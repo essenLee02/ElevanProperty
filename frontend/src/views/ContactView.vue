@@ -21,30 +21,37 @@
             <form @submit.prevent="submitForm" class="contact-form">
               <div class="row">
                 <div class="col-md-6">
-                  <input type="text" v-model.trim="form.name" placeholder="Name" />
+                  <input type="text" v-model="form.name" placeholder="Name" />
                 </div>
                 <div class="col-md-6">
-                  <input type="email" v-model.trim="form.email" placeholder="Email" />
+                  <input type="email" v-model="form.email" placeholder="Email" />
                 </div>
               </div>
               <div class="row">
                 <div class="col-md-6">
-                  <input type="text" v-model.trim="form.phone" placeholder="Phone" />
+                  <input
+                    id="phone"
+                    type="text"
+                    v-model="form.phone"
+                    placeholder="Phone"
+                    inputmode="tel"
+                    autocomplete="tel"
+                  />
                 </div>
                 <div class="col-md-6">
-                  <input type="text" v-model.trim="form.subject" placeholder="Subject" />
+                  <input type="text" v-model="form.subject" placeholder="Subject" />
                 </div>
               </div>
               <div class="row">
                 <div class="col-12">
-                  <textarea v-model.trim="form.message" placeholder="Type Message" rows="5"></textarea>
+                  <textarea v-model="form.message" placeholder="Type Message" rows="5"></textarea>
                 </div>
               </div>
               <div class="row">
                 <div class="col-12">
                   <div class="button text-center rounded-buttons">
-                    <button type="submit" class="btn primary-btn rounded-full" :disabled="isSubmitting">
-                      {{ isSubmitting ? 'Sending...' : 'Send Message' }}
+                    <button type="submit" class="btn primary-btn rounded-full">
+                      Send Message
                     </button>
                   </div>
                 </div>
@@ -58,81 +65,112 @@
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue';
-import { toast } from 'vue3-toastify';
-import api from '../services/api';
+  import { reactive, onMounted, onBeforeUnmount } from 'vue';
+  import axios from 'axios';
+  import { toast } from 'vue3-toastify';
 
-const form = reactive({
-  name: '',
-  email: '',
-  phone: '',
-  subject: '',
-  message: ''
-});
+  const form = reactive({
+    name: '',
+    email: '',
+    phone: '',
+    subject: '',
+    message: ''
+  });
 
-const isSubmitting = ref(false);
-const alert = reactive({
-  type: '',
-  message: ''
-});
+  const phoneRegex = /^[0-9+\-\s]+$/;
 
-const resetForm = () => {
-  form.name = '';
-  form.email = '';
-  form.phone = '';
-  form.subject = '';
-  form.message = '';
-};
+  const cleanPhoneValue = (value) => {
+    return String(value || '').replace(/[^0-9+\-\s]/g, '');
+  };
 
-const showError = (message) => {
-  alert.type = 'error';
-  alert.message = message;
-  toast.error(message);
-};
-
-const showSuccess = (message) => {
-  alert.type = 'success';
-  alert.message = message;
-  toast.success(message);
-};
-
-const validateForm = () => {
-  const blankSections = [];
-  if (!form.name) blankSections.push('Name');
-  if (!form.email) blankSections.push('Email');
-  if (!form.phone) blankSections.push('Phone');
-  if (!form.subject) blankSections.push('Subject');
-  if (!form.message) blankSections.push('Message');
-
-  return blankSections;
-};
-
-const submitForm = async () => {
-  alert.type = '';
-  alert.message = '';
-
-  const blankSections = validateForm();
-
-  if (blankSections.length > 0) {
-    showError(`The following sections are blank: ${blankSections.join(', ')}`);
-    return;
-  }
-
-  isSubmitting.value = true;
-
-  try {
-    const response = await api.post('/contact', { ...form });
-
-    if (response.data.success) {
-      showSuccess(response.data.message || 'Message sent successfully!');
-      resetForm();
-    } else {
-      showError(response.data.error || 'Failed to send message.');
+  const loadJQuery = () => {
+    if (window.jQuery) {
+      return Promise.resolve(window.jQuery);
     }
-  } catch (error) {
-    showError(error.response?.data?.error || 'An error occurred while sending the message.');
-  } finally {
-    isSubmitting.value = false;
-  }
-};
+
+    return new Promise((resolve, reject) => {
+      const existingScript = document.querySelector('script[data-contact-jquery="true"]');
+
+      if (existingScript) {
+        existingScript.addEventListener('load', () => resolve(window.jQuery));
+        existingScript.addEventListener('error', reject);
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = 'https://code.jquery.com/jquery-3.7.1.min.js';
+      script.async = true;
+      script.setAttribute('data-contact-jquery', 'true');
+      script.onload = () => resolve(window.jQuery);
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
+  };
+
+  const phoneInputHandler = function () {
+    const $ = window.jQuery;
+    const currentValue = $(this).val();
+    const cleanedValue = cleanPhoneValue(currentValue);
+
+    if (currentValue !== cleanedValue) {
+      $(this).val(cleanedValue);
+    }
+
+    form.phone = cleanedValue;
+  };
+
+  onMounted(async () => {
+    try {
+      const $ = await loadJQuery();
+
+      $('#phone').on('input paste keyup', phoneInputHandler);
+    } catch (error) {
+      console.error('Failed to load jQuery for phone validation:', error);
+    }
+  });
+
+  onBeforeUnmount(() => {
+    if (window.jQuery) {
+      window.jQuery('#phone').off('input paste keyup', phoneInputHandler);
+    }
+  });
+
+  const submitForm = async () => {
+    form.phone = cleanPhoneValue(form.phone);
+
+    const blankSections = [];
+    if (!form.name) blankSections.push('Name');
+    if (!form.email) blankSections.push('Email');
+    if (!form.phone) blankSections.push('Phone');
+    if (!form.subject) blankSections.push('Subject');
+    if (!form.message) blankSections.push('Message');
+
+    if (blankSections.length > 0) {
+      toast.error(`The following sections are blank: ${blankSections.join(', ')}`);
+      return;
+    }
+
+    if (!phoneRegex.test(form.phone)) {
+      toast.error('Phone only accepts numbers, +, -, and spaces.');
+      return;
+    }
+
+    try {
+      const response = await axios.post('http://localhost:5000/api/contact', form);
+      if (response.data.success) {
+        toast.success(response.data.message);
+        form.name = '';
+        form.email = '';
+        form.phone = '';
+        form.subject = '';
+        form.message = '';
+      }
+    } catch (error) {
+      if (error.response && error.response.data && error.response.data.error) {
+        toast.error(error.response.data.error);
+      } else {
+        toast.error('An error occurred while sending the message.');
+      }
+    }
+  };
 </script>
