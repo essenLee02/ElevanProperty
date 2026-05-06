@@ -14,44 +14,52 @@
               </div>
             </div>
 
-            <div v-if="alert.message" :class="['alert', alert.type === 'success' ? 'alert-success' : 'alert-danger']">
+            <div v-if="alert.message"
+              :class="['alert', alert.type === 'success' ? 'alert-success' : 'alert-danger']"
+              role="alert"
+            >
               {{ alert.message }}
             </div>
 
             <form @submit.prevent="submitForm" class="contact-form">
               <div class="row">
                 <div class="col-md-6">
-                  <input type="text" v-model="form.name" placeholder="Name" />
+                  <input type="text" v-model.trim="form.name" placeholder="Name" />
                 </div>
                 <div class="col-md-6">
-                  <input type="email" v-model="form.email" placeholder="Email" />
+                  <input type="email" v-model.trim="form.email" placeholder="Email" />
                 </div>
               </div>
+
               <div class="row">
                 <div class="col-md-6">
                   <input
+                    ref="phoneInput"
                     id="phone"
                     type="text"
                     v-model="form.phone"
                     placeholder="Phone"
                     inputmode="tel"
                     autocomplete="tel"
+                    @input="sanitizePhone"
                   />
                 </div>
                 <div class="col-md-6">
-                  <input type="text" v-model="form.subject" placeholder="Subject" />
+                  <input type="text" v-model.trim="form.subject" placeholder="Subject" />
                 </div>
               </div>
+
               <div class="row">
                 <div class="col-12">
-                  <textarea v-model="form.message" placeholder="Type Message" rows="5"></textarea>
+                  <textarea v-model.trim="form.message" placeholder="Type Message" rows="5"></textarea>
                 </div>
               </div>
+
               <div class="row">
                 <div class="col-12">
                   <div class="button text-center rounded-buttons">
-                    <button type="submit" class="btn primary-btn rounded-full">
-                      Send Message
+                    <button type="submit" class="btn primary-btn rounded-full" :disabled="isSubmitting">
+                      {{ isSubmitting ? 'Sending...' : 'Send Message' }}
                     </button>
                   </div>
                 </div>
@@ -65,112 +73,168 @@
 </template>
 
 <script setup>
-  import { reactive, onMounted, onBeforeUnmount } from 'vue';
-  import axios from 'axios';
-  import { toast } from 'vue3-toastify';
+import { onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import axios from 'axios';
+import { toast } from 'vue3-toastify';
 
-  const form = reactive({
-    name: '',
-    email: '',
-    phone: '',
-    subject: '',
-    message: ''
-  });
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+const JQUERY_LOCAL_PATH = '/assets/jquery-4.0.0/jquery-4.0.0.min.js';
+const PHONE_ALLOWED_REGEX = /[^0-9+\-\s]/g;
 
-  const phoneRegex = /^[0-9+\-\s]+$/;
+const phoneInput = ref(null);
+const isSubmitting = ref(false);
 
-  const cleanPhoneValue = (value) => {
-    return String(value || '').replace(/[^0-9+\-\s]/g, '');
-  };
+const alert = reactive({
+  type: '',
+  message: ''
+});
 
-  const loadJQuery = () => {
+const form = reactive({
+  name: '',
+  email: '',
+  phone: '',
+  subject: '',
+  message: ''
+});
+
+const setAlert = (type, message) => {
+  alert.type = type;
+  alert.message = message;
+};
+
+const clearAlert = () => {
+  alert.type = '';
+  alert.message = '';
+};
+
+const filterPhoneValue = (value) => String(value || '').replace(PHONE_ALLOWED_REGEX, '');
+
+const sanitizePhone = (event) => {
+  const filteredPhone = filterPhoneValue(event?.target?.value ?? form.phone);
+  form.phone = filteredPhone;
+
+  if (event?.target && event.target.value !== filteredPhone) {
+    event.target.value = filteredPhone;
+  }
+};
+
+const loadLocalJquery = () => {
+  return new Promise((resolve, reject) => {
     if (window.jQuery) {
-      return Promise.resolve(window.jQuery);
-    }
-
-    return new Promise((resolve, reject) => {
-      const existingScript = document.querySelector('script[data-contact-jquery="true"]');
-
-      if (existingScript) {
-        existingScript.addEventListener('load', () => resolve(window.jQuery));
-        existingScript.addEventListener('error', reject);
-        return;
-      }
-
-      const script = document.createElement('script');
-      script.src = 'https://code.jquery.com/jquery-4.0.0.min.js';
-      script.async = true;
-      script.setAttribute('data-contact-jquery', 'true');
-      script.onload = () => resolve(window.jQuery);
-      script.onerror = reject;
-      document.head.appendChild(script);
-    });
-  };
-
-  const phoneInputHandler = function () {
-    const $ = window.jQuery;
-    const currentValue = $(this).val();
-    const cleanedValue = cleanPhoneValue(currentValue);
-
-    if (currentValue !== cleanedValue) {
-      $(this).val(cleanedValue);
-    }
-
-    form.phone = cleanedValue;
-  };
-
-  onMounted(async () => {
-    try {
-      const $ = await loadJQuery();
-
-      $('#phone').on('input paste keyup', phoneInputHandler);
-    } catch (error) {
-      console.error('Failed to load jQuery for phone validation:', error);
-    }
-  });
-
-  onBeforeUnmount(() => {
-    if (window.jQuery) {
-      window.jQuery('#phone').off('input paste keyup', phoneInputHandler);
-    }
-  });
-
-  const submitForm = async () => {
-    form.phone = cleanPhoneValue(form.phone);
-
-    const blankSections = [];
-    if (!form.name) blankSections.push('Name');
-    if (!form.email) blankSections.push('Email');
-    if (!form.phone) blankSections.push('Phone');
-    if (!form.subject) blankSections.push('Subject');
-    if (!form.message) blankSections.push('Message');
-
-    if (blankSections.length > 0) {
-      toast.error(`The following sections are blank: ${blankSections.join(', ')}`);
+      resolve(window.jQuery);
       return;
     }
 
-    if (!phoneRegex.test(form.phone)) {
-      toast.error('Phone only accepts numbers, +, -, and spaces.');
+    const existingScript = document.querySelector(`script[src="${JQUERY_LOCAL_PATH}"]`);
+    if (existingScript) {
+      existingScript.addEventListener('load', () => resolve(window.jQuery));
+      existingScript.addEventListener('error', reject);
       return;
     }
 
-    try {
-      const response = await axios.post('http://localhost:5000/api/contact', form);
-      if (response.data.success) {
-        toast.success(response.data.message);
-        form.name = '';
-        form.email = '';
-        form.phone = '';
-        form.subject = '';
-        form.message = '';
-      }
-    } catch (error) {
-      if (error.response && error.response.data && error.response.data.error) {
-        toast.error(error.response.data.error);
-      } else {
-        toast.error('An error occurred while sending the message.');
-      }
-    }
-  };
+    const script = document.createElement('script');
+    script.src = JQUERY_LOCAL_PATH;
+    script.onload = () => resolve(window.jQuery);
+    script.onerror = reject;
+    document.body.appendChild(script);
+  });
+};
+
+const bindJqueryPhoneValidation = async () => {
+  try {
+    const $ = await loadLocalJquery();
+
+    if (!phoneInput.value || !$) return;
+
+    $(phoneInput.value)
+      .off('input.contactPhoneValidation')
+      .on('input.contactPhoneValidation', function () {
+        const originalValue = $(this).val();
+        const filteredValue = filterPhoneValue(originalValue);
+
+        if (originalValue !== filteredValue) {
+          $(this).val(filteredValue);
+        }
+
+        form.phone = filteredValue;
+      });
+  } catch (error) {
+    console.error('Failed to load local jQuery for phone validation:', error);
+  }
+};
+
+const validateForm = () => {
+  const blankSections = [];
+
+  if (!form.name.trim()) blankSections.push('Name');
+  if (!form.email.trim()) blankSections.push('Email');
+  if (!form.phone.trim()) blankSections.push('Phone');
+  if (!form.subject.trim()) blankSections.push('Subject');
+  if (!form.message.trim()) blankSections.push('Message');
+
+  if (blankSections.length > 0) {
+    return `The following sections are blank: ${blankSections.join(', ')}`;
+  }
+
+  return '';
+};
+
+const resetForm = () => {
+  form.name = '';
+  form.email = '';
+  form.phone = '';
+  form.subject = '';
+  form.message = '';
+};
+
+const submitForm = async () => {
+  clearAlert();
+  sanitizePhone();
+
+  const validationError = validateForm();
+  if (validationError) {
+    setAlert('error', validationError);
+    toast.error(validationError);
+    return;
+  }
+
+  isSubmitting.value = true;
+
+  try {
+    const payload = {
+      name: form.name.trim(),
+      email: form.email.trim(),
+      phone: form.phone.trim(),
+      subject: form.subject.trim(),
+      message: form.message.trim()
+    };
+
+    const response = await axios.post(`${API_BASE_URL}/contact`, payload);
+    const successMessage = response.data?.message || 'Message sent successfully.';
+
+    setAlert('success', successMessage);
+    toast.success(successMessage);
+    resetForm();
+  } catch (error) {
+    const errorMessage =
+      error.response?.data?.error ||
+      error.response?.data?.message ||
+      'An error occurred while sending the message.';
+
+    setAlert('error', errorMessage);
+    toast.error(errorMessage);
+  } finally {
+    isSubmitting.value = false;
+  }
+};
+
+onMounted(() => {
+  bindJqueryPhoneValidation();
+});
+
+onBeforeUnmount(() => {
+  if (window.jQuery && phoneInput.value) {
+    window.jQuery(phoneInput.value).off('input.contactPhoneValidation');
+  }
+});
 </script>
