@@ -98,7 +98,7 @@
       }
 
       const script = document.createElement('script');
-      script.src = 'https://code.jquery.com/jquery-3.7.1.min.js';
+      script.src = 'https://code.jquery.com/jquery-4.0.0.min.js';
       script.async = true;
       script.setAttribute('data-contact-jquery', 'true');
       script.onload = () => resolve(window.jQuery);
