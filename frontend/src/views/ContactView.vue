@@ -212,6 +212,13 @@ const submitForm = async () => {
     const response = await axios.post(`${API_BASE_URL}/contact`, payload);
     const successMessage = response.data?.message || 'Message sent successfully.';
 
+    if (response.data?.whatsappSent === false && response.data?.aiWhatsappError) {
+      const warningMessage = `${successMessage} Detail: ${response.data.aiWhatsappError}`;
+      setAlert('error', warningMessage);
+      toast.error(warningMessage);
+      return;
+    }
+
     setAlert('success', successMessage);
     toast.success(successMessage);
     resetForm();

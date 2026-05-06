@@ -15,6 +15,7 @@ router.get('/about', aboutController.index);
 // Module Contact
 router.post('/contact', contactController.submitContact);
 router.get('/contact/google-sheets-status', contactController.googleSheetsStatus);
+router.get('/contact/ai-whatsapp-status', contactController.aiWhatsappStatus);
 
 // Module Logger
 router.post('/log', logController.saveLog);

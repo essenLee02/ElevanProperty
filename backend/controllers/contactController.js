@@ -3,6 +3,8 @@ const path = require('path');
 const { GoogleSpreadsheet } = require('google-spreadsheet');
 const { JWT } = require('google-auth-library');
 const Contact = require('../models/Contact');
+const { generateContactReply, checkOpenAIConfig } = require('../services/openaiService');
+const { sendWhatsAppMessage, normalizeWhatsAppNumber, checkFonnteConfig } = require('../services/fonnteService');
 
 const REQUIRED_FIELDS = [
   { key: 'name', label: 'Name' },
@@ -172,6 +174,19 @@ const sanitizeContactPayload = (body) => ({
   message: String(body.message || '').trim()
 });
 
+const isAiWhatsappEnabled = () => String(process.env.ENABLE_AI_WHATSAPP || 'true').toLowerCase() !== 'false';
+
+const buildAiWhatsappReply = async (contactPayload) => {
+  const aiReply = await generateContactReply(contactPayload);
+  const whatsappResult = await sendWhatsAppMessage(contactPayload.phone, aiReply);
+
+  return {
+    aiReply,
+    whatsappTarget: whatsappResult.target,
+    fonnteResponse: whatsappResult.response
+  };
+};
+
 exports.submitToGoogleSheets = async (contactData) => {
   const { doc, config, serviceAccountEmail } = createGoogleDocument();
   const sheet = await getTargetSheet(doc, config, serviceAccountEmail);
@@ -226,6 +241,26 @@ exports.googleSheetsStatus = async (req, res) => {
   }
 };
 
+exports.aiWhatsappStatus = async (req, res) => {
+  const openAIConfig = checkOpenAIConfig();
+  const fonnteConfig = checkFonnteConfig();
+
+  return res.json({
+    success: openAIConfig.hasApiKey && fonnteConfig.hasToken,
+    aiWhatsappEnabled: isAiWhatsappEnabled(),
+    openAI: {
+      hasApiKey: openAIConfig.hasApiKey,
+      model: openAIConfig.model
+    },
+    fonnte: {
+      hasToken: fonnteConfig.hasToken
+    },
+    message: openAIConfig.hasApiKey && fonnteConfig.hasToken
+      ? 'OpenAI and Fonnte configuration are present.'
+      : 'OPENAI_API_KEY or FONNTE_TOKEN is missing in backend .env.'
+  });
+};
+
 exports.submitContact = async (req, res) => {
   const contactPayload = sanitizeContactPayload(req.body);
 
@@ -250,22 +285,68 @@ exports.submitContact = async (req, res) => {
   }
 
   try {
-    // Submit to Google Sheets first. This prevents duplicate MySQL rows when Google permission is not ready.
+    // 1. Submit to Google Sheets first. This prevents duplicate MySQL rows when Google permission is not ready.
     await exports.submitToGoogleSheets(contactPayload);
 
+    // 2. Save to MySQL database.
     const newContact = await Contact.create(contactPayload);
-
     console.log(`[USER LOG] Action: FORM_SUBMIT_SUCCESS | Details: Contact ID: ${newContact.id}`);
 
-    return res.json({
-      success: true,
-      message: 'Message received, sent to Google Spreadsheet, and saved to database successfully!'
-    });
+    // 3. Send the contact form data to OpenAI, then send OpenAI's reply to WhatsApp via Fonnte.
+    if (!isAiWhatsappEnabled()) {
+      return res.json({
+        success: true,
+        googleSheetSent: true,
+        databaseSaved: true,
+        whatsappSent: false,
+        contactId: newContact.id,
+        message: 'Message received, sent to Google Spreadsheet, and saved to database successfully. AI WhatsApp reply is disabled.'
+      });
+    }
+
+    try {
+      const aiWhatsappResult = await buildAiWhatsappReply(contactPayload);
+
+      console.log(
+        `[USER LOG] Action: AI_WHATSAPP_SENT | Details: ${JSON.stringify({
+          contactId: newContact.id,
+          target: aiWhatsappResult.whatsappTarget
+        })}`
+      );
+
+      return res.json({
+        success: true,
+        googleSheetSent: true,
+        databaseSaved: true,
+        whatsappSent: true,
+        contactId: newContact.id,
+        whatsappTarget: aiWhatsappResult.whatsappTarget,
+        aiReply: aiWhatsappResult.aiReply,
+        fonnteResponse: aiWhatsappResult.fonnteResponse,
+        message: 'Message received, sent to Google Spreadsheet, saved to database, and AI WhatsApp reply sent successfully!'
+      });
+    } catch (aiWhatsappError) {
+      console.error('Failed to send AI WhatsApp reply:', aiWhatsappError);
+
+      return res.status(200).json({
+        success: true,
+        googleSheetSent: true,
+        databaseSaved: true,
+        whatsappSent: false,
+        contactId: newContact.id,
+        whatsappTarget: normalizeWhatsAppNumber(contactPayload.phone),
+        aiWhatsappError: aiWhatsappError.message || 'Failed to send AI WhatsApp reply.',
+        message: 'Message received, sent to Google Spreadsheet, and saved to database. However, the AI WhatsApp reply failed. Please check OPENAI_API_KEY, OPENAI_MODEL, FONNTE_TOKEN, Fonnte device connection, and WhatsApp quota.'
+      });
+    }
   } catch (error) {
     console.error('Error saving contact:', error);
 
     return res.status(500).json({
       success: false,
+      googleSheetSent: false,
+      databaseSaved: false,
+      whatsappSent: false,
       error: error.message || 'Failed to save message.'
     });
   }

@@ -21,6 +21,29 @@ function extractOpenAIText(data) {
   return '';
 }
 
+function normalizeOpenAIError(error) {
+  const status = error?.response?.status;
+  const apiMessage =
+    error?.response?.data?.error?.message ||
+    error?.response?.data?.message ||
+    error?.message ||
+    'Unknown OpenAI API error';
+
+  if (status === 401) {
+    return new Error('OpenAI API key is invalid or unauthorized. Please check OPENAI_API_KEY in backend .env.');
+  }
+
+  if (status === 402 || status === 429) {
+    return new Error(`OpenAI API quota/billing/rate limit issue: ${apiMessage}`);
+  }
+
+  if (status === 400 && apiMessage.toLowerCase().includes('model')) {
+    return new Error(`OpenAI model error: ${apiMessage}. Please check OPENAI_MODEL in backend .env.`);
+  }
+
+  return new Error(`OpenAI API error${status ? ` (${status})` : ''}: ${apiMessage}`);
+}
+
 exports.generateContactReply = async ({ name, email, phone, subject, message }) => {
   if (!process.env.OPENAI_API_KEY) {
     throw new Error('OPENAI_API_KEY is missing in backend .env');
@@ -34,13 +57,13 @@ Create a short WhatsApp reply in Bahasa Indonesia.
 
 Rules:
 - Greet the customer by name.
-- Acknowledge their inquiry.
-- Mention that the team will follow up soon.
+- Acknowledge their property inquiry.
+- Mention that the team will follow up soon by WhatsApp or phone.
 - Keep it friendly, polite, and concise.
-- Do not invent exact availability, price, or legal promise.
+- Do not invent exact availability, price, discount, legal promise, or appointment schedule.
 - Maximum 5 short paragraphs.
 
-Customer data:
+Customer data from website contact form:
 Name: ${name}
 Email: ${email}
 Phone: ${phone}
@@ -48,27 +71,37 @@ Subject: ${subject}
 Message: ${message}
 `;
 
-  const response = await axios.post(
-    'https://api.openai.com/v1/responses',
-    {
-      model,
-      input: prompt,
-      max_output_tokens: 350
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        'Content-Type': 'application/json'
+  try {
+    const response = await axios.post(
+      'https://api.openai.com/v1/responses',
+      {
+        model,
+        input: prompt,
+        max_output_tokens: 350,
+        store: false
       },
-      timeout: 60000
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 60000
+      }
+    );
+
+    const aiText = extractOpenAIText(response.data);
+
+    if (!aiText) {
+      throw new Error('OpenAI response is empty or cannot be parsed.');
     }
-  );
 
-  const aiText = extractOpenAIText(response.data);
-
-  if (!aiText) {
-    throw new Error('OpenAI response is empty or cannot be parsed.');
+    return aiText;
+  } catch (error) {
+    throw normalizeOpenAIError(error);
   }
-
-  return aiText;
 };
+
+exports.checkOpenAIConfig = () => ({
+  hasApiKey: Boolean(process.env.OPENAI_API_KEY),
+  model: process.env.OPENAI_MODEL || 'gpt-5.5'
+});

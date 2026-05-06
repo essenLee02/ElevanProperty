@@ -24,6 +24,35 @@ function normalizeWhatsAppNumber(phone) {
   return target;
 }
 
+function normalizeFonnteError(error) {
+  const status = error?.response?.status;
+  const data = error?.response?.data;
+  const apiReason =
+    data?.reason ||
+    data?.detail ||
+    data?.message ||
+    error?.message ||
+    'Unknown Fonnte API error';
+
+  if (status === 401 || String(apiReason).toLowerCase().includes('token')) {
+    return new Error('Fonnte token is invalid or unauthorized. Please check FONNTE_TOKEN in backend .env.');
+  }
+
+  return new Error(`Fonnte API error${status ? ` (${status})` : ''}: ${apiReason}`);
+}
+
+function createFonnteFormData(payload) {
+  const formData = new FormData();
+
+  Object.entries(payload).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      formData.append(key, String(value));
+    }
+  });
+
+  return formData;
+}
+
 exports.normalizeWhatsAppNumber = normalizeWhatsAppNumber;
 
 exports.sendWhatsAppMessage = async (phone, message) => {
@@ -37,26 +66,34 @@ exports.sendWhatsAppMessage = async (phone, message) => {
     throw new Error('Invalid WhatsApp target number. Please use numbers with optional +, -, or spaces.');
   }
 
-  const response = await axios.post(
-    'https://api.fonnte.com/send',
-    {
-      target,
-      message,
-      countryCode: '0',
-      typing: true
-    },
-    {
+  const formData = createFonnteFormData({
+    target,
+    message,
+    countryCode: '0',
+    typing: 'true'
+  });
+
+  try {
+    const response = await axios.post('https://api.fonnte.com/send', formData, {
       headers: {
-        Authorization: process.env.FONNTE_TOKEN,
-        'Content-Type': 'application/json'
+        Authorization: process.env.FONNTE_TOKEN
       },
       timeout: 60000
+    });
+
+    if (response.data && response.data.status === false) {
+      throw new Error(response.data.reason || response.data.detail || 'Fonnte failed to send WhatsApp message.');
     }
-  );
 
-  if (response.data && response.data.status === false) {
-    throw new Error(response.data.reason || response.data.detail || 'Fonnte failed to send WhatsApp message.');
+    return {
+      target,
+      response: response.data
+    };
+  } catch (error) {
+    throw normalizeFonnteError(error);
   }
-
-  return response.data;
 };
+
+exports.checkFonnteConfig = () => ({
+  hasToken: Boolean(process.env.FONNTE_TOKEN)
+});
