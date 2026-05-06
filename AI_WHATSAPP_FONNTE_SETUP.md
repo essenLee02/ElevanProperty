@@ -1,112 +1,67 @@
-# AI WhatsApp Reply via OpenAI + Fonnte
+# AI WhatsApp Fonnte Setup
 
-Flow after this fix:
+Flow setelah user submit Contact Form:
 
-```text
-Vue Contact Form
-→ POST /api/contact
-→ Backend validates required fields
-→ Backend writes to Google Spreadsheet
-→ Backend saves to MySQL contacts table
-→ Backend sends form data to OpenAI Responses API
-→ Backend receives AI reply
-→ Backend sends AI reply to the customer's WhatsApp number via Fonnte API
-```
+1. Data dikirim ke Google Spreadsheet.
+2. Data disimpan ke MySQL.
+3. Backend mengirim subject + message ke OpenAI Responses API.
+4. Backend menerima jawaban ChatGPT.
+5. Backend mengirim jawaban tersebut ke nomor WhatsApp customer melalui Fonnte API.
 
-## 1. Backend .env
+## File yang diubah
 
-Create or update `backend/.env`:
+- `backend/controllers/contactController.js`
+- `backend/services/openaiService.js`
+- `backend/services/fonnteService.js`
+- `backend/routes/index.js`
+- `backend/.env.example`
+
+## .env backend
+
+Copy `.env.example` menjadi `.env`, lalu isi:
 
 ```env
-PORT=5000
+OPENAI_API_KEY=sk-proj-your_new_openai_key_here
+OPENAI_MODEL=gpt-5.4-mini
+OPENAI_STORE_RESPONSE=true
+OPENAI_MAX_OUTPUT_TOKENS=0
 
-DB_HOST=localhost
-DB_USER=root
-DB_PASSWORD=
-DB_NAME=db_property
-DB_DIALECT=mysql
-
-GOOGLE_SHEET_ID=1nwy276VXH0JvDZVOoddBbqmr9jwpydoKrukWY2Jukw4
-GOOGLE_SHEET_GID=0
-GOOGLE_SHEET_TAB_NAME=
-GOOGLE_SERVICE_ACCOUNT_JSON_PATH=./google-service-account.json
-
-OPENAI_API_KEY=your_new_openai_api_key
-OPENAI_MODEL=gpt-5.5
+FONNTE_TOKEN=your_new_fonnte_token_here
 ENABLE_AI_WHATSAPP=true
-
-FONNTE_TOKEN=your_new_fonnte_token
 ```
 
-Do not put `OPENAI_API_KEY`, `FONNTE_TOKEN`, `.env`, or `google-service-account.json` in frontend/public or GitHub.
+`OPENAI_MAX_OUTPUT_TOKENS=0` artinya backend tidak mengirim parameter `max_output_tokens`, sehingga request backend lebih mirip dengan request Postman yang sudah berhasil.
 
-## 2. Google Sheet setup
+## Test endpoint
 
-Copy your service account JSON file to:
-
-```text
-backend/google-service-account.json
-```
-
-Open the JSON, copy `client_email`, then share the Google Spreadsheet to that email as **Editor**.
-
-## 3. Test endpoints
-
-Start backend:
-
-```bash
-cd backend
-npm install
-npm run dev
-```
-
-Check Google Sheets connection:
-
-```text
-http://localhost:5000/api/contact/google-sheets-status
-```
-
-Check OpenAI + Fonnte environment configuration:
+Cek config OpenAI + Fonnte tanpa mengirim pesan:
 
 ```text
 http://localhost:5000/api/contact/ai-whatsapp-status
 ```
 
-The AI/Fonnte status endpoint only checks whether config values are present. The real test is submitting the contact form.
+Test OpenAI dengan request kecil:
 
-## 4. Common issues
-
-### OpenAI API fails
-
-Check:
-
-- `OPENAI_API_KEY` is valid and not revoked.
-- Billing/credits are active in OpenAI Platform.
-- `OPENAI_MODEL` is available to your project.
-
-### Fonnte fails
-
-Check:
-
-- `FONNTE_TOKEN` is valid.
-- Fonnte device is connected.
-- WhatsApp quota is available.
-- Phone number is valid. Example accepted input: `08123456789`, `+62 812-3456-7890`, `628123456789`.
-
-## 5. Backend response behavior
-
-If Google Sheets or MySQL fails, backend returns HTTP 500 and the form shows an error.
-
-If Google Sheets and MySQL succeed but OpenAI/Fonnte fails, backend returns HTTP 200 with:
-
-```json
-{
-  "success": true,
-  "googleSheetSent": true,
-  "databaseSaved": true,
-  "whatsappSent": false,
-  "aiWhatsappError": "..."
-}
+```text
+http://localhost:5000/api/contact/ai-whatsapp-status?testOpenAI=true
 ```
 
-This avoids losing the customer contact data while still showing the AI/WhatsApp error clearly.
+Cek Google Sheets:
+
+```text
+http://localhost:5000/api/contact/google-sheets-status
+```
+
+## Restart backend
+
+Setelah mengubah `.env`, backend wajib di-restart:
+
+```bash
+cd backend
+npm run dev
+```
+
+## Catatan security
+
+Jangan upload `.env`, `google-service-account.json`, OpenAI API key, atau Fonnte token ke GitHub/public.
+Jika key/token sudah pernah dibagikan, revoke/rotate dan buat key/token baru.
