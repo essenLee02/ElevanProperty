@@ -1,0 +1,33 @@
+# Property Data Model
+
+## Minimum Property Fields
+- property_id
+- title
+- transaction_type
+- property_type
+- city
+- district
+- neighborhood
+- address
+- landmark
+- latitude
+- longitude
+- land_size
+- building_size
+- bedrooms
+- bathrooms
+- floors
+- parking
+- garden
+- furnished_status
+- style
+- security_features
+- pet_friendly
+- facilities
+- price
+- rent_period_supported
+- occupancy_rules
+- images
+- status
+- created_at
+- updated_at

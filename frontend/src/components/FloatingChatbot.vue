@@ -192,7 +192,9 @@ onMounted(() => {
   border-radius: 14px;
   display: inline-block;
   line-height: 1.4;
+  white-space: pre-line;
 }
+
 .chat-message.assistant {
   justify-content: flex-start;
 }

@@ -1,38 +1,32 @@
 const axios = require('axios');
+const { loadProjectSkillPrompt } = require('./skillPromptService');
 
 const DEFAULT_MODEL = 'gpt-5.4-mini';
 const OPENAI_RESPONSES_URL = 'https://api.openai.com/v1/responses';
 
-const PROPERTY_ASSISTANT_PROMPT = `
+const BASE_PROPERTY_ASSISTANT_PROMPT = `
 You are a professional property assistant for a property rental and sales platform in Indonesia.
 
-Your job is to help customers buy, sell, or rent properties such as houses, villas, hotels, apartments, and boarding houses.
+You must follow the project skill documentation provided below. The skill documentation is the main behavior standard for this website chatbot and WhatsApp chatbot.
 
-Always communicate in a friendly, professional, polite, natural, and human-like way.
-
-Stay focused on property topics only. If the customer asks unrelated questions, politely redirect them back to property buying, selling, or rental assistance.
-
-Your service focus is Java Island, Indonesia. If the customer asks outside Java, explain politely and offer similar locations in Java.
-
-Identify whether the customer wants to buy, sell, or rent. If unclear, ask a follow-up question.
-
-Collect important requirements:
-- property type
-- location
-- budget
-- land size
-- building size
-- bedrooms
-- bathrooms
-- facilities
-- furnished/unfurnished
-- rental duration if renting
-- number of occupants if renting
-
-Recommend suitable property options if available. If exact options are not available, suggest alternatives.
-
-Reply in the same language used by the customer.
+Core behavior:
+- Help customers buy, sell, or rent properties such as houses, villas, hotels, apartments, and boarding houses.
+- Reply in the same language used by the customer.
+- Stay focused on property topics only.
+- Prioritize the customer's latest message over older conversation history.
+- Use only backend property catalog data provided in the current request.
+- Do not invent property names, prices, facilities, addresses, locations, discounts, or availability.
+- If exact matching properties exist, list exact matching properties first.
+- If no exact match exists, clearly apologize or explain that no exact match is available, then provide only the closest alternatives from the backend catalog.
+- If the customer asks for rental houses in Surabaya, do not recommend hotels in Malang.
+- If the customer asks for hotels in Malang, recommend hotels in Malang if available.
+- If the customer asks for a budget range, respect the range when exact matching data exists; if alternatives are outside the range, say so clearly.
+- After listing property options, ask only one short follow-up question.
 `.trim();
+
+function getProjectSkillInstruction() {
+  return `${BASE_PROPERTY_ASSISTANT_PROMPT}\n\nPROJECT SKILL DOCUMENTATION:\n${loadProjectSkillPrompt()}`;
+}
 
 function sanitizeEnvValue(value) {
   return String(value || '')
@@ -135,10 +129,21 @@ async function createResponse(input, options = {}) {
     store: options.store !== undefined ? options.store : config.store
   };
 
+  if (options.metadata && typeof options.metadata === 'object') {
+    payload.metadata = options.metadata;
+  }
+
   const maxOutputTokens = Number(options.max_output_tokens || process.env.OPENAI_MAX_OUTPUT_TOKENS || 0);
   if (maxOutputTokens > 0) payload.max_output_tokens = maxOutputTokens;
 
   try {
+    console.log('[OPENAI REQUEST]', {
+      model: payload.model,
+      store: payload.store,
+      source: options.metadata?.source || 'unknown',
+      channel: options.metadata?.channel || 'unknown'
+    });
+
     const response = await axios.post(OPENAI_RESPONSES_URL, payload, {
       headers: {
         Authorization: `Bearer ${config.apiKey}`,
@@ -161,7 +166,7 @@ function formatHistory(history = []) {
 }
 
 async function generateContactReply({ name, email, phone, subject, message }) {
-  const input = `${PROPERTY_ASSISTANT_PROMPT}
+  const input = `${getProjectSkillInstruction()}
 
 Task: Create a short WhatsApp reply for a new website Contact Form submission.
 
@@ -181,50 +186,95 @@ Phone: ${phone}
 Subject: ${subject}
 Message: ${message}`;
 
-  return createResponse(input, { store: true });
+  return createResponse(input, {
+    store: true,
+    metadata: {
+      source: 'elevanlabs_contact_form',
+      channel: 'website_contact'
+    }
+  });
 }
 
 async function generateChatbotReply(session, history, userMessage, propertyContext = '') {
-  const input = `${PROPERTY_ASSISTANT_PROMPT}
+  const input = `${getProjectSkillInstruction()}
 
 Customer profile:
 Name: ${session.name}
 Phone: ${session.normalizedPhone}
 Source: ${session.source}
 
-Recent conversation history:
+Recent conversation history for context only. Do not let old history override the latest customer message:
 ${formatHistory(history)}
 
-Available property context:
-${propertyContext || 'No live property catalog is connected yet. Ask discovery questions and offer to let the team follow up.'}
+Backend property catalog context for this latest message:
+${propertyContext || 'No backend property catalog context is available.'}
 
-Current customer message:
+Latest customer message. This is the highest-priority instruction:
 ${userMessage}
 
-Reply naturally and helpfully. Ask for missing requirements if needed.`;
+Task:
+Create the final chatbot reply using only the backend property catalog context above.
+If exact matches are available, recommend exact matches directly.
+If no exact match is available, say that no exact match is available and then present only the backend alternatives.
+Do not keep asking discovery questions before showing options when the customer asks for suggestions or available properties.`;
 
-  return createResponse(input, { store: true });
+  return createResponse(input, {
+    store: true,
+    metadata: {
+      source: 'elevanlabs_floating_chatbot',
+      channel: 'website_chatbot',
+      sessionId: String(session.id || '')
+    }
+  });
 }
 
 async function generateWhatsappReply(session, history, userMessage, propertyContext = '') {
-  return generateChatbotReply(session, history, userMessage, propertyContext);
+  const input = `${getProjectSkillInstruction()}
+
+Customer profile:
+Name: ${session.name}
+Phone: ${session.normalizedPhone}
+Source: ${session.source}
+
+Recent conversation history for context only. Do not let old history override the latest customer message:
+${formatHistory(history)}
+
+Backend property catalog context for this latest WhatsApp message:
+${propertyContext || 'No backend property catalog context is available.'}
+
+Latest WhatsApp customer message. This is the highest-priority instruction:
+${userMessage}
+
+Task:
+Create the final WhatsApp reply using only the backend property catalog context above.
+If exact matches are available, recommend exact matches directly.
+If no exact match is available, say that no exact match is available and then present only the backend alternatives.`;
+
+  return createResponse(input, {
+    store: true,
+    metadata: {
+      source: 'elevanlabs_fonnte_whatsapp',
+      channel: 'whatsapp',
+      sessionId: String(session.id || '')
+    }
+  });
 }
 
 async function detectCustomerIntent(message) {
-  const input = `${PROPERTY_ASSISTANT_PROMPT}
+  const input = `${getProjectSkillInstruction()}
 
 Classify this customer message into one of: buy, sell, rent, unknown.
 Return only one word.
 Message: ${message}`;
-  return createResponse(input, { store: false });
+  return createResponse(input, { store: true, metadata: { source: 'elevanlabs_intent_detection', channel: 'backend' } });
 }
 
 async function extractPropertyPreferences(message) {
-  const input = `${PROPERTY_ASSISTANT_PROMPT}
+  const input = `${getProjectSkillInstruction()}
 
 Extract property preferences from the message into concise JSON with these keys: intent, propertyType, location, budget, size, bedrooms, bathrooms, facilities, rentalDuration, occupants, notes.
 Message: ${message}`;
-  return createResponse(input, { store: false });
+  return createResponse(input, { store: true, metadata: { source: 'elevanlabs_preference_extraction', channel: 'backend' } });
 }
 
 function checkOpenAIConfig() {
@@ -233,12 +283,15 @@ function checkOpenAIConfig() {
     hasApiKey: Boolean(config.apiKey),
     keyLooksValid: Boolean(config.apiKey && config.apiKey.startsWith('sk-')),
     maskedKey: maskSecret(config.apiKey),
-    model: config.model
+    model: config.model,
+    store: config.store,
+    skillPromptLoaded: Boolean(loadProjectSkillPrompt())
   };
 }
 
 module.exports = {
-  PROPERTY_ASSISTANT_PROMPT,
+  PROPERTY_ASSISTANT_PROMPT: getProjectSkillInstruction(),
+  getProjectSkillInstruction,
   createResponse,
   generateContactReply,
   generateChatbotReply,

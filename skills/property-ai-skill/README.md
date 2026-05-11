@@ -1,40 +1,28 @@
-# Property AI Website Skill — Split English Documentation
+# Property AI Website Skill Pack
 
-This package contains structured English documentation for the Property Rental & Sales Website with AI chatbot capability.
+This skill pack documents the recommended structure, functional scope, technical design, and best practices for a property rental and sales website with AI chatbot capabilities.
 
-The documentation is based on the website requirements for:
+## Scope
+This website supports:
+- property discovery for buy and rent flows
+- web modules such as Home, About Us, Contact, and floating Chatbot
+- Node.js backend orchestration
+- Vue.js frontend experience
+- Fonnte WhatsApp integration
+- OpenAI / LLM-based chatbot logic
+- multilingual conversations
+- basic conversation memory and lead tracking
+- future-ready negotiation and compliance workflow
 
-- VueJS frontend
-- NodeJS / Express backend
-- MySQL database
-- Google Sheets API
-- OpenAI / ChatGPT API
-- Fonnte WhatsApp API
-- Contact form automation
-- Website floating chatbot
-- WhatsApp chatbot workflow
-- Conversation history and property recommendation flow
-
-## Documentation List
-
-| File | Description |
-|---|---|
-| `SKILL.md` | Main documentation index |
-| `docs/00-goal-and-scope.md` | Business goals, project scope, and user journey |
-| `docs/01-environment-and-security.md` | Environment variables, technology stack, and security rules |
-| `docs/02-directory-structure.md` | Recommended backend and frontend directory structure |
-| `docs/03-modules-home-about-contact.md` | Home, About Us, and Contact module specifications |
-| `docs/04-chatbot-skill.md` | AI chatbot behavior, intent detection, and property inquiry flow |
-| `docs/05-fonnte-whatsapp-flow.md` | WhatsApp chatbot flow using Fonnte |
-| `docs/06-openai-gpt-integration.md` | OpenAI / ChatGPT API integration guide |
-| `docs/07-google-sheets-integration.md` | Google Sheets integration guide |
-| `docs/08-backend-controllers-services.md` | Backend controllers, services, and utility responsibilities |
-| `docs/09-database-models.md` | Database model design |
-| `docs/10-api-specification.md` | API endpoint specification |
-| `docs/11-frontend-components.md` | Frontend views, components, and service structure |
-| `docs/12-testing-and-deployment.md` | Testing and deployment checklist |
-| `docs/13-development-rules.md` | Development rules, error handling, and definition of done |
-
-## How to Use
-
-Use this documentation as a development standard for the website. When adding or changing a feature, update the relevant Markdown file.
+## Directory Structure
+- `environment/` — stack, configuration, environment variables, and setup
+- `modules/` — Home, About Us, Contact, and global frontend behavior
+- `chatbot/` — floating website chatbot behavior, UX, and memory rules
+- `backend/` — backend architecture, API flow, webhook flow, and services
+- `ai/` — chatbot prompts, guardrails, recommendation logic, and negotiation
+- `compliance/` — location boundaries, policy constraints, and audit logging
+- `data/` — property data design, lead data design, and normalization rules
+- `deployment/` — release, environments, and operational recommendations
+- `security/` — privacy, API protection, and safe handling of user data
+- `operations/` — monitoring, logging, maintenance, and support
+- `goals/` — project goals, MVP scope, and success metrics
