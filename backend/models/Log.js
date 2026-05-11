@@ -9,6 +9,11 @@ const Log = sequelize.define('Log', {
   details: {
     type: DataTypes.TEXT,
     allowNull: true
+  },
+  level: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    defaultValue: 'info'
   }
 }, {
   tableName: 'logs',

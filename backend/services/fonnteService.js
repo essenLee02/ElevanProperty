@@ -1,71 +1,26 @@
 const axios = require('axios');
-
-const FONNTE_SEND_URL = 'https://api.fonnte.com/send';
-
-function maskSecret(secret) {
-  const value = String(secret || '').trim();
-  if (!value) return '';
-  if (value.length <= 8) return `${value.slice(0, 3)}...`;
-  return `${value.slice(0, 5)}...${value.slice(-4)}`;
-}
+const { normalizePhone } = require('../utils/normalizePhone');
 
 function normalizeWhatsAppNumber(phone) {
-  let target = String(phone || '').trim();
-
-  // Remove spaces and dash from contact form.
-  // Example: +62 812-3456-7890 -> +6281234567890
-  target = target.replace(/[\s\-]/g, '');
-
-  if (target.startsWith('+')) {
-    target = target.slice(1);
-  }
-
-  // Indonesian local format: 0812xxxx -> 62812xxxx
-  if (target.startsWith('0')) {
-    target = `62${target.slice(1)}`;
-  }
-
-  // If user inputs 812xxxx, assume Indonesia and convert to 62812xxxx
-  if (target.startsWith('8')) {
-    target = `62${target}`;
-  }
-
-  return target;
+  return normalizePhone(phone);
 }
 
 function normalizeFonnteError(error) {
   const status = error?.response?.status;
-  const responseData = error?.response?.data;
-  const apiMessage =
-    responseData?.reason ||
-    responseData?.detail ||
-    responseData?.message ||
-    error?.message ||
-    'Unknown Fonnte error';
+  const data = error?.response?.data;
+  const apiReason = data?.reason || data?.detail || data?.message || error?.message || 'Unknown Fonnte API error';
 
-  if (status === 401 || status === 403) {
-    return new Error(`Fonnte authorization failed. Please check FONNTE_TOKEN. Detail: ${apiMessage}`);
+  if (status === 401 || String(apiReason).toLowerCase().includes('token')) {
+    return new Error('Fonnte token is invalid or unauthorized. Please check FONNTE_TOKEN in backend .env.');
   }
 
-  return new Error(`Fonnte API error${status ? ` ${status}` : ''}: ${apiMessage}`);
+  return new Error(`Fonnte API error${status ? ` (${status})` : ''}: ${apiReason}`);
 }
 
-exports.normalizeWhatsAppNumber = normalizeWhatsAppNumber;
-
-exports.getFonnteStatus = () => ({
-  tokenLoaded: Boolean(String(process.env.FONNTE_TOKEN || '').trim()),
-  tokenMasked: maskSecret(process.env.FONNTE_TOKEN)
-});
-
-exports.sendWhatsAppMessage = async (phone, message) => {
-  const token = String(process.env.FONNTE_TOKEN || '').trim();
-
-  if (!token) {
-    throw new Error('FONNTE_TOKEN is missing in backend .env');
-  }
+async function sendWhatsAppMessage(phone, message) {
+  if (!process.env.FONNTE_TOKEN) throw new Error('FONNTE_TOKEN is missing in backend .env');
 
   const target = normalizeWhatsAppNumber(phone);
-
   if (!target || !/^\d+$/.test(target)) {
     throw new Error('Invalid WhatsApp target number. Please use numbers with optional +, -, or spaces.');
   }
@@ -77,27 +32,31 @@ exports.sendWhatsAppMessage = async (phone, message) => {
   payload.append('typing', 'true');
 
   try {
-    const response = await axios.post(FONNTE_SEND_URL, payload.toString(), {
+    const response = await axios.post('https://api.fonnte.com/send', payload, {
       headers: {
-        Authorization: token,
+        Authorization: process.env.FONNTE_TOKEN,
         'Content-Type': 'application/x-www-form-urlencoded'
       },
-      timeout: 90000
+      timeout: 60000
     });
 
     if (response.data && response.data.status === false) {
       throw new Error(response.data.reason || response.data.detail || 'Fonnte failed to send WhatsApp message.');
     }
 
-    return {
-      target,
-      response: response.data
-    };
+    return { target, response: response.data };
   } catch (error) {
-    if (error.response) {
-      throw normalizeFonnteError(error);
-    }
-
-    throw error;
+    throw normalizeFonnteError(error);
   }
+}
+
+function checkFonnteConfig() {
+  return { hasToken: Boolean(process.env.FONNTE_TOKEN) };
+}
+
+module.exports = {
+  sendWhatsAppMessage,
+  normalizeWhatsAppNumber,
+  normalizeFonnteTarget: normalizeWhatsAppNumber,
+  checkFonnteConfig
 };
