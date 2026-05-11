@@ -1,8 +1,3 @@
----
-name: property-ai-website-skills
-description: Guidance for developing a property rental and sales website with VueJS, NodeJS, MySQL, Google Sheets, OpenAI, Fonnte WhatsApp, contact forms, chatbot workflows, and property recommendations.
----
-
 # SKILL.md — Property AI Website Documentation Index
 
 This is the main index for the Property Rental & Sales Website skill documentation.
