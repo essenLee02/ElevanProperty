@@ -39,7 +39,7 @@
 
 <script setup>
 import { nextTick, onMounted, reactive, ref } from 'vue';
-import { sendChatbotMessage } from '../services/chatbotApi';
+import { sendChatbotMessage } from '../services/chatbotApi'; // Tampilan Chatbot AI
 
 const PHONE_ALLOWED_REGEX = /[^0-9+\-\s]/g;
 
