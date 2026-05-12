@@ -1,24 +1,17 @@
-# ChatGPT Property Response Skills Only
+# ChatGPT Property Response Skill
 
-This package contains response-only `.md` skill files for a property chatbot.
+This folder contains clean, non-redundant `.md` files that guide GPT response behavior for the property chatbot.
 
-It intentionally removes all technical instructions about:
-
-- website environment
-- coding
-- backend
-- frontend
-- API setup
-- database
-- deployment
-
-The files only teach GPT how to respond properly to property-related users.
-
-## Structure
+## Files
 
 ```text
-chat_gpt_response_skills_only_updated/
-├─ SKILL.md
-├─ README.md
-└─ docs/
+SKILL.md
+docs/01-role-scope-and-style.md
+docs/02-property-intent-and-terminology.md
+docs/03-catalog-recommendation-rules.md
+docs/04-history-memory-and-latest-message.md
+docs/05-off-topic-and-ambiguity-control.md
+docs/06-budget-location-facility-rules.md
+docs/07-response-templates.md
+docs/08-negotiation-and-escalation.md
 ```
