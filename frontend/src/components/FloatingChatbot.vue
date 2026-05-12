@@ -26,7 +26,7 @@
       <template v-else>
         <div ref="messagesContainer" class="chat-messages">
           <div v-for="(item, index) in messages" :key="index" :class="['chat-message', item.role]">
-            <span>{{ item.text }}</span>
+            <span v-html="formatChatMessage(item.text)"></span>
           </div>
         </div>
         <form class="chat-input" @submit.prevent="sendMessage">
@@ -106,6 +106,21 @@ function readCookie(name) {
   } catch (_) {
     return null;
   }
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function formatChatMessage(value) {
+  const escaped = escapeHtml(value);
+
+  return escaped.replace(/\*\*([^*]+?)\*\*/g, '<b>$1</b>');
 }
 
 function getSavedProfileFromCookie() {
