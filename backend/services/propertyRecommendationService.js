@@ -1,12 +1,16 @@
-const { Op } = require('sequelize');
-const { Property } = require('../models');
+const path = require('path');
+const fs = require('fs');
 
 const PROPERTY_TYPES = {
   hotel: ['hotel', 'hotels', 'penginapan'],
   villa: ['villa', 'vila'],
   house: ['rumah', 'house', 'home', 'kontrakan', 'residential'],
   apartment: ['apartemen', 'apartment', 'apart'],
-  boarding_house: ['kos', 'kost', 'boarding house', 'boarding_house', 'indekos']
+  boarding_house: ['kos', 'kost', 'boarding house', 'boarding_house', 'indekos'],
+  shophouse: ['ruko', 'shophouse', 'toko'],
+  office: ['kantor', 'office'],
+  warehouse: ['gudang', 'warehouse'],
+  others: ['lainnya', 'others', 'other']
 };
 
 const TRANSACTION_TYPES = {
@@ -15,329 +19,84 @@ const TRANSACTION_TYPES = {
   purchase: ['beli', 'buy', 'purchase', 'membeli']
 };
 
-const KNOWN_LOCATIONS = [
+// Base location keywords. The complete location list is expanded dynamically
+// from indonesia_property_36_provinces_flat.json so chatbot search follows
+// the same JSON catalog used by About Us.
+const FALLBACK_LOCATION_KEYWORDS = [
   'Malang', 'Batu', 'Surabaya', 'Sidoarjo', 'Madiun', 'Semarang', 'Yogyakarta', 'Bandung',
-  'Jakarta', 'Bogor', 'Depok', 'Tangerang', 'Bekasi', 'Solo', 'Papua', 'Jayapura', 'Bali', 'Denpasar'
+  'Jakarta', 'Bogor', 'Depok', 'Tangerang', 'Bekasi', 'Solo', 'Serang', 'Cilegon',
+  'Cirebon', 'Tasikmalaya', 'Sukabumi', 'Karawang', 'Medan', 'Palembang', 'Pekanbaru',
+  'Padang', 'Bandar Lampung', 'Banda Aceh', 'Jambi', 'Bengkulu', 'Pangkal Pinang',
+  'Tanjung Pinang', 'Pontianak', 'Banjarmasin', 'Samarinda', 'Balikpapan', 'Palangkaraya',
+  'Tanjung Selor', 'Makassar', 'Manado', 'Kendari', 'Palu', 'Gorontalo', 'Mamuju',
+  'Bali', 'Denpasar', 'Mataram', 'Kupang', 'Papua', 'Jayapura', 'Ambon', 'Sofifi',
+  'Manokwari', 'Lhokseumawe', 'Langsa', 'Sabang', 'Meulaboh'
 ];
 
-const baseProperties = [
-  {
-    title: 'Surabaya Rungkut Furnished House',
-    description: 'Budget furnished rental house in Surabaya with AC and Wi-Fi, suitable for small families or staff accommodation.',
-    price: 'Rp 8.500.000 / tahun',
-    location: 'Surabaya',
-    city: 'Surabaya',
-    district: 'Rungkut',
-    address: 'Jl. Rungkut Asri, Surabaya',
-    buildingArea: '72 m²',
-    landArea: '90 m²',
-    bedrooms: 2,
-    bathrooms: 1,
-    floors: 1,
-    parking: '1 car',
-    garden: 'Small front yard',
-    buildingType: 'house',
-    transactionType: 'rent',
-    facilities: 'Full furnished, AC, Wi-Fi, Kitchen set, Parking',
-    furnishedStatus: 'Furnished',
-    style: 'Simple modern',
-    imageUrl: '/assets/images/blog/1.jpg',
-    status: 'available'
-  },
-  {
-    title: 'Surabaya Wonokromo Compact House',
-    description: 'Compact yearly rental house in Surabaya, suitable for customers who need affordable access to central areas.',
-    price: 'Rp 9.750.000 / tahun',
-    location: 'Surabaya',
-    city: 'Surabaya',
-    district: 'Wonokromo',
-    address: 'Jl. Wonokromo, Surabaya',
-    buildingArea: '80 m²',
-    landArea: '100 m²',
-    bedrooms: 3,
-    bathrooms: 1,
-    floors: 1,
-    parking: '1 car',
-    garden: 'Not included',
-    buildingType: 'house',
-    transactionType: 'rent',
-    facilities: 'Full furnished, AC, Wi-Fi, Parking, Security',
-    furnishedStatus: 'Furnished',
-    style: 'Family compact',
-    imageUrl: '/assets/images/blog/2.jpg',
-    status: 'available'
-  },
-  {
-    title: 'Surabaya Mulyorejo Family House',
-    description: 'Family rental house in Surabaya with larger space and residential neighborhood access.',
-    price: 'Rp 18.000.000 / tahun',
-    location: 'Surabaya',
-    city: 'Surabaya',
-    district: 'Mulyorejo',
-    address: 'Jl. Mulyorejo Indah, Surabaya',
-    buildingArea: '120 m²',
-    landArea: '150 m²',
-    bedrooms: 3,
-    bathrooms: 2,
-    floors: 2,
-    parking: '1 car',
-    garden: 'Available',
-    buildingType: 'house',
-    transactionType: 'rent',
-    facilities: 'AC, Wi-Fi, Kitchen set, Parking, Garden',
-    furnishedStatus: 'Semi furnished',
-    style: 'Modern family',
-    imageUrl: '/assets/images/blog/3.jpg',
-    status: 'available'
-  },
-  {
-    title: 'Jakarta Cibubur Furnished House',
-    description: 'Yearly rental house in Jakarta area with furnished rooms, AC, and Wi-Fi.',
-    price: 'Rp 9.500.000 / tahun',
-    location: 'Jakarta',
-    city: 'Jakarta',
-    district: 'Cibubur',
-    address: 'Jl. Cibubur Residence, Jakarta',
-    buildingArea: '78 m²',
-    landArea: '96 m²',
-    bedrooms: 2,
-    bathrooms: 1,
-    floors: 1,
-    parking: '1 car',
-    garden: 'Small yard',
-    buildingType: 'house',
-    transactionType: 'rent',
-    facilities: 'Full furnished, AC, Wi-Fi, Kitchen set, Parking',
-    furnishedStatus: 'Furnished',
-    style: 'Simple modern',
-    imageUrl: '/assets/images/blog/1.jpg',
-    status: 'available'
-  },
-  {
-    title: 'Malang City Center Business Hotel',
-    description: 'A practical hotel option near central Malang, suitable for business trips, family stays, and short rental needs.',
-    price: 'Rp 450.000 / malam',
-    location: 'Malang',
-    city: 'Malang',
-    district: 'Klojen',
-    address: 'Jl. Basuki Rahmat, Klojen, Malang',
-    buildingArea: '1.250 m²',
-    landArea: '1.600 m²',
-    bedrooms: 42,
-    bathrooms: 42,
-    floors: 5,
-    parking: 'Available',
-    garden: 'Not included',
-    buildingType: 'hotel',
-    transactionType: 'rent',
-    facilities: 'AC, Wi-Fi, Parking, Security, Restaurant, Meeting room',
-    furnishedStatus: 'Furnished',
-    style: 'Modern',
-    imageUrl: '/assets/images/blog/1.jpg',
-    status: 'available'
-  },
-  {
-    title: 'Malang Family Boutique Hotel',
-    description: 'Comfortable boutique hotel in Malang with AC, Wi-Fi, and family-friendly room options.',
-    price: 'Rp 650.000 / malam',
-    location: 'Malang',
-    city: 'Malang',
-    district: 'Lowokwaru',
-    address: 'Jl. Soekarno Hatta, Lowokwaru, Malang',
-    buildingArea: '980 m²',
-    landArea: '1.250 m²',
-    bedrooms: 28,
-    bathrooms: 28,
-    floors: 4,
-    parking: 'Available',
-    garden: 'Small garden',
-    buildingType: 'hotel',
-    transactionType: 'rent',
-    facilities: 'AC, Wi-Fi, Parking, Security, Breakfast area',
-    furnishedStatus: 'Furnished',
-    style: 'Modern tropical',
-    imageUrl: '/assets/images/blog/2.jpg',
-    status: 'available'
-  },
-  {
-    title: 'Malang Syariah Budget Hotel',
-    description: 'Affordable hotel option in Malang for customers who need simple rooms with AC and Wi-Fi.',
-    price: 'Rp 275.000 / malam',
-    location: 'Malang',
-    city: 'Malang',
-    district: 'Blimbing',
-    address: 'Jl. Borobudur, Blimbing, Malang',
-    buildingArea: '720 m²',
-    landArea: '900 m²',
-    bedrooms: 24,
-    bathrooms: 24,
-    floors: 3,
-    parking: 'Limited',
-    garden: 'Not included',
-    buildingType: 'hotel',
-    transactionType: 'rent',
-    facilities: 'AC, Wi-Fi, Parking, Security',
-    furnishedStatus: 'Furnished',
-    style: 'Simple modern',
-    imageUrl: '/assets/images/blog/3.jpg',
-    status: 'available'
-  },
-  {
-    title: 'Malang Ijen Residential House',
-    description: 'Residential house in Malang suitable for family rental with spacious living area and parking.',
-    price: 'Rp 55.000.000 / tahun',
-    location: 'Malang',
-    city: 'Malang',
-    district: 'Ijen',
-    address: 'Jl. Ijen Boulevard, Malang',
-    buildingArea: '180 m²',
-    landArea: '240 m²',
-    bedrooms: 4,
-    bathrooms: 3,
-    floors: 2,
-    parking: '2 cars',
-    garden: 'Available',
-    buildingType: 'house',
-    transactionType: 'rent',
-    facilities: 'AC, Parking, Kitchen set, Security, Garden',
-    furnishedStatus: 'Semi furnished',
-    style: 'Classic modern',
-    imageUrl: '/assets/images/blog/2.jpg',
-    status: 'available'
-  },
-  {
-    title: 'Malang Lowokwaru Student Boarding House',
-    description: 'Boarding house near campus area in Malang with simple furnished rooms and Wi-Fi.',
-    price: 'Rp 1.500.000 / bulan',
-    location: 'Malang',
-    city: 'Malang',
-    district: 'Lowokwaru',
-    address: 'Jl. Sigura-gura, Lowokwaru, Malang',
-    buildingArea: '420 m²',
-    landArea: '520 m²',
-    bedrooms: 18,
-    bathrooms: 10,
-    floors: 2,
-    parking: 'Motorcycle parking',
-    garden: 'Not included',
-    buildingType: 'boarding_house',
-    transactionType: 'rent',
-    facilities: 'Wi-Fi, Bed, Wardrobe, Shared kitchen, Parking',
-    furnishedStatus: 'Furnished',
-    style: 'Simple',
-    imageUrl: '/assets/images/blog/1.jpg',
-    status: 'available'
-  },
-  {
-    title: 'Batu Mountain View Villa',
-    description: 'Villa near Batu and Malang with cool weather, mountain view, AC, Wi-Fi, and private parking.',
-    price: 'Rp 1.800.000 / malam',
-    location: 'Batu',
-    city: 'Batu',
-    district: 'Oro-Oro Ombo',
-    address: 'Jl. Oro-Oro Ombo, Batu',
-    buildingArea: '220 m²',
-    landArea: '320 m²',
-    bedrooms: 4,
-    bathrooms: 3,
-    floors: 2,
-    parking: '2 cars',
-    garden: 'Available',
-    buildingType: 'villa',
-    transactionType: 'rent',
-    facilities: 'AC, Wi-Fi, Kitchen set, Parking, Water heater, Garden',
-    furnishedStatus: 'Furnished',
-    style: 'Modern mountain villa',
-    imageUrl: '/assets/images/blog/3.jpg',
-    status: 'available'
-  },
-  {
-    title: 'Surabaya Business Hotel Darmo',
-    description: 'Business hotel in Surabaya for rental and corporate accommodation needs.',
-    price: 'Rp 600.000 / malam',
-    location: 'Surabaya',
-    city: 'Surabaya',
-    district: 'Darmo',
-    address: 'Jl. Darmo, Surabaya',
-    buildingArea: '1.500 m²',
-    landArea: '1.900 m²',
-    bedrooms: 48,
-    bathrooms: 48,
-    floors: 6,
-    parking: 'Available',
-    garden: 'Not included',
-    buildingType: 'hotel',
-    transactionType: 'rent',
-    facilities: 'AC, Wi-Fi, Parking, Security, Meeting room',
-    furnishedStatus: 'Furnished',
-    style: 'Business modern',
-    imageUrl: '/assets/images/blog/1.jpg',
-    status: 'available'
-  },
-  {
-    title: 'Papua Jayapura Transit Hotel',
-    description: 'Transit hotel option in Jayapura, Papua, suitable for business travelers and short stays.',
-    price: 'Rp 520.000 / malam',
-    location: 'Papua',
-    city: 'Jayapura',
-    district: 'Jayapura Selatan',
-    address: 'Jl. Raya Entrop, Jayapura, Papua',
-    buildingArea: '1.100 m²',
-    landArea: '1.450 m²',
-    bedrooms: 36,
-    bathrooms: 36,
-    floors: 4,
-    parking: 'Available',
-    garden: 'Not included',
-    buildingType: 'hotel',
-    transactionType: 'rent',
-    facilities: 'AC, Wi-Fi, Parking, Security, Airport access',
-    furnishedStatus: 'Furnished',
-    style: 'Modern',
-    imageUrl: '/assets/images/blog/2.jpg',
-    status: 'available'
+function getKnownLocations() {
+  const dynamicLocations = loadJsonProperties().flatMap((property) => [
+    property.province,
+    property.city,
+    property.district,
+    property.location
+  ]).filter(Boolean);
+
+  return [...new Set([...FALLBACK_LOCATION_KEYWORDS, ...dynamicLocations])]
+    .sort((a, b) => String(b).length - String(a).length);
+}
+
+// ─── JSON Property Loader ────────────────────────────────────────────────────
+// Reads indonesia_property_36_provinces_flat.json from the frontend public
+// folder and normalises each record to the camelCase shape expected by the
+// downstream filter / search functions.  The result is cached after first load.
+
+const JSON_DATA_PATH = path.resolve(
+  __dirname,
+  '../../frontend/public/json_data/indonesia_property_36_provinces_flat.json'
+);
+
+let _jsonPropertiesCache = null;
+
+function loadJsonProperties() {
+  if (_jsonPropertiesCache) return _jsonPropertiesCache;
+
+  try {
+    const raw = fs.readFileSync(JSON_DATA_PATH, 'utf8');
+    const json = JSON.parse(raw);
+    const records = json.properties || [];
+
+    _jsonPropertiesCache = records.map((p, index) => ({
+      id: p.id || index + 1,
+      title: p.title || '',
+      description: p.description || '',
+      price: p.price || '',
+      // Normalise location object → flat fields expected by filterProperties.
+      location: p.location?.city || p.location?.province || '',
+      province: p.location?.province || '',
+      city: p.location?.city || '',
+      district: p.location?.area || '',
+      address: p.address || '',
+      buildingArea: p.building_area || '',
+      landArea: p.land_area || '',
+      buildingType: p.building_type || '',
+      transactionType: p.transaction_type || '',
+      facilities: Array.isArray(p.facilities) ? p.facilities.join(', ') : (p.facilities || ''),
+      imageUrl: p.image || '',
+      status: 'available'
+    }));
+
+    console.log(`[PropertyRecommendationService] Loaded ${_jsonPropertiesCache.length} properties from JSON file.`);
+    return _jsonPropertiesCache;
+  } catch (err) {
+    console.error('[PropertyRecommendationService] Failed to load JSON file:', err.message);
+    return [];
   }
-];
+}
 
-const generatedProperties = Array.from({ length: 30 }, (_, index) => {
-  const buildingTypes = ['villa', 'house', 'apartment', 'hotel', 'boarding_house'];
-  const transactionTypes = ['sale', 'rent', 'purchase'];
-  const cities = ['Surabaya', 'Malang', 'Sidoarjo', 'Batu', 'Madiun', 'Semarang', 'Yogyakarta', 'Bandung', 'Papua'];
-  const buildingType = buildingTypes[index % buildingTypes.length];
-  const transactionType = transactionTypes[index % transactionTypes.length];
-  const city = cities[index % cities.length];
-  const number = index + 20;
+// Expose as fallbackProperties for backward-compatible module.exports reference.
+const fallbackProperties = loadJsonProperties();
 
-  return {
-    id: number,
-    title: `${city} ${buildingType.replace('_', ' ')} ${number}`,
-    description: `Curated ${buildingType.replace('_', ' ')} option for ${transactionType} customers who need a reliable property in ${city}.`,
-    price: transactionType === 'rent' ? `Rp ${(12 + (index % 20))} juta / bulan` : `Rp ${(650 + index * 85).toLocaleString('id-ID')} juta`,
-    location: city,
-    city,
-    district: `District ${1 + (index % 5)}`,
-    address: `Jl. Property ${number}, ${city}`,
-    buildingArea: `${80 + index * 7} m²`,
-    landArea: `${100 + index * 8} m²`,
-    bedrooms: 2 + (index % 5),
-    bathrooms: 1 + (index % 4),
-    floors: 1 + (index % 3),
-    parking: index % 2 === 0 ? 'Available' : 'Limited',
-    garden: index % 3 === 0 ? 'Available' : 'Not included',
-    buildingType,
-    transactionType,
-    facilities: ['AC', 'Parking', 'Security', index % 2 === 0 ? 'Wi-Fi' : 'Kitchen set'].join(', '),
-    furnishedStatus: index % 2 === 0 ? 'Furnished' : 'Unfurnished',
-    style: index % 2 === 0 ? 'Modern' : 'Classic',
-    imageUrl: `/assets/images/blog/${(index % 3) + 1}.jpg`,
-    status: 'available'
-  };
-});
 
-const fallbackProperties = [...baseProperties, ...generatedProperties].map((property, index) => ({
-  id: property.id || index + 1,
-  ...property
-}));
 
 function normalizeText(value) {
   return String(value || '').toLowerCase().trim();
@@ -345,6 +104,10 @@ function normalizeText(value) {
 
 function includesAny(text, words = []) {
   return words.some((word) => text.includes(word));
+}
+
+function escapeRegExp(value = '') {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function detectBuildingType(message = '') {
@@ -366,7 +129,7 @@ function cleanLocationCandidate(value = '') {
 
 function detectLocation(message = '') {
   const text = normalizeText(message);
-  const found = KNOWN_LOCATIONS.find((location) => new RegExp(`\\b${location.toLowerCase()}\\b`, 'i').test(text));
+  const found = getKnownLocations().find((location) => new RegExp(`\\b${escapeRegExp(location.toLowerCase())}\\b`, 'i').test(text));
   if (found) return found;
 
   const afterDi = text.match(/\bdi\s+([a-zA-Z\s]{3,35})/i);
@@ -496,12 +259,9 @@ function mergePropertyCatalog(dbProperties = []) {
 }
 
 async function getSourceProperties() {
-  try {
-    const dbProperties = await Property.findAll({ where: { status: 'available' }, limit: 300 });
-    return mergePropertyCatalog(dbProperties.map((p) => p.toJSON()));
-  } catch (error) {
-    return fallbackProperties;
-  }
+  // JSON catalog is the single source for portfolio and chatbot recommendations.
+  // No database or dummy generator is used here.
+  return loadJsonProperties();
 }
 
 function parsePropertyPrice(property = {}) {
@@ -548,7 +308,7 @@ function filterProperties(properties, filters = {}) {
   const location = normalizeText(filters.location || filters.city);
 
   return properties.filter((property) => {
-    const propertyText = [property.location, property.city, property.district, property.address].map(normalizeText).join(' ');
+    const propertyText = [property.province, property.location, property.city, property.district, property.address].map(normalizeText).join(' ');
     const matchesTransaction = transactionType ? normalizeText(property.transactionType) === transactionType : true;
     const matchesBuilding = buildingType ? normalizeText(property.buildingType) === buildingType : true;
     const matchesLocation = location ? propertyText.includes(location) : true;
@@ -615,7 +375,11 @@ function humanBuildingType(type = '') {
     villa: 'villa',
     house: 'rumah',
     apartment: 'apartemen',
-    boarding_house: 'kos / boarding house'
+    boarding_house: 'kos / boarding house',
+    shophouse: 'ruko / shophouse',
+    office: 'kantor / office',
+    warehouse: 'gudang / warehouse',
+    others: 'properti lainnya'
   };
   return map[type] || type || 'properti';
 }

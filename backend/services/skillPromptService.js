@@ -4,13 +4,18 @@ const path = require('path');
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 
 const SKILL_FILES = [
+  // Current code-aligned website skill. Keep this first so ChatGPT follows
+  // the latest JSON catalog and first-chat propertyContext rules.
+  path.join(PROJECT_ROOT, 'skills', 'website_env_concept', 'SKILL.md'),
+  path.join(PROJECT_ROOT, 'skills', 'website_env_concept', '04-current-modules', '02-about-us-module.md'),
+  path.join(PROJECT_ROOT, 'skills', 'website_env_concept', '06-planned-chatbot-openai-fonnte', '01-floating-chatbot-planned.md'),
+  path.join(PROJECT_ROOT, 'skills', 'website_env_concept', '06-planned-chatbot-openai-fonnte', '02-property-catalog-planned.md'),
+  path.join(PROJECT_ROOT, 'skills', 'website_env_concept', '06-planned-chatbot-openai-fonnte', '03-session-history-planned.md'),
+
+  // General response behavior skill.
   path.join(PROJECT_ROOT, 'skills', 'property-ai-website-skills', 'SKILL.md'),
-  path.join(PROJECT_ROOT, 'skills', 'property-ai-website-skills', 'docs', '00-goal-and-scope.md'),
-  path.join(PROJECT_ROOT, 'skills', 'property-ai-website-skills', 'docs', '03-modules-home-about-contact.md'),
   path.join(PROJECT_ROOT, 'skills', 'property-ai-website-skills', 'docs', '04-chatbot-skill.md'),
-  path.join(PROJECT_ROOT, 'skills', 'property-ai-website-skills', 'docs', '05-fonnte-whatsapp-flow.md'),
-  path.join(PROJECT_ROOT, 'skills', 'property-ai-website-skills', 'docs', '06-openai-gpt-integration.md'),
-  path.join(PROJECT_ROOT, 'skills', 'property-ai-website-skills', 'docs', '08-backend-controllers-services.md')
+  path.join(PROJECT_ROOT, 'skills', 'property-ai-website-skills', 'docs', '06-openai-gpt-integration.md')
 ];
 
 function readSkillFile(filePath) {

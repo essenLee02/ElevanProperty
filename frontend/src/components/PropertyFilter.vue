@@ -5,11 +5,14 @@
       <select class="form-select" :value="buildingType" @change="$emit('update:buildingType', $event.target.value)">
         <option value="">All Types</option>
         <option value="house">House</option>
-        <option value="villa">Villa</option>
-        <option value="hotel">Hotel</option>
-        <option value="boarding_house">Boarding House</option>
         <option value="apartment">Apartment</option>
-        <option value="other">Other</option>
+        <option value="hotel">Hotel</option>
+        <option value="villa">Villa</option>
+        <option value="boarding_house">Boarding House</option>
+        <option value="shophouse">Shophouse</option>
+        <option value="office">Office</option>
+        <option value="warehouse">Warehouse</option>
+        <option value="others">Others</option>
       </select>
     </div>
     <div class="col-md-4 mb-3">

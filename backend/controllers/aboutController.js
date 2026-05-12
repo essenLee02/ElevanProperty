@@ -16,7 +16,7 @@ exports.index = async (req, res) => {
       },
       filters: {
         transactionTypes: ['sale', 'rent', 'purchase'],
-        buildingTypes: ['house', 'villa', 'hotel', 'boarding_house', 'apartment', 'other']
+        buildingTypes: ['house', 'apartment', 'hotel', 'villa', 'boarding_house', 'shophouse', 'office', 'warehouse', 'others']
       },
       portfolios: portfolios.length ? portfolios : fallbackProperties
     }

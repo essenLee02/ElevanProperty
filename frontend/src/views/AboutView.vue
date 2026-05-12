@@ -32,11 +32,33 @@
       </div>
       <div class="container">
         <div class="row">
-          <div v-for="item in filteredPortfolios" :key="item.id" class="col-lg-4 col-md-6 col-12 mb-4">
-            <PortfolioCard :property="item" />
+          <div v-if="isLoading" class="col-12 text-center py-5">
+            <p class="text-muted">Loading properties...</p>
           </div>
-          <div v-if="filteredPortfolios.length === 0" class="col-12 text-center text-muted">
-            <p>No portfolios match the selected filters.</p>
+          <template v-else>
+            <div v-for="item in paginatedPortfolios" :key="item.id" class="col-lg-4 col-md-6 col-12 mb-4">
+              <PortfolioCard :property="normalizeForCard(item)" />
+            </div>
+            <div v-if="filteredPortfolios.length === 0" class="col-12 text-center text-muted">
+              <p>No portfolios match the selected filters.</p>
+            </div>
+          </template>
+        </div>
+
+        <!-- Pagination -->
+        <div v-if="totalPages > 1" class="row mt-3">
+          <div class="col-12 d-flex justify-content-center align-items-center gap-2 flex-wrap">
+            <button
+              class="btn btn-sm btn-outline-primary"
+              :disabled="currentPage === 1"
+              @click="currentPage--"
+            >← Prev</button>
+            <span class="text-muted small">Page {{ currentPage }} of {{ totalPages }} ({{ filteredPortfolios.length }} properties)</span>
+            <button
+              class="btn btn-sm btn-outline-primary"
+              :disabled="currentPage === totalPages"
+              @click="currentPage++"
+            >Next →</button>
           </div>
         </div>
       </div>
@@ -48,7 +70,6 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import PortfolioCard from '../components/PortfolioCard.vue';
 import PropertyFilter from '../components/PropertyFilter.vue';
-import { getAboutData } from '../services/aboutApi';
 import api from '../services/api';
 
 const company = ref({
@@ -61,37 +82,51 @@ const company = ref({
 
 const filters = reactive({ buildingType: '', transactionType: '', location: '' });
 const portfolios = ref([]);
+const isLoading = ref(true);
+const currentPage = ref(1);
+const PAGE_SIZE = 12;
 
-const fallbackPortfolios = Array.from({ length: 40 }, (_, index) => {
-  const buildingTypes = ['villa', 'house', 'apartment', 'hotel', 'boarding_house'];
-  const transactionTypes = ['sale', 'rent', 'purchase'];
-  const cities = ['Surabaya', 'Malang', 'Sidoarjo', 'Batu', 'Madiun', 'Semarang', 'Yogyakarta', 'Bandung'];
-  const buildingType = buildingTypes[index % buildingTypes.length];
-  const transactionType = transactionTypes[index % transactionTypes.length];
-  const city = cities[index % cities.length];
+/**
+ * Normalize a flat JSON property record into the shape expected by PortfolioCard.
+ * The JSON uses snake_case keys; PortfolioCard expects camelCase equivalents.
+ */
+function normalizeForCard(item) {
   return {
-    id: index + 1,
-    title: `${city} ${buildingType.replace('_', ' ')} ${index + 1}`,
-    description: `Curated ${buildingType.replace('_', ' ')} option for ${transactionType} customers in ${city}.`,
-    price: transactionType === 'rent' ? `Rp ${8 + (index % 20)} juta / bulan` : `Rp ${(650 + index * 85).toLocaleString('id-ID')} juta`,
-    location: city,
-    address: `Jl. Property ${index + 1}, ${city}`,
-    buildingArea: `${80 + index * 7} m²`,
-    landArea: `${100 + index * 8} m²`,
-    buildingType,
-    transactionType,
-    facilities: 'AC, Parking, Security',
-    imageUrl: `/assets/images/blog/${(index % 3) + 1}.jpg`
+    id: item.id,
+    title: item.title,
+    description: item.description,
+    price: item.price,
+    location: item.location?.city || item.location?.province || item.location || '',
+    address: item.address,
+    buildingArea: item.building_area || item.buildingArea || '',
+    landArea: item.land_area || item.landArea || '',
+    buildingType: item.building_type || item.buildingType || '',
+    transactionType: item.transaction_type || item.transactionType || '',
+    facilities: Array.isArray(item.facilities)
+      ? item.facilities.join(', ')
+      : item.facilities || '',
+    imageUrl: item.image || item.imageUrl || ''
   };
-});
+}
 
+/**
+ * Load portfolio records only from the static JSON catalog.
+ * No dummy generator or random portfolio function is used on About Us.
+ */
 const loadAbout = async () => {
+  isLoading.value = true;
+
   try {
-    const response = await getAboutData();
-    company.value = response.data?.data?.company || company.value;
-    portfolios.value = response.data?.data?.portfolios || fallbackPortfolios;
-  } catch (error) {
-    portfolios.value = fallbackPortfolios;
+    const res = await fetch('/json_data/indonesia_property_36_provinces_flat.json');
+    if (!res.ok) throw new Error(`Property JSON request failed: ${res.status}`);
+
+    const json = await res.json();
+    portfolios.value = Array.isArray(json.properties) ? json.properties : [];
+  } catch (err) {
+    console.error('Failed to load property JSON:', err);
+    portfolios.value = [];
+  } finally {
+    isLoading.value = false;
   }
 };
 
@@ -99,15 +134,36 @@ const filteredPortfolios = computed(() => {
   const buildingType = filters.buildingType.toLowerCase();
   const transactionType = filters.transactionType.toLowerCase();
   const location = filters.location.toLowerCase();
+
   return portfolios.value.filter((item) => {
-    const matchBuilding = buildingType ? String(item.buildingType).toLowerCase() === buildingType : true;
-    const matchTransaction = transactionType ? String(item.transactionType).toLowerCase() === transactionType : true;
-    const matchLocation = location ? String(item.location || item.city || '').toLowerCase().includes(location) : true;
+    const bt = String(item.building_type || item.buildingType || '').toLowerCase();
+    const tt = String(item.transaction_type || item.transactionType || '').toLowerCase();
+    const loc = [
+      item.location?.city,
+      item.location?.province,
+      item.location?.area,
+      item.location,
+      item.city,
+      item.address
+    ].filter(Boolean).join(' ').toLowerCase();
+
+    const matchBuilding = buildingType ? bt === buildingType : true;
+    const matchTransaction = transactionType ? tt === transactionType : true;
+    const matchLocation = location ? loc.includes(location) : true;
     return matchBuilding && matchTransaction && matchLocation;
   });
 });
 
+const totalPages = computed(() => Math.ceil(filteredPortfolios.value.length / PAGE_SIZE));
+
+const paginatedPortfolios = computed(() => {
+  const start = (currentPage.value - 1) * PAGE_SIZE;
+  return filteredPortfolios.value.slice(start, start + PAGE_SIZE);
+});
+
+// Reset to page 1 whenever filters change.
 watch(filters, (newFilters) => {
+  currentPage.value = 1;
   api.post('/log', { action: 'FILTER_DATA', details: newFilters }).catch(() => {});
 }, { deep: true });
 
