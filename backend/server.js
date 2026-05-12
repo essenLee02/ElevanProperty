@@ -39,6 +39,28 @@ async function ensureRequiredDatabaseColumns() {
       console.warn('Database schema check warning:', error.message);
     }
   }
+
+  try {
+    const chatSessionsTable = await queryInterface.describeTable('chat_sessions');
+    if (chatSessionsTable && !chatSessionsTable.location) {
+      await queryInterface.addColumn('chat_sessions', 'location', {
+        type: DataTypes.STRING,
+        allowNull: true
+      });
+      console.log('Database migration completed: added chat_sessions.location column');
+    }
+    if (chatSessionsTable && !chatSessionsTable.normalizedLocation) {
+      await queryInterface.addColumn('chat_sessions', 'normalizedLocation', {
+        type: DataTypes.STRING,
+        allowNull: true
+      });
+      console.log('Database migration completed: added chat_sessions.normalizedLocation column');
+    }
+  } catch (error) {
+    if (!String(error.message || '').toLowerCase().includes('no description found')) {
+      console.warn('Chat session schema check warning:', error.message);
+    }
+  }
 }
 
 sequelize.sync()

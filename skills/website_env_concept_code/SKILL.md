@@ -50,3 +50,49 @@ Recommended improvement
 ```
 
 This avoids mismatch between documentation and actual code behavior.
+
+## Chatbot Cookie, Location, and History Update
+
+Current chatbot profile fields:
+
+```text
+name
+phone
+location
+```
+
+The chatbot must require all three fields before the user can start chatting.
+
+The browser cookie only stores the temporary chat profile. The cookie TTL is controlled from the backend `.env` file:
+
+```env
+CHATBOT_COOKIE_TTL_MINUTES=20
+```
+
+The frontend must call:
+
+```text
+GET /api/chatbot/config
+```
+
+and use the returned `cookieTtlSeconds` to set the browser cookie `Max-Age`.
+
+When the cookie expires or is deleted, the user must enter name, phone number, and location again before sending a new chatbot message.
+
+The chatbot conversation history is not only based on the browser cookie. Chat history is stored and reconnected by customer identity:
+
+```text
+normalizedName
+normalizedPhone
+normalizedLocation
+```
+
+When the same customer returns and enters the same name, phone, and location, ChatGPT should use previous history for context while still prioritizing the latest user message.
+
+On the first chatbot message after profile input, the website sends a compact JSON property context from:
+
+```text
+frontend/public/json_data/indonesia_property_36_provinces_flat.json
+```
+
+to the backend, and the backend forwards that context to ChatGPT together with conversation history.

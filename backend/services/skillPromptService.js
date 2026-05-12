@@ -15,7 +15,8 @@ const SKILL_FILES = [
   // General response behavior skill.
   path.join(PROJECT_ROOT, 'skills', 'property-ai-website-skills', 'SKILL.md'),
   path.join(PROJECT_ROOT, 'skills', 'property-ai-website-skills', 'docs', '04-chatbot-skill.md'),
-  path.join(PROJECT_ROOT, 'skills', 'property-ai-website-skills', 'docs', '06-openai-gpt-integration.md')
+  path.join(PROJECT_ROOT, 'skills', 'property-ai-website-skills', 'docs', '06-openai-gpt-integration.md'),
+  path.join(PROJECT_ROOT, 'skills', 'chat_gpt_reponds', 'docs', '07-conversation-history-and-latest-message-priority.md')
 ];
 
 function readSkillFile(filePath) {

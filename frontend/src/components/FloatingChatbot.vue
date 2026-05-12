@@ -14,9 +14,11 @@
       </div>
 
       <div v-if="!profileReady" class="chat-profile">
-        <p class="mb-2">Please enter your name and phone number before chatting.</p>
+        <p class="mb-2">Please enter your name, phone number, and location before chatting.</p>
         <input v-model.trim="profile.name" class="form-control mb-2" placeholder="Name" />
         <input v-model="profile.phone" class="form-control mb-2" placeholder="Phone" inputmode="tel" @input="sanitizePhone" />
+        <input v-model.trim="profile.location" class="form-control mb-2" placeholder="Your location, e.g. Surabaya" />
+        <small class="text-muted d-block mb-2">Your chat profile cookie follows the backend .env TTL setting.</small>
         <button class="btn primary-btn rounded-full w-100" type="button" @click="startChat">Start Chat</button>
         <p v-if="errorMessage" class="text-danger small mt-2">{{ errorMessage }}</p>
       </div>
@@ -39,12 +41,15 @@
 
 <script setup>
 import { nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
-import { sendChatbotMessage } from '../services/chatbotApi';
+import { getChatbotConfig, sendChatbotMessage } from '../services/chatbotApi';
 
 const PHONE_ALLOWED_REGEX = /[^0-9+\-\s]/g;
 const JSON_DATA_URL = '/json_data/indonesia_property_36_provinces_flat.json';
 const PROFILE_COOKIE_NAME = 'propertyChatProfile';
-const PROFILE_COOKIE_TTL_SECONDS = 20 * 60;
+const DEFAULT_PROFILE_COOKIE_TTL_MINUTES = 20;
+const DEFAULT_PROFILE_COOKIE_TTL_SECONDS = DEFAULT_PROFILE_COOKIE_TTL_MINUTES * 60;
+const profileCookieTtlSeconds = ref(DEFAULT_PROFILE_COOKIE_TTL_SECONDS);
+const profileCookieTtlMinutes = ref(DEFAULT_PROFILE_COOKIE_TTL_MINUTES);
 
 // Max properties to include in the first-chat context payload to ChatGPT.
 // Sending all 7,920 records would be very large; send a compact JSON-derived context.
@@ -62,13 +67,14 @@ let profileExpiryTimer = null;
 
 const profile = reactive({
   name: '',
-  phone: ''
+  phone: '',
+  location: ''
 });
 
 const createInitialMessages = () => ([
   {
     role: 'assistant',
-    text: 'Hello! I can help you buy, sell, or rent properties such as houses, villas, hotels, apartments, and boarding houses.'
+    text: 'Hello! I can help you buy, sell, or rent properties. Please enter your name, phone number, and location to start.'
   }
 ]);
 
@@ -108,7 +114,7 @@ function getSavedProfileFromCookie() {
 
   try {
     const parsed = JSON.parse(raw);
-    if (!parsed.name || !parsed.phone || !parsed.expiresAt || Date.now() >= Number(parsed.expiresAt)) {
+    if (!parsed.name || !parsed.phone || !parsed.location || !parsed.expiresAt || Date.now() >= Number(parsed.expiresAt)) {
       deleteCookie(PROFILE_COOKIE_NAME);
       return null;
     }
@@ -131,6 +137,7 @@ function resetChatProfile(message = '') {
   deleteCookie(PROFILE_COOKIE_NAME);
   profile.name = '';
   profile.phone = '';
+  profile.location = '';
   profileReady.value = false;
   contextSentOnce.value = false;
   messages.value = createInitialMessages();
@@ -141,30 +148,32 @@ function scheduleProfileExpiry(expiresAt) {
   clearProfileExpiryTimer();
   const remaining = Number(expiresAt) - Date.now();
   if (!Number.isFinite(remaining) || remaining <= 0) {
-    resetChatProfile('Your chat session expired after 20 minutes. Please enter your name and phone number again.');
+    resetChatProfile('Your chat session expired. Please enter your name, phone number, and location again.');
     return;
   }
 
   profileExpiryTimer = window.setTimeout(() => {
-    resetChatProfile('Your chat session expired after 20 minutes. Please enter your name and phone number again.');
+    resetChatProfile('Your chat session expired. Please enter your name, phone number, and location again.');
   }, remaining);
 }
 
 function saveProfileCookie() {
-  const expiresAt = Date.now() + (PROFILE_COOKIE_TTL_SECONDS * 1000);
+  const ttlSeconds = Number(profileCookieTtlSeconds.value || DEFAULT_PROFILE_COOKIE_TTL_SECONDS);
+  const expiresAt = Date.now() + (ttlSeconds * 1000);
   const value = JSON.stringify({
     name: profile.name,
     phone: profile.phone,
+    location: profile.location,
     expiresAt
   });
-  setCookie(PROFILE_COOKIE_NAME, value, PROFILE_COOKIE_TTL_SECONDS);
+  setCookie(PROFILE_COOKIE_NAME, value, ttlSeconds);
   scheduleProfileExpiry(expiresAt);
 }
 
 function ensureProfileCookieIsValid() {
   const saved = getSavedProfileFromCookie();
   if (!saved) {
-    resetChatProfile('Your chat session expired after 20 minutes. Please enter your name and phone number again.');
+    resetChatProfile('Your chat session expired. Please enter your name, phone number, and location again.');
     return false;
   }
   return true;
@@ -180,8 +189,8 @@ const scrollToBottom = async () => {
 const startChat = () => {
   errorMessage.value = '';
   sanitizePhone();
-  if (!profile.name.trim() || !profile.phone.trim()) {
-    errorMessage.value = 'Name and phone are required.';
+  if (!profile.name.trim() || !profile.phone.trim() || !profile.location.trim()) {
+    errorMessage.value = 'Name, phone, and location are required.';
     return;
   }
   saveProfileCookie();
@@ -285,6 +294,7 @@ async function loadPropertyContextSample(userMessage = '') {
 
     return {
       sourceFile: 'frontend/public/json_data/indonesia_property_36_provinces_flat.json',
+      userLocation: profile.location,
       totalRecords: properties.length,
       sampleSize: selected.length,
       selectionStrategy,
@@ -311,13 +321,14 @@ const sendMessage = async () => {
     // context in the request payload sent to the backend / ChatGPT.
     let propertyContext = null;
     if (!contextSentOnce.value) {
-      propertyContext = await loadPropertyContextSample(userText);
+      propertyContext = await loadPropertyContextSample(`${userText} ${profile.location}`);
       contextSentOnce.value = true;
     }
 
     const payload = {
       name: profile.name,
       phone: profile.phone,
+      location: profile.location,
       message: userText
     };
 
@@ -338,12 +349,27 @@ const sendMessage = async () => {
   }
 };
 
-onMounted(() => {
+async function loadChatbotConfig() {
+  try {
+    const response = await getChatbotConfig();
+    const ttlSeconds = Number(response.data?.cookieTtlSeconds || DEFAULT_PROFILE_COOKIE_TTL_SECONDS);
+    const ttlMinutes = Number(response.data?.cookieTtlMinutes || DEFAULT_PROFILE_COOKIE_TTL_MINUTES);
+    if (Number.isFinite(ttlSeconds) && ttlSeconds > 0) profileCookieTtlSeconds.value = ttlSeconds;
+    if (Number.isFinite(ttlMinutes) && ttlMinutes > 0) profileCookieTtlMinutes.value = ttlMinutes;
+  } catch (_) {
+    profileCookieTtlSeconds.value = DEFAULT_PROFILE_COOKIE_TTL_SECONDS;
+    profileCookieTtlMinutes.value = DEFAULT_PROFILE_COOKIE_TTL_MINUTES;
+  }
+}
+
+onMounted(async () => {
+  await loadChatbotConfig();
   const saved = getSavedProfileFromCookie();
   if (saved) {
     profile.name = saved.name || '';
     profile.phone = saved.phone || '';
-    profileReady.value = Boolean(profile.name && profile.phone);
+    profile.location = saved.location || '';
+    profileReady.value = Boolean(profile.name && profile.phone && profile.location);
     scheduleProfileExpiry(saved.expiresAt);
   }
 });

@@ -88,3 +88,17 @@ Reply in the same language used by the customer.
 - Limit history length to control token usage.
 - Handle quota, billing, model, and API key errors.
 - Do not allow the AI to move outside property context.
+
+## Customer Identity Context for OpenAI
+
+Every chatbot OpenAI request should include customer identity:
+
+```text
+Name
+Phone
+Location
+```
+
+It should also include recent conversation history for the same identity when available.
+
+ChatGPT should use this history to remember the returning user's previous needs, but must still prioritize the latest user message.

@@ -55,3 +55,19 @@ ENABLE_AI_WHATSAPP
 ```
 
 These should only be added when ChatGPT and Fonnte integrations are implemented.
+
+## Chatbot Cookie TTL Environment
+
+The chatbot profile cookie expiration is configured from backend `.env`:
+
+```env
+CHATBOT_COOKIE_TTL_MINUTES=20
+```
+
+This value is exposed safely through:
+
+```text
+GET /api/chatbot/config
+```
+
+Only the TTL value is exposed. Secret keys remain backend-only.

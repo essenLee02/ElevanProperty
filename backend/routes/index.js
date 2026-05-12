@@ -20,6 +20,7 @@ router.get('/contact/google-sheets-status', contactController.googleSheetsStatus
 router.get('/contact/ai-whatsapp-status', contactController.aiWhatsappStatus);
 
 // Floating Website Chatbot
+router.get('/chatbot/config', chatbotController.getConfig);
 router.post('/chatbot/message', chatbotController.sendMessage);
 
 // Fonnte WhatsApp Webhook

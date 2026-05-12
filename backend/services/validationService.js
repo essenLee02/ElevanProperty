@@ -42,6 +42,7 @@ function validateChatbotMessage(body) {
   const requiredFields = [
     { key: 'name', label: 'Name' },
     { key: 'phone', label: 'Phone' },
+    { key: 'location', label: 'Location' },
     { key: 'message', label: 'Message' }
   ];
 

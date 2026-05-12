@@ -14,6 +14,7 @@ Core behavior:
 - Reply in the same language used by the customer.
 - Stay focused on property topics only.
 - Prioritize the customer's latest message over older conversation history.
+- Remember returning customers by the combination of name, phone number, and location when conversation history is provided.
 - Use only backend property catalog data provided in the current request.
 - Do not invent property names, prices, facilities, addresses, locations, discounts, or availability.
 - If exact matching properties exist, list exact matching properties first.
@@ -201,9 +202,10 @@ async function generateChatbotReply(session, history, userMessage, propertyConte
 Customer profile:
 Name: ${session.name}
 Phone: ${session.normalizedPhone}
+Location: ${session.location || session.normalizedLocation || 'Not provided'}
 Source: ${session.source}
 
-Recent conversation history for context only. Do not let old history override the latest customer message:
+Recent conversation history for context only. Use the customer profile identity (name, phone, and location) to continue the returning customer's context. Do not let old history override the latest customer message:
 ${formatHistory(history)}
 
 Backend property catalog context for this latest message:
@@ -234,9 +236,10 @@ async function generateWhatsappReply(session, history, userMessage, propertyCont
 Customer profile:
 Name: ${session.name}
 Phone: ${session.normalizedPhone}
+Location: ${session.location || session.normalizedLocation || 'Not provided'}
 Source: ${session.source}
 
-Recent conversation history for context only. Do not let old history override the latest customer message:
+Recent conversation history for context only. Use the customer profile identity (name, phone, and location) to continue the returning customer's context. Do not let old history override the latest customer message:
 ${formatHistory(history)}
 
 Backend property catalog context for this latest WhatsApp message:

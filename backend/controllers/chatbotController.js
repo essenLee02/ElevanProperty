@@ -23,6 +23,7 @@ function formatFrontendPropertyContext(propertyContext) {
     `Total records in dataset: ${propertyContext.totalRecords || 'unknown'}`,
     `Context records provided: ${propertyContext.sampleSize || propertyContext.properties.length} properties`,
     `Selection strategy: ${propertyContext.selectionStrategy || 'not specified'}`,
+    `Customer location provided from chatbot profile: ${propertyContext.userLocation || 'not provided'}`,
     ''
   ];
 
@@ -41,10 +42,28 @@ function formatFrontendPropertyContext(propertyContext) {
   return lines.join('\n');
 }
 
+
+function getChatbotCookieTtlMinutes() {
+  const value = Number(process.env.CHATBOT_COOKIE_TTL_MINUTES || 20);
+  if (!Number.isFinite(value) || value <= 0) return 20;
+  return Math.min(Math.max(Math.round(value), 1), 1440);
+}
+
+exports.getConfig = (_req, res) => {
+  const cookieTtlMinutes = getChatbotCookieTtlMinutes();
+  return res.json({
+    success: true,
+    cookieTtlMinutes,
+    cookieTtlSeconds: cookieTtlMinutes * 60,
+    requiredProfileFields: ['name', 'phone', 'location']
+  });
+};
+
 exports.sendMessage = async (req, res) => {
   const payload = {
     name: String(req.body.name || '').trim(),
     phone: String(req.body.phone || '').trim(),
+    location: String(req.body.location || '').trim(),
     message: String(req.body.message || '').trim()
   };
 
@@ -57,8 +76,8 @@ exports.sendMessage = async (req, res) => {
   }
 
   try {
-    const session = await findOrCreateSession(payload.name, payload.phone, 'website_chatbot');
-    await saveUserMessage(session.id, payload.message, 'website_chatbot');
+    const session = await findOrCreateSession(payload.name, payload.phone, payload.location, 'website_chatbot');
+    await saveUserMessage(session.id, payload.message, 'website_chatbot', { location: payload.location });
 
     const history = await getConversationHistory(session.id, 12);
 

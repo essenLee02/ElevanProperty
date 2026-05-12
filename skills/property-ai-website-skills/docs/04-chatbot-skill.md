@@ -143,6 +143,36 @@ Sorry, I specifically help with buying, selling, and renting properties such as 
 
 ## 14. Area Scope Rule
 
-The chatbot focuses on properties in Java Island, Indonesia.
+The chatbot must follow the property data available in the JSON/catalog context.
 
-If the user asks about properties outside Java, the chatbot must politely explain the service focus and offer alternatives in Java.
+Do not apply an artificial Java-only restriction. If the JSON/catalog contains properties outside Java, including Papua or other Indonesian provinces, the chatbot may recommend them when they match the user's request. If no matching data exists, say no exact match is available and ask whether the user wants alternatives.
+
+## 15. Customer Identity, Cookie TTL, and History Memory
+
+The chatbot must collect these fields before chat starts:
+
+```text
+name
+phone
+location
+```
+
+The website profile cookie is temporary and expires based on the backend `.env` value:
+
+```env
+CHATBOT_COOKIE_TTL_MINUTES=20
+```
+
+If the cookie expires or is deleted, the user must enter name, phone, and location again.
+
+The cookie is not the permanent memory. Conversation history is remembered through the backend chat session using:
+
+```text
+name
+phone
+location
+```
+
+When ChatGPT receives history for the same customer identity, it should continue the conversation naturally and refer to relevant previous needs, such as preferred location, property type, budget, or facilities.
+
+However, the latest user message always has the highest priority and must not be overridden by old history.

@@ -19,6 +19,15 @@ const ChatSession = sequelize.define('ChatSession', {
     allowNull: false,
     index: true
   },
+  location: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  normalizedLocation: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    index: true
+  },
   source: {
     type: DataTypes.STRING,
     allowNull: false,
