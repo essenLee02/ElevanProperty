@@ -1,7 +1,7 @@
 <template>
   <div class="row mt-4 text-start">
     <div class="col-md-4 mb-3">
-      <label class="form-label">Filter by Building Type:</label>
+      <label class="form-label">Building Type:</label>
       <select class="form-select" :value="buildingType" @change="$emit('update:buildingType', $event.target.value)">
         <option value="">All Types</option>
         <option value="house">House</option>
@@ -16,7 +16,7 @@
       </select>
     </div>
     <div class="col-md-4 mb-3">
-      <label class="form-label">Filter by Transaction Type:</label>
+      <label class="form-label">Transaction Type:</label>
       <select class="form-select" :value="transactionType" @change="$emit('update:transactionType', $event.target.value)">
         <option value="">All Transactions</option>
         <option value="sale">Sale</option>
@@ -25,7 +25,7 @@
       </select>
     </div>
     <div class="col-md-4 mb-3">
-      <label class="form-label">Filter by Location:</label>
+      <label class="form-label">Location:</label>
       <input class="form-control" :value="location" placeholder="City or location" @input="$emit('update:location', $event.target.value)" />
     </div>
   </div>
