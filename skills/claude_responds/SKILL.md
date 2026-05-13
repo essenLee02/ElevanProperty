@@ -1,5 +1,5 @@
 ---
-name: claude_property_responds
+name: claude_responds
 description: Aturan respons untuk chatbot properti jual & sewa. Mengatur cara asisten memahami pertanyaan user, merekomendasikan properti dari katalog, mengelola memori per user, memberikan saran alternatif lokasi/harga terdekat, dan merespons multibahasa. Skill ini hanya mengatur perilaku respons (apa & bagaimana asisten membalas), bukan backend/frontend/database.
 ---
 
