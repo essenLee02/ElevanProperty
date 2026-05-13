@@ -21,6 +21,7 @@ router.get('/contact/ai-whatsapp-status', contactController.aiWhatsappStatus);
 
 // Floating Website Chatbot
 router.get('/chatbot/config', chatbotController.getConfig);
+router.get('/chatbot/ai-provider-status', chatbotController.aiProviderStatus);
 router.post('/chatbot/message', chatbotController.sendMessage);
 
 // Fonnte WhatsApp Webhook

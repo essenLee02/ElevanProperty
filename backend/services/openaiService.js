@@ -1,33 +1,16 @@
 const axios = require('axios');
 const { loadProjectSkillPrompt } = require('./skillPromptService');
+const {
+  getProjectSkillInstruction,
+  buildContactReplyPrompt,
+  buildChatbotReplyPrompt,
+  buildWhatsappReplyPrompt,
+  buildIntentDetectionPrompt,
+  buildPreferenceExtractionPrompt
+} = require('./aiPromptBuilderService');
 
-const DEFAULT_MODEL = 'gpt-5.4-mini';
+const DEFAULT_CHATGPT_MODEL = 'gpt-5.4-mini';
 const OPENAI_RESPONSES_URL = 'https://api.openai.com/v1/responses';
-
-const BASE_PROPERTY_ASSISTANT_PROMPT = `
-You are a professional property assistant for a property rental and sales platform in Indonesia.
-
-You must follow the project skill documentation provided below. The skill documentation is the main behavior standard for this website chatbot and WhatsApp chatbot.
-
-Core behavior:
-- Help customers buy, sell, or rent properties such as houses, villas, hotels, apartments, and boarding houses.
-- Reply in the same language used by the customer.
-- Stay focused on property topics only.
-- Prioritize the customer's latest message over older conversation history.
-- Remember returning customers by the combination of name, phone number, and location when conversation history is provided.
-- Use only backend property catalog data provided in the current request.
-- Do not invent property names, prices, facilities, addresses, locations, discounts, or availability.
-- If exact matching properties exist, list exact matching properties first.
-- If no exact match exists, clearly apologize or explain that no exact match is available, then provide only the closest alternatives from the backend catalog.
-- If the customer asks for rental houses in Surabaya, do not recommend hotels in Malang.
-- If the customer asks for hotels in Malang, recommend hotels in Malang if available.
-- If the customer asks for a budget range, respect the range when exact matching data exists; if alternatives are outside the range, say so clearly.
-- After listing property options, ask only one short follow-up question.
-`.trim();
-
-function getProjectSkillInstruction() {
-  return `${BASE_PROPERTY_ASSISTANT_PROMPT}\n\nPROJECT SKILL DOCUMENTATION:\n${loadProjectSkillPrompt()}`;
-}
 
 function sanitizeEnvValue(value) {
   return String(value || '')
@@ -45,7 +28,7 @@ function maskSecret(value) {
   return `${clean.slice(0, 8)}...${clean.slice(-4)}`;
 }
 
-function extractOpenAIText(data) {
+function extractChatGPTText(data) {
   if (data && typeof data.output_text === 'string' && data.output_text.trim()) {
     return data.output_text.trim();
   }
@@ -79,32 +62,67 @@ function extractOpenAIText(data) {
   return '';
 }
 
-function normalizeOpenAIError(error) {
+function tagChatGPTError(error, options = {}) {
+  error.provider = 'chatgpt';
+  error.status = options.status || error.status;
+  error.fallbackEligible = Boolean(options.fallbackEligible);
+  error.originalMessage = options.originalMessage || error.originalMessage || error.message;
+  return error;
+}
+
+function isChatGPTQuotaBillingOrRateLimit(status, message = '') {
+  const text = String(message || '').toLowerCase();
+  return (
+    status === 402 ||
+    status === 429 ||
+    text.includes('quota') ||
+    text.includes('billing') ||
+    text.includes('insufficient') ||
+    text.includes('credit') ||
+    text.includes('rate limit') ||
+    text.includes('rate_limit') ||
+    text.includes('exceeded your current quota')
+  );
+}
+
+function normalizeChatGPTError(error) {
   const status = error?.response?.status;
   const apiMessage =
     error?.response?.data?.error?.message ||
     error?.response?.data?.message ||
     error?.message ||
-    'Unknown OpenAI API error';
+    'Unknown ChatGPT API error';
 
   if (status === 401) {
-    return new Error('OpenAI rejected the API key. Please replace OPENAI_API_KEY in backend/.env with a new active key, then restart the backend.');
+    return tagChatGPTError(
+      new Error('ChatGPT rejected the API key. Please replace OPENAI_API_KEY in backend/.env with a new active key, then restart the backend.'),
+      { status, originalMessage: apiMessage, fallbackEligible: false }
+    );
   }
 
-  if (status === 402 || status === 429) {
-    return new Error(`OpenAI API quota/billing/rate limit issue: ${apiMessage}`);
+  if (isChatGPTQuotaBillingOrRateLimit(status, apiMessage)) {
+    return tagChatGPTError(
+      new Error(`ChatGPT API quota/billing/rate limit issue: ${apiMessage}`),
+      { status, originalMessage: apiMessage, fallbackEligible: true }
+    );
   }
 
   if ((status === 400 || status === 404) && String(apiMessage).toLowerCase().includes('model')) {
-    return new Error(`OpenAI model error: ${apiMessage}. Please check OPENAI_MODEL in backend/.env.`);
+    return tagChatGPTError(
+      new Error(`ChatGPT model error: ${apiMessage}. Please check OPENAI_MODEL in backend/.env.`),
+      { status, originalMessage: apiMessage, fallbackEligible: false }
+    );
   }
 
-  return new Error(`OpenAI API error${status ? ` (${status})` : ''}: ${apiMessage}`);
+  return tagChatGPTError(
+    new Error(`ChatGPT API error${status ? ` (${status})` : ''}: ${apiMessage}`),
+    { status, originalMessage: apiMessage, fallbackEligible: false }
+  );
 }
 
-function getOpenAIConfig() {
+function getChatGPTConfig() {
   const apiKey = sanitizeEnvValue(process.env.OPENAI_API_KEY);
-  const model = sanitizeEnvValue(process.env.OPENAI_MODEL) || DEFAULT_MODEL;
+  const model = sanitizeEnvValue(process.env.OPENAI_MODEL) || DEFAULT_CHATGPT_MODEL;
 
   return {
     apiKey,
@@ -113,15 +131,15 @@ function getOpenAIConfig() {
   };
 }
 
-async function createResponse(input, options = {}) {
-  const config = getOpenAIConfig();
+async function callChatGPTResponseAPI(input, options = {}) {
+  const config = getChatGPTConfig();
 
   if (!config.apiKey) {
-    throw new Error('OPENAI_API_KEY is missing in backend/.env');
+    throw tagChatGPTError(new Error('OPENAI_API_KEY is missing in backend/.env'), { fallbackEligible: false });
   }
 
   if (!config.apiKey.startsWith('sk-')) {
-    throw new Error('OPENAI_API_KEY format is invalid. It should start with sk-.');
+    throw tagChatGPTError(new Error('OPENAI_API_KEY format is invalid. It should start with sk-.'), { fallbackEligible: false });
   }
 
   const payload = {
@@ -138,7 +156,8 @@ async function createResponse(input, options = {}) {
   if (maxOutputTokens > 0) payload.max_output_tokens = maxOutputTokens;
 
   try {
-    console.log('[OPENAI REQUEST]', {
+    console.log('[CHATGPT REQUEST]', {
+      provider: 'chatgpt',
       model: payload.model,
       store: payload.store,
       source: options.metadata?.source || 'unknown',
@@ -153,136 +172,67 @@ async function createResponse(input, options = {}) {
       timeout: 90000
     });
 
-    const text = extractOpenAIText(response.data);
-    if (!text) throw new Error('OpenAI response is empty or cannot be parsed.');
+    const text = extractChatGPTText(response.data);
+    if (!text) throw new Error('ChatGPT response is empty or cannot be parsed.');
     return text;
   } catch (error) {
-    throw normalizeOpenAIError(error);
+    throw normalizeChatGPTError(error);
   }
 }
 
-function formatHistory(history = []) {
-  if (!history.length) return 'No previous conversation history.';
-  return history.map((item) => `${item.role}: ${item.message}`).join('\n');
-}
-
-async function generateContactReply({ name, email, phone, subject, message }) {
-  const input = `${getProjectSkillInstruction()}
-
-Task: Create a short WhatsApp reply for a new website Contact Form submission.
-
-Rules:
-- Greet the customer by name.
-- Acknowledge the property inquiry.
-- Ask one or two relevant follow-up questions if needed.
-- Mention that the team can continue assisting through WhatsApp.
-- Do not invent exact availability, price, discount, legal promise, or appointment schedule.
-- Keep it friendly, polite, and concise.
-- Maximum 5 short paragraphs.
-
-Customer data:
-Name: ${name}
-Email: ${email}
-Phone: ${phone}
-Subject: ${subject}
-Message: ${message}`;
-
-  return createResponse(input, {
+async function generateChatGPTContactReply(contactPayload) {
+  return callChatGPTResponseAPI(buildContactReplyPrompt(contactPayload), {
     store: true,
     metadata: {
       source: 'elevanlabs_contact_form',
-      channel: 'website_contact'
+      channel: 'website_contact',
+      provider: 'chatgpt'
     }
   });
 }
 
-async function generateChatbotReply(session, history, userMessage, propertyContext = '') {
-  const input = `${getProjectSkillInstruction()}
-
-Customer profile:
-Name: ${session.name}
-Phone: ${session.normalizedPhone}
-Location: ${session.location || session.normalizedLocation || 'Not provided'}
-Source: ${session.source}
-
-Recent conversation history for context only. Use the customer profile identity (name, phone, and location) to continue the returning customer's context. Do not let old history override the latest customer message:
-${formatHistory(history)}
-
-Backend property catalog context for this latest message:
-${propertyContext || 'No backend property catalog context is available.'}
-
-Latest customer message. This is the highest-priority instruction:
-${userMessage}
-
-Task:
-Create the final chatbot reply using only the backend property catalog context above.
-If exact matches are available, recommend exact matches directly.
-If no exact match is available, say that no exact match is available and then present only the backend alternatives.
-Do not keep asking discovery questions before showing options when the customer asks for suggestions or available properties.`;
-
-  return createResponse(input, {
+async function generateChatGPTChatbotReply(session, history, userMessage, propertyContext = '') {
+  return callChatGPTResponseAPI(buildChatbotReplyPrompt(session, history, userMessage, propertyContext), {
     store: true,
     metadata: {
       source: 'elevanlabs_floating_chatbot',
       channel: 'website_chatbot',
-      sessionId: String(session.id || '')
+      sessionId: String(session.id || ''),
+      provider: 'chatgpt'
     }
   });
 }
 
-async function generateWhatsappReply(session, history, userMessage, propertyContext = '') {
-  const input = `${getProjectSkillInstruction()}
-
-Customer profile:
-Name: ${session.name}
-Phone: ${session.normalizedPhone}
-Location: ${session.location || session.normalizedLocation || 'Not provided'}
-Source: ${session.source}
-
-Recent conversation history for context only. Use the customer profile identity (name, phone, and location) to continue the returning customer's context. Do not let old history override the latest customer message:
-${formatHistory(history)}
-
-Backend property catalog context for this latest WhatsApp message:
-${propertyContext || 'No backend property catalog context is available.'}
-
-Latest WhatsApp customer message. This is the highest-priority instruction:
-${userMessage}
-
-Task:
-Create the final WhatsApp reply using only the backend property catalog context above.
-If exact matches are available, recommend exact matches directly.
-If no exact match is available, say that no exact match is available and then present only the backend alternatives.`;
-
-  return createResponse(input, {
+async function generateChatGPTWhatsappReply(session, history, userMessage, propertyContext = '') {
+  return callChatGPTResponseAPI(buildWhatsappReplyPrompt(session, history, userMessage, propertyContext), {
     store: true,
     metadata: {
       source: 'elevanlabs_fonnte_whatsapp',
       channel: 'whatsapp',
-      sessionId: String(session.id || '')
+      sessionId: String(session.id || ''),
+      provider: 'chatgpt'
     }
   });
 }
 
-async function detectCustomerIntent(message) {
-  const input = `${getProjectSkillInstruction()}
-
-Classify this customer message into one of: buy, sell, rent, unknown.
-Return only one word.
-Message: ${message}`;
-  return createResponse(input, { store: true, metadata: { source: 'elevanlabs_intent_detection', channel: 'backend' } });
+async function detectCustomerIntentWithChatGPT(message) {
+  return callChatGPTResponseAPI(buildIntentDetectionPrompt(message), {
+    store: true,
+    metadata: { source: 'elevanlabs_intent_detection', channel: 'backend', provider: 'chatgpt' }
+  });
 }
 
-async function extractPropertyPreferences(message) {
-  const input = `${getProjectSkillInstruction()}
-
-Extract property preferences from the message into concise JSON with these keys: intent, propertyType, location, budget, size, bedrooms, bathrooms, facilities, rentalDuration, occupants, notes.
-Message: ${message}`;
-  return createResponse(input, { store: true, metadata: { source: 'elevanlabs_preference_extraction', channel: 'backend' } });
+async function extractPropertyPreferencesWithChatGPT(message) {
+  return callChatGPTResponseAPI(buildPreferenceExtractionPrompt(message), {
+    store: true,
+    metadata: { source: 'elevanlabs_preference_extraction', channel: 'backend', provider: 'chatgpt' }
+  });
 }
 
-function checkOpenAIConfig() {
-  const config = getOpenAIConfig();
+function checkChatGPTConfig() {
+  const config = getChatGPTConfig();
   return {
+    provider: 'chatgpt',
     hasApiKey: Boolean(config.apiKey),
     keyLooksValid: Boolean(config.apiKey && config.apiKey.startsWith('sk-')),
     maskedKey: maskSecret(config.apiKey),
@@ -292,16 +242,33 @@ function checkOpenAIConfig() {
   };
 }
 
+function isChatGPTFallbackEligibleError(error) {
+  return Boolean(error?.fallbackEligible || isChatGPTQuotaBillingOrRateLimit(error?.status, error?.message));
+}
+
 module.exports = {
   PROPERTY_ASSISTANT_PROMPT: getProjectSkillInstruction(),
   getProjectSkillInstruction,
-  createResponse,
-  generateContactReply,
-  generateChatbotReply,
-  generateWhatsappReply,
-  detectCustomerIntent,
-  extractPropertyPreferences,
-  checkOpenAIConfig,
+
+  // New explicit ChatGPT function names
+  getChatGPTConfig,
+  callChatGPTResponseAPI,
+  generateChatGPTContactReply,
+  generateChatGPTChatbotReply,
+  generateChatGPTWhatsappReply,
+  detectCustomerIntentWithChatGPT,
+  extractPropertyPreferencesWithChatGPT,
+  checkChatGPTConfig,
+  isChatGPTFallbackEligibleError,
   sanitizeEnvValue,
-  maskSecret
+  maskSecret,
+
+  // Backward-compatible aliases used by older controllers/services.
+  createResponse: callChatGPTResponseAPI,
+  generateContactReply: generateChatGPTContactReply,
+  generateChatbotReply: generateChatGPTChatbotReply,
+  generateWhatsappReply: generateChatGPTWhatsappReply,
+  detectCustomerIntent: detectCustomerIntentWithChatGPT,
+  extractPropertyPreferences: extractPropertyPreferencesWithChatGPT,
+  checkOpenAIConfig: checkChatGPTConfig
 };

@@ -12,6 +12,7 @@
         <option value="shophouse">Shophouse</option>
         <option value="office">Office</option>
         <option value="warehouse">Warehouse</option>
+        <option value="store">Store</option>
         <option value="others">Others</option>
       </select>
     </div>

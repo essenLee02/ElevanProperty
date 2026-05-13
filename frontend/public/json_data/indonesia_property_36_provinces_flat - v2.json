@@ -20,6 +20,7 @@
       "shophouse",
       "office",
       "warehouse",
+      "store",
       "others"
     ],
     "note": "Mock/sample data for development, chatbot testing, frontend portfolio testing, and backend import testing.",

@@ -18,3 +18,10 @@ docs/09-google-sheets-integration.md
 docs/10-database-models.md
 docs/11-testing-troubleshooting-deployment.md
 ```
+
+
+## New AI Provider Fallback Documentation
+
+```text
+docs/12-ai-provider-chatgpt-claude-fallback.md
+```

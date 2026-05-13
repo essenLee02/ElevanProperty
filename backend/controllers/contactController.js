@@ -1,7 +1,11 @@
 const { Contact } = require('../models');
 const { validateContactForm } = require('../services/validationService');
 const { appendContactRow, getGoogleSheetsStatus } = require('../services/googleSheetsService');
-const { generateContactReply, checkOpenAIConfig } = require('../services/openaiService');
+const { checkChatGPTConfig } = require('../services/openaiService');
+const {
+  generateContactReplyWithProviderFallback,
+  checkAIProviderConfig
+} = require('../services/aiProviderService');
 const { sendWhatsAppMessage, normalizeWhatsAppNumber, checkFonnteConfig } = require('../services/fonnteService');
 const { findOrCreateSession, saveUserMessage, saveAssistantMessage } = require('../services/sessionService');
 const { safeLog } = require('../utils/safeLog');
@@ -21,7 +25,8 @@ function isAiWhatsappEnabled() {
 }
 
 async function sendAiWhatsappReply(contactPayload) {
-  const aiReply = await generateContactReply(contactPayload);
+  const aiResult = await generateContactReplyWithProviderFallback(contactPayload);
+  const aiReply = aiResult.reply;
   const whatsappResult = await sendWhatsAppMessage(contactPayload.phone, aiReply);
 
   const session = await findOrCreateSession(contactPayload.name, contactPayload.phone, 'contact_form');
@@ -29,11 +34,21 @@ async function sendAiWhatsappReply(contactPayload) {
     email: contactPayload.email
   });
   await saveAssistantMessage(session.id, aiReply, 'whatsapp', {
-    whatsappTarget: whatsappResult.target
+    whatsappTarget: whatsappResult.target,
+    source: aiResult.provider,
+    primaryProvider: aiResult.primaryProvider,
+    fallbackUsed: aiResult.fallbackUsed,
+    fallbackProvider: aiResult.fallbackProvider || null,
+    primaryError: aiResult.primaryError || null
   });
 
   return {
     aiReply,
+    aiProvider: aiResult.provider,
+    primaryProvider: aiResult.primaryProvider,
+    fallbackUsed: aiResult.fallbackUsed,
+    fallbackProvider: aiResult.fallbackProvider || null,
+    primaryError: aiResult.primaryError || null,
     whatsappTarget: whatsappResult.target,
     fonnteResponse: whatsappResult.response
   };
@@ -92,6 +107,11 @@ exports.submitContact = async (req, res) => {
         contactId: newContact.id,
         whatsappTarget: aiWhatsappResult.whatsappTarget,
         aiReply: aiWhatsappResult.aiReply,
+        aiProvider: aiWhatsappResult.aiProvider,
+        primaryProvider: aiWhatsappResult.primaryProvider,
+        fallbackUsed: aiWhatsappResult.fallbackUsed,
+        fallbackProvider: aiWhatsappResult.fallbackProvider || null,
+        primaryError: aiWhatsappResult.primaryError || null,
         fonnteResponse: aiWhatsappResult.fonnteResponse,
         message: 'Message received, sent to Google Spreadsheet, saved to database, and AI WhatsApp reply sent successfully.'
       });
@@ -106,7 +126,7 @@ exports.submitContact = async (req, res) => {
         contactId: newContact.id,
         whatsappTarget: normalizeWhatsAppNumber(contactPayload.phone),
         aiWhatsappError: aiWhatsappError.message || 'Failed to send AI WhatsApp reply.',
-        message: 'Message received, sent to Google Spreadsheet, and saved to database. However, the AI WhatsApp reply failed. Please check OPENAI_API_KEY, OPENAI_MODEL, FONNTE_TOKEN, Fonnte device connection, and WhatsApp quota.'
+        message: 'Message received, sent to Google Spreadsheet, and saved to database. However, the AI WhatsApp reply failed. Please check OPENAI_API_KEY, OPENAI_MODEL, ANTHROPIC_API_KEY, CLAUDE_MODEL, FONNTE_TOKEN, Fonnte device connection, and WhatsApp quota.'
       });
     }
   } catch (error) {
@@ -143,36 +163,35 @@ exports.googleSheetsStatus = async (req, res) => {
 };
 
 exports.aiWhatsappStatus = async (req, res) => {
-  const openAIConfig = checkOpenAIConfig();
+  const aiConfig = checkAIProviderConfig();
   const fonnteConfig = checkFonnteConfig();
-  let openAITest = null;
 
-  if (String(req.query.testOpenAI || '').toLowerCase() === 'true') {
-    try {
-      const { createResponse } = require('../services/openaiService');
-      openAITest = await createResponse('Reply with this exact text only: OpenAI backend connection is OK.', { store: false });
-    } catch (error) {
-      openAITest = { error: error.message };
-    }
-  }
+  // Backward-compatible field for existing frontend/debug usage.
+  const openAIConfig = checkChatGPTConfig();
 
-  const success = openAIConfig.hasApiKey && openAIConfig.keyLooksValid && fonnteConfig.hasToken && (!openAITest?.error);
+  const aiReady =
+    (aiConfig.primaryProvider === 'chatgpt' && aiConfig.chatGPT.hasApiKey && aiConfig.chatGPT.keyLooksValid) ||
+    (aiConfig.primaryProvider === 'claude' && aiConfig.claude.hasApiKey && aiConfig.claude.keyLooksValid) ||
+    aiConfig.claudeFallbackReady;
+
+  const success = aiReady && fonnteConfig.hasToken;
 
   return res.status(success ? 200 : 500).json({
     success,
     aiWhatsappEnabled: isAiWhatsappEnabled(),
+    aiProviders: aiConfig,
     openAI: {
       hasApiKey: openAIConfig.hasApiKey,
       keyLooksValid: openAIConfig.keyLooksValid,
       maskedKey: openAIConfig.maskedKey,
       model: openAIConfig.model,
-      test: openAITest
+      provider: 'chatgpt'
     },
     fonnte: {
       hasToken: fonnteConfig.hasToken
     },
     message: success
-      ? 'OpenAI and Fonnte configuration are ready.'
-      : 'OpenAI or Fonnte configuration is not ready. If the OpenAI test says the key was rejected, create a new OpenAI API key, update backend/.env, and restart the backend.'
+      ? 'AI provider and Fonnte configuration are ready. ChatGPT is primary by default; Claude fallback is available when configured.'
+      : 'AI provider or Fonnte configuration is not ready. Check OPENAI_API_KEY, ANTHROPIC_API_KEY, ENABLE_CLAUDE_FALLBACK, and FONNTE_TOKEN in backend/.env.'
   });
 };
