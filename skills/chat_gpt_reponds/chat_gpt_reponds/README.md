@@ -1,4 +1,4 @@
-# chat_gpt_reponds — Combined With claude_property_responds
+# chat_gpt_reponds — Combined With property_responds
 
 Generated at: `2026-05-13T09:16:05Z`
 
@@ -6,7 +6,7 @@ This folder is the corrected combined response-skill package.
 
 ## What Was Combined
 
-This package uses `chat_gpt_reponds` as the main folder and combines it with the response logic from `claude_property_responds.zip`.
+This package uses `chat_gpt_reponds` as the main folder and combines it with the response logic from `property_responds.zip`.
 
 The final result is only:
 
@@ -14,7 +14,7 @@ The final result is only:
 chat_gpt_reponds/
 ```
 
-There is no extra `skills/` wrapper folder and no separate `claude_property_responds/` folder.
+There is no extra `skills/` wrapper folder and no separate `property_responds/` folder.
 
 ## Purpose
 

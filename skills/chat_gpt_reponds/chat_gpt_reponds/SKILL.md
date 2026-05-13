@@ -1,6 +1,6 @@
 ---
 name: chat-gpt-property-response-skill
-description: Combined English response behavior skill for a property chatbot. This is the chat_gpt_reponds skill combined with claude_property_responds guidance. It helps GPT answer property buying, selling, and rental questions using available catalog context, user identity, location, and conversation history.
+description: Combined English response behavior skill for a property chatbot. This is the chat_gpt_reponds skill combined with property_responds guidance. It helps GPT answer property buying, selling, and rental questions using available catalog context, user identity, location, and conversation history.
 ---
 
 # chat_gpt_reponds — Property Response Skill
