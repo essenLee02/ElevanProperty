@@ -1,49 +1,80 @@
 ---
-name: website-environment-code-integration-skill
-description: Consolidated website environment and code development skill for the ElevanLabs property website. Covers VueJS frontend, NodeJS backend, database, Google API, Fonnte API, ChatGPT API, JSON property catalog, chatbot cookie/session, and testing/deployment.
+name: elevan-property-website-environment-skill-module-split
+description: Module-based website environment and development skill for the Elevan_Property project. It separates Home, About Us, Contact, and Chatbot skills while keeping shared backend, frontend, environment, API, database, and troubleshooting guidance clean and non-repetitive.
+version: elevan-property-module-split-v1
 ---
 
-# Website Environment and Code Integration Skill
+# Elevan_Property Website Environment Skill
 
 ## Purpose
 
-This skill documents how the property website should be developed and maintained.
+This skill documents the **Elevan_Property** website environment only.
 
-It covers:
-
-- frontend modules;
-- backend modules;
-- database and models;
-- JSON property catalog;
-- About Us portfolio from JSON;
-- Contact Form;
-- chatbot workflow;
-- chatbot cookie/session TTL;
-- Google Sheets API;
-- Fonnte WhatsApp API;
-- ChatGPT / OpenAI API;
-- frontend rendering rules;
-- testing and troubleshooting.
-
-## Core Architecture
+It supports backend and frontend development for the actual project structure:
 
 ```text
-VueJS frontend
-→ NodeJS / Express backend
-→ MySQL / Sequelize
-→ Google Sheets API
-→ ChatGPT / OpenAI API
-→ Fonnte WhatsApp API
+Elevan_Property/
+├─ backend/
+├─ frontend/
+└─ skills/
 ```
+
+## Core Stack
+
+```text
+Backend: Node.js, Express, Sequelize, MySQL
+Frontend: Vue 3, Vite, Axios, Vue Router, vue3-toastify
+External APIs: OpenAI / ChatGPT, Anthropic / Claude, Fonnte, Google Sheets
+Property Catalog: frontend/public/json_data/indonesia_property_36_provinces_flat.json
+Response Skills: skills/chat_gpt_responds and skills/claude_responds
+```
+
+## Main Architecture
+
+```text
+Vue frontend
+→ Axios API services
+→ Express backend
+→ MySQL / Sequelize
+→ JSON property catalog
+→ ChatGPT / Claude / Private Agent
+→ Fonnte WhatsApp
+→ Google Sheets
+```
+
+## Module-Based Rule
+
+The project skill should be organized by module:
+
+```text
+Home
+About Us
+Contact
+Chatbot
+```
+
+Each module should clearly describe:
+
+- frontend files;
+- backend routes/controllers/services;
+- data source;
+- expected behavior;
+- validation or business rule;
+- troubleshooting focus.
 
 ## Development Principles
 
-1. Frontend handles UI only.
-2. Backend handles private APIs, database, external integrations, and security.
-3. Secrets must never be exposed in frontend.
-4. About Us portfolio data should come from `frontend/public/json_data/indonesia_property_36_provinces_flat.json`.
-5. Chatbot property recommendations should be based on JSON property data.
-6. Chatbot identity requires name, phone, and location.
-7. Chatbot cookie/session TTL is controlled from backend `.env`.
-8. ChatGPT should receive filtered property context, user identity, location, and relevant conversation history.
-9. Documentation must avoid duplicated or looping instructions.
+1. Backend uses `backend/.env`.
+2. Frontend uses `frontend/.env`.
+3. Browser-exposed frontend variables must start with `VITE_`.
+4. Secrets must stay only in `backend/.env`.
+5. About Us portfolio must use the JSON property catalog.
+6. Contact Form must be public and not require user login/JWT.
+7. Chatbot recommendations must use backend catalog context.
+8. ChatGPT must load response skills from `skills/chat_gpt_responds`.
+9. Claude must load response skills from `skills/claude_responds`.
+10. Private Agent should use both ChatGPT and Claude response skill rules.
+11. Google Sheets sync errors must not block database contact submission.
+12. Fonnte WhatsApp errors must be logged clearly without exposing tokens.
+13. Backend and frontend dependencies must be installed separately.
+14. Keep skill files clean, module-based, non-repetitive, and focused on actual Elevan_Property code.
