@@ -1,5 +1,3 @@
-const fs = require('fs');
-const path = require('path');
 const { validateChatbotMessage } = require('../services/validationService');
 const {
   findOrCreateSession,
@@ -13,36 +11,21 @@ const {
   getVisibleMatchesFromAlternatives
 } = require('../services/propertyRecommendationService');
 
-const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
-const CHAT_GPT_RESPONSE_SKILL_DIR = path.join(PROJECT_ROOT, 'skills', 'chat_gpt_reponds');
-
-function readMarkdownFiles(directoryPath) {
-  try {
-    if (!fs.existsSync(directoryPath)) return [];
-
-    return fs.readdirSync(directoryPath, { withFileTypes: true })
-      .flatMap((entry) => {
-        const fullPath = path.join(directoryPath, entry.name);
-        if (entry.isDirectory()) return readMarkdownFiles(fullPath);
-        if (entry.isFile() && entry.name.toLowerCase().endsWith('.md')) return [fullPath];
-        return [];
-      });
-  } catch (error) {
-    console.error('[PRIVATE CHATBOT CONTROLLER SKILL READ ERROR]', {
-      path: directoryPath,
-      message: error.message
-    });
-    return [];
-  }
-}
+const {
+  loadResponseSkillPrompt,
+  getSkillRegistryStatus
+} = require('../services/skillPromptService');
 
 function loadPrivateChatbotSkillInfo() {
-  const files = readMarkdownFiles(CHAT_GPT_RESPONSE_SKILL_DIR);
+  const registry = getSkillRegistryStatus();
+  const privatePrompt = loadResponseSkillPrompt('private_agent', { maxCharacters: 12000 });
 
   return {
-    skillDirectory: CHAT_GPT_RESPONSE_SKILL_DIR,
-    skillFileCount: files.length,
-    skillFiles: files.map((file) => path.relative(PROJECT_ROOT, file))
+    skillSource: 'skills/chat_gpt_responds + skills/claude_responds',
+    skillPromptLoaded: Boolean(privatePrompt),
+    skillPromptCharacters: privatePrompt.length,
+    chatGPTSkill: registry.groups.chat_gpt_responds,
+    claudeSkill: registry.groups.claude_responds
   };
 }
 

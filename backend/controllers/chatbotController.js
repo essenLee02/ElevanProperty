@@ -11,6 +11,7 @@ const {
 } = require('../services/aiProviderService');
 const { buildRecommendationContextForLLM } = require('../services/propertyRecommendationService');
 const chatbotPrivateController = require('./chatbotPrivateController');
+const { getSkillRegistryStatus } = require('../services/skillPromptService');
 
 /**
  * Format the property context payload from the frontend (first-chat JSON data)
@@ -74,6 +75,7 @@ exports.aiProviderStatus = (_req, res) => {
   return res.status(ready ? 200 : 500).json({
     success: ready,
     ...config,
+    skillRegistry: getSkillRegistryStatus(),
     privateController: {
       enabled: String(process.env.ENABLE_CHATBOT_PRIVATE_CONTROLLER || 'true').toLowerCase() !== 'false',
       name: 'chatbotPrivateController',
@@ -83,6 +85,22 @@ exports.aiProviderStatus = (_req, res) => {
     message: ready
       ? 'AI provider configuration is ready. If ChatGPT and Claude fail, chatbotPrivateController can respond as local private agent.'
       : 'AI provider configuration is not ready. Check OPENAI_API_KEY, ANTHROPIC_API_KEY, or ENABLE_CHATBOT_PRIVATE_CONTROLLER in backend/.env.'
+  });
+};
+
+
+exports.skillStatus = (_req, res) => {
+  const registry = getSkillRegistryStatus();
+
+  const chatGPTReady = registry.groups.chat_gpt_responds.exists && registry.groups.chat_gpt_responds.markdownFileCount > 0;
+  const claudeReady = registry.groups.claude_responds.exists && registry.groups.claude_responds.markdownFileCount > 0;
+
+  return res.status(chatGPTReady && claudeReady ? 200 : 500).json({
+    success: chatGPTReady && claudeReady,
+    message: chatGPTReady && claudeReady
+      ? 'Registered response skills are loaded successfully.'
+      : 'One or more response skill folders are missing. Check skills/chat_gpt_responds and skills/claude_responds.',
+    registry
   });
 };
 

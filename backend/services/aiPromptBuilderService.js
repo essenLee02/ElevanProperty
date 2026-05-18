@@ -22,8 +22,8 @@ Core behavior:
 - After listing property options, ask only one short follow-up question.
 `.trim();
 
-function getProjectSkillInstruction() {
-  return `${BASE_PROPERTY_ASSISTANT_PROMPT}\n\nPROJECT SKILL DOCUMENTATION:\n${loadProjectSkillPrompt()}`;
+function getProjectSkillInstruction(provider = 'shared') {
+  return `${BASE_PROPERTY_ASSISTANT_PROMPT}\n\nPROJECT SKILL DOCUMENTATION FOR PROVIDER: ${provider}\n${loadProjectSkillPrompt({ provider })}`;
 }
 
 function formatConversationHistory(history = []) {
@@ -31,8 +31,8 @@ function formatConversationHistory(history = []) {
   return history.map((item) => `${item.role}: ${item.message}`).join('\n');
 }
 
-function buildContactReplyPrompt({ name, email, phone, subject, message }) {
-  return `${getProjectSkillInstruction()}
+function buildContactReplyPrompt({ name, email, phone, subject, message }, provider = 'shared') {
+  return `${getProjectSkillInstruction(provider)}
 
 Task: Create a short WhatsApp reply for a new website Contact Form submission.
 
@@ -53,8 +53,8 @@ Subject: ${subject}
 Message: ${message}`;
 }
 
-function buildChatbotReplyPrompt(session, history, userMessage, propertyContext = '') {
-  return `${getProjectSkillInstruction()}
+function buildChatbotReplyPrompt(session, history, userMessage, propertyContext = '', provider = 'shared') {
+  return `${getProjectSkillInstruction(provider)}
 
 Customer profile:
 Name: ${session.name}
@@ -78,8 +78,8 @@ If no exact match is available, say that no exact match is available and then pr
 Do not keep asking discovery questions before showing options when the customer asks for suggestions or available properties.`;
 }
 
-function buildWhatsappReplyPrompt(session, history, userMessage, propertyContext = '') {
-  return `${getProjectSkillInstruction()}
+function buildWhatsappReplyPrompt(session, history, userMessage, propertyContext = '', provider = 'shared') {
+  return `${getProjectSkillInstruction(provider)}
 
 Customer profile:
 Name: ${session.name}
@@ -102,16 +102,16 @@ If exact matches are available, recommend exact matches directly.
 If no exact match is available, say that no exact match is available and then present only the backend alternatives.`;
 }
 
-function buildIntentDetectionPrompt(message) {
-  return `${getProjectSkillInstruction()}
+function buildIntentDetectionPrompt(message, provider = 'shared') {
+  return `${getProjectSkillInstruction(provider)}
 
 Classify this customer message into one of: buy, sell, rent, unknown.
 Return only one word.
 Message: ${message}`;
 }
 
-function buildPreferenceExtractionPrompt(message) {
-  return `${getProjectSkillInstruction()}
+function buildPreferenceExtractionPrompt(message, provider = 'shared') {
+  return `${getProjectSkillInstruction(provider)}
 
 Extract property preferences from the message into concise JSON with these keys: intent, propertyType, location, budget, size, bedrooms, bathrooms, facilities, rentalDuration, occupants, notes.
 Message: ${message}`;

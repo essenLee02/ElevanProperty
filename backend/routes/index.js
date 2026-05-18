@@ -23,6 +23,7 @@ router.get('/contact/ai-whatsapp-status', contactController.aiWhatsappStatus);
 // Floating Website Chatbot
 router.get('/chatbot/config', chatbotController.getConfig);
 router.get('/chatbot/ai-provider-status', chatbotController.aiProviderStatus);
+router.get('/chatbot/skill-status', chatbotController.skillStatus);
 router.get('/chatbot/private-status', chatbotPrivateController.privateAgentStatus);
 router.post('/chatbot/private-message', chatbotPrivateController.sendPrivateMessage);
 router.post('/chatbot/message', chatbotController.sendMessage);
