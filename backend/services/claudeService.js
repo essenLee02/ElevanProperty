@@ -104,8 +104,8 @@ async function callClaudeMessagesAPI(input, options = {}) {
 }
 
 async function generateClaudeContactReply(contactPayload) {
-  return callClaudeMessagesAPI(buildContactReplyPrompt(contactPayload), {
-    system: getProjectSkillInstruction(),
+  return callClaudeMessagesAPI(buildContactReplyPrompt(contactPayload, 'claude'), {
+    system: getProjectSkillInstruction('claude'),
     metadata: {
       source: 'elevanlabs_contact_form',
       channel: 'website_contact',
@@ -115,8 +115,8 @@ async function generateClaudeContactReply(contactPayload) {
 }
 
 async function generateClaudeChatbotReply(session, history, userMessage, propertyContext = '') {
-  return callClaudeMessagesAPI(buildChatbotReplyPrompt(session, history, userMessage, propertyContext), {
-    system: getProjectSkillInstruction(),
+  return callClaudeMessagesAPI(buildChatbotReplyPrompt(session, history, userMessage, propertyContext, 'claude'), {
+    system: getProjectSkillInstruction('claude'),
     metadata: {
       source: 'elevanlabs_floating_chatbot',
       channel: 'website_chatbot',
@@ -127,8 +127,8 @@ async function generateClaudeChatbotReply(session, history, userMessage, propert
 }
 
 async function generateClaudeWhatsappReply(session, history, userMessage, propertyContext = '') {
-  return callClaudeMessagesAPI(buildWhatsappReplyPrompt(session, history, userMessage, propertyContext), {
-    system: getProjectSkillInstruction(),
+  return callClaudeMessagesAPI(buildWhatsappReplyPrompt(session, history, userMessage, propertyContext, 'claude'), {
+    system: getProjectSkillInstruction('claude'),
     metadata: {
       source: 'elevanlabs_fonnte_whatsapp',
       channel: 'whatsapp',
@@ -139,15 +139,15 @@ async function generateClaudeWhatsappReply(session, history, userMessage, proper
 }
 
 async function detectCustomerIntentWithClaude(message) {
-  return callClaudeMessagesAPI(buildIntentDetectionPrompt(message), {
-    system: getProjectSkillInstruction(),
+  return callClaudeMessagesAPI(buildIntentDetectionPrompt(message, 'claude'), {
+    system: getProjectSkillInstruction('claude'),
     metadata: { source: 'elevanlabs_intent_detection', channel: 'backend', provider: 'claude' }
   });
 }
 
 async function extractPropertyPreferencesWithClaude(message) {
-  return callClaudeMessagesAPI(buildPreferenceExtractionPrompt(message), {
-    system: getProjectSkillInstruction(),
+  return callClaudeMessagesAPI(buildPreferenceExtractionPrompt(message, 'claude'), {
+    system: getProjectSkillInstruction('claude'),
     metadata: { source: 'elevanlabs_preference_extraction', channel: 'backend', provider: 'claude' }
   });
 }
@@ -161,7 +161,8 @@ function checkClaudeConfig() {
     maskedKey: maskSecret(config.apiKey),
     model: config.model,
     apiVersion: config.apiVersion,
-    maxTokens: config.maxTokens
+    maxTokens: config.maxTokens,
+    skillPromptLoaded: Boolean(getProjectSkillInstruction('claude'))
   };
 }
 

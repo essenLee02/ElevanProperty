@@ -181,7 +181,7 @@ async function callChatGPTResponseAPI(input, options = {}) {
 }
 
 async function generateChatGPTContactReply(contactPayload) {
-  return callChatGPTResponseAPI(buildContactReplyPrompt(contactPayload), {
+  return callChatGPTResponseAPI(buildContactReplyPrompt(contactPayload, 'chatgpt'), {
     store: true,
     metadata: {
       source: 'elevanlabs_contact_form',
@@ -192,7 +192,7 @@ async function generateChatGPTContactReply(contactPayload) {
 }
 
 async function generateChatGPTChatbotReply(session, history, userMessage, propertyContext = '') {
-  return callChatGPTResponseAPI(buildChatbotReplyPrompt(session, history, userMessage, propertyContext), {
+  return callChatGPTResponseAPI(buildChatbotReplyPrompt(session, history, userMessage, propertyContext, 'chatgpt'), {
     store: true,
     metadata: {
       source: 'elevanlabs_floating_chatbot',
@@ -204,7 +204,7 @@ async function generateChatGPTChatbotReply(session, history, userMessage, proper
 }
 
 async function generateChatGPTWhatsappReply(session, history, userMessage, propertyContext = '') {
-  return callChatGPTResponseAPI(buildWhatsappReplyPrompt(session, history, userMessage, propertyContext), {
+  return callChatGPTResponseAPI(buildWhatsappReplyPrompt(session, history, userMessage, propertyContext, 'chatgpt'), {
     store: true,
     metadata: {
       source: 'elevanlabs_fonnte_whatsapp',
@@ -216,14 +216,14 @@ async function generateChatGPTWhatsappReply(session, history, userMessage, prope
 }
 
 async function detectCustomerIntentWithChatGPT(message) {
-  return callChatGPTResponseAPI(buildIntentDetectionPrompt(message), {
+  return callChatGPTResponseAPI(buildIntentDetectionPrompt(message, 'chatgpt'), {
     store: true,
     metadata: { source: 'elevanlabs_intent_detection', channel: 'backend', provider: 'chatgpt' }
   });
 }
 
 async function extractPropertyPreferencesWithChatGPT(message) {
-  return callChatGPTResponseAPI(buildPreferenceExtractionPrompt(message), {
+  return callChatGPTResponseAPI(buildPreferenceExtractionPrompt(message, 'chatgpt'), {
     store: true,
     metadata: { source: 'elevanlabs_preference_extraction', channel: 'backend', provider: 'chatgpt' }
   });
@@ -238,7 +238,7 @@ function checkChatGPTConfig() {
     maskedKey: maskSecret(config.apiKey),
     model: config.model,
     store: config.store,
-    skillPromptLoaded: Boolean(loadProjectSkillPrompt())
+    skillPromptLoaded: Boolean(loadProjectSkillPrompt({ provider: 'chatgpt' }))
   };
 }
 
@@ -247,7 +247,7 @@ function isChatGPTFallbackEligibleError(error) {
 }
 
 module.exports = {
-  PROPERTY_ASSISTANT_PROMPT: getProjectSkillInstruction(),
+  PROPERTY_ASSISTANT_PROMPT: getProjectSkillInstruction('chatgpt'),
   getProjectSkillInstruction,
 
   // New explicit ChatGPT function names
