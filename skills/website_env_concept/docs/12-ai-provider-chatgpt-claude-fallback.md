@@ -11,7 +11,7 @@ ChatGPT is the primary provider.
 Claude is the fallback provider.
 ```
 
-If ChatGPT fails because of quota, billing, or rate-limit issues, the backend should automatically send the same prompt to Claude.
+If ChatGPT fails because of billing, quota, rate-limit, API key, model, or connection issues, the backend should automatically send the same prompt to Claude.
 
 ## Backend Environment Variables
 
@@ -22,7 +22,7 @@ AI_PRIMARY_PROVIDER=chatgpt
 ENABLE_CLAUDE_FALLBACK=true
 
 ANTHROPIC_API_KEY=your_claude_api_key
-CLAUDE_MODEL=claude-sonnet-4-5
+CLAUDE_MODEL=claude-haiku-4-5-20251001
 CLAUDE_API_VERSION=2023-06-01
 CLAUDE_MAX_TOKENS=1200
 ```
