@@ -12,8 +12,8 @@ It includes the important behavior from:
 
 ```text
 chat_gpt_responds.zip
-claude_responds.zip
-claude_responds_old.zip
+smart_responds.zip
+smart_responds_old.zip
 ```
 
 The content is consolidated into fewer category files to avoid repetitive and redundant `.md` files.

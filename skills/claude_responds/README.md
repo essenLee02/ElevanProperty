@@ -1,19 +1,19 @@
-# Claude Response Skill — Optimized v3
+# Smart Response Skill — Optimized v3
 
 Folder:
 
 ```text
-claude_responds
+smart_responds
 ```
 
-This folder is the optimized, synchronized response skill for `Claude`.
+This folder is the optimized, synchronized response skill for `Smart`.
 
 It includes the important behavior from:
 
 ```text
 chat_gpt_responds.zip
-claude_responds.zip
-claude_responds_old.zip
+smart_responds.zip
+smart_responds_old.zip
 ```
 
 The content is consolidated into fewer category files to avoid repetitive and redundant `.md` files.

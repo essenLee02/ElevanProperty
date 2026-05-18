@@ -1,14 +1,14 @@
 ---
-name: claude-property-response-skill
-description: Optimized property chatbot response skill for Claude, synchronized with claude_responds_old behavior and the equivalent ChatGPT/Claude skill. Controls only response behavior for catalog-based property buying, selling, and renting.
+name: smart-property-response-skill
+description: Optimized property chatbot response skill for Smart, synchronized with smart_responds_old behavior and the equivalent ChatGPT/Smart skill. Controls only response behavior for catalog-based property buying, selling, and renting.
 version: v3-old-synced
 ---
 
-# Claude Property Response Skill
+# Smart Property Response Skill
 
 ## Purpose
 
-This skill teaches Claude how to respond inside a property chatbot.
+This skill teaches Smart how to respond inside a property chatbot.
 
 This skill controls **response behavior only**. It does not define backend code, frontend code, database design, API keys, hosting, or deployment.
 
@@ -18,7 +18,7 @@ This skill is synchronized with:
 
 ```text
 ChatGPT response skill
-Claude response skill
+Smart response skill
 Private Agent fallback behavior
 ```
 

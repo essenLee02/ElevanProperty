@@ -8,7 +8,7 @@ This applies to:
 
 ```text
 ChatGPT
-Claude
+Smart
 Private Agent
 ```
 
@@ -144,9 +144,9 @@ English:
    Price: **Rp 39.950.000.000**
 ```
 
-## ChatGPT-Claude Synchronization Rule
+## ChatGPT-Smart Synchronization Rule
 
-ChatGPT and Claude must follow the same response behavior.
+ChatGPT and Smart must follow the same response behavior.
 
 Both providers must share the same:
 
