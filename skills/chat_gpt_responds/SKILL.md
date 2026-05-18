@@ -1,14 +1,14 @@
 ---
-name: claude-property-response-skill
-description: Optimized property chatbot response skill for Claude, synchronized with claude_responds_old behavior and the equivalent ChatGPT/Claude skill. Controls only response behavior for catalog-based property buying, selling, and renting.
+name: chatgpt-property-response-skill
+description: Optimized property chatbot response skill for ChatGPT, synchronized with claude_responds_old behavior and the equivalent ChatGPT/Claude skill. Controls only response behavior for catalog-based property buying, selling, and renting.
 version: v3-old-synced
 ---
 
-# Claude Property Response Skill
+# ChatGPT Property Response Skill
 
 ## Purpose
 
-This skill teaches Claude how to respond inside a property chatbot.
+This skill teaches ChatGPT how to respond inside a property chatbot.
 
 This skill controls **response behavior only**. It does not define backend code, frontend code, database design, API keys, hosting, or deployment.
 

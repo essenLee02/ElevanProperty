@@ -1,12 +1,12 @@
-# Claude Response Skill — Optimized v3
+# ChatGPT Response Skill — Optimized v3
 
 Folder:
 
 ```text
-claude_responds
+chat_gpt_responds
 ```
 
-This folder is the optimized, synchronized response skill for `Claude`.
+This folder is the optimized, synchronized response skill for `ChatGPT`.
 
 It includes the important behavior from:
 
