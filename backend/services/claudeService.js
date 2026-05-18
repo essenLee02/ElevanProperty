@@ -10,7 +10,7 @@ const {
 const { sanitizeEnvValue, maskSecret } = require('./openaiService');
 
 const CLAUDE_MESSAGES_URL = 'https://api.anthropic.com/v1/messages';
-const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-5';
+const DEFAULT_CLAUDE_MODEL = 'claude-haiku-4-5-20251001';
 const DEFAULT_CLAUDE_API_VERSION = '2023-06-01';
 
 function getClaudeConfig() {

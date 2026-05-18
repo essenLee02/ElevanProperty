@@ -9,7 +9,7 @@ Primary provider: ChatGPT / OpenAI
 Fallback provider: Claude / Anthropic
 ```
 
-If ChatGPT fails because of quota, billing, or rate-limit issues, the backend automatically sends the same chatbot/contact/WhatsApp prompt to Claude.
+If ChatGPT fails because of billing, quota, rate-limit, API key, model, or connection issues, the backend automatically sends the same chatbot/contact/WhatsApp prompt to Claude.
 
 ## Add These Variables To `backend/.env`
 
@@ -18,7 +18,7 @@ AI_PRIMARY_PROVIDER=chatgpt
 ENABLE_CLAUDE_FALLBACK=true
 
 ANTHROPIC_API_KEY=your_claude_api_key
-CLAUDE_MODEL=claude-sonnet-4-5
+CLAUDE_MODEL=claude-haiku-4-5-20251001
 CLAUDE_API_VERSION=2023-06-01
 CLAUDE_MAX_TOKENS=1200
 ```
@@ -102,7 +102,7 @@ Claude fallback happens when:
 AI_PRIMARY_PROVIDER=chatgpt
 ENABLE_CLAUDE_FALLBACK=true
 ANTHROPIC_API_KEY is filled
-ChatGPT returns quota/billing/rate-limit issue
+ChatGPT returns billing/quota/rate-limit/API key/model/connection issue
 ```
 
 ## Restart Backend

@@ -72,8 +72,16 @@ function normalizeGoogleError(error, serviceAccountEmail, spreadsheetId) {
     return new Error(buildPermissionErrorMessage(serviceAccountEmail, spreadsheetId));
   }
 
-  if (status === 401 || message.includes('[401]')) {
-    return new Error('Google Sheets authentication failed. Please check the service account JSON file and Google Sheets API enablement.');
+  if (
+    status === 401 ||
+    message.includes('[401]') ||
+    message.toLowerCase().includes('invalid_grant') ||
+    message.toLowerCase().includes('invalid jwt signature')
+  ) {
+    return new Error(
+      'Google Sheets authentication failed in backend service account. Contact Form does not require user login/JWT. ' +
+      'Please check backend/google-service-account.json, private_key formatting, service account status, Google Sheets API enablement, and system clock.'
+    );
   }
 
   if (status === 404 || message.includes('[404]')) {

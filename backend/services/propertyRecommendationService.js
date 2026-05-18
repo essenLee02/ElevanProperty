@@ -220,11 +220,31 @@ function extractPropertyFilters(message = '', history = []) {
   const current = extractSingleMessageFilters(message);
   const previous = extractFromHistory(history);
 
-  // Current message must always win over history. This prevents old queries such as
-  // "hotel in Malang" from contaminating a new request such as "rental house in Surabaya".
+  const currentHasNewSearchAnchor = Boolean(
+    current.buildingType ||
+    current.location ||
+    current.transactionType
+  );
+
+  // Current message must always win over history.
+  //
+  // Important fix:
+  // If the latest message gives a new building type or location but does not give a
+  // transaction type, do NOT inherit an old transaction type from history.
+  //
+  // Example:
+  // Old history: "sewa hotel di Malang"
+  // Latest: "saya mau rumah di Sidoarjo"
+  // Correct filters: buildingType=house, location=Sidoarjo, transactionType=''
+  // Incorrect old behavior: buildingType=house, location=Sidoarjo, transactionType=rent
+  //
+  // This prevents the chatbot from saying "no exact match" while still listing
+  // matching houses as alternatives.
+  const shouldInheritTransactionType = !currentHasNewSearchAnchor;
+
   return {
     buildingType: current.buildingType || previous.buildingType || '',
-    transactionType: current.transactionType || previous.transactionType || '',
+    transactionType: current.transactionType || (shouldInheritTransactionType ? previous.transactionType : '') || '',
     location: current.location || previous.location || '',
     budget: current.budget || previous.budget || null,
     facilities: current.facilities?.length ? current.facilities : previous.facilities || []
@@ -316,6 +336,27 @@ function filterProperties(properties, filters = {}) {
     return matchesTransaction && matchesBuilding && matchesLocation && matchesBudget;
   });
 }
+
+function propertyMatchesCoreVisibleRequest(property = {}, filters = {}) {
+  const buildingType = normalizeText(filters.buildingType);
+  const location = normalizeText(filters.location || filters.city);
+  const transactionType = normalizeText(filters.transactionType);
+
+  const propertyText = [property.province, property.location, property.city, property.district, property.address]
+    .map(normalizeText)
+    .join(' ');
+
+  const matchesBuilding = buildingType ? normalizeText(property.buildingType) === buildingType : true;
+  const matchesLocation = location ? propertyText.includes(location) : true;
+  const matchesTransaction = transactionType ? normalizeText(property.transactionType) === transactionType : true;
+
+  return matchesBuilding && matchesLocation && matchesTransaction;
+}
+
+function getVisibleMatchesFromAlternatives(alternatives = [], filters = {}) {
+  return (alternatives || []).filter((property) => propertyMatchesCoreVisibleRequest(property, filters));
+}
+
 
 async function getAlternatives(filters = {}) {
   const source = await getSourceProperties();
@@ -438,8 +479,27 @@ function summarizeFilters(filters = {}) {
 
 async function buildRecommendationContextForLLM(message = '', history = []) {
   const filters = extractPropertyFilters(message, history);
-  const exactMatches = await searchProperties(filters);
-  const alternatives = exactMatches.length ? [] : await getAlternatives(filters);
+  let exactMatches = await searchProperties(filters);
+  let alternatives = exactMatches.length ? [] : await getAlternatives(filters);
+
+  // Safety correction:
+  // Sometimes a previous conversation can make the strict filter too narrow.
+  // If strict exactMatches is empty, but alternatives still match the visible
+  // customer request (for example buildingType=house and location=Sidoarjo),
+  // promote those alternatives into exactMatches so the AI does not say
+  // "no exact match" while listing matching properties.
+  if (!exactMatches.length && alternatives.length) {
+    const visibleMatches = getVisibleMatchesFromAlternatives(alternatives, filters);
+    if (visibleMatches.length) {
+      exactMatches = visibleMatches;
+      alternatives = alternatives.filter((item) => !visibleMatches.some((match) => (match.id || match.title) === (item.id || item.title)));
+      console.warn('[PROPERTY MATCH CORRECTION]', {
+        reason: 'Promoted visible matching alternatives into exactMatches.',
+        visibleMatches: visibleMatches.length,
+        filters
+      });
+    }
+  }
 
   return {
     filters,
@@ -450,15 +510,16 @@ async function buildRecommendationContextForLLM(message = '', history = []) {
       `Detected customer request: ${JSON.stringify(summarizeFilters(filters), null, 2)}`,
       '',
       exactMatches.length
-        ? `Exact matching properties (${exactMatches.length}). The assistant should prioritize these and should not show unrelated property types or locations:`
+        ? `Exact matching properties (${exactMatches.length}). The assistant must present these as available matching options and must NOT say there is no exact match:`
         : 'No exact match was found for the requested filters. The assistant must clearly say that no exact match is available before offering alternatives.',
       exactMatches.length ? formatPropertyRecommendation(exactMatches, { limit: 8 }) : '',
       '',
       alternatives.length ? `Alternative properties from backend catalog (${alternatives.length}):` : '',
       alternatives.length ? formatPropertyRecommendation(alternatives, { limit: 8 }) : '',
       '',
-      'STRICT RESPONSE RULES FOR CHATGPT:',
-      '- The final answer must be created by ChatGPT using this backend catalog context.',
+      'STRICT RESPONSE RULES FOR CHATGPT / CLAUDE / PRIVATE AGENT:',
+      '- If Exact matching properties contains one or more items, do NOT say "no exact match", "tidak ada exact match", or similar wording.',
+      '- The final answer must be created using this backend catalog context.',
       '- Do not recommend properties that are not listed in Exact matching properties or Alternative properties.',
       '- If exact matches exist, list exact matches first and do not show unrelated alternatives.',
       '- The latest customer message has priority over older history.',
@@ -485,5 +546,7 @@ module.exports = {
   detectTransactionType,
   detectBudget,
   parsePropertyPrice,
-  budgetMatches
+  budgetMatches,
+  propertyMatchesCoreVisibleRequest,
+  getVisibleMatchesFromAlternatives
 };

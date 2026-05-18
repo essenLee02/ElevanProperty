@@ -10,6 +10,7 @@ const {
   checkAIProviderConfig
 } = require('../services/aiProviderService');
 const { buildRecommendationContextForLLM } = require('../services/propertyRecommendationService');
+const chatbotPrivateController = require('./chatbotPrivateController');
 
 /**
  * Format the property context payload from the frontend (first-chat JSON data)
@@ -67,14 +68,21 @@ exports.aiProviderStatus = (_req, res) => {
   const ready =
     (config.primaryProvider === 'chatgpt' && config.chatGPT.hasApiKey && config.chatGPT.keyLooksValid) ||
     (config.primaryProvider === 'claude' && config.claude.hasApiKey && config.claude.keyLooksValid) ||
-    config.claudeFallbackReady;
+    config.claudeFallbackReady ||
+    String(process.env.ENABLE_CHATBOT_PRIVATE_CONTROLLER || 'true').toLowerCase() !== 'false';
 
   return res.status(ready ? 200 : 500).json({
     success: ready,
     ...config,
+    privateController: {
+      enabled: String(process.env.ENABLE_CHATBOT_PRIVATE_CONTROLLER || 'true').toLowerCase() !== 'false',
+      name: 'chatbotPrivateController',
+      statusRoute: '/api/chatbot/private-status',
+      directTestRoute: '/api/chatbot/private-message'
+    },
     message: ready
-      ? 'AI provider configuration is ready.'
-      : 'AI provider configuration is not ready. Check OPENAI_API_KEY and ANTHROPIC_API_KEY in backend/.env.'
+      ? 'AI provider configuration is ready. If ChatGPT and Claude fail, chatbotPrivateController can respond as local private agent.'
+      : 'AI provider configuration is not ready. Check OPENAI_API_KEY, ANTHROPIC_API_KEY, or ENABLE_CHATBOT_PRIVATE_CONTROLLER in backend/.env.'
   });
 };
 
@@ -94,14 +102,18 @@ exports.sendMessage = async (req, res) => {
     return res.status(400).json({ success: false, message: validation.message });
   }
 
+  let session = null;
+  let history = [];
+  let recommendationContext = null;
+
   try {
-    const session = await findOrCreateSession(payload.name, payload.phone, payload.location, 'website_chatbot');
+    session = await findOrCreateSession(payload.name, payload.phone, payload.location, 'website_chatbot');
     await saveUserMessage(session.id, payload.message, 'website_chatbot', { location: payload.location });
 
-    const history = await getConversationHistory(session.id, 12);
+    history = await getConversationHistory(session.id, 12);
 
     // Build recommendation context from backend property catalog.
-    const recommendationContext = await buildRecommendationContextForLLM(payload.message, history);
+    recommendationContext = await buildRecommendationContextForLLM(payload.message, history);
 
     // If the frontend sent property context (first message), append it to the LLM context.
     let combinedContextText = recommendationContext.contextText;
@@ -155,12 +167,72 @@ exports.sendMessage = async (req, res) => {
       frontendContextReceived: Boolean(frontendPropertyContext)
     });
   } catch (error) {
-    console.error('Chatbot message failed:', error);
+    console.error('[CHATBOT EXTERNAL AI FAILED]', {
+      message: error.message,
+      provider: error.provider || 'ai_provider_router',
+      providerErrors: error.providerErrors || null,
+      stack: error.stack
+    });
+
+    const privateControllerEnabled = String(process.env.ENABLE_CHATBOT_PRIVATE_CONTROLLER || 'true').toLowerCase() !== 'false';
+
+    if (privateControllerEnabled && session && history && recommendationContext) {
+      try {
+        const privateResult = await chatbotPrivateController.generatePrivateChatbotResponse({
+          session,
+          history,
+          userMessage: payload.message,
+          recommendationContext,
+          externalError: error
+        });
+
+        await saveAssistantMessage(session.id, privateResult.reply, 'website_chatbot_private', {
+          source: 'private_agent',
+          controller: 'chatbotPrivateController',
+          fallbackUsed: true,
+          fallbackReason: error.message,
+          externalProviderErrors: error.providerErrors || null,
+          exactMatches: privateResult.exactMatches,
+          alternatives: privateResult.alternatives,
+          filters: privateResult.filters,
+          frontendContextReceived: Boolean(frontendPropertyContext)
+        });
+
+        return res.json({
+          success: true,
+          reply: privateResult.reply,
+          sessionId: session.id,
+          source: 'private_agent',
+          aiProvider: 'private_agent',
+          controller: 'chatbotPrivateController',
+          fallbackUsed: true,
+          fallbackReason: error.message,
+          externalProviderErrors: error.providerErrors || null,
+          exactMatches: privateResult.exactMatches,
+          alternatives: privateResult.alternatives,
+          frontendContextReceived: Boolean(frontendPropertyContext)
+        });
+      } catch (privateError) {
+        console.error('[CHATBOT PRIVATE CONTROLLER FAILED]', {
+          message: privateError.message,
+          stack: privateError.stack
+        });
+
+        return res.status(502).json({
+          success: false,
+          message: privateError.message || 'ChatGPT, Claude, and chatbotPrivateController failed.',
+          source: 'private_agent',
+          controller: 'chatbotPrivateController',
+          externalProviderError: error.message
+        });
+      }
+    }
+
     return res.status(502).json({
       success: false,
       message: error.message || 'AI provider failed to generate chatbot reply.',
       source: error.provider || 'ai_provider_router',
-      note: 'Chatbot replies must come from ChatGPT or Claude. No local fallback answer was used.'
+      note: 'Chatbot replies must come from ChatGPT or Claude. chatbotPrivateController was disabled or unavailable.'
     });
   }
 };

@@ -5,6 +5,7 @@ const homeController = require('../controllers/homeController');
 const aboutController = require('../controllers/aboutController');
 const contactController = require('../controllers/contactController');
 const chatbotController = require('../controllers/chatbotController');
+const chatbotPrivateController = require('../controllers/chatbotPrivateController');
 const fonnteWebhookController = require('../controllers/fonnteWebhookController');
 const logController = require('../controllers/logController');
 
@@ -22,6 +23,8 @@ router.get('/contact/ai-whatsapp-status', contactController.aiWhatsappStatus);
 // Floating Website Chatbot
 router.get('/chatbot/config', chatbotController.getConfig);
 router.get('/chatbot/ai-provider-status', chatbotController.aiProviderStatus);
+router.get('/chatbot/private-status', chatbotPrivateController.privateAgentStatus);
+router.post('/chatbot/private-message', chatbotPrivateController.sendPrivateMessage);
 router.post('/chatbot/message', chatbotController.sendMessage);
 
 // Fonnte WhatsApp Webhook

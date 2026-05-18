@@ -70,25 +70,40 @@ exports.submitContact = async (req, res) => {
   }
 
   let googleSheetSent = false;
+  let googleSheetError = null;
   let databaseSaved = false;
   let newContact = null;
 
   try {
-    await appendContactRow({ ...contactPayload, source: 'Website Contact Form' });
-    googleSheetSent = true;
-
+    // Contact Form is public. Users do not need any JWT/login to submit the form.
+    // Save to the database first so Google Sheets service-account/JWT issues do not block user submission.
     newContact = await Contact.create(contactPayload);
     databaseSaved = true;
-    safeLog('FORM_SUBMIT_SUCCESS', `Contact ID: ${newContact.id}`);
+    safeLog('FORM_SUBMIT_DATABASE_SUCCESS', `Contact ID: ${newContact.id}`);
+
+    try {
+      await appendContactRow({ ...contactPayload, source: 'Website Contact Form' });
+      googleSheetSent = true;
+    } catch (sheetError) {
+      googleSheetError = sheetError.message || 'Google Sheets sync failed.';
+      safeLog('GOOGLE_SHEETS_SYNC_FAILED_NON_BLOCKING', googleSheetError, 'error');
+      console.error('[CONTACT GOOGLE SHEETS NON-BLOCKING ERROR]', {
+        message: googleSheetError,
+        note: 'Contact form submission is still saved in database. Users do not need JWT/login for contact form.'
+      });
+    }
 
     if (!isAiWhatsappEnabled()) {
       return res.json({
         success: true,
         googleSheetSent,
+        googleSheetError,
         databaseSaved,
         whatsappSent: false,
         contactId: newContact.id,
-        message: 'Message received, sent to Google Spreadsheet, and saved to database successfully. AI WhatsApp reply is disabled.'
+        message: googleSheetSent
+          ? 'Message received, sent to Google Spreadsheet, and saved to database successfully. AI WhatsApp reply is disabled.'
+          : 'Message received and saved to database successfully. Google Sheets sync failed in backend, but your form submission was accepted. AI WhatsApp reply is disabled.'
       });
     }
 
@@ -102,6 +117,7 @@ exports.submitContact = async (req, res) => {
       return res.json({
         success: true,
         googleSheetSent,
+        googleSheetError,
         databaseSaved,
         whatsappSent: true,
         contactId: newContact.id,
@@ -113,7 +129,9 @@ exports.submitContact = async (req, res) => {
         fallbackProvider: aiWhatsappResult.fallbackProvider || null,
         primaryError: aiWhatsappResult.primaryError || null,
         fonnteResponse: aiWhatsappResult.fonnteResponse,
-        message: 'Message received, sent to Google Spreadsheet, saved to database, and AI WhatsApp reply sent successfully.'
+        message: googleSheetSent
+          ? 'Message received, sent to Google Spreadsheet, saved to database, and AI WhatsApp reply sent successfully.'
+          : 'Message received and saved to database successfully. Google Sheets sync failed in backend, but AI WhatsApp reply was sent successfully.'
       });
     } catch (aiWhatsappError) {
       safeLog('AI_WHATSAPP_FAILED', aiWhatsappError.message, 'error');
@@ -121,12 +139,15 @@ exports.submitContact = async (req, res) => {
       return res.status(200).json({
         success: true,
         googleSheetSent,
+        googleSheetError,
         databaseSaved,
         whatsappSent: false,
         contactId: newContact.id,
         whatsappTarget: normalizeWhatsAppNumber(contactPayload.phone),
         aiWhatsappError: aiWhatsappError.message || 'Failed to send AI WhatsApp reply.',
-        message: 'Message received, sent to Google Spreadsheet, and saved to database. However, the AI WhatsApp reply failed. Please check OPENAI_API_KEY, OPENAI_MODEL, ANTHROPIC_API_KEY, CLAUDE_MODEL, FONNTE_TOKEN, Fonnte device connection, and WhatsApp quota.'
+        message: googleSheetSent
+          ? 'Message received, sent to Google Spreadsheet, and saved to database. However, the AI WhatsApp reply failed.'
+          : 'Message received and saved to database successfully. Google Sheets sync and AI WhatsApp reply failed in backend, but your form submission was accepted.'
       });
     }
   } catch (error) {
@@ -135,6 +156,7 @@ exports.submitContact = async (req, res) => {
     return res.status(500).json({
       success: false,
       googleSheetSent,
+      googleSheetError,
       databaseSaved,
       whatsappSent: false,
       contactId: newContact?.id || null,
