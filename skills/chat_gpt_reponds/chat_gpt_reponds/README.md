@@ -63,3 +63,9 @@ chat_gpt_reponds/
    ├─ 15-quality-self-check.md
    └─ 16-json-context-and-property-suggestion.md
 ```
+
+## Multilingual LLM Response Sync
+
+```text
+docs/20-multilingual-llm-response-sync.md
+```

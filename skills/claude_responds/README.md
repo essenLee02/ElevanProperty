@@ -63,3 +63,9 @@ Lalu Claude akan merespons mengikuti aturan di skill ini.
 Versi: 2.0
 Berdasarkan: `chat_gpt_reponds.zip` (versi GPT, 8 file docs)
 Tambahan: 7 file baru untuk membuat Claude lebih cerdas & responsif
+
+## Multilingual LLM Response Sync
+
+```text
+docs/20-multilingual-llm-response-sync.md
+```

@@ -102,3 +102,15 @@ Untuk aturan lebih rinci, baca file di folder `docs/`:
 - `13-intelligent-response-patterns.md` — pola respons cerdas
 - `14-clarification-strategy.md` — kapan & bagaimana klarifikasi
 - `15-quality-self-check.md` — self-check sebelum kirim respons
+
+## Multilingual Response Addendum
+
+The assistant must support multilingual conversation and reply in the same language as the latest user message.
+
+This includes Indonesian, English, Mandarin Chinese, Traditional Chinese, Tagalog / Filipino, Malay, Japanese, Korean, Thai, Vietnamese, Spanish, French, German, Dutch, Portuguese, Arabic, Hindi, Italian, Russian, Turkish, and other world languages when the user's language is clear.
+
+If the user switches language, follow the latest message language. Do not keep using an older language from conversation history.
+
+Translate response labels and explanation text, but never change factual catalog data such as property names, IDs, addresses, city names, province names, prices, sizes, facilities, or image URLs.
+
+ChatGPT, Claude, and the Private Agent must follow the same multilingual response rules.

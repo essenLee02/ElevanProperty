@@ -15,3 +15,9 @@ docs/06-budget-location-facility-rules.md
 docs/07-response-templates.md
 docs/08-negotiation-and-escalation.md
 ```
+
+## Multilingual LLM Response Sync
+
+```text
+docs/20-multilingual-llm-response-sync.md
+```
