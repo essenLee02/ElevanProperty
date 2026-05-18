@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
+<<<<<<< HEAD
     "start": "node server.js",
     "dev": "nodemon server.js"
   },
@@ -18,5 +19,20 @@
   },
   "devDependencies": {
     "nodemon": "^3.1.14"
+=======
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "env:check": "node -e \"const fs=require('fs'); const path=require('path'); const env=fs.existsSync('.env')?fs.readFileSync('.env','utf8'):''; console.log(env.split(/\\r?\\n/).filter(Boolean).filter(x=>!x.startsWith('#')).join('\\n'))\"",
+    "reinstall": "npm install"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.4",
+    "axios": "^1.16.1",
+    "vite": "^5.4.21",
+    "vue": "^3.5.34",
+    "vue-router": "^5.0.7",
+    "vue3-toastify": "^0.2.9"
+>>>>>>> feature/chatbot
   }
 }
