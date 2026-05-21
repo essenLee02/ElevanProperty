@@ -29,6 +29,9 @@ router.get('/chatbot/private-status', chatbotPrivateController.privateAgentStatu
 router.post('/chatbot/private-message', chatbotPrivateController.sendPrivateMessage);
 router.post('/chatbot/message', chatbotController.sendMessage);
 
+// Debug endpoints
+router.get('/chatbot/debug/test-rumah123', chatbotPrivateController.debugTestRumah123);
+
 // Fonnte WhatsApp Webhook
 router.post('/fonnte/webhook', fonnteWebhookController.handleWebhook);
 

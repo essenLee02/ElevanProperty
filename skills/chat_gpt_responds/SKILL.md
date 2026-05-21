@@ -69,10 +69,55 @@ docs/08-rumah123-live-data.md
 
 This skill now includes support for live property listings from Rumah123.com injected via Apify.
 
-When `RUMAH123 LIVE LISTINGS` appears in the context, the assistant must:
+### Configuration: RUMAH123_DATA Toggle
 
-1. Prioritize those listings over static catalog data.
-2. Show up to 20 best matches ranked by location → type → price relevance.
-3. Include property images using markdown: `![Title](imageUrl)`.
-4. Show agent name, WhatsApp contact, and link to Rumah123 listing.
-5. Label the section clearly as "Data Terkini dari Rumah123".
+The system has an ON/OFF toggle (`RUMAH123_DATA`) to control whether Rumah123 live data is used:
+
+**When RUMAH123_DATA=ON** (Production):
+- Live listings from Rumah123 are fetched and included in context
+- Section `RUMAH123 LIVE LISTINGS (from Apify)` will be present
+- Assistant must prioritize Rumah123 listings over static catalog
+
+**When RUMAH123_DATA=OFF** (Development/Testing):
+- Rumah123 live data is NOT included in context
+- Only static catalog data is available
+- Assistant falls back to catalog-only recommendations
+
+### Behavior When Rumah123 Data is Present
+
+When `RUMAH123 LIVE LISTINGS` section appears in the context, the assistant must:
+
+1. **Prioritize Rumah123 data** — Show live listings before static catalog alternatives.
+2. **Show best matches** — Display up to 20 most relevant listings ranked by:
+   - Exact location match (highest priority)
+   - Property type match
+   - Price relevance
+   - Availability
+3. **Include rich details**:
+   - Property images using markdown: `![Title](imageUrl)` (first image only)
+   - Price in bold: `💰 Harga: **Rp X,XXX/bulan**`
+   - Complete location: district, city, province
+   - Building & land sizes
+   - Bedroom/bathroom count
+   - Furnishing condition
+   - Certificate type
+4. **Display agent contact**:
+   - Agent name and agency name
+   - WhatsApp link: `[Chat Agen](https://wa.me/6281234567890)`
+5. **Include Rumah123 URL**:
+   - Direct link: `🔗 [Lihat di Rumah123](https://www.rumah123.com/properti/...)`
+   - This link is **MANDATORY** for every Rumah123 listing
+6. **Label section clearly** — Use: "Berikut [N] pilihan apartemen terbaik dari **Rumah123** (data terkini):"
+7. **Respect location strictly** — CRITICAL:
+   - When user asks for "Surabaya", show ONLY Surabaya results
+   - When user asks for "PTC Surabaya", location normalizes to "Surabaya"
+   - NEVER show results from unrelated cities (Aceh, Bali, Jakarta when user asked for Surabaya)
+   - If no results found for requested location, say: "Maaf, belum ada listing di **[location]** dari Rumah123. Apakah Anda ingin mencari di kota lain?"
+
+### Behavior When Rumah123 Data is Absent
+
+When `RUMAH123 LIVE LISTINGS` section is NOT in context (RUMAH123_DATA=OFF):
+- Use static catalog data only
+- Mention that data is from our catalog (not live from Rumah123)
+- Offer relevant alternatives from the catalog
+- Do NOT mention Rumah123 or Apify

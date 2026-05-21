@@ -140,9 +140,11 @@ class Rumah123ContextService {
     };
     if (location) input.location = location;
 
-    console.log(`[Rumah123Context] Fetching: location="${location}", type="${propertyType}", listing="${listingType}"`);
+    console.log(`[Rumah123Context] Fetching from Apify: location="${location}", type="${propertyType || 'any'}", listing="${listingType}"`);
+    console.log(`[Rumah123Context] Apify input:`, JSON.stringify(input, null, 2));
 
     try {
+      const startTime = Date.now();
       const run = await Promise.race([
         client.actor(this.#ACTOR_ID).call(input),
         new Promise((_, reject) =>
@@ -150,12 +152,20 @@ class Rumah123ContextService {
         ),
       ]);
 
+      const fetchTime = Date.now() - startTime;
+      console.log(`[Rumah123Context] Apify run completed in ${fetchTime}ms, runId="${run.id}", datasetId="${run.defaultDatasetId}"`);
+
       const { items } = await client.dataset(run.defaultDatasetId).listItems();
-      console.log(`[Rumah123Context] Fetched ${items.length} listings.`);
+      console.log(`[Rumah123Context] ✓ Apify returned ${items.length} listings for location="${location}"`);
+
+      if (items.length === 0) {
+        console.warn(`[Rumah123Context] ⚠️  No listings found on Apify for location="${location}". This may indicate: 1) Location not recognized by Rumah123, 2) No properties available at this location, 3) Cache issue.`);
+      }
 
       return items.slice(0, this.#MAX_LISTINGS).map(item => this.#transform(item));
     } catch (err) {
-      console.error('[Rumah123Context] Apify fetch error:', err.message);
+      console.error('[Rumah123Context] ✗ Apify fetch error:', err.message);
+      console.error('[Rumah123Context] Error details:', { location, propertyType, listingType, timeout: this.#FETCH_TIMEOUT });
       return [];
     }
   }
@@ -174,18 +184,22 @@ class Rumah123ContextService {
    */
   static #triggerBackgroundFetch(cacheKey, location, propertyType, listingType) {
     const existing = this.#cache.get(cacheKey) || {};
-    if (existing.fetching) return; // already in flight
+    if (existing.fetching) {
+      console.log(`[Rumah123Context] Background fetch already in progress for key="${cacheKey}", skipping duplicate`);
+      return; // already in flight
+    }
 
     // Mark as fetching (preserve existing items if any)
     this.#cache.set(cacheKey, { ...existing, fetching: true, fetchedAt: existing.fetchedAt || 0 });
+    console.log(`[Rumah123Context] ⏳ Background fetch triggered: key="${cacheKey}", location="${location}"`);
 
     this.#fetchFromApify(location, propertyType, listingType)
       .then(items => {
         this.#cache.set(cacheKey, { items, fetchedAt: Date.now(), fetching: false });
-        console.log(`[Rumah123Context] Cache updated: key="${cacheKey}", items=${items.length}`);
+        console.log(`[Rumah123Context] ✓ Cache updated: key="${cacheKey}", items=${items.length}`);
       })
       .catch(err => {
-        console.error('[Rumah123Context] Background fetch failed:', err.message);
+        console.error('[Rumah123Context] ✗ Background fetch failed:', err.message);
         this.#cache.set(cacheKey, { items: [], fetchedAt: Date.now(), fetching: false });
       });
   }
@@ -211,8 +225,16 @@ class Rumah123ContextService {
 
     // Serve from cache when valid and populated
     if (this.#isValid(entry) && entry.items?.length > 0) {
-      console.log(`[Rumah123Context] Cache HIT: key="${key}", items=${entry.items.length}`);
+      const ageMinutes = Math.round((Date.now() - entry.fetchedAt) / 60000);
+      console.log(`[Rumah123Context] ✓ Cache HIT: key="${key}", items=${entry.items.length}, age=${ageMinutes}min`);
       return entry.items;
+    }
+
+    // Log cache miss
+    if (entry && !this.#isValid(entry)) {
+      console.log(`[Rumah123Context] Cache EXPIRED: key="${key}", triggering background refresh`);
+    } else {
+      console.log(`[Rumah123Context] Cache MISS: key="${key}", triggering fetch`);
     }
 
     // Start background fetch (no-op if already in flight)
@@ -220,9 +242,15 @@ class Rumah123ContextService {
 
     // Wait briefly for the first-ever result on cache miss
     if (!entry?.items) {
+      console.log(`[Rumah123Context] Waiting up to ${this.#FIRST_WAIT_MS}ms for first Apify result...`);
       await new Promise(resolve => setTimeout(resolve, this.#FIRST_WAIT_MS));
       const fresh = this.#cache.get(key);
-      if (fresh?.items?.length > 0) return fresh.items;
+      if (fresh?.items?.length > 0) {
+        console.log(`[Rumah123Context] ✓ First-fetch result received: ${fresh.items.length} items`);
+        return fresh.items;
+      } else {
+        console.log(`[Rumah123Context] ⚠️  No results after ${this.#FIRST_WAIT_MS}ms wait (fetch may still be in progress)`);
+      }
     }
 
     return entry?.items || [];

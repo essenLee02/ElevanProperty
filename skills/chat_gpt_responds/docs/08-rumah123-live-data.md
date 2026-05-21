@@ -143,6 +143,12 @@ When the user gives a budget:
 
 ## Rumah123 Location Matching
 
-- Match `city`, `district`, `province`, or `location` fields against the user's requested location.
-- Partial match is acceptable (e.g., "Jakarta" matches "Jakarta Selatan").
-- Prefer `district`-level matches when the user specifies a more specific area.
+**CRITICAL: Respect the user's requested location strictly.**
+
+- When a user specifies a location (e.g., "Surabaya", "Jakarta Selatan", "PTC"), **ONLY show results from that location**.
+- If the user specifies a district (e.g., "Gunawangsa", "PTC"), first try to match it exactly, then fall back to the parent city (e.g., "Surabaya").
+- **NEVER show results from unrelated cities** — if user asks for "Surabaya" apartments, do NOT show results from Aceh, Bali, Jakarta, etc.
+- When results are limited or empty for the requested location, **explicitly state which location(s) have no results**.
+  - ❌ Don't: Show Aceh results and imply they are for Surabaya
+  - ✅ Do: "Maaf, tidak ada apartemen yang tersedia di Surabaya dengan kriteria tersebut. Apakah Anda ingin mencari di kota lain?"
+- Partial match is acceptable (e.g., "Jakarta" matches "Jakarta Selatan"), but only AFTER attempting exact matches.

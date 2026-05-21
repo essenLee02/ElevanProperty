@@ -411,44 +411,97 @@ class ResponseBuilder {
    * @param {object}   params.filters
    * @returns {string}
    */
+  /**
+   * Filter alternatives to only include those matching the requested location.
+   * CRITICAL: Ensures we never show properties from unrelated cities.
+   *
+   * @param {object[]} alternatives
+   * @param {string}   location - The location the user requested
+   * @returns {object[]} Filtered alternatives
+   */
+  #filterAlternativesByLocation(alternatives = [], location = '') {
+    if (!location) return alternatives;
+
+    const normLoc = location.toLowerCase().trim();
+    return alternatives.filter(item => {
+      const itemLoc = [item.location, item.city, item.district, item.province]
+        .filter(Boolean)
+        .map(s => String(s).toLowerCase())
+        .join(' ');
+      return itemLoc.includes(normLoc);
+    });
+  }
+
+  /**
+   * Build a reply when no exact catalog match exists.
+   * Prioritises Rumah123 live data, then shows location-filtered catalog alternatives.
+   *
+   * CRITICAL: Respects location filters — only shows alternatives from the requested location.
+   * Never shows results from unrelated cities.
+   *
+   * @param {{ alternatives, rumah123Listings, filters }} params
+   * @returns {string}
+   */
   alternative({ alternatives = [], rumah123Listings = [], filters = {} }) {
-    const summary = this.#summarizeRequest(filters);
-    const hasR123 = rumah123Listings.length > 0;
-    const hasAlt  = alternatives.length > 0;
-    const isId    = this.#lang === 'id';
+    const summary    = this.#summarizeRequest(filters);
+    const location   = filters.location || '';
+    const hasR123    = rumah123Listings.length > 0;
+
+    // Filter alternatives to ONLY match requested location
+    const filteredAlt = location
+      ? this.#filterAlternativesByLocation(alternatives, location)
+      : alternatives;
+    const hasAlt     = filteredAlt.length > 0;
+    const isId       = this.#lang === 'id';
 
     // Nothing found anywhere
     if (!hasR123 && !hasAlt) {
+      const locationNote = location
+        ? (isId ? ` di **${location}**` : ` in **${location}**`)
+        : '';
       return isId
-        ? `Maaf, saat ini belum ada properti yang sesuai dengan **${summary}** di katalog maupun Rumah123. Apakah Anda ingin mencoba lokasi, tipe properti, atau range harga lain?`
-        : `Sorry, there is currently no property matching **${summary}** in our catalog or Rumah123. Would you like to try another location, property type, or price range?`;
+        ? `Maaf, saat ini belum ada properti yang sesuai dengan **${summary}**${locationNote} di katalog maupun Rumah123. Apakah Anda ingin mencoba lokasi, tipe properti, atau range harga lain?`
+        : `Sorry, there is currently no property matching **${summary}**${locationNote} in our catalog or Rumah123. Would you like to try another location, property type, or price range?`;
     }
 
-    const lines = [
-      isId
-        ? `Maaf, belum ada exact match untuk **${summary}** di katalog kami. Namun berikut opsi terbaik dari **Rumah123** dan alternatif terdekat:\n`
-        : `Sorry, no exact match for **${summary}** in our catalog. Here are the best options from **Rumah123** and closest alternatives:\n`,
-    ];
+    const lines = [];
 
+    // Show Rumah123 results if available
     if (hasR123) {
       const count = Math.min(rumah123Listings.length, 20);
       lines.push(isId
-        ? `**Data Terkini dari Rumah123 (${count} listing):**\n`
-        : `**Live Rumah123 Listings (${count} results):**\n`
+        ? `Berikut **${count} listing terbaik** dari **Rumah123** untuk **${summary}** (data terkini):\n`
+        : `Here are the **top ${count} listings** from **Rumah123** for **${summary}** (live data):\n`
       );
       lines.push(PropertyFormatter.rumah123List(rumah123Listings, this.#lang, 20));
+    } else if (location) {
+      // No Rumah123 results for this location — state it explicitly
+      lines.push(isId
+        ? `⚠️ Maaf, belum ada listing yang tersedia di **${location}** dari Rumah123 untuk **${summary}**.\n`
+        : `⚠️ Sorry, no listings are currently available in **${location}** from Rumah123 for **${summary}**.\n`
+      );
     }
 
+    // Show catalog alternatives (filtered by location)
     if (hasAlt) {
-      if (hasR123)
+      if (hasR123) {
         lines.push(isId ? '\n---\n**Alternatif dari Katalog Kami:**\n' : '\n---\n**Alternatives from Our Catalog:**\n');
-      lines.push(PropertyFormatter.catalogList(alternatives, this.#lang, 6));
+      } else {
+        lines.push(isId
+          ? `Namun berikut pilihan alternatif dari katalog kami untuk **${summary}**:\n`
+          : `Here are some alternative options from our catalog for **${summary}**:\n`
+        );
+      }
+      lines.push(PropertyFormatter.catalogList(filteredAlt, this.#lang, 6));
     }
 
-    lines.push(isId
-      ? '\n\nApakah Anda ingin saya carikan alternatif lokasi atau range harga lain?'
-      : '\n\nWould you like me to check another location or price range?'
-    );
+    // Add follow-up question
+    if (hasR123 || hasAlt) {
+      lines.push(isId
+        ? '\n\nApakah ada yang ingin Anda tanyakan lebih lanjut?'
+        : '\n\nWould you like to know more details?'
+      );
+    }
 
     return lines.join('\n');
   }
@@ -475,29 +528,99 @@ class ChatbotPrivateService {
   }
 
   /**
+   * Normalize location by extracting the city name from district+city combinations.
+   * Example: "PTC surabaya" → "Surabaya" (matches known locations)
+   *          "Gunawangsa Surabaya" → "Surabaya"
+   *
+   * @param {string} location - Raw location string from filters
+   * @returns {string} Normalized location (city name)
+   * @private
+   */
+  static #normalizeLocation(location = '') {
+    if (!location) return '';
+
+    const text = String(location).toLowerCase().trim();
+
+    // Known cities/provinces that should be extracted from compound locations
+    const knownCities = [
+      'surabaya', 'jakarta', 'bandung', 'semarang', 'yogyakarta', 'malang',
+      'medan', 'palembang', 'pekanbaru', 'padang', 'makassar', 'denpasar',
+      'bali', 'batu', 'bogor', 'depok', 'tangerang', 'bekasi', 'solo',
+      'serang', 'cilegon', 'cirebon', 'tasikmalaya', 'sukabumi', 'karawang'
+    ];
+
+    // If location is already a known city, return it as-is
+    if (knownCities.includes(text)) {
+      return location; // preserve original capitalization
+    }
+
+    // Try to extract known city from compound location (e.g., "PTC surabaya" → "surabaya")
+    for (const city of knownCities) {
+      if (text.includes(city)) {
+        // Find the original capitalization from the input
+        const words = location.split(/\s+/);
+        for (const word of words) {
+          if (word.toLowerCase() === city) {
+            return word; // return with original capitalization
+          }
+        }
+        return city;
+      }
+    }
+
+    return location; // no normalization possible
+  }
+
+  /**
    * Fetch live Rumah123 listings based on property filters.
-   * Returns an empty array (non-fatal) when Apify is not configured or the fetch fails.
+   * Returns an empty array (non-fatal) when:
+   *   - RUMAH123_DATA environment variable is OFF
+   *   - Apify is not configured or the fetch fails
+   *
+   * Automatically normalizes location (e.g., "PTC surabaya" → "Surabaya") to match
+   * Apify's location search requirements.
    *
    * @param {object} filters          - Extracted property filters
    * @param {string} sessionLocation  - Fallback location from the chat session
    * @returns {Promise<object[]>}
    */
   static async fetchRumah123Listings(filters = {}, sessionLocation = '') {
+    // Check if Rumah123 data is enabled
+    const rumah123DataEnabled = String(process.env.RUMAH123_DATA || 'ON').toUpperCase() === 'ON';
+    if (!rumah123DataEnabled) {
+      console.log('[PrivateController] Rumah123 data disabled (RUMAH123_DATA=OFF) — using catalog only');
+      return [];
+    }
+
     const apifyToken = process.env.APIFY_API_TOKEN;
     if (!apifyToken || apifyToken === 'isi_apify_token_anda') return [];
 
     try {
       const propertyType = mapBuildingTypeToApify(filters.buildingType);
       const listingType  = mapTransactionTypeToApify(filters.transactionType);
-      const location     = filters.location || sessionLocation || '';
+      let location       = filters.location || sessionLocation || '';
 
-      if (!location && !propertyType) return [];
+      // Normalize location to extract city name from compound locations
+      if (location) {
+        const originalLocation = location;
+        location = this.#normalizeLocation(location);
+        if (originalLocation !== location) {
+          console.log(`[PrivateController] Location normalized: "${originalLocation}" → "${location}"`);
+        }
+      }
+
+      console.log(`[PrivateController] Fetching Rumah123: location="${location}", type="${propertyType}", listing="${listingType}"`);
+
+      if (!location && !propertyType) {
+        console.log('[PrivateController] Skipping Rumah123 fetch: no location or propertyType provided');
+        return [];
+      }
 
       const listings = await getRumah123Listings({ location, propertyType, listingType });
-      console.log(`[PrivateController] Rumah123 fetched: ${listings.length} listings`);
+      console.log(`[PrivateController] Rumah123 fetched: ${listings.length} listings for location="${location}"`);
       return listings;
     } catch (err) {
-      console.warn('[PrivateController] Rumah123 fetch failed (non-fatal):', err.message);
+      console.error('[PrivateController] Rumah123 fetch failed (non-fatal):', err.message);
       return [];
     }
   }
@@ -621,6 +744,7 @@ exports.privateAgentStatus = (_req, res) => {
   const skillInfo  = ChatbotPrivateService.loadSkillInfo();
   const enabled    = String(process.env.ENABLE_CHATBOT_PRIVATE_CONTROLLER || 'true').toLowerCase() !== 'false';
   const apifyReady = Boolean(process.env.APIFY_API_TOKEN && process.env.APIFY_API_TOKEN !== 'isi_apify_token_anda');
+  const rumah123DataEnabled = String(process.env.RUMAH123_DATA || 'ON').toUpperCase() === 'ON';
 
   return res.json({
     success: true,
@@ -628,17 +752,24 @@ exports.privateAgentStatus = (_req, res) => {
     controller: 'chatbotPrivateController',
     source:     'private_agent',
     behavior:   'Activated when ChatGPT and Claude cannot generate a response.',
+    dataSource: {
+      rumah123Enabled: rumah123DataEnabled,
+      rumah123Status:  rumah123DataEnabled ? 'ON (live Rumah123 data)' : 'OFF (static JSON catalog)',
+      catalogEnabled:  true,
+      catalogPath:     'frontend/public/json_data/indonesia_property_36_provinces_flat.json',
+    },
     rumah123Integration: {
-      enabled:     apifyReady,
+      enabled:     apifyReady && rumah123DataEnabled,
+      apiTokenConfigured: apifyReady,
       maxListings: 20,
-      features: [
+      features: rumah123DataEnabled ? [
         'live Rumah123 data',
         'property images',
         'agent contacts',
         'WhatsApp links',
         'direct Rumah123 URL per listing',
         'top 20 ranking',
-      ],
+      ] : [],
     },
     skillInfo,
   });
@@ -708,6 +839,56 @@ exports.sendPrivateMessage = async (req, res) => {
       source:     'private_agent',
       controller: 'chatbotPrivateController',
       message:    error.message || 'Private chatbot controller failed.',
+    });
+  }
+};
+
+/**
+ * GET /api/chatbot/debug/test-rumah123
+ * Debug endpoint to test Rumah123 fetch with location normalization.
+ *
+ * Query params:
+ *   ?location=Surabaya (or "PTC Surabaya", "Gunawangsa Surabaya")
+ *   &propertyType=apartment (optional)
+ *   &listingType=rent (optional, default: sale)
+ *
+ * This endpoint logs detailed debug info to server console.
+ */
+exports.debugTestRumah123 = async (req, res) => {
+  try {
+    const { location = 'Surabaya', propertyType = '', listingType = 'sale' } = req.query;
+
+    console.log(`\n${'='.repeat(60)}`);
+    console.log(`DEBUG: Testing Rumah123 Fetch`);
+    console.log(`Input: location="${location}", propertyType="${propertyType}", listingType="${listingType}"`);
+    console.log(`${'='.repeat(60)}`);
+
+    // Test the private fetch method which includes location normalization
+    const filters = { location, buildingType: propertyType, transactionType: listingType };
+    const listings = await ChatbotPrivateService.fetchRumah123Listings(filters);
+
+    console.log(`Final result: ${listings.length} listings returned\n`);
+
+    return res.json({
+      success: true,
+      debug: {
+        input: { location, propertyType, listingType },
+        resultCount: listings.length,
+        listings: listings.slice(0, 2).map(item => ({
+          title: item.title,
+          location: `${item.district || ''} ${item.city || ''}`.trim(),
+          price: item.price,
+          url: item.url
+        }))
+      },
+      note: 'Check server console logs for detailed fetch trace'
+    });
+  } catch (err) {
+    console.error(`[DEBUG] Error:`, err.message);
+    return res.status(500).json({
+      success: false,
+      error: err.message,
+      hint: 'Check server logs for detailed debug output'
     });
   }
 };
