@@ -1,0 +1,181 @@
+{
+  "info": {
+    "name": "Rumah123 via Apify - Elevan Property",
+    "description": "Collection untuk test API Rumah123 scraper via Apify",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5000/api",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Status - Cek Apify Token",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/rumah123/status",
+          "host": ["{{base_url}}"],
+          "path": ["rumah123", "status"]
+        },
+        "description": "Cek apakah APIFY_API_TOKEN sudah dikonfigurasi"
+      }
+    },
+    {
+      "name": "2. Search Rumah Dijual - Jakarta Selatan",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"listingType\": \"sale\",\n  \"location\": \"Jakarta Selatan\",\n  \"sortOrder\": \"recommended\",\n  \"propertyType\": [\"house\"],\n  \"limit\": 10\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/rumah123/search",
+          "host": ["{{base_url}}"],
+          "path": ["rumah123", "search"]
+        },
+        "description": "Cari rumah dijual di Jakarta Selatan - 10 listing"
+      }
+    },
+    {
+      "name": "3. Search dengan Filter Harga",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"listingType\": \"sale\",\n  \"location\": \"Jakarta Selatan\",\n  \"sortOrder\": \"price-asc\",\n  \"propertyType\": [\"house\", \"apartment\"],\n  \"minPrice\": 500000000,\n  \"maxPrice\": 3000000000,\n  \"minBedrooms\": \"2\",\n  \"minBathrooms\": \"1\",\n  \"limit\": 10\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/rumah123/search",
+          "host": ["{{base_url}}"],
+          "path": ["rumah123", "search"]
+        },
+        "description": "Cari properti dengan rentang harga 500 juta - 3 miliar, minimal 2 kamar tidur"
+      }
+    },
+    {
+      "name": "4. Search Apartemen Sewa - Furnished",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"listingType\": \"rent\",\n  \"location\": \"Jakarta Pusat\",\n  \"sortOrder\": \"recommended\",\n  \"propertyType\": [\"apartment\"],\n  \"maxPrice\": 50000000,\n  \"minBedrooms\": \"1\",\n  \"furnishingCondition\": [\"fully-furnished\"],\n  \"facilities\": [\"parking\", \"security\"],\n  \"limit\": 10\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/rumah123/search",
+          "host": ["{{base_url}}"],
+          "path": ["rumah123", "search"]
+        },
+        "description": "Apartemen sewa di Jakarta Pusat, fully furnished, max 50 juta/tahun"
+      }
+    },
+    {
+      "name": "5. Search Villa di Bali",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"listingType\": \"sale\",\n  \"location\": \"Bali\",\n  \"sortOrder\": \"price-desc\",\n  \"propertyType\": [\"villa\"],\n  \"minBedrooms\": \"3\",\n  \"minBathrooms\": \"2\",\n  \"limit\": 10\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/rumah123/search",
+          "host": ["{{base_url}}"],
+          "path": ["rumah123", "search"]
+        },
+        "description": "Cari villa dijual di Bali, minimal 3 kamar tidur, urut harga tertinggi"
+      }
+    },
+    {
+      "name": "6. Search via URL Langsung",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"startUrls\": [\n    \"https://www.rumah123.com/jual/dki-jakarta/rumah/\",\n    \"https://www.rumah123.com/jual/bali/villa/\"\n  ],\n  \"limit\": 10\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/rumah123/search",
+          "host": ["{{base_url}}"],
+          "path": ["rumah123", "search"]
+        },
+        "description": "Ambil data langsung dari URL Rumah123 (tanpa filter)"
+      }
+    },
+    {
+      "name": "7. Search GET - Query Params",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/rumah123/search?listingType=sale&location=Bandung&propertyType=house&minPrice=300000000&maxPrice=1000000000&limit=10",
+          "host": ["{{base_url}}"],
+          "path": ["rumah123", "search"],
+          "query": [
+            { "key": "listingType", "value": "sale" },
+            { "key": "location", "value": "Bandung" },
+            { "key": "propertyType", "value": "house" },
+            { "key": "minPrice", "value": "300000000" },
+            { "key": "maxPrice", "value": "1000000000" },
+            { "key": "limit", "value": "10" }
+          ]
+        },
+        "description": "Search via GET params - rumah dijual di Bandung"
+      }
+    },
+    {
+      "name": "8. Ambil Dataset yang Sudah Ada",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/rumah123/dataset/DATASET_ID_DARI_RUN_SEBELUMNYA?offset=0&limit=50",
+          "host": ["{{base_url}}"],
+          "path": ["rumah123", "dataset", "DATASET_ID_DARI_RUN_SEBELUMNYA"],
+          "query": [
+            { "key": "offset", "value": "0" },
+            { "key": "limit", "value": "50" }
+          ]
+        },
+        "description": "Ambil data dari dataset yang sudah ada - ganti DATASET_ID dengan ID dari response sebelumnya"
+      }
+    },
+    {
+      "name": "9. Search Raw Data (Data Asli Apify)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"listingType\": \"sale\",\n  \"location\": \"Surabaya\",\n  \"propertyType\": [\"house\"],\n  \"limit\": 5,\n  \"raw\": true\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/rumah123/search",
+          "host": ["{{base_url}}"],
+          "path": ["rumah123", "search"]
+        },
+        "description": "Ambil raw data lengkap dari Apify (tidak di-transform). Berguna untuk melihat semua field yang tersedia."
+      }
+    }
+  ]
+}

@@ -8,6 +8,7 @@ const chatbotController = require('../controllers/chatbotController');
 const chatbotPrivateController = require('../controllers/chatbotPrivateController');
 const fonnteWebhookController = require('../controllers/fonnteWebhookController');
 const logController = require('../controllers/logController');
+const rumah123Controller = require('../controllers/rumah123Controller');
 
 // Module Home
 router.get('/home', homeController.index);
@@ -33,5 +34,13 @@ router.post('/fonnte/webhook', fonnteWebhookController.handleWebhook);
 
 // Module Logger
 router.post('/log', logController.saveLog);
+
+// Module Rumah123 (Apify Scraper)
+router.get('/rumah123/status', rumah123Controller.status);
+router.get('/rumah123/search', rumah123Controller.search);
+router.post('/rumah123/search', rumah123Controller.searchPost);
+router.get('/rumah123/dataset/:datasetId', rumah123Controller.getDataset);
+router.get('/rumah123/cache-status', rumah123Controller.cacheStatus);
+router.post('/rumah123/warmup', rumah123Controller.triggerWarmup);
 
 module.exports = router;

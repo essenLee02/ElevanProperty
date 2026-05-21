@@ -1,0 +1,550 @@
+{
+  "info": {
+    "_postman_id": "rumah123-apify-elevan",
+    "name": "Rumah123 via Apify - Elevan Property",
+    "description": "Collection API untuk scrape property dari Rumah123 menggunakan Apify\n\n⚠️ SECURITY WARNING:\nToken Apify sudah di-set. Jangan share collection ini ke public!",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "elevan_property"
+  },
+  "item": [
+    {
+      "name": "🔑 Setup & Status",
+      "item": [
+        {
+          "name": "✅ 1. Status - Cek Apify Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status OK', function() {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.response.to.be.json;",
+                  "});",
+                  "",
+                  "let response = pm.response.json();",
+                  "console.log('✅ Apify Token Status:', response.data.apifyTokenConfigured);",
+                  "console.log('Actor ID:', response.data.actorId);",
+                  "console.log('Pricing:', response.data.pricingPerResults);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5000/api/rumah123/status",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "rumah123", "status"]
+            },
+            "description": "Cek apakah APIFY_API_TOKEN sudah dikonfigurasi dengan benar di .env backend"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🏠 Search - Dijual",
+      "item": [
+        {
+          "name": "2️⃣ Rumah Dijual - Jakarta Selatan (10 listing)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Set timestamp untuk tracking",
+                  "pm.environment.set('request_time', new Date().toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Response Status 200', function() {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response is JSON', function() {",
+                  "  pm.response.to.be.json;",
+                  "});",
+                  "",
+                  "let response = pm.response.json();",
+                  "console.log('✅ Total listings:', response.data.meta.total);",
+                  "console.log('🏃 Run ID:', response.data.meta.runId);",
+                  "console.log('📊 Dataset ID:', response.data.meta.datasetId);",
+                  "console.log('⏱️ Request time:', pm.environment.get('request_time'));",
+                  "",
+                  "// Simpan dataset ID untuk dipakai di request berikutnya",
+                  "if(response.data.meta.datasetId) {",
+                  "  pm.environment.set('dataset_id', response.data.meta.datasetId);",
+                  "  console.log('💾 Dataset ID saved to environment');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"listingType\": \"sale\",\n  \"location\": \"Jakarta Selatan\",\n  \"sortOrder\": \"recommended\",\n  \"propertyType\": [\"house\"],\n  \"furnishingCondition\": [],\n  \"facilities\": [],\n  \"limit\": 10\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/rumah123/search",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "rumah123", "search"]
+            },
+            "description": "Cari rumah dijual di Jakarta Selatan - 10 listing pertama"
+          },
+          "response": []
+        },
+        {
+          "name": "🏠 Filter Harga - 500M-3M di Jakarta Selatan",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Response Status 200', function() {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "let response = pm.response.json();",
+                  "let listings = response.data.listings;",
+                  "",
+                  "// Verifikasi filter harga",
+                  "listings.forEach(function(listing) {",
+                  "  pm.expect(listing.priceNumeric).to.be.at.least(500000000);",
+                  "  pm.expect(listing.priceNumeric).to.be.at.most(3000000000);",
+                  "});",
+                  "",
+                  "console.log('✅ Semua listing dalam range harga 500M-3M');",
+                  "console.log('📍 Total:', listings.length);",
+                  "listings.slice(0, 3).forEach(function(listing, idx) {",
+                  "  console.log((idx+1) + '. ' + listing.title + ' - ' + listing.price);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"listingType\": \"sale\",\n  \"location\": \"Jakarta Selatan\",\n  \"sortOrder\": \"price-asc\",\n  \"propertyType\": [\"house\", \"apartment\"],\n  \"minPrice\": 500000000,\n  \"maxPrice\": 3000000000,\n  \"minBedrooms\": \"2\",\n  \"minBathrooms\": \"1\",\n  \"limit\": 10\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/rumah123/search",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "rumah123", "search"]
+            },
+            "description": "Cari properti dengan filter:\n- Harga: 500 juta - 3 miliar\n- Minimal 2 kamar tidur\n- Minimal 1 kamar mandi\n- Urutkan harga terendah"
+          },
+          "response": []
+        },
+        {
+          "name": "🏠 Rumah Besar - 4+ Kamar di Jakarta Pusat",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"listingType\": \"sale\",\n  \"location\": \"Jakarta Pusat\",\n  \"sortOrder\": \"recommended\",\n  \"propertyType\": [\"house\"],\n  \"minBedrooms\": \"4\",\n  \"minBathrooms\": \"2\",\n  \"limit\": 10\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/rumah123/search",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "rumah123", "search"]
+            },
+            "description": "Cari rumah besar (4+ kamar tidur) di Jakarta Pusat"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🏢 Search - Disewa",
+      "item": [
+        {
+          "name": "2️⃣ Apartemen Sewa - Jakarta Pusat (Furnished)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Response Status 200', function() {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "let response = pm.response.json();",
+                  "let listings = response.data.listings;",
+                  "",
+                  "console.log('🏢 Apartemen Sewa ditemukan:', listings.length);",
+                  "console.log('💰 Range harga: ' + listings[0].price + ' - ' + listings[listings.length-1].price);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"listingType\": \"rent\",\n  \"location\": \"Jakarta Pusat\",\n  \"sortOrder\": \"recommended\",\n  \"propertyType\": [\"apartment\"],\n  \"maxPrice\": 50000000,\n  \"minBedrooms\": \"1\",\n  \"furnishingCondition\": [\"fully-furnished\"],\n  \"facilities\": [\"parking\", \"security\"],\n  \"limit\": 10\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/rumah123/search",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "rumah123", "search"]
+            },
+            "description": "Apartemen sewa di Jakarta Pusat:\n- Max harga: 50 juta/tahun\n- Fully furnished\n- Ada parking & security"
+          },
+          "response": []
+        },
+        {
+          "name": "🏢 Kost/Boarding House - Bandung",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"listingType\": \"rent\",\n  \"location\": \"Bandung\",\n  \"sortOrder\": \"price-asc\",\n  \"propertyType\": [\"boarding-house\"],\n  \"maxPrice\": 20000000,\n  \"limit\": 10\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/rumah123/search",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "rumah123", "search"]
+            },
+            "description": "Cari kost/boarding house di Bandung, max 20 juta/tahun"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🏝️ Search - Premium Properties",
+      "item": [
+        {
+          "name": "💎 Villa di Bali - Luxury",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Response Status 200', function() {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "let response = pm.response.json();",
+                  "let listings = response.data.listings;",
+                  "",
+                  "// Hitung rata-rata harga",
+                  "let total = 0;",
+                  "listings.forEach(l => { total += l.priceNumeric; });",
+                  "let avgPrice = total / listings.length;",
+                  "",
+                  "console.log('💎 Villa di Bali');",
+                  "console.log('Total ditemukan:', listings.length);",
+                  "console.log('Rata-rata harga: Rp ' + new Intl.NumberFormat('id-ID').format(avgPrice));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"listingType\": \"sale\",\n  \"location\": \"Bali\",\n  \"sortOrder\": \"price-desc\",\n  \"propertyType\": [\"villa\"],\n  \"minBedrooms\": \"3\",\n  \"minBathrooms\": \"2\",\n  \"limit\": 10\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/rumah123/search",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "rumah123", "search"]
+            },
+            "description": "Cari villa di Bali, minimal 3 kamar tidur, urutkan harga tertinggi"
+          },
+          "response": []
+        },
+        {
+          "name": "🏢 Ruko Komersial - Surabaya",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"listingType\": \"sale\",\n  \"location\": \"Surabaya\",\n  \"sortOrder\": \"recommended\",\n  \"propertyType\": [\"shophouse\"],\n  \"minBedrooms\": \"2\",\n  \"limit\": 10\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/rumah123/search",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "rumah123", "search"]
+            },
+            "description": "Cari ruko komersial di Surabaya"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🔗 Advanced - Direct URL & Raw Data",
+      "item": [
+        {
+          "name": "🌐 Scrape dari URL Langsung",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Response Status 200', function() {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "let response = pm.response.json();",
+                  "console.log('✅ Scraped from URLs:', response.data.meta.total + ' listings');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"startUrls\": [\n    \"https://www.rumah123.com/jual/dki-jakarta/rumah/\",\n    \"https://www.rumah123.com/jual/bali/villa/\"\n  ],\n  \"limit\": 10\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/rumah123/search",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "rumah123", "search"]
+            },
+            "description": "Ambil data langsung dari URL Rumah123 (tanpa filter built-in, langsung dari search page)"
+          },
+          "response": []
+        },
+        {
+          "name": "📊 Raw Data dari Apify (Semua Field)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"listingType\": \"sale\",\n  \"location\": \"Jakarta Selatan\",\n  \"propertyType\": [\"house\"],\n  \"limit\": 5,\n  \"raw\": true\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/rumah123/search",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "rumah123", "search"]
+            },
+            "description": "Lihat raw data lengkap dari Apify dengan semua field yang tersedia (tidak di-transform)"
+          },
+          "response": []
+        },
+        {
+          "name": "📋 Ambil Dataset yang Sudah Ada",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Ganti dataset_id dengan ID dari response sebelumnya",
+                  "// Contoh: datset_ABC123XYZ",
+                  "let datasetId = pm.environment.get('dataset_id');",
+                  "if(!datasetId) {",
+                  "  console.warn('⚠️ dataset_id belum di-set. Jalankan search request terlebih dahulu!');",
+                  "} else {",
+                  "  console.log('📊 Using dataset ID:', datasetId);",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Response Status 200', function() {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "let response = pm.response.json();",
+                  "console.log('📋 Total listings in dataset:', response.data.meta.total);",
+                  "console.log('📊 Current page:', response.data.meta.offset + ' to ' + (response.data.meta.offset + response.data.listings.length));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5000/api/rumah123/dataset/{{dataset_id}}?offset=0&limit=50",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "rumah123", "dataset", "{{dataset_id}}"],
+              "query": [
+                {
+                  "key": "offset",
+                  "value": "0"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Ambil data dari dataset yang sudah ada (hasil dari search sebelumnya)\n\nVariable {{dataset_id}} otomatis di-set setelah menjalankan search request"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🎯 Quick Test - 3 Sample Requests",
+      "item": [
+        {
+          "name": "Quick #1: Rumah 500M-1M Jakarta",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"listingType\": \"sale\",\n  \"location\": \"Jakarta Selatan\",\n  \"minPrice\": 500000000,\n  \"maxPrice\": 1000000000,\n  \"limit\": 5\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/rumah123/search",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "rumah123", "search"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Quick #2: Apartemen Sewa Jakarta",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"listingType\": \"rent\",\n  \"location\": \"Jakarta\",\n  \"propertyType\": [\"apartment\"],\n  \"maxPrice\": 30000000,\n  \"limit\": 5\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/rumah123/search",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "rumah123", "search"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Quick #3: Tanah Bandung",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"listingType\": \"sale\",\n  \"location\": \"Bandung\",\n  \"propertyType\": [\"land\"],\n  \"limit\": 5\n}"
+            },
+            "url": {
+              "raw": "http://localhost:5000/api/rumah123/search",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "5000",
+              "path": ["api", "rumah123", "search"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

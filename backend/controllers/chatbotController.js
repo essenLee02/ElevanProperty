@@ -10,6 +10,12 @@ const {
   checkAIProviderConfig
 } = require('../services/aiProviderService');
 const { buildRecommendationContextForLLM } = require('../services/propertyRecommendationService');
+const {
+  getRumah123Listings,
+  formatRumah123ContextForLLM,
+  mapBuildingTypeToApify,
+  mapTransactionTypeToApify,
+} = require('../services/rumah123ContextService');
 const chatbotPrivateController = require('./chatbotPrivateController');
 const { getSkillRegistryStatus } = require('../services/skillPromptService');
 
@@ -133,8 +139,41 @@ exports.sendMessage = async (req, res) => {
     // Build recommendation context from backend property catalog.
     recommendationContext = await buildRecommendationContextForLLM(payload.message, history);
 
+    // Fetch Rumah123 live listings based on detected filters
+    let rumah123Block = '';
+    try {
+      const filters = recommendationContext.filters;
+      const apifyPropertyType = mapBuildingTypeToApify(filters.buildingType);
+      const apifyListingType = mapTransactionTypeToApify(filters.transactionType);
+      const location = filters.location || payload.location || '';
+
+      if (location || apifyPropertyType) {
+        const rumah123Listings = await getRumah123Listings({
+          location,
+          propertyType: apifyPropertyType,
+          listingType: apifyListingType,
+        });
+
+        if (rumah123Listings.length > 0) {
+          rumah123Block = formatRumah123ContextForLLM(rumah123Listings);
+          console.log(`[Chatbot] Injected ${rumah123Listings.length} Rumah123 listings into context.`);
+        }
+      }
+    } catch (rumah123Err) {
+      console.warn('[Chatbot] Rumah123 context fetch failed (non-fatal):', rumah123Err.message);
+    }
+
     // If the frontend sent property context (first message), append it to the LLM context.
     let combinedContextText = recommendationContext.contextText;
+
+    if (rumah123Block) {
+      combinedContextText = [
+        combinedContextText,
+        '',
+        rumah123Block
+      ].join('\n');
+    }
+
     if (frontendPropertyContext) {
       const frontendBlock = formatFrontendPropertyContext(frontendPropertyContext);
       if (frontendBlock) {

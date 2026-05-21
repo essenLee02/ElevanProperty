@@ -62,4 +62,17 @@ docs/04-history-memory-context.md
 docs/05-multilingual-provider-sync.md
 docs/06-response-format-templates-quality.md
 docs/07-offtopic-clarification-negotiation-escalation.md
+docs/08-rumah123-live-data.md
 ```
+
+## Rumah123 Live Data Integration
+
+This skill now includes support for live property listings from Rumah123.com injected via Apify.
+
+When `RUMAH123 LIVE LISTINGS` appears in the context, the assistant must:
+
+1. Prioritize those listings over static catalog data.
+2. Show up to 20 best matches ranked by location → type → price relevance.
+3. Include property images using markdown: `![Title](imageUrl)`.
+4. Show agent name, WhatsApp contact, and link to Rumah123 listing.
+5. Label the section clearly as "Data Terkini dari Rumah123".

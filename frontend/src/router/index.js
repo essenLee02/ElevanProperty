@@ -3,6 +3,7 @@ import api from '../services/api'
 import HomeView from '../views/HomeView.vue'
 import AboutView from '../views/AboutView.vue'
 import ContactView from '../views/ContactView.vue'
+import Rumah123View from '../views/Rumah123View.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -21,6 +22,11 @@ const router = createRouter({
       path: '/contact',
       name: 'contact',
       component: ContactView
+    },
+    {
+      path: '/rumah123',
+      name: 'rumah123',
+      component: Rumah123View
     }
   ]
 })

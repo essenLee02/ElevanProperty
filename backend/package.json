@@ -9,6 +9,7 @@
     "reinstall": "npm install"
   },
   "dependencies": {
+    "apify-client": "^2.23.3",
     "axios": "^1.16.1",
     "cors": "^2.8.6",
     "dotenv": "^16.6.1",

@@ -69,8 +69,19 @@ sequelize.sync()
     console.log('Database connected and synced');
     console.log('Environment file loaded from:', path.resolve(__dirname, '.env'));
     console.log('OpenAI key configured:', Boolean(process.env.OPENAI_API_KEY));
+    console.log('Apify token configured:', Boolean(process.env.APIFY_API_TOKEN) && process.env.APIFY_API_TOKEN !== 'isi_apify_token_anda');
     app.listen(port, () => {
       console.log(`Backend listening at http://localhost:${port}`);
+
+      // Warmup Rumah123 cache in background after server starts
+      if (process.env.APIFY_API_TOKEN && process.env.APIFY_API_TOKEN !== 'isi_apify_token_anda') {
+        const { warmupCache } = require('./services/rumah123ContextService');
+        const warmupLocations = (process.env.RUMAH123_WARMUP_LOCATIONS || 'Jakarta Selatan,Surabaya,Bandung,Bali').split(',').map(s => s.trim());
+        setTimeout(() => {
+          console.log('[Rumah123] Starting background cache warmup...');
+          warmupCache(warmupLocations);
+        }, 5000); // delay 5s after server start
+      }
     });
   })
   .catch((err) => {
