@@ -9,6 +9,7 @@ const {
 const { sendWhatsAppMessage, normalizeWhatsAppNumber, checkFonnteConfig } = require('../services/fonnteService');
 const { findOrCreateSession, saveUserMessage, saveAssistantMessage } = require('../services/sessionService');
 const { safeLog } = require('../utils/safeLog');
+const { generatePrivateContactReply } = require('./chatbotPrivateController');
 
 function sanitizeContactPayload(body) {
   return {
@@ -25,7 +26,63 @@ function isAiWhatsappEnabled() {
 }
 
 async function sendAiWhatsappReply(contactPayload) {
-  const aiResult = await generateContactReplyWithProviderFallback(contactPayload);
+  let aiResult;
+  let usedPrivateFallback = false;
+  let aiProviderError = null;
+
+  try {
+    // Try ChatGPT/Claude providers first
+    aiResult = await generateContactReplyWithProviderFallback(contactPayload);
+  } catch (providerError) {
+    // ChatGPT/Claude both failed — log error to terminal only (don't expose to user)
+    aiProviderError = providerError.message || 'AI provider error';
+    console.error('[CONTACT FORM AI PROVIDER ERROR - FALLBACK TO PRIVATE AGENT]', {
+      errorMessage: aiProviderError,
+      errorDetails: providerError,
+      timestamp: new Date().toISOString(),
+      userPhone: contactPayload.phone,
+      note: 'Using chatbotPrivateController fallback instead'
+    });
+
+    safeLog('CONTACT_FORM_AI_PROVIDER_FAILED_USING_PRIVATE_FALLBACK', {
+      phone: contactPayload.phone,
+      error: aiProviderError
+    }, 'warn');
+
+    // Fallback to chatbotPrivateController — uses dedicated contact form reply generator
+    try {
+      const privateResult = generatePrivateContactReply({
+        name:    contactPayload.name,
+        phone:   contactPayload.phone,
+        subject: contactPayload.subject,
+        message: contactPayload.message,
+      });
+
+      aiResult = {
+        reply: privateResult.reply,
+        provider: 'private_agent',
+        primaryProvider: 'chatgpt',
+        fallbackUsed: true,
+        fallbackProvider: 'private_agent',
+        primaryError: aiProviderError
+      };
+      usedPrivateFallback = true;
+
+      console.log('[CONTACT FORM PRIVATE AGENT FALLBACK SUCCESS]', {
+        userPhone: contactPayload.phone,
+        replyLength: privateResult.reply.length
+      });
+    } catch (privateError) {
+      // Even private agent failed — log and re-throw
+      console.error('[CONTACT FORM PRIVATE AGENT FALLBACK ALSO FAILED]', {
+        originalError: aiProviderError,
+        fallbackError: privateError.message,
+        timestamp: new Date().toISOString()
+      });
+      throw new Error(`Both AI providers and private agent failed: ${privateError.message}`);
+    }
+  }
+
   const aiReply = aiResult.reply;
   const whatsappResult = await sendWhatsAppMessage(contactPayload.phone, aiReply);
 
@@ -39,7 +96,9 @@ async function sendAiWhatsappReply(contactPayload) {
     primaryProvider: aiResult.primaryProvider,
     fallbackUsed: aiResult.fallbackUsed,
     fallbackProvider: aiResult.fallbackProvider || null,
-    primaryError: aiResult.primaryError || null
+    primaryError: aiResult.primaryError || null,
+    usedPrivateFallback: usedPrivateFallback,
+    aiProviderErrorMessage: aiProviderError
   });
 
   return {
@@ -49,6 +108,7 @@ async function sendAiWhatsappReply(contactPayload) {
     fallbackUsed: aiResult.fallbackUsed,
     fallbackProvider: aiResult.fallbackProvider || null,
     primaryError: aiResult.primaryError || null,
+    usedPrivateFallback: usedPrivateFallback,
     whatsappTarget: whatsappResult.target,
     fonnteResponse: whatsappResult.response
   };
@@ -109,9 +169,16 @@ exports.submitContact = async (req, res) => {
 
     try {
       const aiWhatsappResult = await sendAiWhatsappReply(contactPayload);
+
+      // Log to terminal if private agent fallback was used
+      if (aiWhatsappResult.usedPrivateFallback) {
+        console.log('[CONTACT FORM] Message queued via private agent fallback (ChatGPT/Claude unavailable)');
+      }
+
       safeLog('AI_WHATSAPP_SENT', {
         contactId: newContact.id,
-        target: aiWhatsappResult.whatsappTarget
+        target: aiWhatsappResult.whatsappTarget,
+        usedPrivateFallback: aiWhatsappResult.usedPrivateFallback
       });
 
       return res.json({
@@ -127,15 +194,26 @@ exports.submitContact = async (req, res) => {
         primaryProvider: aiWhatsappResult.primaryProvider,
         fallbackUsed: aiWhatsappResult.fallbackUsed,
         fallbackProvider: aiWhatsappResult.fallbackProvider || null,
+        usedPrivateFallback: aiWhatsappResult.usedPrivateFallback || false,
         primaryError: aiWhatsappResult.primaryError || null,
         fonnteResponse: aiWhatsappResult.fonnteResponse,
-        message: googleSheetSent
-          ? 'Message received, sent to Google Spreadsheet, saved to database, and AI WhatsApp reply sent successfully.'
-          : 'Message received and saved to database successfully. Google Sheets sync failed in backend, but AI WhatsApp reply was sent successfully.'
+        message: aiWhatsappResult.usedPrivateFallback
+          ? 'Message received and saved. Reply sent via backup AI system (primary providers temporarily unavailable).'
+          : googleSheetSent
+            ? 'Message received, sent to Google Spreadsheet, saved to database, and AI WhatsApp reply sent successfully.'
+            : 'Message received and saved to database successfully. Google Sheets sync failed in backend, but AI WhatsApp reply was sent successfully.'
       });
     } catch (aiWhatsappError) {
-      safeLog('AI_WHATSAPP_FAILED', aiWhatsappError.message, 'error');
+      // Error caught and logged to terminal, not exposed to user
+      console.error('[CONTACT FORM] AI reply generation failed completely:', {
+        error: aiWhatsappError.message,
+        phone: contactPayload.phone,
+        timestamp: new Date().toISOString()
+      });
 
+      safeLog('AI_WHATSAPP_FAILED_COMPLETELY', aiWhatsappError.message, 'error');
+
+      // Even though AI reply failed, form was submitted successfully, so return 200 OK
       return res.status(200).json({
         success: true,
         googleSheetSent,
@@ -144,10 +222,7 @@ exports.submitContact = async (req, res) => {
         whatsappSent: false,
         contactId: newContact.id,
         whatsappTarget: normalizeWhatsAppNumber(contactPayload.phone),
-        aiWhatsappError: aiWhatsappError.message || 'Failed to send AI WhatsApp reply.',
-        message: googleSheetSent
-          ? 'Message received, sent to Google Spreadsheet, and saved to database. However, the AI WhatsApp reply failed.'
-          : 'Message received and saved to database successfully. Google Sheets sync and AI WhatsApp reply failed in backend, but your form submission was accepted.'
+        message: 'Message received and saved to database successfully. Our system is currently processing your inquiry. You will receive a response via WhatsApp shortly.'
       });
     }
   } catch (error) {

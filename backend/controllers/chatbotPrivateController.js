@@ -732,6 +732,96 @@ class ChatbotPrivateService {
       ...meta,
     };
   }
+
+  /**
+   * Generate a professional WhatsApp follow-up reply for a Contact Form submission.
+   *
+   * This is the private-agent fallback used when ChatGPT and Claude are both unavailable.
+   * Produces a warm, empathetic, property-focused CS reply — matching the same tone and
+   * structure defined in aiPromptBuilderService.buildContactReplyPrompt().
+   *
+   * @param {object} contactPayload
+   * @param {string} contactPayload.name     - Customer's full name
+   * @param {string} contactPayload.phone    - Customer's phone number
+   * @param {string} contactPayload.subject  - Form subject / inquiry topic
+   * @param {string} contactPayload.message  - Customer's detailed message
+   * @returns {{ reply: string, source: string }}
+   */
+  static generateContactFormReply({ name = '', phone = '', subject = '', message = '' } = {}) {
+    const firstName   = (name || '').split(' ')[0] || name || 'Bapak/Ibu';
+    const combinedMsg = `${subject} ${message}`.toLowerCase();
+    const lang        = LanguageDetector.detect(combinedMsg);
+    const isId        = lang === 'id';
+
+    // Detect inquiry intent from subject + message
+    const isRent      = /sewa|rent|kontrak|kost|boarding/i.test(combinedMsg);
+    const isBuy       = /beli|buy|purchase|jual|invest/i.test(combinedMsg);
+    const isSell      = /jual|sell|pasarkan|listing/i.test(combinedMsg);
+    const isApartment = /apartemen|apartment|apart/i.test(combinedMsg);
+    const isHotel     = /hotel/i.test(combinedMsg);
+    const isVilla     = /villa|vila/i.test(combinedMsg);
+    const isHouse     = /rumah|house|home|kontrakan|residential/i.test(combinedMsg);
+
+    // Build intent-aware follow-up question
+    let followUp;
+    if (isId) {
+      if (isRent)      followUp = `Boleh saya tanyakan, kira-kira *kapan* Bapak/Ibu berencana untuk pindah, dan apakah ada preferensi lokasi atau fasilitas tertentu yang menjadi prioritas?`;
+      else if (isBuy)  followUp = `Agar kami bisa memberikan pilihan terbaik, boleh saya tahu *kisaran anggaran* yang Bapak/Ibu siapkan, dan apakah ada preferensi lokasi atau tipe properti tertentu?`;
+      else if (isSell) followUp = `Untuk membantu proses pemasaran properti Bapak/Ibu, boleh kami ketahui *lokasi dan tipe properti* yang ingin dijualkan, beserta harga yang diharapkan?`;
+      else             followUp = `Agar kami dapat memberikan informasi yang paling sesuai, boleh saya tahu lebih lanjut mengenai *kebutuhan atau preferensi properti* Bapak/Ibu?`;
+    } else {
+      if (isRent)      followUp = `To help us find the perfect match for you, may I ask *when you're planning to move in*, and do you have any specific location or facility preferences?`;
+      else if (isBuy)  followUp = `To tailor our recommendations, could you share your *approximate budget* and any preferred location or property type?`;
+      else if (isSell) followUp = `To assist you in listing your property effectively, could you share the *property location, type, and your expected price*?`;
+      else             followUp = `To better assist you, could you share more about your *specific property needs or preferences*?`;
+    }
+
+    // Build property type mention
+    let propType = '';
+    if (isId) {
+      if (isApartment) propType = 'apartemen';
+      else if (isHotel) propType = 'hotel';
+      else if (isVilla) propType = 'villa';
+      else if (isHouse) propType = 'properti';
+      else propType = 'properti';
+    } else {
+      if (isApartment) propType = 'apartment';
+      else if (isHotel) propType = 'hotel';
+      else if (isVilla) propType = 'villa';
+      else if (isHouse) propType = 'property';
+      else propType = 'property';
+    }
+
+    // Compose the WhatsApp reply in the detected language
+    let reply;
+    if (isId) {
+      const greeting   = `Halo *${firstName}*, terima kasih telah menghubungi *Elevan Property*! 🏡`;
+      const ack        = subject
+        ? `Kami sudah menerima pesan Anda mengenai *"${subject}"* dan dengan senang hati akan membantu Anda menemukan ${propType} yang paling sesuai dengan kebutuhan Anda.`
+        : `Kami sudah menerima pesan Anda dan dengan senang hati akan membantu Anda menemukan ${propType} yang paling sesuai dengan kebutuhan Anda.`;
+      const value      = `Tim konsultan properti kami siap mendampingi Bapak/Ibu mulai dari pencarian hingga proses penyelesaian transaksi dengan nyaman dan profesional.`;
+      const signOff    = `Silakan lanjutkan percakapan ini kapan saja — kami siap membantu!\n\nSalam hangat,\n*Elvan*\n*Elevan Property* 🌟`;
+      reply = [greeting, ack, value, followUp, signOff].join('\n\n');
+    } else {
+      const greeting   = `Hello *${firstName}*, thank you for reaching out to *Elevan Property*! 🏡`;
+      const ack        = subject
+        ? `We've received your inquiry regarding *"${subject}"* and we'd be delighted to help you find the perfect ${propType} that fits your needs.`
+        : `We've received your message and we'd be delighted to help you find the right ${propType} for your needs.`;
+      const value      = `Our dedicated property consultants are here to guide you every step of the way — from property search to a smooth, stress-free transaction.`;
+      const signOff    = `Feel free to continue this conversation anytime — we're always here to help!\n\nWarm regards,\n*Elvan*\n*Elevan Property* 🌟`;
+      reply = [greeting, ack, value, followUp, signOff].join('\n\n');
+    }
+
+    console.log(`[PrivateAgent/ContactForm] Reply generated (lang=${lang}, firstName="${firstName}")`);
+
+    return {
+      reply,
+      source:   'private_agent',
+      provider: 'private_agent',
+      primaryProvider: 'private_agent',
+      fallbackUsed: true,
+    };
+  }
 }
 
 // ─── Express Endpoints ────────────────────────────────────────────────────────
@@ -895,5 +985,6 @@ exports.debugTestRumah123 = async (req, res) => {
 
 // ─── Shared exports (used by chatbotController.js as fallback) ────────────────
 
-module.exports.generatePrivateChatbotResponse = (params) => ChatbotPrivateService.generateResponse(params);
-module.exports.loadPrivateChatbotSkillInfo     = ()       => ChatbotPrivateService.loadSkillInfo();
+module.exports.generatePrivateChatbotResponse  = (params)  => ChatbotPrivateService.generateResponse(params);
+module.exports.generatePrivateContactReply     = (payload) => ChatbotPrivateService.generateContactFormReply(payload);
+module.exports.loadPrivateChatbotSkillInfo     = ()        => ChatbotPrivateService.loadSkillInfo();
