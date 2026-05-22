@@ -15,6 +15,7 @@ const whatsappInboundController = require('../controllers/whatsappInboundControl
 const registerController = require('../controllers/registerController');
 const loginController = require('../controllers/loginController');
 const refreshTokenController = require('../controllers/refreshTokenController');
+const profileController = require('../controllers/profileController');
 const { verifyToken } = require('../middleware/verifyToken');
 
 // Module Home
@@ -62,6 +63,10 @@ router.get('/auth/refresh', refreshTokenController.refreshTokenController);
 // Logout & Get current user (open, rely on cookie)
 router.delete('/auth/logout', loginController.logoutUser);
 router.get('/auth/me', loginController.getCurrentUser);
+
+// Profile routes (requires authentication)
+router.get('/profile/me', profileController.getCurrentProfile);
+router.put('/profile/update-agent', profileController.updateDataAgent);
 
 // Example protected endpoint pakai verifyToken (boleh dihapus kalau tidak dipakai)
 router.get('/auth/protected-test', verifyToken, (req, res) => {

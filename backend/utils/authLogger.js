@@ -152,7 +152,10 @@ const authLog = {
   logoutSuccess:   (user, extra = {})            => logAuthEvent({ action: 'LOGOUT', status: 'SUCCESS', user, extra }),
   logoutFailed:    (reason, extra = {}, user = {}) => logAuthEvent({ action: 'LOGOUT', status: 'FAILED',  user, reason, ...extra }),
 
-  pageNavigation:  (extra = {})                  => logAuthEvent({ action: 'PAGE', status: 'INFO', extra })
+  pageNavigation:  (extra = {})                  => logAuthEvent({ action: 'PAGE', status: 'INFO', extra }),
+
+  profileUpdateSuccess: (user, extra = {})       => logAuthEvent({ action: 'PROFILE_UPDATE', status: 'SUCCESS', user, extra }),
+  profileUpdateFailed:  (reason, extra = {}, user = {}) => logAuthEvent({ action: 'PROFILE_UPDATE', status: 'FAILED', user, reason, ...extra })
 };
 
 module.exports = {

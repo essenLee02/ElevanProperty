@@ -178,11 +178,10 @@ exports.insertDataAgent = async (req, res) => {
 
     // Generate user_id (prefix nama + random + count+1)
     const totalUsers = await User.count();
-    const newUserId = makeUserIdFunction(name, totalUsers);
+    const newUserId = makeUserIdFunction(name, totalUsers).toUpperCase();
 
-    // Capitalize each word di nama
-    const formattedName = String(name).trim()
-      .replace(/(^\w{1})|(\s+\w{1})/g, letter => letter.toUpperCase());
+    // Convert nama ke UPPERCASE
+    const formattedName = String(name).trim().toUpperCase();
 
     // Default created_by = 'Self-Register' kalau register dari halaman publik
     const createdByValue = (createdBy && String(createdBy).trim() !== '')
