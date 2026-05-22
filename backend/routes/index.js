@@ -9,6 +9,13 @@ const chatbotPrivateController = require('../controllers/chatbotPrivateControlle
 const fonnteWebhookController = require('../controllers/fonnteWebhookController');
 const logController = require('../controllers/logController');
 const rumah123Controller = require('../controllers/rumah123Controller');
+const whatsappInboundController = require('../controllers/whatsappInboundController');
+
+// Auth controllers (Login & Register Users)
+const registerController = require('../controllers/registerController');
+const loginController = require('../controllers/loginController');
+const refreshTokenController = require('../controllers/refreshTokenController');
+const { verifyToken } = require('../middleware/verifyToken');
 
 // Module Home
 router.get('/home', homeController.index);
@@ -34,6 +41,36 @@ router.get('/chatbot/debug/test-rumah123', chatbotPrivateController.debugTestRum
 
 // Fonnte WhatsApp Webhook
 router.post('/fonnte/webhook', fonnteWebhookController.handleWebhook);
+
+// WhatsApp Inbound Messages (Fonnte Webhook Handler)
+router.post('/whatsapp/webhook', whatsappInboundController.handleInboundMessage);
+router.get('/whatsapp/messages', whatsappInboundController.getInboundMessages);
+router.get('/whatsapp/messages/:id', whatsappInboundController.getMessageDetail);
+router.get('/whatsapp/agents/status', whatsappInboundController.getAgentsStatus);
+
+// =============================================================
+// Auth Routes (Login & Register Users)
+// =============================================================
+// Register & Login (open access)
+router.post('/auth/register', registerController.insertDataAgent);
+router.get('/auth/users-count', registerController.countUsers);
+router.post('/auth/login', loginController.loginUser);
+
+// Refresh token (rely on cookie HttpOnly)
+router.get('/auth/refresh', refreshTokenController.refreshTokenController);
+
+// Logout & Get current user (open, rely on cookie)
+router.delete('/auth/logout', loginController.logoutUser);
+router.get('/auth/me', loginController.getCurrentUser);
+
+// Example protected endpoint pakai verifyToken (boleh dihapus kalau tidak dipakai)
+router.get('/auth/protected-test', verifyToken, (req, res) => {
+  return res.json({
+    status: 200,
+    data: { response: req.user, message: 'Anda terautentikasi' },
+    isSuccess: 1
+  });
+});
 
 // Module Logger
 router.post('/log', logController.saveLog);

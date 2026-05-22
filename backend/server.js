@@ -3,6 +3,7 @@ require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
 const express = require('express');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
 const { DataTypes } = require('sequelize');
 const sequelize = require('./config/database');
 require('./models');
@@ -10,8 +11,35 @@ const routes = require('./routes/index');
 
 const app = express();
 const port = process.env.PORT || 5000;
+const frontendPort = process.env.FRONTEND_PORT || 5173;
 
-app.use(cors());
+// CORS dengan credentials supaya cookie refresh_token bisa dibaca frontend
+// Hanya izinkan origin dari localhost:FRONTEND_PORT dan 127.0.0.1:FRONTEND_PORT
+const allowedOrigins = [
+  `http://localhost:${frontendPort}`,
+  `http://127.0.0.1:${frontendPort}`,
+  `http://0.0.0.0:${frontendPort}`
+];
+
+app.use(cors({
+  origin: function(origin, callback) {
+    // Allow no-origin (Postman, curl, mobile) tanpa origin header
+    if (!origin) return callback(null, true);
+
+    // Check apakah origin ada di whitelist
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    // Reject jika origin tidak diizinkan
+    console.warn(`⚠️  CORS REJECTED: Origin '${origin}' not allowed. Allowed: ${allowedOrigins.join(', ')}`);
+    return callback(new Error('CORS policy: Origin not allowed'));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+app.use(cookieParser());
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -72,6 +100,7 @@ sequelize.sync()
     console.log('Apify token configured:', Boolean(process.env.APIFY_API_TOKEN) && process.env.APIFY_API_TOKEN !== 'isi_apify_token_anda');
     app.listen(port, () => {
       console.log(`Backend listening at http://localhost:${port}`);
+      console.log(`CORS Allowed Origins: ${allowedOrigins.join(', ')}`);
 
       // Warmup Rumah123 cache in background after server starts
       if (process.env.APIFY_API_TOKEN && process.env.APIFY_API_TOKEN !== 'isi_apify_token_anda') {
