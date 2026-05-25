@@ -1,92 +1,113 @@
 # 02. Project Configuration & Setup
 
-## Installation & Setup
+## Environment Variables (backend/.env)
 
-```bash
-# Backend
-cd backend
-npm install express dotenv cors sqlite3 axios uuid
-npm install nodemon --save-dev
-
-# Frontend  
-cd frontend
-npm create vite@latest . -- --template vue
-npm install axios vue-router
-```
-
-## Environment Variables (.env)
-
+### Server
 ```env
-# Server
-NODE_ENV=production
-PORT=3000
+PORT=5005
+FRONTEND_PORT=5173
+```
 
-# Database
-DATABASE_TYPE=sqlite
-DATABASE_URL=sqlite:./db/database.sqlite
+### Database (MySQL)
+```env
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=
+DB_NAME=db_property
+DB_DIALECT=mysql
+```
 
-# AI Providers
-OPENAI_API_KEY=sk-...
-ANTHROPIC_API_KEY=sk-ant-...
+### OpenAI (ChatGPT — primary AI)
+```env
+OPENAI_API_KEY=sk-proj-...
+OPENAI_MODEL=gpt-4o-mini
+OPENAI_STORE_RESPONSE=true
+OPENAI_MAX_OUTPUT_TOKENS=0
+```
+
+### Claude (Anthropic — fallback AI)
+```env
+ANTHROPIC_API_KEY=...            ← placeholder = Claude disabled
+CLAUDE_MODEL=claude-haiku-4-5-20251001
+CLAUDE_API_VERSION=2023-06-01
+CLAUDE_MAX_TOKENS=1200
+```
+
+### AI Provider Routing
+```env
 AI_PRIMARY_PROVIDER=chatgpt
-AI_FALLBACK_PROVIDER=claude
+ENABLE_CLAUDE_FALLBACK=true
+ENABLE_CHATBOT_PRIVATE_CONTROLLER=true
+ENABLE_AI_WHATSAPP=true
+```
 
-# External
+### WhatsApp (Fonnte)
+```env
 FONNTE_TOKEN=...
+```
+
+### Live Property Data (Rumah123 via Apify)
+```env
+APIFY_API_TOKEN=...
+RUMAH123_DATA=ON               ← OFF = use only JSON catalog
+RUMAH123_WARMUP_LOCATIONS=Jakarta Selatan,Surabaya,Bandung,Bali
+```
+
+### Google Sheets (contact form sync, non-blocking)
+```env
 GOOGLE_SHEET_ID=...
-AWS_S3_BUCKET=...
-
-# Chat
-CHATBOT_COOKIE_TTL_MINUTES=1440
-SESSION_TIMEOUT_MINUTES=720
+GOOGLE_SHEET_GID=0
+GOOGLE_SERVICE_ACCOUNT_JSON_PATH=./google-service-account.json
 ```
 
-## Database Initialization
-
-**SQLite** (development):
-```bash
-# Automatic on first run - database.js handles it
+### JWT Authentication
+```env
+ACCESS_TOKEN_SECRET=...
+REFRESH_TOKEN_SECRET=...
+ACCESS_TOKEN_EXPIRY=5m
+REFRESH_TOKEN_EXPIRY=1d
+COOKIE_REFRESH_TOKEN=Elevan_Refresh_Token
+BCRYPT_SALT_ROUNDS=10
 ```
 
-**PostgreSQL** (production):
-```bash
-createdb elevan_property
-createuser elevan_user
-psql -d elevan_property -c "ALTER USER elevan_user WITH PASSWORD 'password';"
+### Chatbot Session
+```env
+CHATBOT_COOKIE_TTL_MINUTES=90
 ```
 
-## Package.json Scripts
-
-```json
-{
-  "scripts": {
-    "dev": "nodemon server.js",
-    "start": "node server.js",
-    "migrate": "node config/migrations.js",
-    "test": "jest",
-    "deploy": "npm run migrate && npm start"
-  }
-}
+### Skill Prompt Character Limits
+```env
+SKILL_MAX_WEBSITE_CHARACTERS=12000
+SKILL_MAX_RESPONSE_CHARACTERS=22000
+SKILL_MAX_PROJECT_CHARACTERS=36000
 ```
 
-## Running Application
+## Quick Start
 
 ```bash
-# Development
+# Backend (port 5005)
+cd backend
+npm install
+# Fill in backend/.env
+node server.js        # or: npm run dev (nodemon)
+
+# Frontend (port 5173)
+cd frontend
+npm install
 npm run dev
-# Server on http://localhost:3000
-
-# Production  
-npm run deploy
 ```
 
-## Setup Checklist
+## Backend Dependencies
 
-- [ ] Node.js >= 18 installed
-- [ ] .env file configured
-- [ ] Database created
-- [ ] API keys obtained (OpenAI, Claude, Fonnte)
-- [ ] npm install completed
-- [ ] Database migrations run
-- [ ] Server starts without errors
-- [ ] Frontend can reach backend
+| Package | Purpose |
+|---|---|
+| express | HTTP server |
+| sequelize + mysql2 | ORM + MySQL driver |
+| bcrypt | password hashing |
+| jsonwebtoken | JWT access/refresh tokens |
+| cookie-parser | read HttpOnly cookies |
+| axios | Claude API + Fonnte HTTP calls |
+| google-spreadsheet | Google Sheets integration |
+| apify-client | Rumah123 live property data |
+| express-rate-limit | rate limiting (contact form: 5/15min) |
+| dotenv | environment variable loading |

@@ -1,74 +1,82 @@
 # 07. Frontend Architecture & Setup
 
-## Vue 3 + Vite Setup
-
-```bash
-npm create vite@latest frontend -- --template vue
-npm install axios vue-router pinia
-```
+## Stack
+- Vue 3 (Composition API)
+- Vite build tool
+- Port 5173 (dev)
 
 ## Directory Structure
 
 ```
-frontend/
-├── src/
-│   ├── components/
-│   │   ├── HomeModule.vue
-│   │   ├── AboutModule.vue
-│   │   ├── ContactModule.vue
-│   │   └── ChatbotModule.vue
-│   ├── composables/
-│   │   ├── useChatbot.js
-│   │   ├── useProperty.js
-│   │   └── useSession.js
-│   ├── api/
-│   │   ├── chatbot.js
-│   │   ├── contact.js
-│   │   └── catalog.js
-│   ├── App.vue
-│   ├── main.js
-│   └── style.css
-└── vite.config.js
+frontend/src/
+├── views/
+│   ├── HomeView.vue          ← Landing page, contains FloatingChatbot
+│   ├── AboutView.vue         ← About page (static)
+│   ├── ContactView.vue       ← Contact form with AI WhatsApp reply
+│   ├── Rumah123View.vue      ← Live property search (Apify)
+│   ├── LoginView.vue         ← Login form (auth layout)
+│   ├── RegisterView.vue      ← Register form (auth layout)
+│   └── ProfileView.vue       ← User profile (requires auth)
+├── components/
+│   └── FloatingChatbot.vue   ← Main chatbot widget (~950 lines)
+├── services/
+│   ├── api.js                ← Axios instance with interceptors
+│   ├── authApi.js            ← Token memory management
+│   └── chatbotApi.js         ← Chatbot API calls
+└── router/
+    └── index.js              ← Vue Router with auth guards
 ```
 
-## API Services
+## Router Guards (frontend/src/router/index.js)
 
 ```javascript
-// api/chatbot.js
-export async function sendMessage(message, sessionId) {
-  const response = await axios.post('/api/chatbot', { message, sessionId });
-  return response.data;
-}
-
-export async function getHistory(sessionId) {
-  const response = await axios.get(`/api/chatbot/history/${sessionId}`);
-  return response.data;
-}
+// Route meta options:
+{ meta: { requiresAuth: true } }   // → redirect to /login if not authenticated
+{ meta: { requiresGuest: true } }  // → redirect logged-in users away (login/register pages)
+// No meta = public (accessible by all, logged in or not)
 ```
 
-## Composables
+| Route | Meta | Access |
+|---|---|---|
+| / (Home) | none | public |
+| /about | none | public |
+| /contact | none | public |
+| /rumah123 | none | public |
+| /login | requiresGuest | guests only |
+| /register | requiresGuest | guests only |
+| /profile | requiresAuth | logged-in only |
 
-```javascript
-// composables/useChatbot.js
-export function useChatbot() {
-  const messages = ref([]);
-  const sessionId = ref(localStorage.getItem('sessionId') || '');
-  
-  async function sendMessage(text) {
-    const response = await chatbotApi.sendMessage(text, sessionId.value);
-    messages.value.push({ role: 'assistant', text: response });
-    sessionId.value = response.sessionId;
-    localStorage.setItem('sessionId', sessionId.value);
-  }
+## Authentication in Frontend
 
-  return { messages, sendMessage };
-}
+### authApi.js
+- `getCachedToken()` — returns token from memory (falls back to localStorage for page reload)
+- `setCachedToken(token)` — stores in memory (runtime only, more XSS-safe than localStorage)
+- `clearCachedToken()` — removes token from memory
+
+### api.js (Axios instance)
+- `baseURL: /api` → proxied to `http://localhost:5005/api` by Vite
+- **Request interceptor**: adds `Authorization: Bearer <token>` header automatically
+- **Response interceptor**: on 401, calls `GET /api/auth/refresh`, retries original request with new token
+
+## FloatingChatbot.vue
+
+See `11-module-chatbot.md` for full details.
+
+Key files used:
+- Reads profile from cookie `chatbot_profile`
+- Reads session ID from cookie (TTL from `/api/chatbot/config`)
+- Loads property data from `frontend/public/json_data/indonesia_property_36_provinces_flat.json`
+- Posts to `POST /api/chatbot/message`
+
+## Build / Deploy
+
+```bash
+# Dev server (hot reload)
+npm run dev
+
+# Production build (outputs to frontend/dist/)
+npm run build
 ```
 
-## Environment Variables
-
-```env
-VITE_API_URL=http://localhost:3000/api
-VITE_ENABLE_CHATBOT=true
-VITE_CHATBOT_POSITION=bottom-right
-```
+Vite config proxies `/api` to `http://localhost:5005` in dev mode.
+For production, configure your web server (nginx/caddy) to proxy `/api` to the Node.js backend.

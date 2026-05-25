@@ -1,95 +1,107 @@
 # 03. Database Design & Models
 
-## Database Schema
+Database: `db_property` (MySQL / MariaDB 10.4)
+ORM: Sequelize v6 (`backend/models/`)
+Sync strategy: `sequelize.sync({ alter: true })` on server start (auto-migrates, no data loss)
 
-### Sessions Table
-```sql
-CREATE TABLE sessions (
-  id VARCHAR(36) PRIMARY KEY,
-  phone VARCHAR(20) NOT NULL UNIQUE,
-  name VARCHAR(100),
-  location VARCHAR(100),
-  createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  lastActivity TIMESTAMP
-);
-```
+## Tables
 
-### Chat History Table
-```sql
-CREATE TABLE chat_history (
-  id VARCHAR(36) PRIMARY KEY,
-  sessionId VARCHAR(36) REFERENCES sessions(id),
-  userMessage TEXT,
-  aiResponse TEXT,
-  aiProvider VARCHAR(20),
-  tokensUsed INTEGER,
-  timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
+### users
+Stores registered agents (login system).
 
-### Properties Table
-```sql
-CREATE TABLE properties (
-  id VARCHAR(36) PRIMARY KEY,
-  name VARCHAR(255),
-  type VARCHAR(50),
-  transaction VARCHAR(20),
-  location VARCHAR(255),
-  price DECIMAL(15,2),
-  facilities JSON,
-  description TEXT
-);
-```
+| Column | Type | Notes |
+|---|---|---|
+| id | INT AI PK | auto-increment |
+| user_id | VARCHAR(20) | format: `NTAb3xK006` (prefix+random+count) |
+| name | VARCHAR(100) | stored UPPERCASE |
+| birthdate | DATE | nullable |
+| phone | VARCHAR(20) | nullable |
+| username | VARCHAR(50) | unique |
+| password | VARCHAR(255) | bcrypt hash |
+| refresh_token | TEXT | current JWT refresh token (null = logged out) |
+| status | INT | 1=active, 2=blocked, 3=deleted |
+| privilege | VARCHAR(50) | nullable |
+| created_date, created_by | | audit |
+| updated_date, update_by | | audit |
 
-### Contacts Table
-```sql
-CREATE TABLE contacts (
-  id VARCHAR(36) PRIMARY KEY,
-  name VARCHAR(100),
-  phone VARCHAR(20),
-  email VARCHAR(100),
-  message TEXT,
-  status VARCHAR(50) DEFAULT 'new',
-  submittedAt TIMESTAMP
-);
-```
+### chat_sessions
+One row per unique customer conversation context.
 
-## JavaScript Models
+| Column | Type | Notes |
+|---|---|---|
+| id | INT AI PK | |
+| session_token | VARCHAR | unique identifier (stored in cookie) |
+| name | VARCHAR | customer name |
+| phone | VARCHAR | customer phone |
+| location | VARCHAR | customer location |
+| source | VARCHAR | `website_chatbot`, `contact_form`, `whatsapp_fonnte` |
+| createdAt, updatedAt | DATETIME | Sequelize auto |
 
-### Session Model
-```javascript
-class Session {
-  constructor(data) {
-    this.id = data.id || uuid();
-    this.phone = data.phone;
-    this.name = data.name;
-    this.location = data.location;
-    this.history = [];
-    this.createdAt = new Date();
-  }
-}
-```
+### chat_messages
+All messages for each session.
 
-## Data Relationships
+| Column | Type | Notes |
+|---|---|---|
+| id | INT AI PK | |
+| session_id | INT | FK → chat_sessions.id |
+| role | VARCHAR | `user` or `assistant` |
+| content | TEXT | message text |
+| source | VARCHAR | `website_chatbot`, `whatsapp`, `private_agent`, etc. |
+| metadata | JSON | AI provider info, filters, match counts |
+| createdAt, updatedAt | DATETIME | |
 
-```
-Session (1) ──→ (Many) ChatHistory
-Session (1) ──→ (Many) Contacts
-Property → Multiple recommendations
-```
+### contacts
+Contact form submissions.
 
-## Indexes
+| Column | Type | Notes |
+|---|---|---|
+| id | INT AI PK | |
+| name | VARCHAR | |
+| email | VARCHAR | |
+| phone | VARCHAR | |
+| subject | VARCHAR | |
+| message | TEXT | |
+| createdAt, updatedAt | DATETIME | |
 
-```sql
-CREATE INDEX idx_sessions_phone ON sessions(phone);
-CREATE INDEX idx_history_sessionId ON chat_history(sessionId);
-CREATE INDEX idx_properties_type ON properties(type);
-CREATE INDEX idx_properties_location ON properties(location);
-```
+### whatsapp_inbound_messages
+Messages received from customers on the 5 agent WhatsApp numbers.
 
-## Migration Strategy
+| Column | Type | Notes |
+|---|---|---|
+| id | INT AI PK | |
+| agentName | VARCHAR | Clarence / Desy / Nigel / Natasha / Leo |
+| agentPhone | VARCHAR | agent's WA number (as received) |
+| agentPhoneNormalized | VARCHAR | e.g. `6282111367154` |
+| senderName | VARCHAR | customer display name |
+| senderPhone | VARCHAR | customer phone |
+| senderPhoneNormalized | VARCHAR | |
+| message | TEXT | |
+| mediaType, mediaUrl | VARCHAR | nullable |
+| deviceId | VARCHAR | Fonnte device ID |
+| timestamp | VARCHAR | from Fonnte payload |
+| rawPayload | TEXT | full JSON from webhook |
+| status | VARCHAR | `received` |
+| createdAt, updatedAt | DATETIME | |
 
-Migrations are idempotent - safe to run multiple times:
-```javascript
-// config/migrations.js handles table creation automatically
-```
+### logs
+Frontend navigation and action logging.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | INT AI PK | |
+| action | VARCHAR | e.g. `PAGE_VIEW` |
+| details | TEXT | |
+| username | VARCHAR | nullable |
+| user_id | VARCHAR | nullable |
+| createdAt | DATETIME | |
+
+## Sequelize Models (backend/models/)
+
+- `User.js` → users
+- `ChatSession.js` → chat_sessions
+- `ChatMessage.js` → chat_messages
+- `Contact.js` → contacts
+- `WhatsAppInbound.js` → whatsapp_inbound_messages
+- `Log.js` → logs
+
+All models auto-exported from `backend/models/index.js`.

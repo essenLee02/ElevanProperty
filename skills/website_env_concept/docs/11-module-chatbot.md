@@ -1,114 +1,82 @@
 # 11. Module: Chatbot
 
-## Floating Chatbot Widget
+## FloatingChatbot.vue
+`frontend/src/components/FloatingChatbot.vue` (~950 lines)
 
-```
-Chatbot Module
-├── Floating Button
-│   └── Toggle open/close
-│
-├── Chat Window
-│   ├── Header (title, close button)
-│   ├── Messages area (scrollable)
-│   ├── Input field
-│   └── Send button
-│
-├── Session Management
-│   ├── Store sessionId in cookie
-│   ├── Load chat history
-│   └── Maintain context
-│
-└── Context Persistence
-    ├── Remember user location
-    ├── Remember property preferences
-    └── Restore conversation
-```
+Bottom-right floating chat widget. Visible on all pages (included in HomeView).
+Public — no login required.
 
-## Component Template
+## Profile & Session Management
 
-```vue
-<template>
-  <div class="floating-chatbot">
-    <div v-if="isOpen" class="chatbot-window">
-      <div class="header">
-        <h3>Property Assistant</h3>
-        <button @click="isOpen = false">×</button>
-      </div>
-      <div class="messages">
-        <div v-for="msg in messages" :key="msg.id" :class="msg.role">
-          {{ msg.text }}
-        </div>
-      </div>
-      <div class="input-area">
-        <input 
-          v-model="userMessage" 
-          @keyup.enter="sendMessage" 
-          placeholder="Ask about properties..."
-        />
-        <button @click="sendMessage">Send</button>
-      </div>
-    </div>
-    <button v-else @click="isOpen = true" class="toggle">💬</button>
-  </div>
-</template>
-```
+### User Profile (cookie: `chatbot_profile`)
+Before sending first message, user fills:
+- `name` (required)
+- `phone` (required)
+- `location` (required)
 
-## Chatbot Logic
+Stored in a persistent cookie. Restored on page reload.
+
+### Session Cookie
+Session ID stored in cookie with TTL from `GET /api/chatbot/config`:
+- Default: 90 minutes (`CHATBOT_COOKIE_TTL_MINUTES`)
+- When cookie expires, new session starts
+
+### Returning Customer Recognition
+`sessionService.findOrCreateSession()` normalizes name/phone/location to recognize returning customers even with slight typos.
+
+## First Message — Property Context
+
+On the first message of a new session, FloatingChatbot:
+1. Loads `frontend/public/json_data/indonesia_property_36_provinces_flat.json` (36 provinces, flat array)
+2. Sends it as `propertyContext` in the POST body
+
+Backend uses this + live Rumah123 data to build the AI prompt context.
+
+## Message Rendering (XSS-Safe)
 
 ```javascript
-export function useChatbot() {
-  const isOpen = ref(false);
-  const messages = ref([]);
-  const userMessage = ref('');
-  const sessionId = ref(localStorage.getItem('chatbot_session') || '');
-
-  async function sendMessage() {
-    if (!userMessage.value) return;
-
-    messages.value.push({
-      id: Date.now(),
-      role: 'user',
-      text: userMessage.value
-    });
-
-    const response = await chatbotApi.sendMessage(
-      userMessage.value, 
-      sessionId.value
-    );
-
-    messages.value.push({
-      id: Date.now() + 1,
-      role: 'assistant',
-      text: response.text
-    });
-
-    sessionId.value = response.sessionId;
-    localStorage.setItem('chatbot_session', sessionId.value);
-    userMessage.value = '';
+class MessageFormatter {
+  static #escapeHtml(text) {
+    // HTML-escape special chars FIRST (prevent XSS injection)
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;') /* ... */;
   }
-
-  return { isOpen, messages, userMessage, sendMessage };
+  static toHtml(text) {
+    const escaped = MessageFormatter.#escapeHtml(text);
+    // Then convert markdown: **bold**, *italic*, `code`, - lists → safe HTML
+    return escaped;
+  }
 }
 ```
 
-## Features
+## API Call
 
-- Floating widget (bottom-right)
-- Session persistence
-- Chat history
-- Property recommendations
-- Click to open/close
-- Mobile optimized
-- Smooth animations
+```javascript
+POST /api/chatbot/message
+Body: {
+  name: "string",
+  phone: "string",
+  location: "string",
+  message: "string",
+  propertyContext: { ... }   // first message only; null on subsequent
+}
 
-## Context Management
+Response: {
+  success: true,
+  reply: "string",
+  sessionId: number,
+  aiProvider: "chatgpt" | "claude" | "private_agent",
+  fallbackUsed: boolean,
+  exactMatches: number,
+  alternatives: number
+}
+```
 
-- Store sessionId in localStorage
-- Load previous messages
-- Maintain user preferences
-- Handle session timeout
+## Backend Handler
+`backend/controllers/chatbotController.js` → class `ChatbotController`:
 
-## API Integration
-
-- POST /api/chatbot - Send message
-- GET /api/chatbot/history/:sessionId - Load history
+| Method | Route | Description |
+|---|---|---|
+| `sendMessage(req, res)` | POST /api/chatbot/message | main chatbot handler |
+| `getConfig(_req, res)` | GET /api/chatbot/config | cookie TTL + required fields |
+| `aiProviderStatus(_req, res)` | GET /api/chatbot/ai-provider-status | AI config check |
+| `skillStatus(_req, res)` | GET /api/chatbot/skill-status | skill files check |

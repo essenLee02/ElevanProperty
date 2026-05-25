@@ -1,78 +1,18 @@
 # 09. Module: About Us
 
-## About Page Structure
+## AboutView.vue
+`frontend/src/views/AboutView.vue`
 
-```
-About Module
-├── Company Overview
-│   ├── Mission & Vision
-│   └── Company history
-│
-├── Team Section
-│   ├── Team members
-│   └── Roles
-│
-├── Why Choose Us
-│   ├── 3-4 key benefits
-│   └── Trust indicators
-│
-└── Property Catalog
-    ├── Featured listings
-    └── Call to action
-```
+Static about page. Public — accessible to all users.
 
-## Component Template
+### Content Areas
+- Company overview / mission / vision
+- Team section (agents: Clarence, Desy, Nigel, Natasha, Leo)
+- Why Choose Us / key differentiators
+- Property highlights / statistics
+- Call-to-action → Contact form or Chatbot
 
-```vue
-<template>
-  <div class="about-module">
-    <section class="company-overview">
-      <h1>About ElevanLabs</h1>
-      <p>{{ companyDescription }}</p>
-    </section>
+### Backend
+`GET /api/about` → `aboutController.index`
 
-    <section class="team">
-      <h2>Our Team</h2>
-      <div class="team-grid">
-        <TeamMember 
-          v-for="member in team" 
-          :key="member.id"
-          :member="member"
-        />
-      </div>
-    </section>
-
-    <section class="why-us">
-      <h2>Why Choose Us?</h2>
-      <BenefitCard v-for="benefit in benefits" :key="benefit.id" :benefit="benefit" />
-    </section>
-
-    <section class="catalog">
-      <h2>Our Properties</h2>
-      <CatalogPreview />
-    </section>
-  </div>
-</template>
-```
-
-## Content Areas
-
-- Company mission/vision
-- Team profiles
-- Key differentiators
-- Service highlights
-- Property statistics
-- Contact call-to-action
-
-## JSON Catalog Integration
-
-- Display property count by type
-- Highlight featured listings
-- Show transaction types
-- Location availability
-
-## Call to Actions
-
-- "View All Properties" → Chatbot
-- "Contact Us" → Contact form
-- "Chat with AI" → Floating chatbot
+No database queries — static data returned from controller.
