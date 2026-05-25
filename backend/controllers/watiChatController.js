@@ -78,21 +78,22 @@ class AgentLookup {
         return agent;
       }
 
-      // Try normalized match if database might have normalized format
-      agent = await User.findOne({
+      // Try normalized match — check ALL agents, not just the first one
+      const allAgents = await User.findAll({
         where: { privilege: 'agent', status: 1 },
         attributes: ['id', 'user_id', 'name', 'phone', 'username']
       });
 
-      if (agent) {
-        const agentNormalized = PhoneUtils.normalize(agent.phone);
+      for (const a of allAgents) {
+        const agentNormalized = PhoneUtils.normalize(a.phone);
         if (agentNormalized === normalized) {
-          console.log(`[WATI AGENT] Found via normalized match: ${agent.name} (${agent.phone})`);
-          return agent;
+          console.log(`[WATI AGENT] Found via normalized match: ${a.name} (${a.phone}) → ${agentNormalized}`);
+          return a;
         }
       }
 
       console.warn(`[WATI AGENT] No agent found for phone: ${phoneNumber} (normalized: ${normalized})`);
+      console.warn(`[WATI AGENT] Registered agents:`, allAgents.map(a => `${a.name}:${PhoneUtils.normalize(a.phone)}`));
       return null;
     } catch (error) {
       console.error('[WATI AGENT LOOKUP ERROR]', error.message);
@@ -204,14 +205,17 @@ class AiReplyGenerator {
 class MessageProcessor {
   /**
    * Find or create chat session
+   * ChatSession fields: name, normalizedName, phone, normalizedPhone, source, location, normalizedLocation
+   * Agent identity encoded in source: 'wati_leo_felix'
    */
-  static async findOrCreateSession(customerPhone, agentName) {
+  static async findOrCreateSession(customerPhone, agentName, customerName = 'Customer') {
     try {
+      const normalizedPhone = PhoneUtils.normalize(customerPhone);
+      const agentSlug = agentName.toLowerCase().replace(/\s+/g, '_');
+      const source = `wati_${agentSlug}`;
+
       let session = await ChatSession.findOne({
-        where: {
-          customerPhone: customerPhone,
-          agentName: agentName
-        }
+        where: { normalizedPhone, source }
       });
 
       if (session) {
@@ -219,14 +223,16 @@ class MessageProcessor {
       }
 
       session = await ChatSession.create({
-        customerName: 'Customer', // Will be updated from customer data if available
-        customerPhone: customerPhone,
-        normalizedPhone: PhoneUtils.normalize(customerPhone),
-        agentName: agentName,
-        source: 'whatsapp'
+        name: customerName,
+        normalizedName: customerName.toLowerCase(),
+        phone: customerPhone,
+        normalizedPhone,
+        source,
+        location: null,
+        normalizedLocation: null
       });
 
-      console.log(`[WATI SESSION] Created new session: ID ${session.id}`);
+      console.log(`[WATI SESSION] Created new session: ID ${session.id} (${agentName})`);
       return session;
     } catch (error) {
       console.error('[WATI SESSION ERROR]', error.message);
@@ -236,15 +242,16 @@ class MessageProcessor {
 
   /**
    * Save customer message to database
+   * ChatMessage fields: chatSessionId, role, message, channel, metadata (TEXT)
    */
   static async saveCustomerMessage(session, message, metadata = {}) {
     try {
       const saved = await ChatMessage.create({
-        session_id: session.id,
+        chatSessionId: session.id,
         role: 'user',
         message: message,
-        source: 'whatsapp',
-        metadata: metadata
+        channel: 'whatsapp',
+        metadata: JSON.stringify(metadata)
       });
 
       console.log(`[WATI MESSAGE] Saved customer message: ID ${saved.id}`);
@@ -261,16 +268,16 @@ class MessageProcessor {
   static async saveAiReply(session, reply, aiResult) {
     try {
       const saved = await ChatMessage.create({
-        session_id: session.id,
+        chatSessionId: session.id,
         role: 'assistant',
         message: reply,
-        source: 'whatsapp',
-        aiProvider: aiResult.provider,
-        metadata: {
+        channel: 'whatsapp',
+        metadata: JSON.stringify({
+          aiProvider: aiResult.provider,
           primaryProvider: aiResult.primaryProvider,
           fallbackUsed: aiResult.fallbackUsed,
           fallbackProvider: aiResult.fallbackProvider || null
-        }
+        })
       });
 
       console.log(`[WATI MESSAGE] Saved AI reply: ID ${saved.id}`);
@@ -352,19 +359,27 @@ class WatiChatController {
     try {
       const payload = req.body;
 
+      // Log raw payload for debugging
+      console.log('[WATI WEBHOOK] Raw payload received:', JSON.stringify(payload, null, 2));
+
+      // WATI actual format: waId (customer), text.body (message), owner (agent number)
+      // Fallback to legacy field names for compatibility
+      const customerPhone = payload.waId || payload.from;
+      const agentPhone    = payload.owner || payload.to;
+      const customerMessage = String(payload.text?.body || payload.message || '').trim();
+      const messageId     = payload.id || payload.messageId || `wati_${Date.now()}`;
+      const customerName  = payload.name || payload.senderName || 'Customer';
+
       // Validate payload
-      if (!payload || !payload.from || !payload.to || !payload.message) {
-        console.warn('[WATI WEBHOOK] Invalid payload:', payload);
+      if (!customerPhone || !agentPhone || !customerMessage) {
+        console.warn('[WATI WEBHOOK] Missing required fields. Got:', {
+          customerPhone, agentPhone, hasMessage: !!customerMessage
+        });
         return res.status(400).json({
           success: false,
-          message: 'Invalid webhook payload: missing required fields'
+          message: 'Invalid webhook payload: missing waId / owner / text.body'
         });
       }
-
-      const customerPhone = payload.from;
-      const agentPhone = payload.to;
-      const customerMessage = String(payload.message || '').trim();
-      const messageId = payload.messageId || `wati_${Date.now()}`;
 
       // Validate phone numbers
       if (!PhoneUtils.isValid(customerPhone)) {
@@ -402,7 +417,8 @@ class WatiChatController {
         agent,
         customerPhone,
         customerMessage,
-        messageId
+        messageId,
+        customerName
       );
 
       return res.json({
@@ -424,9 +440,9 @@ class WatiChatController {
   /**
    * Internal: Process message flow
    */
-  static async _processMessage(agent, customerPhone, customerMessage, messageId) {
+  static async _processMessage(agent, customerPhone, customerMessage, messageId, customerName = 'Customer') {
     // Create/find session
-    const session = await MessageProcessor.findOrCreateSession(customerPhone, agent.name);
+    const session = await MessageProcessor.findOrCreateSession(customerPhone, agent.name, customerName);
 
     // Save customer message
     await MessageProcessor.saveCustomerMessage(session, customerMessage, {
@@ -526,14 +542,17 @@ class WatiChatController {
         });
       }
 
+      const agentSlug = agentName.toLowerCase().replace(/\s+/g, '_');
+      const source = `wati_${agentSlug}`;
+
       const sessions = await ChatSession.findAll({
-        where: { agentName },
+        where: { source },
         order: [['updatedAt', 'DESC']],
         limit: Math.min(parseInt(limit) || 50, 200),
         offset: parseInt(offset) || 0
       });
 
-      const total = await ChatSession.count({ where: { agentName } });
+      const total = await ChatSession.count({ where: { source } });
 
       return res.json({
         success: true,
@@ -582,7 +601,7 @@ class WatiChatController {
       }
 
       const messages = await ChatMessage.findAll({
-        where: { session_id: sessionId },
+        where: { chatSessionId: sessionId },
         order: [['createdAt', 'ASC']],
         limit: Math.min(parseInt(limit) || 100, 500)
       });
@@ -592,9 +611,9 @@ class WatiChatController {
         data: {
           session: {
             id: session.id,
-            customerName: session.customerName,
-            customerPhone: session.customerPhone,
-            agentName: session.agentName,
+            customerName: session.name,
+            customerPhone: session.phone,
+            agentSource: session.source,
             source: session.source,
             createdAt: session.createdAt
           },

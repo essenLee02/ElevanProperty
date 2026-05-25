@@ -126,7 +126,7 @@ class RegisterController {
         created_date:  new Date(),
         created_by:    createdByValue,
         status:        1,
-        privilege:     privilege || null
+        privilege:     privilege || 'agent'
       });
 
       authLog.registerSuccess({

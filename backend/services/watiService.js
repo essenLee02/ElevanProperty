@@ -11,17 +11,20 @@ const axios = require('axios');
 const { sanitizeEnvValue, maskSecret } = require('./openaiService');
 const { safeLog } = require('../utils/safeLog');
 
-const WATI_API_URL = 'https://api.wati.io/api/v1';
+// WATI API URL harus account-specific, contoh: https://live-mt-server.wati.io/10167096/api/v1
+// Set WATI_API_URL di .env sesuai account Anda (lihat WATI Dashboard → Settings → API)
+const WATI_API_URL_DEFAULT = 'https://live-mt-server.wati.io/10167096/api/v1';
 
 class WatiService {
   /**
-   * Get WATI API token from .env
+   * Get WATI API token and base URL from .env
    */
   static #getWatiConfig() {
     const token = sanitizeEnvValue(process.env.WATI_API_TOKEN);
+    const baseUrl = (process.env.WATI_API_URL || WATI_API_URL_DEFAULT).replace(/\/$/, '');
     return {
       token,
-      baseUrl: WATI_API_URL,
+      baseUrl,
       enabled: Boolean(token && token.length > 20)
     };
   }
@@ -79,10 +82,8 @@ class WatiService {
       throw new Error(`Message too long (${normalizedMessageLength} chars, max 1600)`);
     }
 
-    const payload = {
-      waNumber: normalizedPhone,
-      messageText: String(messageText).trim()
-    };
+    // WATI sendSessionMessage: phone goes in URL path, not in body
+    const body = { messageText: String(messageText).trim() };
 
     try {
       console.log('[WATI SEND MESSAGE]', {
@@ -92,13 +93,17 @@ class WatiService {
         provider: 'wati'
       });
 
-      const response = await axios.post(`${WATI_API_URL}/sendSessionMessage`, payload, {
-        headers: {
-          Authorization: `Bearer ${config.token}`,
-          'Content-Type': 'application/json'
-        },
-        timeout: 30000
-      });
+      const response = await axios.post(
+        `${config.baseUrl}/sendSessionMessage/${normalizedPhone}`,
+        body,
+        {
+          headers: {
+            Authorization: `Bearer ${config.token}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 30000
+        }
+      );
 
       safeLog('WATI_MESSAGE_SENT', {
         recipient: normalizedPhone,
@@ -151,7 +156,7 @@ class WatiService {
     }
 
     try {
-      const response = await axios.get(`${WATI_API_URL}/getProfile`, {
+      const response = await axios.get(`${config.baseUrl}/getProfile`, {
         headers: {
           Authorization: `Bearer ${config.token}`,
           'Content-Type': 'application/json'
@@ -188,7 +193,7 @@ class WatiService {
     const normalizedPhone = WatiService.normalizePhone(waNumber);
 
     try {
-      const response = await axios.get(`${WATI_API_URL}/getConversations`, {
+      const response = await axios.get(`${config.baseUrl}/getConversations`, {
         params: { waNumber: normalizedPhone },
         headers: {
           Authorization: `Bearer ${config.token}`,
