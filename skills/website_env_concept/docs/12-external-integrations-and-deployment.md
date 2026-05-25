@@ -1,131 +1,96 @@
 # 12. External Integrations & Deployment
 
-## Fonnte WhatsApp Integration
+## Fonnte (WhatsApp)
 
+**Used for:**
+- Sending AI-generated replies to customers (contact form + Fonnte webhook)
+- Receiving messages from customers on agent WhatsApp numbers (webhook)
+
+**Service:** `backend/services/fonnteService.js`
 ```javascript
-class FonnteService {
-  async sendMessage(phoneNumber, message) {
-    const response = await axios.post(
-      'https://api.fonnte.com/send',
-      {
-        target: phoneNumber,
-        message: message,
-        countryCode: '62'
-      },
-      {
-        headers: {
-          'Authorization': process.env.FONNTE_TOKEN
-        }
-      }
-    );
-    return response.data;
-  }
-
-  validateWebhook(req) {
-    // Verify webhook signature
-    const signature = req.headers['x-webhook-signature'];
-    const expected = hash(req.body + process.env.FONNTE_WEBHOOK_SECRET);
-    return signature === expected;
-  }
-}
+sendWhatsAppMessage(phone, message)
+// POST https://api.fonnte.com/send
+// Header: Authorization: FONNTE_TOKEN
+// Body: { target: phone, message, countryCode: '62' }
 ```
 
-## Google Sheets Integration
+**Webhook endpoints:**
+| Path | Controller | Purpose |
+|---|---|---|
+| POST /api/fonnte/webhook | fonnteWebhookController | Fonnte AI reply (external webhook) |
+| POST /api/whatsapp/webhook | whatsappInboundController | Agent inbound messages |
 
-```javascript
-class SheetsService {
-  async appendRow(rowData) {
-    // Non-blocking append to Google Sheets
-    // Used for contact form submissions
-    // Returns immediately
-  }
-}
-```
+**5 Agent Numbers:**
+| Name | Normalized Phone |
+|---|---|
+| Clarence | 6282111367154 |
+| Desy | 6282113318191 |
+| Nigel | 6282233556796 |
+| Natasha | 6282223058788 |
+| Leo | 6281334708691 |
 
-## AWS S3 Integration
+**Troubleshooting:**
+- Messages not sent → check `FONNTE_TOKEN` in `.env`
+- Webhook not received → verify webhook URL in Fonnte dashboard (Settings → Webhook)
+- Phone format → must be `628...` not `08...`
 
-```javascript
-class S3Service {
-  async uploadPropertyImage(file) {
-    // Upload to S3
-    // Return public URL
-  }
-}
-```
+---
 
-## Deployment Checklist
+## Google Sheets
 
-### Pre-Deployment
-- [ ] All tests passing
-- [ ] Environment variables configured
-- [ ] Database migrations run
-- [ ] Skill files in place
-- [ ] API keys validated
-- [ ] SSL certificate ready
+**Used for:** Contact form submission backup (non-blocking)
 
-### Deployment
-- [ ] Deploy backend to server
-- [ ] Deploy frontend to CDN
-- [ ] Update DNS records
-- [ ] Configure WhatsApp webhook
-- [ ] Test all integrations
-- [ ] Monitor logs
+**Service:** `backend/services/googleSheetsService.js`
+- Uses `google-spreadsheet` npm package
+- Credentials: `backend/google-service-account.json` (download from Google Cloud)
+- Sheet ID: `GOOGLE_SHEET_ID` in `.env`
 
-### Post-Deployment
-- [ ] Smoke tests passing
-- [ ] Monitor performance
-- [ ] Check error rates
-- [ ] Verify WhatsApp functionality
-- [ ] Test contact form flow
+**Setup:**
+1. Google Cloud Console → New project → Enable Sheets API + Drive API
+2. IAM → Service Accounts → Create → download JSON → save as `backend/google-service-account.json`
+3. Open your Google Sheet → Share with service account email (Editor)
+4. Set `GOOGLE_SHEET_ID` from sheet URL
 
-## Deployment Commands
+**Note:** Sheets sync is non-blocking — if it fails, the contact form still succeeds.
 
+**Status check:** `GET /api/contact/google-sheets-status`
+
+---
+
+## Rumah123 via Apify
+
+**Used for:** Live property listings in chatbot responses
+
+**Toggle:** `RUMAH123_DATA=ON` (or `OFF` for JSON-only mode)
+
+**Warmup on server start:** `RUMAH123_WARMUP_LOCATIONS=Jakarta Selatan,Surabaya,Bandung,Bali`
+
+**Token:** `APIFY_API_TOKEN` in `.env`
+
+---
+
+## Deployment Notes
+
+### Pre-Deploy Checklist
+- Set real `ANTHROPIC_API_KEY` (currently placeholder — Claude fallback disabled)
+- Set real `OPENAI_API_KEY` (check quota)
+- Enable `secure: true` on refresh token cookie in `loginController.js` for HTTPS
+- Replace `0.0.0.0` in CORS `allowedOrigins` in `server.js` with production domain
+- Consider moving `access_token` storage from localStorage to memory-only in `authApi.js`
+
+### Start Commands
 ```bash
-# Backend
-npm run migrate
-npm start
+# Backend (production)
+cd backend && node server.js
 
-# Frontend
-npm run build
-# Deploy dist/ folder to CDN
+# Frontend (build)
+cd frontend && npm run build
+# Serve frontend/dist/ via nginx or static host
+
+# Frontend (dev)
+cd frontend && npm run dev
 ```
 
-## Troubleshooting
-
-**Issue**: WhatsApp messages not received
-- Check Fonnte token
-- Verify webhook URL
-- Validate webhook signature
-
-**Issue**: Contact form not saving
-- Verify Google Sheets API
-- Check service account credentials
-- Confirm sheet permissions
-
-**Issue**: High latency
-- Check database performance
-- Verify AI provider response time
-- Optimize skill file size
-
-**Issue**: Database errors
-- Run migrations: npm run migrate
-- Check connection string
-- Verify database exists
-
-## Performance Optimization
-
-- Enable response caching
-- Compress assets
-- Minify code
-- Optimize images
-- Use CDN for static files
-- Enable gzip compression
-
-## Monitoring
-
-- Application logs
-- Error tracking
-- Performance metrics
-- User analytics
-- API response times
-- Database performance
+### WATI (Future)
+`WATI_API_TOKEN` is configured in `.env` but not yet integrated.
+WATI would replace or complement Fonnte for the multi-agent WhatsApp system.

@@ -8,8 +8,8 @@ exports.index = async (req, res) => {
     success: true,
     data: {
       company: {
-        title: 'About ElevanLabs Real Estate',
-        profile: 'ElevanLabs provides property rental, buying, and selling assistance through a modern website, structured property portfolio, and AI-powered customer communication.',
+        title: `About ${process.env.APP_NAME || 'Elevan Property'}`,
+        profile: `${process.env.APP_NAME || 'Elevan Property'} provides property rental, buying, and selling assistance through a modern website, structured property portfolio, and AI-powered customer communication.`,
         rentalServices: 'Rental services include boarding houses, house rentals, villas, hotels, and apartments for daily, monthly, or yearly needs.',
         buyingServices: 'Buying services help customers identify property options based on location, budget, land size, building size, and facilities.',
         sellingServices: 'Selling services help property owners present property information clearly and connect with potential buyers or renters.'

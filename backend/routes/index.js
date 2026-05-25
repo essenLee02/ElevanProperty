@@ -1,5 +1,14 @@
 const express = require('express');
 const router = express.Router();
+const rateLimit = require('express-rate-limit');
+
+const contactLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5,
+  message: { success: false, message: 'Terlalu banyak pengiriman. Coba lagi dalam 15 menit.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 const homeController = require('../controllers/homeController');
 const aboutController = require('../controllers/aboutController');
@@ -10,6 +19,7 @@ const fonnteWebhookController = require('../controllers/fonnteWebhookController'
 const logController = require('../controllers/logController');
 const rumah123Controller = require('../controllers/rumah123Controller');
 const whatsappInboundController = require('../controllers/whatsappInboundController');
+const watiChatController = require('../controllers/watiChatController');
 
 // Auth controllers (Login & Register Users)
 const registerController = require('../controllers/registerController');
@@ -25,7 +35,7 @@ router.get('/home', homeController.index);
 router.get('/about', aboutController.index);
 
 // Module Contact
-router.post('/contact', contactController.submitContact);
+router.post('/contact', contactLimiter, contactController.submitContact);
 router.get('/contact/google-sheets-status', contactController.googleSheetsStatus);
 router.get('/contact/ai-whatsapp-status', contactController.aiWhatsappStatus);
 
@@ -48,6 +58,13 @@ router.post('/whatsapp/webhook', whatsappInboundController.handleInboundMessage)
 router.get('/whatsapp/messages', whatsappInboundController.getInboundMessages);
 router.get('/whatsapp/messages/:id', whatsappInboundController.getMessageDetail);
 router.get('/whatsapp/agents/status', whatsappInboundController.getAgentsStatus);
+
+// WATI WhatsApp Chat Controller (Multi-Agent)
+router.post('/wati/webhook', watiChatController.handleInboundMessage);
+router.get('/wati/agent-chats/:agentName', watiChatController.getAgentChats);
+router.get('/wati/chat-history/:sessionId', watiChatController.getChatHistory);
+router.get('/wati/agents/list', watiChatController.getRegisteredAgents);
+router.get('/wati/status', watiChatController.getWatiStatus);
 
 // =============================================================
 // Auth Routes (Login & Register Users)

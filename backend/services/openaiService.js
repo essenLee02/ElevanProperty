@@ -184,7 +184,7 @@ async function generateChatGPTContactReply(contactPayload) {
   return callChatGPTResponseAPI(buildContactReplyPrompt(contactPayload, 'chatgpt'), {
     store: true,
     metadata: {
-      source: 'elevanlabs_contact_form',
+      source: 'contact_form',
       channel: 'website_contact',
       provider: 'chatgpt'
     }
@@ -195,7 +195,7 @@ async function generateChatGPTChatbotReply(session, history, userMessage, proper
   return callChatGPTResponseAPI(buildChatbotReplyPrompt(session, history, userMessage, propertyContext, 'chatgpt'), {
     store: true,
     metadata: {
-      source: 'elevanlabs_floating_chatbot',
+      source: 'floating_chatbot',
       channel: 'website_chatbot',
       sessionId: String(session.id || ''),
       provider: 'chatgpt'
@@ -207,7 +207,7 @@ async function generateChatGPTWhatsappReply(session, history, userMessage, prope
   return callChatGPTResponseAPI(buildWhatsappReplyPrompt(session, history, userMessage, propertyContext, 'chatgpt'), {
     store: true,
     metadata: {
-      source: 'elevanlabs_fonnte_whatsapp',
+      source: 'fonnte_whatsapp',
       channel: 'whatsapp',
       sessionId: String(session.id || ''),
       provider: 'chatgpt'
@@ -218,14 +218,14 @@ async function generateChatGPTWhatsappReply(session, history, userMessage, prope
 async function detectCustomerIntentWithChatGPT(message) {
   return callChatGPTResponseAPI(buildIntentDetectionPrompt(message, 'chatgpt'), {
     store: true,
-    metadata: { source: 'elevanlabs_intent_detection', channel: 'backend', provider: 'chatgpt' }
+    metadata: { source: 'intent_detection', channel: 'backend', provider: 'chatgpt' }
   });
 }
 
 async function extractPropertyPreferencesWithChatGPT(message) {
   return callChatGPTResponseAPI(buildPreferenceExtractionPrompt(message, 'chatgpt'), {
     store: true,
-    metadata: { source: 'elevanlabs_preference_extraction', channel: 'backend', provider: 'chatgpt' }
+    metadata: { source: 'preference_extraction', channel: 'backend', provider: 'chatgpt' }
   });
 }
 

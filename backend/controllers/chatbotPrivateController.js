@@ -987,4 +987,44 @@ exports.debugTestRumah123 = async (req, res) => {
 
 module.exports.generatePrivateChatbotResponse  = (params)  => ChatbotPrivateService.generateResponse(params);
 module.exports.generatePrivateContactReply     = (payload) => ChatbotPrivateService.generateContactFormReply(payload);
+
+/**
+ * Generate private WhatsApp reply (used by watiChatController as fallback)
+ * Simplified version for WhatsApp with agent name
+ */
+module.exports.generatePrivateWhatsappReply = (payload) => {
+  const { name, phone, message, agentName = 'Property Consultant' } = payload;
+  const appName = process.env.APP_NAME || 'Elevan Property';
+
+  const isIndonesian = String(message || '').toLowerCase().includes('saya') ||
+                      String(message || '').toLowerCase().includes('mau') ||
+                      String(message || '').toLowerCase().includes('cari');
+
+  if (isIndonesian) {
+    const reply = `Halo ${name}, terima kasih telah menghubungi kami! 🏠
+
+Pesan Anda sudah kami terima. ${agentName} dari ${appName} akan segera membalas dengan informasi properti yang sesuai dengan kebutuhan Anda.
+
+Kami siap membantu Anda menemukan rumah, villa, apartemen, atau properti lainnya yang sempurna.
+
+Salam hangat,
+*${agentName}*
+*${appName}*`;
+
+    return { reply };
+  } else {
+    const reply = `Hello ${name}, thank you for reaching out! 🏠
+
+We've received your message. ${agentName} from ${appName} will get back to you shortly with property information tailored to your needs.
+
+We're here to help you find the perfect house, villa, apartment, or property.
+
+Warm regards,
+*${agentName}*
+*${appName}*`;
+
+    return { reply };
+  }
+};
+
 module.exports.loadPrivateChatbotSkillInfo     = ()        => ChatbotPrivateService.loadSkillInfo();

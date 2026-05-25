@@ -10,7 +10,7 @@ const {
 const { sanitizeEnvValue, maskSecret } = require('./openaiService');
 
 const CLAUDE_MESSAGES_URL = 'https://api.anthropic.com/v1/messages';
-const DEFAULT_CLAUDE_MODEL = 'claude-haiku-4-5-20251001';
+const DEFAULT_CLAUDE_MODEL = 'claude-haiku-4-5';
 const DEFAULT_CLAUDE_API_VERSION = '2023-06-01';
 
 function getClaudeConfig() {
@@ -107,7 +107,7 @@ async function generateClaudeContactReply(contactPayload) {
   return callClaudeMessagesAPI(buildContactReplyPrompt(contactPayload, 'claude'), {
     system: getProjectSkillInstruction('claude'),
     metadata: {
-      source: 'elevanlabs_contact_form',
+      source: 'contact_form',
       channel: 'website_contact',
       provider: 'claude'
     }
@@ -118,7 +118,7 @@ async function generateClaudeChatbotReply(session, history, userMessage, propert
   return callClaudeMessagesAPI(buildChatbotReplyPrompt(session, history, userMessage, propertyContext, 'claude'), {
     system: getProjectSkillInstruction('claude'),
     metadata: {
-      source: 'elevanlabs_floating_chatbot',
+      source: 'floating_chatbot',
       channel: 'website_chatbot',
       sessionId: String(session.id || ''),
       provider: 'claude'
@@ -130,7 +130,7 @@ async function generateClaudeWhatsappReply(session, history, userMessage, proper
   return callClaudeMessagesAPI(buildWhatsappReplyPrompt(session, history, userMessage, propertyContext, 'claude'), {
     system: getProjectSkillInstruction('claude'),
     metadata: {
-      source: 'elevanlabs_fonnte_whatsapp',
+      source: 'fonnte_whatsapp',
       channel: 'whatsapp',
       sessionId: String(session.id || ''),
       provider: 'claude'
@@ -141,14 +141,14 @@ async function generateClaudeWhatsappReply(session, history, userMessage, proper
 async function detectCustomerIntentWithClaude(message) {
   return callClaudeMessagesAPI(buildIntentDetectionPrompt(message, 'claude'), {
     system: getProjectSkillInstruction('claude'),
-    metadata: { source: 'elevanlabs_intent_detection', channel: 'backend', provider: 'claude' }
+    metadata: { source: 'intent_detection', channel: 'backend', provider: 'claude' }
   });
 }
 
 async function extractPropertyPreferencesWithClaude(message) {
   return callClaudeMessagesAPI(buildPreferenceExtractionPrompt(message, 'claude'), {
     system: getProjectSkillInstruction('claude'),
-    metadata: { source: 'elevanlabs_preference_extraction', channel: 'backend', provider: 'claude' }
+    metadata: { source: 'preference_extraction', channel: 'backend', provider: 'claude' }
   });
 }
 

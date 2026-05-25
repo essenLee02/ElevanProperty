@@ -16,19 +16,16 @@ const router = createRouter({
       path: '/',
       name: 'home',
       component: HomeView,
-      meta: { requiresGuest: true }  // Hanya untuk user belum login
     },
     {
       path: '/about',
       name: 'about',
       component: AboutView,
-      meta: { requiresGuest: true }  // Hanya untuk user belum login
     },
     {
       path: '/contact',
       name: 'contact',
       component: ContactView,
-      meta: { requiresGuest: true }  // Hanya untuk user belum login
     },
     {
       path: '/rumah123',

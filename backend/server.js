@@ -44,7 +44,8 @@ app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 app.get('/', (req, res) => {
-  res.json({ success: true, message: 'ElevanLabs backend is running.' });
+  const appName = process.env.APP_NAME || 'Elevan Property';
+  res.json({ success: true, message: `${appName} backend is running.` });
 });
 
 app.use('/api', routes);

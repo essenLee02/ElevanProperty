@@ -3,10 +3,10 @@ exports.index = (req, res) => {
     success: true,
     data: {
       heroTitle: 'Find the Right Property with Smart Assistance',
-      heroSubtitle: 'ElevanLabs helps customers buy, sell, and rent houses, villas, hotels, apartments, and boarding houses with a more transparent and guided process.',
+      heroSubtitle: `${process.env.APP_NAME || 'Elevan Property'} helps customers buy, sell, and rent houses, villas, hotels, apartments, and boarding houses with a more transparent and guided process.`,
       vision: 'To become a trusted and customer-focused property platform that makes property search, rental, buying, and selling easier for everyone.',
       mission: 'To connect customers with suitable property options through reliable portfolio data, professional assistance, and AI-powered conversations.',
-      story: 'The business was built from the common difficulty of finding reliable property information, comparing options, and communicating with agents quickly. ElevanLabs aims to simplify that journey through a clear website, structured portfolio, and automated customer assistance.',
+      story: `The business was built from the common difficulty of finding reliable property information, comparing options, and communicating with agents quickly. ${process.env.APP_NAME || 'Elevan Property'} aims to simplify that journey through a clear website, structured portfolio, and automated customer assistance.`,
       benefits: [
         'Clear property information',
         'Faster customer response',
