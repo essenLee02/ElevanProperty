@@ -1,56 +1,47 @@
 ---
 name: elevan-property-system
 description: Elevan Property platform — Node.js+Express backend, Vue 3 frontend, MySQL, AI chatbot (ChatGPT→Claude→Private), Fonnte (contact form), WATI (agent chat), JWT auth, Rumah123 via Apify.
-version: 5.1
+version: 6.0
 status: production
 updated: 2026-05-26
 ---
 
 # Elevan Property — System Documentation
 
-## Skill Files (Feature Summaries)
-
-Quick-reference files covering each major feature area:
+## Skill Files (`docs/`)
 
 ```
 docs/
-├── A-auth-and-agents.md              ← Login, Register, Profile, JWT, 6 agents
-├── B-wati-whatsapp-integration.md    ← WATI setup, watiChatController, agent-customer chat
-├── C-website-modules.md              ← Home, About, Contact, Chatbot, Rumah123
-└── D-ai-and-external-integrations.md ← ChatGPT, Claude, Private Agent, Fonnte, Google, Apify, NGROK
-```
-
-## Skill Files (Detailed Technical Reference)
-
-In-depth implementation docs:
-
-```
-docs/
-├── 01-system-overview-and-architecture.md
-├── 02-project-configuration-and-setup.md
-├── 03-database-design-and-models.md
-├── 04-backend-api-and-services.md
-├── 05-ai-integration-system.md
-├── 06-skill-loader-and-prompts.md
-├── 07-frontend-architecture-and-setup.md
-├── 08-module-home.md
-├── 09-module-about-us.md
-├── 10-module-contact.md
-├── 11-module-chatbot.md
-└── 12-external-integrations-and-deployment.md
+├── 01-system-overview-and-architecture.md   ← Stack, directory, all data flows
+├── 02-project-configuration-and-setup.md    ← Installation, dependencies, complete .env
+├── 03-database-design-and-models.md         ← All tables, Sequelize models
+├── 04-auth-and-agents.md                    ← JWT, login/register, 6 agents, phone normalization
+├── 05-backend-api-and-services.md           ← All API routes, controllers, key services
+├── 06-ai-system-and-skill-loader.md         ← AI fallback chain, ChatGPT, Claude, Private, skill files
+├── 07-frontend-and-modules.md               ← Vue 3, router, auth guards, all page modules
+├── 08-wati-whatsapp-integration.md          ← WATI arch, watiChatController, NGROK, curl tests
+├── 09-fonnte-and-contact-form.md            ← Fonnte service, contact form flow (Fonnte = contact ONLY)
+├── 10-google-sheets-integration.md          ← Google Sheets setup, appendContactRow, non-blocking
+├── 11-rumah123-and-apify.md                 ← Live property data, Apify config, static JSON fallback
+└── 12-deployment-and-troubleshooting.md     ← Deploy checklist, NGROK, start commands, common issues
 ```
 
 ## Quick Reference
 
 | Question | File |
 |---|---|
-| Login / register / JWT / agent list | `docs/A-auth-and-agents.md` |
-| WATI setup, watiController, terminal format | `docs/B-wati-whatsapp-integration.md` |
-| Contact form (Fonnte), Chatbot, Rumah123 | `docs/C-website-modules.md` |
-| ChatGPT / Claude / Private / all .env | `docs/D-ai-and-external-integrations.md` |
-| All API routes | `docs/04-backend-api-and-services.md` |
-| Database tables & models | `docs/03-database-design-and-models.md` |
-| Frontend Vue 3 structure | `docs/07-frontend-architecture-and-setup.md` |
+| Stack, architecture, data flows | `01-system-overview-and-architecture.md` |
+| Environment variables (.env) | `02-project-configuration-and-setup.md` |
+| Database tables & models | `03-database-design-and-models.md` |
+| Login / register / JWT / 6 agents | `04-auth-and-agents.md` |
+| All API routes & controllers | `05-backend-api-and-services.md` |
+| ChatGPT / Claude / Private Agent / skill files | `06-ai-system-and-skill-loader.md` |
+| Vue 3 frontend, router, page modules | `07-frontend-and-modules.md` |
+| WATI webhook, watiChatController, curl tests | `08-wati-whatsapp-integration.md` |
+| Fonnte, contact form flow | `09-fonnte-and-contact-form.md` |
+| Google Sheets setup & integration | `10-google-sheets-integration.md` |
+| Rumah123 live property data | `11-rumah123-and-apify.md` |
+| Deployment, NGROK, troubleshooting | `12-deployment-and-troubleshooting.md` |
 
 ## System Status (26 May 2026)
 

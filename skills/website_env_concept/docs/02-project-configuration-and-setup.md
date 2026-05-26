@@ -41,29 +41,36 @@ ENABLE_CHATBOT_PRIVATE_CONTROLLER=true
 ENABLE_AI_WHATSAPP=true
 ```
 
-### WhatsApp (Fonnte)
+### WhatsApp (Fonnte — contact form only)
 ```env
-FONNTE_TOKEN=...
+FONNTE_TOKEN=m5HDmV4hAYRFBgTdkfDR
+ENABLE_AI_WHATSAPP=true
+```
+
+### WATI (Agent-customer chat)
+```env
+WATI_API_TOKEN=wati_2688d36b-1f09-41b6-b09d-1872e6ce6c8e.699l...
+WATI_API_URL=https://live.wati.io/10167096/api/v1
 ```
 
 ### Live Property Data (Rumah123 via Apify)
 ```env
-APIFY_API_TOKEN=...
-RUMAH123_DATA=ON               ← OFF = use only JSON catalog
+APIFY_API_TOKEN=        # lihat backend/.env — jangan commit token ini ke git
+RUMAH123_DATA=ON               # OFF = use only static JSON catalog
 RUMAH123_WARMUP_LOCATIONS=Jakarta Selatan,Surabaya,Bandung,Bali
 ```
 
 ### Google Sheets (contact form sync, non-blocking)
 ```env
-GOOGLE_SHEET_ID=...
+GOOGLE_SHEET_ID=1nwy276VXH0JvDZVOoddBbqmr9jwpydoKrukWY2Jukw4
 GOOGLE_SHEET_GID=0
 GOOGLE_SERVICE_ACCOUNT_JSON_PATH=./google-service-account.json
 ```
 
 ### JWT Authentication
 ```env
-ACCESS_TOKEN_SECRET=...
-REFRESH_TOKEN_SECRET=...
+ACCESS_TOKEN_SECRET=elevan_access_secret_...
+REFRESH_TOKEN_SECRET=elevan_refresh_secret_...
 ACCESS_TOKEN_EXPIRY=5m
 REFRESH_TOKEN_EXPIRY=1d
 COOKIE_REFRESH_TOKEN=Elevan_Refresh_Token

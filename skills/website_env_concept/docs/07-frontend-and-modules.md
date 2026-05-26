@@ -1,0 +1,238 @@
+# 07. Frontend Architecture & All Page Modules
+
+## Stack
+- Vue 3 (Composition API)
+- Vite build tool
+- Port 5173 (dev)
+
+## Directory Structure
+
+```
+frontend/src/
+├── views/
+│   ├── HomeView.vue          ← Landing page, contains FloatingChatbot
+│   ├── AboutView.vue         ← About page (static)
+│   ├── ContactView.vue       ← Contact form with AI WhatsApp reply
+│   ├── Rumah123View.vue      ← Live property search (Apify)
+│   ├── LoginView.vue         ← Login form
+│   ├── RegisterView.vue      ← Register form
+│   └── ProfileView.vue       ← User profile (requires auth)
+├── components/
+│   └── FloatingChatbot.vue   ← Main chatbot widget (~950 lines)
+├── services/
+│   ├── api.js                ← Axios instance with interceptors
+│   ├── authApi.js            ← Token memory management
+│   └── chatbotApi.js         ← Chatbot API calls
+└── router/
+    └── index.js              ← Vue Router with auth guards
+```
+
+---
+
+## Module Status
+
+| Module | Vue File | Controller | Status |
+|---|---|---|---|
+| Home | `HomeView.vue` | `homeController.js` | ✅ Live |
+| About | `AboutView.vue` | `aboutController.js` | ✅ Live |
+| Contact | `ContactView.vue` | `contactController.js` | ✅ Live |
+| Chatbot | `FloatingChatbot.vue` | `chatbotController.js` | ✅ Live |
+| Rumah123 | `Rumah123View.vue` | `rumah123Controller.js` | ✅ Live |
+| Auth (Login/Register) | `LoginView`, `RegisterView` | `loginController`, `registerController` | ✅ Live |
+| Profile | `ProfileView.vue` | `profileController.js` | ✅ Live |
+| WATI Chat | *(terminal only, no UI)* | `watiChatController.js` | ⚠️ Channel pending |
+
+---
+
+## Router Guards (`frontend/src/router/index.js`)
+
+```javascript
+{ meta: { requiresAuth: true } }   // → redirect to /login if not authenticated
+{ meta: { requiresGuest: true } }  // → redirect logged-in users to /profile
+// No meta = public
+```
+
+| Route | Meta | Access |
+|---|---|---|
+| / (Home) | none | public |
+| /about | none | public |
+| /contact | none | public |
+| /rumah123 | none | public |
+| /login | requiresGuest | guests only |
+| /register | requiresGuest | guests only |
+| /profile | requiresAuth | logged-in only |
+
+Auth state checked via `GET /api/auth/me` on app load.
+
+---
+
+## Authentication Frontend
+
+### authApi.js
+- `getCachedToken()` — from memory (falls back to localStorage on reload)
+- `setCachedToken(token)` — memory-only (more XSS-safe)
+- `clearCachedToken()` — removes from memory
+
+### api.js (Axios instance)
+- `baseURL: /api` → proxied to `http://localhost:5005/api` by Vite
+- **Request interceptor**: adds `Authorization: Bearer <token>` header
+- **Response interceptor**: on 401 → calls `GET /api/auth/refresh` → retries original request
+
+---
+
+## Module: Home (`HomeView.vue`)
+
+`frontend/src/views/HomeView.vue` — main landing page. Public.
+
+### Sections
+- Hero section with property search CTA and "Chat with AI" button
+- Featured property listings
+- "How It Works" steps
+- `<FloatingChatbot />` component (bottom-right, always visible)
+
+**Note:** No backend API call for page content — static layout. Property catalog loaded by FloatingChatbot on first chat.
+
+---
+
+## Module: About (`AboutView.vue`)
+
+`frontend/src/views/AboutView.vue` — static page, public.
+
+Backend route: `GET /api/about` → `aboutController.index`
+
+Content: company description, team info, property highlights.
+
+---
+
+## Module: Contact (`ContactView.vue`)
+
+`frontend/src/views/ContactView.vue` — contact form. Public.
+Rate limit: **5 submissions per IP per 15 minutes**.
+
+### Form Fields
+- `name` (required)
+- `phone` (required) — customer's WhatsApp number, 10–15 digits
+- `email` (required)
+- `subject` (required)
+- `message` (required)
+
+### Submission Flow (`POST /api/contact`)
+
+```
+Frontend → POST /api/contact { name, phone, email, subject, message }
+     ↓
+ContactController.submitContact():
+  a. validateContactForm()
+  b. Contact.create()                          ← save to MySQL contacts table
+  c. appendContactRow() [NON-BLOCKING]         ← Google Sheets (silent fail)
+  d. generateContactReplyWithProviderFallback() ← ChatGPT → Claude → Private
+  e. sendWhatsAppMessage(phone, aiReply)        ← Fonnte API
+  f. findOrCreateSession + save messages       ← chat_sessions + chat_messages
+     ↓
+Response: 200 OK even if AI/Fonnte fails
+```
+
+> **Fonnte** is used ONLY here for contact form — NOT in watiChatController.
+
+### Rate Limit Error
+Returns 429: `"Terlalu banyak pengiriman. Coba lagi dalam 15 menit."`
+
+### Controller Methods
+| Method | Route | Description |
+|---|---|---|
+| `submitContact(req, res)` | POST /api/contact | main handler |
+| `googleSheetsStatus(req, res)` | GET /api/contact/google-sheets-status | check Sheets connection |
+| `aiWhatsappStatus(req, res)` | GET /api/contact/ai-whatsapp-status | check AI + Fonnte config |
+
+---
+
+## Module: Chatbot (`FloatingChatbot.vue`)
+
+`frontend/src/components/FloatingChatbot.vue` (~950 lines)
+
+Bottom-right floating chat widget. Visible on all pages (included in HomeView). Public — no login required.
+
+### User Profile (cookie: `chatbot_profile`)
+Before first message, user fills:
+- `name` (required)
+- `phone` (required)
+- `location` (required)
+
+Stored in a persistent cookie. Restored on page reload.
+
+### Session Cookie
+Session ID stored in cookie with TTL from `GET /api/chatbot/config`:
+- Default: 90 minutes (`CHATBOT_COOKIE_TTL_MINUTES`)
+- Expired → new session starts
+
+### Returning Customer Recognition
+`sessionService.findOrCreateSession()` normalizes name/phone/location to recognize returning customers even with typos.
+
+### First Message — Property Context
+On the first message of a new session:
+1. Loads `frontend/public/json_data/indonesia_property_36_provinces_flat.json`
+2. Sends it as `propertyContext` in POST body
+
+Backend uses this + live Rumah123 data for full property-aware AI prompt.
+
+### Message Rendering (XSS-Safe)
+
+```javascript
+class MessageFormatter {
+  static #escapeHtml(text) {
+    // HTML-escape FIRST to prevent XSS injection
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;') /* ... */;
+  }
+  static toHtml(text) {
+    const escaped = MessageFormatter.#escapeHtml(text);
+    // Then convert: **bold**, *italic*, `code`, - lists → safe HTML
+    return escaped;
+  }
+}
+```
+
+### API Call
+
+```javascript
+POST /api/chatbot/message
+Body: {
+  name: "string",
+  phone: "string",
+  location: "string",
+  message: "string",
+  propertyContext: { ... }   // first message only; null on subsequent
+}
+
+Response: {
+  success: true,
+  reply: "string",
+  sessionId: number,
+  aiProvider: "chatgpt" | "claude" | "private_agent",
+  fallbackUsed: boolean,
+  exactMatches: number,
+  alternatives: number
+}
+```
+
+### Controller Methods
+| Method | Route | Description |
+|---|---|---|
+| `sendMessage(req, res)` | POST /api/chatbot/message | main handler |
+| `getConfig(_req, res)` | GET /api/chatbot/config | cookie TTL + required fields |
+| `aiProviderStatus(_req, res)` | GET /api/chatbot/ai-provider-status | AI config check |
+| `skillStatus(_req, res)` | GET /api/chatbot/skill-status | skill files check |
+
+---
+
+## Build / Deploy
+
+```bash
+# Dev server (hot reload)
+cd frontend && npm run dev
+
+# Production build → outputs to frontend/dist/
+cd frontend && npm run build
+```
+
+Vite config proxies `/api` to `http://localhost:5005` in dev mode.
+For production: configure nginx/caddy to proxy `/api` to Node.js backend.
