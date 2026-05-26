@@ -90,7 +90,9 @@ const User = sequelize.define('User', {
   indexes: [
     { fields: ['user_id'] },
     { fields: ['username'] },
-    { fields: ['status'] }
+    { fields: ['status'] },
+    { fields: ['privilege', 'status'] },  // For agent lookup queries (WATI)
+    { fields: ['phone'] }                  // For phone matching in AgentLookup
   ]
 });
 

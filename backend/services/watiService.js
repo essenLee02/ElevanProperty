@@ -11,9 +11,11 @@ const axios = require('axios');
 const { sanitizeEnvValue, maskSecret } = require('./openaiService');
 const { safeLog } = require('../utils/safeLog');
 
-// WATI API URL harus account-specific, contoh: https://live-mt-server.wati.io/10167096/api/v1
-// Set WATI_API_URL di .env sesuai account Anda (lihat WATI Dashboard → Settings → API)
-const WATI_API_URL_DEFAULT = 'https://live-mt-server.wati.io/10167096/api/v1';
+// WATI API URL dapat berbeda per account
+// WATI_API_URL HARUS di-override di .env (lihat WATI Dashboard → Settings → API)
+// Contoh: https://live-mt-server.wati.io/10167096/api/v1 atau https://live.wati.io/api/v1
+// JANGAN gunakan default hardcoded - setiap account punya URL berbeda!
+const WATI_API_URL_DEFAULT = 'https://live.wati.io/api/v1';
 
 class WatiService {
   /**

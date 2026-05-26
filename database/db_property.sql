@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: May 25, 2026 at 12:11 PM
+-- Generation Time: May 26, 2026 at 05:20 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.1.25
 
@@ -480,7 +480,20 @@ INSERT INTO `logs` (`id`, `action`, `details`, `createdAt`, `updatedAt`, `level`
 (177, 'PAGE_VIEW', 'Navigated from /rumah123 to /profile', '2026-05-25 10:09:23', '2026-05-25 10:09:23', 'info'),
 (178, 'PAGE_VIEW', 'Navigated from /profile to /login', '2026-05-25 10:09:50', '2026-05-25 10:09:50', 'info'),
 (179, 'PAGE_VIEW', 'Navigated from /login to /', '2026-05-25 10:10:17', '2026-05-25 10:10:17', 'info'),
-(180, 'PAGE_VIEW', 'Navigated from / to /rumah123', '2026-05-25 10:10:19', '2026-05-25 10:10:19', 'info');
+(180, 'PAGE_VIEW', 'Navigated from / to /rumah123', '2026-05-25 10:10:19', '2026-05-25 10:10:19', 'info'),
+(181, 'PAGE_VIEW', 'Navigated from / to /', '2026-05-26 01:55:34', '2026-05-26 01:55:34', 'info'),
+(182, 'PAGE_VIEW', 'Navigated from / to /login', '2026-05-26 01:55:39', '2026-05-26 01:55:39', 'info'),
+(183, 'PAGE_VIEW', 'Navigated from /login to /login', '2026-05-26 01:55:42', '2026-05-26 01:55:42', 'info'),
+(184, 'PAGE_VIEW', 'Navigated from /login to /register', '2026-05-26 01:55:43', '2026-05-26 01:55:43', 'info'),
+(185, 'PAGE_VIEW', 'Navigated from /register to /login', '2026-05-26 01:56:31', '2026-05-26 01:56:31', 'info'),
+(186, 'PAGE_VIEW', 'Navigated from /login to /register', '2026-05-26 01:56:33', '2026-05-26 01:56:33', 'info'),
+(187, 'PAGE_VIEW', 'Navigated from /register to /login', '2026-05-26 01:57:23', '2026-05-26 01:57:23', 'info'),
+(188, 'PAGE_VIEW', 'Navigated from /login to /register', '2026-05-26 01:57:55', '2026-05-26 01:57:55', 'info'),
+(189, 'PAGE_VIEW', 'Navigated from /register to /login', '2026-05-26 01:58:50', '2026-05-26 01:58:50', 'info'),
+(190, 'PAGE_VIEW', 'Navigated from /login to /', '2026-05-26 01:58:55', '2026-05-26 01:58:55', 'info'),
+(191, 'PAGE_VIEW', 'Navigated from / to /login', '2026-05-26 03:17:07', '2026-05-26 03:17:07', 'info'),
+(192, 'PAGE_VIEW', 'Navigated from /login to /register', '2026-05-26 03:17:13', '2026-05-26 03:17:13', 'info'),
+(193, 'PAGE_VIEW', 'Navigated from /register to /login', '2026-05-26 03:18:18', '2026-05-26 03:18:18', 'info');
 
 -- --------------------------------------------------------
 
@@ -543,8 +556,12 @@ CREATE TABLE `users` (
 --
 
 INSERT INTO `users` (`id`, `user_id`, `name`, `birthdate`, `phone`, `username`, `password`, `refresh_token`, `updated_date`, `update_by`, `created_date`, `created_by`, `status`, `privilege`) VALUES
-(1, 'SA6EDRU001', 'STEFANUS NIGEL ANGGRIAWAN', '1998-05-04', '082233556796', 'nigel123', '$2b$10$Rld5zga/CswkKyQPgPi6GO./sa5.OuVwgApiGxbZmCRudUD9TNHD2', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJTQTZFRFJVMDAxIiwidXNlck5hbWUiOiJTVEVGQU5VUyBOSUdFTCBBTkdHUklBV0FOIiwidXNlcm5hbWUiOiJuaWdlbDEyMyIsInByaXZpbGVnZSI6bnVsbCwiaWF0IjoxNzc5NzAzODE2LCJleHAiOjE3Nzk3OTAyMTZ9.F8OWqLMtOUeb3-hGsvyEKs6aEwM_OCb_nGe2sg1GVKo', '2026-05-25 10:10:16', 'nigel123', '2026-05-22 03:26:55', 'Self-Register', 1, NULL),
-(2, 'LFGKT49002', 'LEO FELIX', '2000-05-25', '+62821-3311-936', 'leon123', '$2b$10$TGeqAjXzANa7ccU7EKMDbeDf4WDkB7ivVxzKI/AE90VZjMI/K6DTO', NULL, '2026-05-25 10:09:50', 'leon123', '2026-05-25 10:05:33', 'Self-Register', 1, NULL);
+(1, 'SA6EDRU001', 'NIGEL KUNCORO', '1998-05-04', '082233556796', 'nigel123', '$2b$10$Rld5zga/CswkKyQPgPi6GO./sa5.OuVwgApiGxbZmCRudUD9TNHD2', NULL, '2026-05-26 01:55:38', 'nigel123', '2026-05-22 03:26:55', 'Self-Register', 1, 'agent'),
+(2, 'LFGKT49002', 'LEO FELIX', '2000-05-25', '+62821-3311-936', 'leon123', '$2b$10$TGeqAjXzANa7ccU7EKMDbeDf4WDkB7ivVxzKI/AE90VZjMI/K6DTO', NULL, '2026-05-25 10:09:50', 'leon123', '2026-05-25 10:05:33', 'Self-Register', 1, 'agent'),
+(3, 'CEMPL3Z003', 'CLARENCE MARIO', '1993-03-24', '0821-1136-7154', 'clarence123', '$2b$10$jvnn536K239gxQRcOqNIauJxZxTq9iBcJYLWDstvTItZGkAIsA07e', NULL, NULL, NULL, '2026-05-26 01:56:29', 'Self-Register', 1, 'agent'),
+(4, 'DTDE8RX004', 'DESY TALIM', '1995-08-27', '0821-1331-8191', 'desy54321', '$2b$10$ZCZK0Lzlenn2y1ni3gtITOdJs9GISQcG1eatRxh0PEBKk0BXwyhNq', NULL, NULL, NULL, '2026-05-26 01:57:21', 'Self-Register', 1, 'agent'),
+(5, 'ITJMESP005', 'IFAN TJANDRA', '2000-05-12', '+62881036588874', 'ifansiapa', '$2b$10$XK.IYefPk7hTE8hXNPJriOpueghFfkUH0.9m413E/PMBg2rESDmge', NULL, '2026-05-26 03:17:07', 'ifansiapa', '2026-05-26 01:58:48', 'Self-Register', 1, 'agent'),
+(6, 'IE1BGVY006', 'IFAN ELDY', '1998-04-16', '0881-0365-88874', 'ifaneldy', '$2b$10$FDHol/1mitgKFZwNmTZjIu1WgsRmRr28BTspMm5jlKxPlkbifhwFu', NULL, NULL, NULL, '2026-05-26 03:18:16', 'Self-Register', 1, 'agent');
 
 -- --------------------------------------------------------
 
@@ -615,7 +632,9 @@ ALTER TABLE `users`
   ADD UNIQUE KEY `username` (`username`),
   ADD KEY `users_user_id` (`user_id`),
   ADD KEY `users_username` (`username`),
-  ADD KEY `users_status` (`status`);
+  ADD KEY `users_status` (`status`),
+  ADD KEY `users_privilege_status` (`privilege`,`status`),
+  ADD KEY `users_phone` (`phone`);
 
 --
 -- Indexes for table `whatsapp_inbound_messages`
@@ -653,7 +672,7 @@ ALTER TABLE `contacts`
 -- AUTO_INCREMENT for table `logs`
 --
 ALTER TABLE `logs`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=181;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=194;
 
 --
 -- AUTO_INCREMENT for table `properties`
@@ -665,7 +684,7 @@ ALTER TABLE `properties`
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 
 --
 -- AUTO_INCREMENT for table `whatsapp_inbound_messages`
