@@ -1,40 +1,80 @@
 ---
 name: elevan-property-system
-description: Elevan Property platform documentation — Node.js+Express backend, Vue 3 frontend, MySQL, AI chatbot (ChatGPT→Claude→Private), Fonnte WhatsApp, JWT auth.
-version: 4.0
+description: Elevan Property platform — Node.js+Express backend, Vue 3 frontend, MySQL, AI chatbot (ChatGPT→Claude→Private), Fonnte (contact form), WATI (agent chat), JWT auth, Rumah123 via Apify.
+version: 5.1
 status: production
+updated: 2026-05-26
 ---
 
 # Elevan Property — System Documentation
 
-## Document Index
+## Skill Files (Feature Summaries)
+
+Quick-reference files covering each major feature area:
 
 ```
 docs/
-├── 01-system-overview-and-architecture.md    ← Stack, data flows, directory structure
-├── 02-project-configuration-and-setup.md     ← .env variables, dependencies, quick start
-├── 03-database-design-and-models.md          ← MySQL tables, Sequelize models
-├── 04-backend-api-and-services.md            ← All API routes, key services
-├── 05-ai-integration-system.md               ← ChatGPT→Claude→Private fallback chain
-├── 06-skill-loader-and-prompts.md            ← Skill file system, prompt loading
-├── 07-frontend-architecture-and-setup.md     ← Vue 3 structure, router, auth
-├── 08-module-home.md                         ← HomeView.vue
-├── 09-module-about-us.md                     ← AboutView.vue
-├── 10-module-contact.md                      ← Contact form flow, rate limiting
-├── 11-module-chatbot.md                      ← FloatingChatbot.vue, session management
-└── 12-external-integrations-and-deployment.md ← Fonnte, Google Sheets, Rumah123, deploy
+├── A-auth-and-agents.md              ← Login, Register, Profile, JWT, 6 agents
+├── B-wati-whatsapp-integration.md    ← WATI setup, watiChatController, agent-customer chat
+├── C-website-modules.md              ← Home, About, Contact, Chatbot, Rumah123
+└── D-ai-and-external-integrations.md ← ChatGPT, Claude, Private Agent, Fonnte, Google, Apify, NGROK
+```
+
+## Skill Files (Detailed Technical Reference)
+
+In-depth implementation docs:
+
+```
+docs/
+├── 01-system-overview-and-architecture.md
+├── 02-project-configuration-and-setup.md
+├── 03-database-design-and-models.md
+├── 04-backend-api-and-services.md
+├── 05-ai-integration-system.md
+├── 06-skill-loader-and-prompts.md
+├── 07-frontend-architecture-and-setup.md
+├── 08-module-home.md
+├── 09-module-about-us.md
+├── 10-module-contact.md
+├── 11-module-chatbot.md
+└── 12-external-integrations-and-deployment.md
 ```
 
 ## Quick Reference
 
-| Question | Document |
+| Question | File |
 |---|---|
-| How does the AI fallback work? | 05 |
-| What are all the API routes? | 04 |
-| What tables are in the DB? | 03 |
-| How is the chatbot session managed? | 11 |
-| How does the contact form flow? | 10 |
-| How to configure .env? | 02 |
-| How does JWT auth work? | 07 + 04 |
-| How does Fonnte WhatsApp work? | 12 |
-| How does OOP controller pattern work? | 04 |
+| Login / register / JWT / agent list | `docs/A-auth-and-agents.md` |
+| WATI setup, watiController, terminal format | `docs/B-wati-whatsapp-integration.md` |
+| Contact form (Fonnte), Chatbot, Rumah123 | `docs/C-website-modules.md` |
+| ChatGPT / Claude / Private / all .env | `docs/D-ai-and-external-integrations.md` |
+| All API routes | `docs/04-backend-api-and-services.md` |
+| Database tables & models | `docs/03-database-design-and-models.md` |
+| Frontend Vue 3 structure | `docs/07-frontend-architecture-and-setup.md` |
+
+## System Status (26 May 2026)
+
+| Feature | Status |
+|---|---|
+| Login / Register / Profile | ✅ Live |
+| Website Chatbot (FloatingChatbot) | ✅ Live |
+| Contact Form (Fonnte + Google Sheets) | ✅ Live |
+| Rumah123 via Apify | ✅ Live (quota-limited) |
+| WATI watiChatController code | ✅ Ready |
+| WATI 6 agents in database | ✅ Done |
+| WATI webhook endpoint | ✅ Ready |
+| WATI WhatsApp Business channel | ❌ Not connected yet |
+| WATI real messages in terminal | ❌ Blocked by above |
+| Claude API key | ⚠️ Placeholder — needs real key |
+
+## Service Scope
+
+| Service | Used For | NOT Used For |
+|---|---|---|
+| **Fonnte** | Contact form WA send + webhook | watiChatController |
+| **WATI** | Agent-customer chat capture | Contact form |
+| **ChatGPT** | Primary AI: chatbot / contact / WATI | — |
+| **Claude** | Fallback AI | — |
+| **Google Sheets** | Contact form submission backup | — |
+| **Apify** | Live Rumah123 property data | — |
+| **NGROK** | Dev tunnel for WATI webhook | Production |

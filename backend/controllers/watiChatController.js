@@ -398,31 +398,59 @@ class WatiChatController {
         });
       }
 
-      // ─── Cari agent dari database ─────────────────────────────────────────
-      // Strategi 1: Cari via agentPhone (dari test payload atau custom field)
-      // Strategi 2: Cari semua agent, match dengan assignedOperator name
-      // Strategi 3: Tampilkan pesan meski agent tidak ditemukan (jangan block!)
+      // ─── Cari agent dari database (4 strategi) ──────────────────────────
+      //
+      // WATI Webhook Fields:
+      //   waId    = nomor yang kirim pesan ke WATI (customer ATAU agent yg balas)
+      //   owner   = nomor bisnis WATI (bukan nomor agent)
+      //   assignedOperator = operator WATI yang handle percakapan
+      //
+      // Kasus 1: Testing via curl  → gunakan field "agentPhone" custom
+      // Kasus 2: WATI Contact balas → waId = nomor agent (LEO FELIX reply ke WATI)
+      // Kasus 3: WATI Operator assigned → assignedOperator.name match ke database
+      // Kasus 4: owner = agent phone → jarang, tapi tetap coba
+      // Fallback: Tampilkan pesan meski tidak ada agent (JANGAN block)
 
-      let agent = null;
+      let agent        = null;
+      let agentSource  = null;
 
+      // Strategi 1: Field "agentPhone" dari test payload (curl testing)
       if (assignedAgentPhone && PhoneUtils.isValid(assignedAgentPhone)) {
         agent = await AgentLookup.findByPhone(assignedAgentPhone);
+        if (agent) agentSource = 'agentPhone_field';
       }
 
-      if (!agent && businessPhone && PhoneUtils.isValid(businessPhone)) {
-        agent = await AgentLookup.findByPhone(businessPhone);
+      // Strategi 2: waId = nomor agent (terjadi ketika WATI Contact balas ke WATI)
+      // Contoh: LEO FELIX (+62821-3311-936) ada di WATI Contacts
+      // Leo membalas pesan dari WATI → waId = nomor Leo → match di database
+      if (!agent && customerPhone) {
+        agent = await AgentLookup.findByPhone(customerPhone);
+        if (agent) {
+          agentSource = 'waId_is_agent';
+          // Dalam kasus ini, "customer" sebenarnya adalah agent
+          // Swap: agent mengirim pesan, customerPhone perlu di-override
+          console.log(`[WATI AGENT] ℹ️ Detected WATI Contact reply flow: ${agent.name} is the sender`);
+        }
       }
 
+      // Strategi 3: assignedOperator.name dari WATI → match nama ke database
       if (!agent && assignedOp?.name) {
         const allAgents = await AgentLookup.getAll();
         agent = allAgents.find(a =>
           a.name.toLowerCase().includes(assignedOp.name.toLowerCase()) ||
           assignedOp.name.toLowerCase().includes(a.name.toLowerCase())
         ) || null;
+        if (agent) agentSource = 'assignedOperator_name';
+      }
 
-        if (agent) {
-          console.log(`[WATI AGENT] Found via assignedOperator name match: ${agent.name}`);
-        }
+      // Strategi 4: owner = nomor agent (jarang, tapi coba)
+      if (!agent && businessPhone && PhoneUtils.isValid(businessPhone)) {
+        agent = await AgentLookup.findByPhone(businessPhone);
+        if (agent) agentSource = 'owner_field';
+      }
+
+      if (agent) {
+        console.log(`[WATI AGENT] ✅ Found agent: ${agent.name} (via ${agentSource})`);
       }
 
       // ─── Tampilkan pesan di terminal (SELALU tampil, agent tidak found = ok) ─
