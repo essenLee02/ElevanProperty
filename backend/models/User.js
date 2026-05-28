@@ -19,6 +19,7 @@ const sequelize = require('../config/database');
  * - created_by    : siapa yang melakukan registrasi (default 'Self-Register')
  * - status        : 1 = aktif, 2 = blocked, 3 = delete
  * - privilege     : level akses / role (nullable)
+ * - fonnte_token  : Fonnte token milik agent (untuk kirim WA via Fonnte, nullable)
  */
 const User = sequelize.define('User', {
   user_id: {
@@ -83,6 +84,12 @@ const User = sequelize.define('User', {
     type: DataTypes.STRING(50),
     allowNull: true,
     defaultValue: null
+  },
+  fonnte_token: {
+    type: DataTypes.STRING(100),
+    allowNull: true,
+    defaultValue: null,
+    comment: 'Fonnte token milik agent (untuk kirim WA via Fonnte)'
   }
 }, {
   tableName: 'users',

@@ -37,8 +37,9 @@ export async function getCurrentProfile() {
 
 /**
  * PUT /api/profile/update-agent
- * Update nama, phone, birthdate, username user (tanpa konfirmasi password)
- * @param {object} payload - { name, phone, birthdate, username }
+ * Update nama, phone, birthdate, password, fonnte_api user.
+ * Username TIDAK dikirim — backend mengabaikannya.
+ * @param {object} payload - { name, phone, birthdate, password, fonnte_api }
  * @returns {Promise<{ user }>}
  */
 export async function updateProfile(payload) {

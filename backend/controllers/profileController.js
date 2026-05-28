@@ -1,22 +1,28 @@
 /**
  * profileController.js
  *
- * Controller untuk user profile management (update nama, phone, birthdate, username)
- * User TIDAK perlu confirm password untuk update data (direct update)
+ * Controller untuk user profile management.
+ *
+ * Rules:
+ * - Username TIDAK bisa diupdate (read-only)
+ * - Nama, Nomor HP, dan Password WAJIB diisi saat update
+ * - Fonnte API boleh kosong (nullable)
+ * - Birthdate opsional
  *
  * Endpoint:
- *   GET  /api/profile/me   → getCurrentProfile (ambil data user yang login)
- *   PUT  /api/profile/update-agent → updateDataAgent (update nama, phone, birthdate, username)
+ *   GET  /api/profile/me            → getCurrentProfile
+ *   PUT  /api/profile/update-agent  → updateDataAgent
  */
 
+const bcrypt  = require('bcrypt');
 const { User } = require('../models');
 const { HTTP } = require('../utils/httpStatus');
 const { sendSuccess, sendError } = require('../utils/responseFormat');
 const { authLog } = require('../utils/authLogger');
 
-/**
- * Helper bersihkan value env
- */
+/* ─────────────────────────────────────────────
+   Helper
+───────────────────────────────────────────── */
 function cleanEnv(value, fallback = '') {
   if (value === undefined || value === null) return fallback;
   return String(value).trim().replace(/^['"]|['"]$/g, '').replace(/[;\s]+$/g, '') || fallback;
@@ -26,38 +32,33 @@ function getRefreshCookieName() {
   return cleanEnv(process.env.COOKIE_REFRESH_TOKEN, 'Elevan_Refresh_Token');
 }
 
-/**
- * GET /api/profile/me
- *
- * Ambil data profile user yang sedang login (dari refresh_token cookie)
- * Memerlukan authentication (user harus login)
- */
+function getSaltRounds() {
+  const raw    = String(process.env.BCRYPT_SALT_ROUNDS || '10').trim().replace(/[;\s]+$/g, '');
+  const parsed = parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed >= 4 && parsed <= 15 ? parsed : 10;
+}
+
+/* ─────────────────────────────────────────────
+   GET /api/profile/me
+───────────────────────────────────────────── */
 exports.getCurrentProfile = async (req, res) => {
-  const refreshCookieName = getRefreshCookieName();
+  const refreshCookieName      = getRefreshCookieName();
   const refreshTokenFromCookie = req.cookies ? req.cookies[refreshCookieName] : null;
 
-  const requestInfo = {
-    ip:    req.ip || req.connection?.remoteAddress || 'unknown',
-    route: 'GET /api/profile/me'
-  };
-
   try {
-    // 1. Cek refresh_token di cookie
     if (!refreshTokenFromCookie) {
       return sendError(res, HTTP.UNAUTHORIZED, null, 'Belum login');
     }
 
-    // 2. Cari user berdasarkan refresh_token
     const user = await User.findOne({
       where: { refresh_token: refreshTokenFromCookie },
-      attributes: ['user_id', 'name', 'username', 'phone', 'birthdate', 'status']
+      attributes: ['user_id', 'name', 'username', 'phone', 'birthdate', 'status', 'fonnte_token']
     });
 
     if (!user) {
       return sendError(res, HTTP.UNAUTHORIZED, null, 'Token tidak dikenali');
     }
 
-    // 3. Cek status user (1 = aktif)
     if (user.status !== 1) {
       return sendError(res, HTTP.FORBIDDEN, null, 'Akun tidak aktif');
     }
@@ -69,19 +70,15 @@ exports.getCurrentProfile = async (req, res) => {
   }
 };
 
-/**
- * PUT /api/profile/update-agent
- *
- * Update nama, phone, birthdate, username user (TANPA konfirmasi password)
- * User bisa langsung update, tidak perlu masukan password lama
- *
- * Body: { name, phone, birthdate, username }
- * Memerlukan authentication (user harus login)
- */
+/* ─────────────────────────────────────────────
+   PUT /api/profile/update-agent
+───────────────────────────────────────────── */
 exports.updateDataAgent = async (req, res) => {
-  const refreshCookieName = getRefreshCookieName();
+  const refreshCookieName      = getRefreshCookieName();
   const refreshTokenFromCookie = req.cookies ? req.cookies[refreshCookieName] : null;
-  const { name, phone, birthdate, username } = req.body;
+
+  // username sengaja TIDAK diambil dari body — tidak boleh diupdate
+  const { name, phone, birthdate, password, fonnte_token } = req.body;
 
   const requestInfo = {
     ip:    req.ip || req.connection?.remoteAddress || 'unknown',
@@ -89,12 +86,11 @@ exports.updateDataAgent = async (req, res) => {
   };
 
   try {
-    // 1. Cek refresh_token di cookie
+    /* 1. Auth check ─────────────────────────── */
     if (!refreshTokenFromCookie) {
       return sendError(res, HTTP.UNAUTHORIZED, null, 'Belum login');
     }
 
-    // 2. Cari user berdasarkan refresh_token
     const user = await User.findOne({
       where: { refresh_token: refreshTokenFromCookie }
     });
@@ -103,64 +99,90 @@ exports.updateDataAgent = async (req, res) => {
       return sendError(res, HTTP.UNAUTHORIZED, null, 'Token tidak dikenali');
     }
 
-    // 3. Cek status user (1 = aktif)
     if (user.status !== 1) {
       return sendError(res, HTTP.FORBIDDEN, null, 'Akun tidak aktif');
     }
 
-    // 4. Validasi input (minimal 1 field harus diubah)
+    /* 2. Validasi field WAJIB ───────────────── */
+    const cleanName     = String(name  || '').trim();
+    const cleanPhone    = String(phone || '').trim();
+    const cleanPassword = String(password || '').trim();
+
+    if (!cleanName) {
+      return sendError(res, HTTP.BAD_REQUEST, null, 'Nama wajib diisi');
+    }
+
+    if (!cleanPhone) {
+      return sendError(res, HTTP.BAD_REQUEST, null, 'Nomor HP wajib diisi');
+    }
+
+    if (!cleanPassword) {
+      return sendError(res, HTTP.BAD_REQUEST, null, 'Password wajib diisi');
+    }
+
+    if (cleanPassword.length < 6) {
+      return sendError(res, HTTP.BAD_REQUEST, null, 'Password minimal 6 karakter');
+    }
+
+    /* 3. Susun updateFields ─────────────────── */
     const updateFields = {};
-    if (name && name.trim()) updateFields.name = String(name).trim().toUpperCase();
-    if (phone && phone.trim()) updateFields.phone = phone.trim();
-    if (birthdate) updateFields.birthdate = birthdate;
-    if (username && username.trim()) {
-      const trimmedUsername = String(username).trim().toLowerCase();
-      // Cek apakah username baru sudah terpakai (dan bukan username sendiri)
-      if (trimmedUsername !== user.username.toLowerCase()) {
-        const existingUser = await User.findOne({
-          where: { username: trimmedUsername }
-        });
-        if (existingUser) {
-          return sendError(res, HTTP.CONFLICT, null, 'Username sudah terpakai');
-        }
-      }
-      updateFields.username = trimmedUsername;
+
+    // Nama — uppercase
+    updateFields.name = cleanName.toUpperCase();
+
+    // Nomor HP
+    updateFields.phone = cleanPhone;
+
+    // Birthdate — opsional
+    if (birthdate) {
+      updateFields.birthdate = birthdate;
     }
 
-    if (Object.keys(updateFields).length === 0) {
-      return sendError(res, HTTP.BAD_REQUEST, null, 'Tidak ada data yang diubah');
-    }
+    // Password — hash dulu
+    const salt           = await bcrypt.genSalt(getSaltRounds());
+    updateFields.password = await bcrypt.hash(cleanPassword, salt);
 
-    // 5. Update data user
+    // Fonnte API — boleh kosong / null
+    const cleanFonnte = fonnte_token !== undefined && fonnte_token !== null
+      ? String(fonnte_token).trim()
+      : null;
+    updateFields.fonnte_token = cleanFonnte || null;
+
+    // Metadata update
     updateFields.updated_date = new Date();
-    updateFields.update_by = user.username;
+    updateFields.update_by    = user.username;
 
+    /* 4. Simpan ke database ─────────────────── */
     const updateResult = await User.update(updateFields, {
       where: { user_id: user.user_id }
     });
 
     if (!updateResult || updateResult[0] === 0) {
-      console.warn('[PROFILE UPDATE] No rows updated', { user_id: user.user_id, updateFields });
-      return sendError(res, HTTP.INTERNAL_SERVER_ERROR, null, 'Gagal update profil - data tidak berubah');
+      console.warn('[PROFILE UPDATE] No rows updated', { user_id: user.user_id });
+      return sendError(res, HTTP.INTERNAL_SERVER_ERROR, null, 'Gagal update profil');
     }
 
-    // 6. Ambil data user yang sudah diupdate
+    /* 5. Kembalikan data terbaru (tanpa password) */
     const updatedUser = await User.findOne({
       where: { user_id: user.user_id },
-      attributes: ['user_id', 'name', 'username', 'phone', 'birthdate']
+      attributes: ['user_id', 'name', 'username', 'phone', 'birthdate', 'fonnte_token']
     });
 
-    // Log SUCCESS ke terminal
+    // Log ke terminal
     authLog.profileUpdateSuccess(
       { user_id: user.user_id, username: user.username, name: user.name },
       {
         ...requestInfo,
-        'Fields Updated': Object.keys(updateFields).filter(k => k !== 'updated_date' && k !== 'update_by').join(', '),
+        'Fields Updated': Object.keys(updateFields)
+          .filter(k => !['updated_date', 'update_by', 'password'].includes(k))
+          .join(', '),
+        'Password Changed': true,
         'HTTP Status': HTTP.OK
       }
     );
 
     return sendSuccess(res, HTTP.OK, { user: updatedUser }, 'Profil berhasil diupdate');
+
   } catch (error) {
     console.error('[PROFILE UPDATE ERROR]', error);
     return sendError(res, HTTP.INTERNAL_SERVER_ERROR, null, 'Gagal update profil');

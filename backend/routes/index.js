@@ -19,7 +19,8 @@ const fonnteWebhookController = require('../controllers/fonnteWebhookController'
 const logController = require('../controllers/logController');
 const rumah123Controller = require('../controllers/rumah123Controller');
 const whatsappInboundController = require('../controllers/whatsappInboundController');
-const watiChatController = require('../controllers/watiChatController');
+const watiChatController   = require('../controllers/watiChatController');
+const fonnteChatController = require('../controllers/fonnteChatController');
 
 // Auth controllers (Login & Register Users)
 const registerController = require('../controllers/registerController');
@@ -65,6 +66,13 @@ router.get('/wati/agent-chats/:agentName', watiChatController.getAgentChats);
 router.get('/wati/chat-history/:sessionId', watiChatController.getChatHistory);
 router.get('/wati/agents/list', watiChatController.getRegisteredAgents);
 router.get('/wati/status', watiChatController.getWatiStatus);
+
+// Fonnte WhatsApp Chat Controller (Multi-Agent, Per-Agent Token)
+router.post('/fonnte-chat/webhook', fonnteChatController.handleInboundMessage);
+router.get('/fonnte-chat/agents', fonnteChatController.getAgentsWithFonnte);
+router.get('/fonnte-chat/agent-chats/:agentName', fonnteChatController.getAgentChats);
+router.get('/fonnte-chat/chat-history/:sessionId', fonnteChatController.getChatHistory);
+router.get('/fonnte-chat/status', fonnteChatController.getFonnteStatus);
 
 // =============================================================
 // Auth Routes (Login & Register Users)

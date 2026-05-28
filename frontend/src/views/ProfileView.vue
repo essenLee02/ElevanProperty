@@ -25,6 +25,8 @@
 
             <!-- Profile Form -->
             <form v-else @submit.prevent="submitUpdate" class="profile-form">
+
+              <!-- User ID (read-only) -->
               <div class="form-group">
                 <label for="userId">User ID</label>
                 <input
@@ -36,58 +38,115 @@
                 />
               </div>
 
+              <!-- Nama Lengkap (wajib) -->
               <div class="form-group">
-                <label for="name">Nama Lengkap *</label>
+                <label for="name">Nama Lengkap <span class="required">*</span></label>
                 <input
                   id="name"
                   v-model.trim="form.name"
                   type="text"
                   placeholder="Nama lengkap"
                   :disabled="isSubmitting"
+                  required
                 />
               </div>
 
+              <!-- Nomor HP (wajib) -->
               <div class="form-group">
-                <label for="username">Username *</label>
+                <label for="phone">Nomor HP <span class="required">*</span></label>
                 <input
-                  id="username"
-                  v-model.trim="form.username"
-                  type="text"
-                  placeholder="Username unik"
+                  id="phone"
+                  v-model.trim="form.phone"
+                  type="tel"
+                  placeholder="08123456789"
+                  :disabled="isSubmitting"
+                  @input="sanitizePhone"
+                  required
+                />
+              </div>
+
+              <!-- Tanggal Lahir (opsional) -->
+              <div class="form-group">
+                <label for="birthdate">Tanggal Lahir</label>
+                <input
+                  id="birthdate"
+                  v-model="form.birthdate"
+                  type="date"
                   :disabled="isSubmitting"
                 />
               </div>
 
-              <div class="form-row">
-                <div class="form-group">
-                  <label for="phone">Nomor HP</label>
-                  <input
-                    id="phone"
-                    v-model.trim="form.phone"
-                    type="tel"
-                    placeholder="08123456789"
-                    :disabled="isSubmitting"
-                    @input="sanitizePhone"
-                  />
-                </div>
-
-                <div class="form-group">
-                  <label for="birthdate">Tanggal Lahir</label>
-                  <input
-                    id="birthdate"
-                    v-model="form.birthdate"
-                    type="date"
-                    :disabled="isSubmitting"
-                  />
-                </div>
+              <!-- Divider -->
+              <div class="section-divider">
+                <span>Keamanan & Integrasi</span>
               </div>
 
+              
+              <!-- Username (disabled — tidak bisa diubah) -->
+              <div class="form-group">
+                <label for="username">
+                  Username
+                  <span class="badge-locked">🔒 Tidak dapat diubah</span>
+                </label>
+                <input
+                  id="username"
+                  :value="form.username"
+                  type="text"
+                  disabled
+                  class="form-control-static"
+                />
+              </div>
+              
+              <!-- Password Baru (wajib) -->
+              <div class="form-group">
+                <label for="password">
+                  Password <span class="required">*</span>
+                </label>
+                <div class="input-password-wrapper">
+                  <input
+                    id="password"
+                    v-model="form.password"
+                    :type="showPassword ? 'text' : 'password'"
+                    placeholder="Masukkan password Anda"
+                    :disabled="isSubmitting"
+                    autocomplete="new-password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    class="btn-toggle-password"
+                    @click="showPassword = !showPassword"
+                    :title="showPassword ? 'Sembunyikan password' : 'Tampilkan password'"
+                  >
+                    {{ showPassword ? '🙈' : '👁️' }}
+                  </button>
+                </div>
+                <p class="field-hint">Minimal 6 karakter. Wajib diisi setiap menyimpan profil.</p>
+              </div>
+
+              <!-- Fonnte API (opsional) -->
+              <div class="form-group">
+                <label for="fonnteApi">Fonnte API</label>
+                <input
+                  id="fonnteApi"
+                  v-model.trim="form.fonnte_token"
+                  type="text"
+                  placeholder="Masukkan Fonnte API token (opsional)"
+                  :disabled="isSubmitting"
+                />
+                <p class="field-hint">Token API Fonnte pribadi Anda. Boleh dikosongkan.</p>
+              </div>
+
+              <!-- Submit Button -->
               <button
                 type="submit"
                 class="btn-primary"
                 :disabled="isSubmitting || !hasChanges"
               >
-                {{ isSubmitting ? 'Menyimpan...' : 'Simpan Perubahan' }}
+                <span v-if="isSubmitting">
+                  <span class="spinner"></span> Menyimpan...
+                </span>
+                <span v-else>Simpan Perubahan</span>
               </button>
 
               <div class="profile-footer">
@@ -109,101 +168,110 @@ import { getCurrentProfile, updateProfile } from '../services/profileApi';
 
 const router = useRouter();
 
+/* ── State ────────────────────────────────────── */
 const form = reactive({
-  user_id: '',
-  name: '',
-  username: '',
-  phone: '',
-  birthdate: ''
+  user_id:    '',
+  name:       '',
+  username:   '',
+  phone:      '',
+  birthdate:  '',
+  password:   '',
+  fonnte_token: ''
 });
 
+// Nilai awal (untuk deteksi perubahan — kecuali password)
 const originalForm = reactive({
-  user_id: '',
-  name: '',
-  username: '',
-  phone: '',
-  birthdate: ''
+  name:       '',
+  phone:      '',
+  birthdate:  '',
+  fonnte_token: ''
 });
 
-const alert = reactive({ type: '', message: '' });
-const isLoading = ref(true);
+const alert       = reactive({ type: '', message: '' });
+const isLoading   = ref(true);
 const isSubmitting = ref(false);
+const showPassword = ref(false);
 
 const PHONE_REGEX = /[^0-9+\-\s]/g;
 
+/* ── Computed ────────────────────────────────── */
 const alertClass = computed(() => {
   if (alert.type === 'success') return 'alert-success';
   if (alert.type === 'warning') return 'alert-warning';
   return 'alert-danger';
 });
 
+// Form dianggap "ada perubahan" jika:
+// - Salah satu field (name/phone/birthdate/fonnte_token) berbeda dari original, ATAU
+// - Password sudah diisi
 const hasChanges = computed(() => {
   return (
-    form.name !== originalForm.name ||
-    form.username !== originalForm.username ||
-    form.phone !== originalForm.phone ||
-    form.birthdate !== originalForm.birthdate
+    form.name       !== originalForm.name       ||
+    form.phone      !== originalForm.phone      ||
+    form.birthdate  !== originalForm.birthdate  ||
+    form.fonnte_token !== originalForm.fonnte_token ||
+    form.password.length > 0
   );
 });
 
-const setAlert = (type, message) => {
-  alert.type = type;
-  alert.message = message;
-};
-
-const clearAlert = () => {
-  alert.type = '';
-  alert.message = '';
-};
+/* ── Helpers ─────────────────────────────────── */
+const setAlert   = (type, message) => { alert.type = type; alert.message = message; };
+const clearAlert = () => { alert.type = ''; alert.message = ''; };
 
 const sanitizePhone = (event) => {
   form.phone = String(event?.target?.value || form.phone).replace(PHONE_REGEX, '');
 };
 
+/* ── Load profile ────────────────────────────── */
 const loadProfile = async () => {
   isLoading.value = true;
   clearAlert();
   try {
     const result = await getCurrentProfile();
 
-    // Response structure: { status, data: { response: { user }, message }, isSuccess }
     if (result?.isSuccess === 1 && result?.data?.response?.user) {
       const user = result.data.response.user;
-      form.user_id = user.user_id || '';
-      form.name = user.name || '';
-      form.username = user.username || '';
-      form.phone = user.phone || '';
-      form.birthdate = user.birthdate ? user.birthdate.split('T')[0] : '';
 
-      // Store original values
-      originalForm.user_id = form.user_id;
-      originalForm.name = form.name;
-      originalForm.username = form.username;
-      originalForm.phone = form.phone;
-      originalForm.birthdate = form.birthdate;
+      form.user_id    = user.user_id    || '';
+      form.name       = user.name       || '';
+      form.username   = user.username   || '';
+      form.phone      = user.phone      || '';
+      form.birthdate  = user.birthdate ? user.birthdate.split('T')[0] : '';
+      form.fonnte_token = user.fonnte_token || '';
+      form.password   = '';
+
+      // Simpan original (tidak termasuk password)
+      originalForm.name       = form.name;
+      originalForm.phone      = form.phone;
+      originalForm.birthdate  = form.birthdate;
+      originalForm.fonnte_token = form.fonnte_token;
     } else {
       setAlert('danger', result?.data?.message || 'Gagal memuat profil');
       setTimeout(() => router.push('/login'), 2000);
     }
   } catch (error) {
-    const backendMessage =
+    const msg =
       error?.response?.data?.data?.message ||
       error?.response?.data?.message ||
       error?.message ||
       'Gagal memuat profil';
-    setAlert('danger', backendMessage);
+    setAlert('danger', msg);
     setTimeout(() => router.push('/login'), 2000);
   } finally {
     isLoading.value = false;
   }
 };
 
+/* ── Validasi ────────────────────────────────── */
 const validateForm = () => {
-  if (!form.name || !form.name.trim()) return 'Nama wajib diisi';
-  if (!form.username || !form.username.trim()) return 'Username wajib diisi';
+  if (!form.name.trim())     return 'Nama wajib diisi';
+  if (!form.phone.trim())    return 'Nomor HP wajib diisi';
+  if (!form.password.trim()) return 'Password wajib diisi';
+  if (form.password.trim().length < 6) return 'Password minimal 6 karakter';
   return '';
 };
 
+/* ── Submit ──────────────────────────────────── */
 const submitUpdate = async () => {
   clearAlert();
 
@@ -221,38 +289,38 @@ const submitUpdate = async () => {
   isSubmitting.value = true;
   try {
     const payload = {
-      name: form.name,
-      username: form.username,
-      phone: form.phone || null,
-      birthdate: form.birthdate || null
+      name:       form.name,
+      phone:      form.phone,
+      birthdate:  form.birthdate  || null,
+      password:   form.password,
+      fonnte_token: form.fonnte_token || null
+      // username TIDAK dikirim — backend mengabaikannya
     };
 
     const result = await updateProfile(payload);
 
-    // Response structure: { status, data: { response: { user }, message }, isSuccess }
     if (result?.isSuccess === 1 && result?.data?.response?.user) {
       setAlert('success', result?.data?.message || 'Profil berhasil diupdate');
       toast.success(result?.data?.message || 'Profil berhasil diupdate');
 
-      // Update original values
-      originalForm.name = form.name;
-      originalForm.username = form.username;
-      originalForm.phone = form.phone;
-      originalForm.birthdate = form.birthdate;
+      // Reset original values & kosongkan password
+      originalForm.name       = form.name;
+      originalForm.phone      = form.phone;
+      originalForm.birthdate  = form.birthdate;
+      originalForm.fonnte_token = form.fonnte_token;
+      form.password           = '';
 
-      setTimeout(() => {
-        clearAlert();
-      }, 3000);
+      setTimeout(() => clearAlert(), 3000);
     } else {
       setAlert('danger', result?.data?.message || 'Gagal update profil');
     }
   } catch (error) {
-    const backendMessage =
+    const msg =
       error?.response?.data?.data?.message ||
       error?.response?.data?.message ||
       error?.message ||
       'Gagal update profil';
-    setAlert('danger', backendMessage);
+    setAlert('danger', msg);
   } finally {
     isSubmitting.value = false;
   }
@@ -295,22 +363,34 @@ onMounted(() => {
   margin: 0;
 }
 
-.profile-form .form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-
+/* ── Form ────────────────────────────────────── */
 .profile-form .form-group {
   margin-bottom: 18px;
 }
 
 .profile-form label {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 6px;
   font-weight: 500;
   color: #2d3748;
   font-size: 14px;
+}
+
+.required {
+  color: #e53e3e;
+  font-size: 14px;
+}
+
+.badge-locked {
+  font-size: 11px;
+  font-weight: 400;
+  color: #718096;
+  background: #edf2f7;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
 }
 
 .profile-form input {
@@ -321,15 +401,18 @@ onMounted(() => {
   border-radius: 8px;
   outline: none;
   transition: border-color 0.2s;
+  box-sizing: border-box;
 }
 
 .profile-form input:focus {
   border-color: #4299e1;
+  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.15);
 }
 
 .profile-form input:disabled {
   background-color: #edf2f7;
   cursor: not-allowed;
+  color: #718096;
 }
 
 .form-control-static {
@@ -337,16 +420,70 @@ onMounted(() => {
   color: #718096;
 }
 
-.form-info {
-  background-color: #fffaf0;
-  border-left: 4px solid #ed8936;
-  padding: 12px 14px;
-  border-radius: 4px;
-  margin-bottom: 18px;
-  font-size: 13px;
-  color: #7c2d12;
+/* ── Password wrapper ────────────────────────── */
+.input-password-wrapper {
+  position: relative;
 }
 
+.input-password-wrapper input {
+  padding-right: 48px;
+}
+
+.btn-toggle-password {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 0;
+  line-height: 1;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.btn-toggle-password:hover {
+  opacity: 1;
+}
+
+/* ── Field hint ──────────────────────────────── */
+.field-hint {
+  margin: 5px 0 0;
+  font-size: 12px;
+  color: #a0aec0;
+}
+
+/* ── Divider ─────────────────────────────────── */
+.section-divider {
+  position: relative;
+  text-align: center;
+  margin: 8px 0 22px;
+}
+
+.section-divider::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: #e2e8f0;
+}
+
+.section-divider span {
+  position: relative;
+  background: white;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #a0aec0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ── Submit Button ───────────────────────────── */
 .btn-primary {
   width: 100%;
   padding: 12px;
@@ -358,6 +495,10 @@ onMounted(() => {
   cursor: pointer;
   font-size: 15px;
   transition: opacity 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -369,6 +510,22 @@ onMounted(() => {
   cursor: not-allowed;
 }
 
+/* ── Spinner ─────────────────────────────────── */
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Footer ──────────────────────────────────── */
 .profile-footer {
   margin-top: 18px;
   text-align: center;
@@ -385,6 +542,7 @@ onMounted(() => {
   text-decoration: underline;
 }
 
+/* ── Alert ───────────────────────────────────── */
 .alert {
   padding: 12px 16px;
   border-radius: 8px;
@@ -410,18 +568,15 @@ onMounted(() => {
   border: 1px solid #faf089;
 }
 
+/* ── Loading ─────────────────────────────────── */
 .loading-spinner {
   text-align: center;
   padding: 40px 20px;
   color: #718096;
 }
 
+/* ── Responsive ──────────────────────────────── */
 @media (max-width: 576px) {
-  .profile-form .form-row {
-    grid-template-columns: 1fr;
-    gap: 0;
-  }
-
   .profile-card {
     padding: 30px 20px;
   }
