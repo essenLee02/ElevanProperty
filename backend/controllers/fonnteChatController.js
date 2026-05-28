@@ -422,6 +422,21 @@ class FonnteChatController {
       const messageId       = payload.key      || payload.id      || payload.messageId  || `fonnte_${Date.now()}`;
       const msgTimestamp    = payload.timestamp || null;
 
+      // ─── Handle Fonnte status webhook (sent/delivered/read) ─────────
+      // Fonnte mengirim status update terpisah: {device, id, state, stateid, status}
+      // Ini BUKAN pesan masuk — cukup return 200 tanpa proses
+      const isStatusUpdate = (
+        !customerPhone &&
+        !customerMessage &&
+        (payload.status === 'sent' || payload.status === 'delivered' ||
+         payload.status === 'read'  || payload.state  === 'sent'  ||
+         payload.state  === 'delivered' || payload.state  === 'read')
+      );
+      if (isStatusUpdate) {
+        console.log(`[FONNTE STATUS] 📬 Status update: device=${payload.device || '-'} status=${payload.status || payload.state || '-'} id=${payload.id || payload.stateid || '-'}`);
+        return res.status(200).json({ success: true, message: 'Status update diterima' });
+      }
+
       // ─── Validasi field wajib ────────────────────────────────────────
       if (!customerPhone || !customerMessage) {
         console.warn('[FONNTE WEBHOOK] ⚠️ Payload tidak lengkap:', {
@@ -429,7 +444,8 @@ class FonnteChatController {
           hasMessage : !!customerMessage,
           keys       : Object.keys(payload)
         });
-        return res.status(400).json({
+        // Tetap return 200 agar Fonnte tidak retry terus-menerus
+        return res.status(200).json({
           success : false,
           message : 'Payload tidak valid: harus ada sender dan message',
           hint    : 'Pastikan Fonnte mengirim field: sender, message, device'

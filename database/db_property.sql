@@ -3,9 +3,9 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: May 26, 2026 at 05:20 AM
--- Server version: 10.4.32-MariaDB
--- PHP Version: 8.1.25
+-- Waktu pembuatan: 28 Bulan Mei 2026 pada 17.53
+-- Versi server: 10.4.32-MariaDB
+-- Versi PHP: 8.1.25
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
@@ -24,7 +24,7 @@ SET time_zone = "+00:00";
 -- --------------------------------------------------------
 
 --
--- Table structure for table `chat_messages`
+-- Struktur dari tabel `chat_messages`
 --
 
 CREATE TABLE `chat_messages` (
@@ -39,7 +39,7 @@ CREATE TABLE `chat_messages` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `chat_messages`
+-- Dumping data untuk tabel `chat_messages`
 --
 
 INSERT INTO `chat_messages` (`id`, `chatSessionId`, `role`, `message`, `channel`, `metadata`, `createdAt`, `updatedAt`) VALUES
@@ -163,12 +163,27 @@ INSERT INTO `chat_messages` (`id`, `chatSessionId`, `role`, `message`, `channel`
 (116, 1, 'user', 'tolong berikan rekomendasi rumah di gersik', 'website_chatbot', '{\"location\":\"sidoarjo\"}', '2026-05-22 07:08:38', '2026-05-22 07:08:38'),
 (117, 1, 'assistant', 'Maaf, saat ini belum ada properti yang sesuai dengan **Rumah gersik** di **gersik** di katalog maupun Rumah123. Apakah Anda ingin mencoba lokasi, tipe properti, atau range harga lain?', 'website_chatbot_private', '{\"source\":\"private_agent\",\"controller\":\"chatbotPrivateController\",\"fallbackUsed\":true,\"fallbackReason\":\"ChatGPT failed and Claude fallback also failed. ChatGPT: ChatGPT API quota/billing/rate limit issue: You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.. Claude: Claude API error (401): invalid x-api-key\",\"externalProviderErrors\":[{\"provider\":\"chatgpt\",\"message\":\"ChatGPT API quota/billing/rate limit issue: You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.\",\"status\":429},{\"provider\":\"claude\",\"message\":\"Claude API error (401): invalid x-api-key\",\"status\":401}],\"exactMatches\":0,\"alternatives\":8,\"filters\":{\"buildingType\":\"house\",\"transactionType\":\"\",\"location\":\"gersik\",\"budget\":null,\"facilities\":[\"ac\"]},\"frontendContextReceived\":true}', '2026-05-22 07:08:48', '2026-05-22 07:08:48'),
 (118, 1, 'user', 'berikan rekomendasi apartemen yang disewakan di surabaya', 'website_chatbot', '{\"location\":\"sidoarjo\"}', '2026-05-22 07:09:34', '2026-05-22 07:09:34'),
-(119, 1, 'assistant', 'Berikut pilihan **Sewa Apartemen Surabaya** dari katalog properti kami:\n\n1. **Surabaya Industrial Area Apartment Rent**\n   ![Surabaya Industrial Area Apartment Rent](/assets/image_data/properties/apartment.png)\n   📍 Lokasi: Industrial Area, Surabaya, Jawa Timur\n   💰 Harga: **Rp 5.500.000 / month**\n   🏠 Tipe: Apartemen — Sewa\n   📐 Luas: bangunan 53 m2, tanah N/A\n   🏷️ Fasilitas: Lift, Wi-Fi, AC, Furnished, Gym\n\n2. **Surabaya Residential Area Apartment Rent**\n   ![Surabaya Residential Area Apartment Rent](/assets/image_data/properties/apartment.png)\n   📍 Lokasi: Residential Area, Surabaya, Jawa Timur\n   💰 Harga: **Rp 10.500.000 / month**\n   🏠 Tipe: Apartemen — Sewa\n   📐 Luas: bangunan 138 m2, tanah N/A\n   🏷️ Fasilitas: Parking, Swimming Pool, Wi-Fi, Gym, Security\n\n3. **Surabaya Industrial Area Apartment Rent**\n   ![Surabaya Industrial Area Apartment Rent](/assets/image_data/properties/apartment.png)\n   📍 Lokasi: Industrial Area, Surabaya, Jawa Timur\n   💰 Harga: **Rp 9.250.000 / month**\n   🏠 Tipe: Apartemen — Sewa\n   📐 Luas: bangunan 58 m2, tanah N/A\n   🏷️ Fasilitas: Security, AC, Gym, Wi-Fi, Furnished\n\n4. **Surabaya Residential Area Apartment Rent**\n   ![Surabaya Residential Area Apartment Rent](/assets/image_data/properties/apartment.png)\n   📍 Lokasi: Residential Area, Surabaya, Jawa Timur\n   💰 Harga: **Rp 13.750.000 / month**\n   🏠 Tipe: Apartemen — Sewa\n   📐 Luas: bangunan 58 m2, tanah N/A\n   🏷️ Fasilitas: Parking, Swimming Pool, Security, Gym, AC\n\n5. **Surabaya Industrial Area Apartment Rent**\n   ![Surabaya Industrial Area Apartment Rent](/assets/image_data/properties/apartment.png)\n   📍 Lokasi: Industrial Area, Surabaya, Jawa Timur\n   💰 Harga: **Rp 8.250.000 / month**\n   🏠 Tipe: Apartemen — Sewa\n   📐 Luas: bangunan 93 m2, tanah N/A\n   🏷️ Fasilitas: AC, Wi-Fi, Lift, Parking, Furnished\n\n\nApakah ada yang ingin Anda tanyakan lebih lanjut tentang salah satu properti di atas?', 'website_chatbot_private', '{\"source\":\"private_agent\",\"controller\":\"chatbotPrivateController\",\"fallbackUsed\":true,\"fallbackReason\":\"ChatGPT failed and Claude fallback also failed. ChatGPT: ChatGPT API quota/billing/rate limit issue: You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.. Claude: Claude API error (401): invalid x-api-key\",\"externalProviderErrors\":[{\"provider\":\"chatgpt\",\"message\":\"ChatGPT API quota/billing/rate limit issue: You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.\",\"status\":429},{\"provider\":\"claude\",\"message\":\"Claude API error (401): invalid x-api-key\",\"status\":401}],\"exactMatches\":5,\"alternatives\":0,\"filters\":{\"buildingType\":\"apartment\",\"transactionType\":\"rent\",\"location\":\"Surabaya\",\"budget\":null,\"facilities\":[\"ac\"]},\"frontendContextReceived\":false}', '2026-05-22 07:09:44', '2026-05-22 07:09:44');
+(119, 1, 'assistant', 'Berikut pilihan **Sewa Apartemen Surabaya** dari katalog properti kami:\n\n1. **Surabaya Industrial Area Apartment Rent**\n   ![Surabaya Industrial Area Apartment Rent](/assets/image_data/properties/apartment.png)\n   📍 Lokasi: Industrial Area, Surabaya, Jawa Timur\n   💰 Harga: **Rp 5.500.000 / month**\n   🏠 Tipe: Apartemen — Sewa\n   📐 Luas: bangunan 53 m2, tanah N/A\n   🏷️ Fasilitas: Lift, Wi-Fi, AC, Furnished, Gym\n\n2. **Surabaya Residential Area Apartment Rent**\n   ![Surabaya Residential Area Apartment Rent](/assets/image_data/properties/apartment.png)\n   📍 Lokasi: Residential Area, Surabaya, Jawa Timur\n   💰 Harga: **Rp 10.500.000 / month**\n   🏠 Tipe: Apartemen — Sewa\n   📐 Luas: bangunan 138 m2, tanah N/A\n   🏷️ Fasilitas: Parking, Swimming Pool, Wi-Fi, Gym, Security\n\n3. **Surabaya Industrial Area Apartment Rent**\n   ![Surabaya Industrial Area Apartment Rent](/assets/image_data/properties/apartment.png)\n   📍 Lokasi: Industrial Area, Surabaya, Jawa Timur\n   💰 Harga: **Rp 9.250.000 / month**\n   🏠 Tipe: Apartemen — Sewa\n   📐 Luas: bangunan 58 m2, tanah N/A\n   🏷️ Fasilitas: Security, AC, Gym, Wi-Fi, Furnished\n\n4. **Surabaya Residential Area Apartment Rent**\n   ![Surabaya Residential Area Apartment Rent](/assets/image_data/properties/apartment.png)\n   📍 Lokasi: Residential Area, Surabaya, Jawa Timur\n   💰 Harga: **Rp 13.750.000 / month**\n   🏠 Tipe: Apartemen — Sewa\n   📐 Luas: bangunan 58 m2, tanah N/A\n   🏷️ Fasilitas: Parking, Swimming Pool, Security, Gym, AC\n\n5. **Surabaya Industrial Area Apartment Rent**\n   ![Surabaya Industrial Area Apartment Rent](/assets/image_data/properties/apartment.png)\n   📍 Lokasi: Industrial Area, Surabaya, Jawa Timur\n   💰 Harga: **Rp 8.250.000 / month**\n   🏠 Tipe: Apartemen — Sewa\n   📐 Luas: bangunan 93 m2, tanah N/A\n   🏷️ Fasilitas: AC, Wi-Fi, Lift, Parking, Furnished\n\n\nApakah ada yang ingin Anda tanyakan lebih lanjut tentang salah satu properti di atas?', 'website_chatbot_private', '{\"source\":\"private_agent\",\"controller\":\"chatbotPrivateController\",\"fallbackUsed\":true,\"fallbackReason\":\"ChatGPT failed and Claude fallback also failed. ChatGPT: ChatGPT API quota/billing/rate limit issue: You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.. Claude: Claude API error (401): invalid x-api-key\",\"externalProviderErrors\":[{\"provider\":\"chatgpt\",\"message\":\"ChatGPT API quota/billing/rate limit issue: You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.\",\"status\":429},{\"provider\":\"claude\",\"message\":\"Claude API error (401): invalid x-api-key\",\"status\":401}],\"exactMatches\":5,\"alternatives\":0,\"filters\":{\"buildingType\":\"apartment\",\"transactionType\":\"rent\",\"location\":\"Surabaya\",\"budget\":null,\"facilities\":[\"ac\"]},\"frontendContextReceived\":false}', '2026-05-22 07:09:44', '2026-05-22 07:09:44'),
+(120, 2, 'user', 'rumah\nMau tanya join member', 'contact_form', '{\"email\":\"dokumen@gmail.com\"}', '2026-05-27 07:29:26', '2026-05-27 07:29:26'),
+(121, 2, 'assistant', 'Halo *nigel*, terima kasih telah menghubungi *Elevan Property*! 🏡\n\nKami sudah menerima pesan Anda mengenai *\"rumah\"* dan dengan senang hati akan membantu Anda menemukan properti yang paling sesuai dengan kebutuhan Anda.\n\nTim konsultan properti kami siap mendampingi Bapak/Ibu mulai dari pencarian hingga proses penyelesaian transaksi dengan nyaman dan profesional.\n\nAgar kami dapat memberikan informasi yang paling sesuai, boleh saya tahu lebih lanjut mengenai *kebutuhan atau preferensi properti* Bapak/Ibu?\n\nSilakan lanjutkan percakapan ini kapan saja — kami siap membantu!\n\nSalam hangat,\n*Elvan*\n*Elevan Property* 🌟', 'whatsapp', '{\"whatsappTarget\":\"628213311936\",\"source\":\"private_agent\",\"primaryProvider\":\"chatgpt\",\"fallbackUsed\":true,\"fallbackProvider\":\"private_agent\",\"primaryError\":\"ChatGPT failed and Claude fallback also failed. ChatGPT: ChatGPT API quota/billing/rate limit issue: You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.. Claude: Claude API error (401): invalid x-api-key\",\"usedPrivateFallback\":true,\"aiProviderErrorMessage\":\"ChatGPT failed and Claude fallback also failed. ChatGPT: ChatGPT API quota/billing/rate limit issue: You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.. Claude: Claude API error (401): invalid x-api-key\"}', '2026-05-27 07:29:26', '2026-05-27 07:29:26'),
+(122, 6, 'customer', 'Halo, saya mau tanya tentang properti di Surabaya', 'whatsapp', '{\"agentName\":\"NIGEL KUNCORO\",\"agentUserId\":\"SA6EDRU001\",\"messageId\":\"testkey_152622\",\"platform\":\"fonnte\"}', '2026-05-27 08:26:22', '2026-05-27 08:26:22');
+INSERT INTO `chat_messages` (`id`, `chatSessionId`, `role`, `message`, `channel`, `metadata`, `createdAt`, `updatedAt`) VALUES
+(123, 6, 'ai', 'Halo Test Customer, terima kasih telah menghubungi kami! 🏠\n\nPesan Anda sudah kami terima. NIGEL KUNCORO dari Elevan Property akan segera membalas dengan informasi properti yang sesuai dengan kebutuhan Anda.\n\nKami siap membantu Anda menemukan rumah, villa, apartemen, atau properti lainnya yang sempurna.\n\nSalam hangat,\n*NIGEL KUNCORO*\n*Elevan Property*', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"primaryProvider\":\"chatgpt\",\"fallbackUsed\":true,\"fallbackProvider\":\"private_agent\"}', '2026-05-27 08:26:31', '2026-05-27 08:26:31'),
+(124, 7, 'customer', 'Halo, saya mau tanya tentang properti di Surabaya', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"agentUserId\":\"LFGKT49002\",\"messageId\":\"testkey_152634\",\"platform\":\"fonnte\"}', '2026-05-27 08:26:34', '2026-05-27 08:26:34'),
+(125, 7, 'ai', 'Halo Test Customer, terima kasih telah menghubungi kami! 🏠\n\nPesan Anda sudah kami terima. LEO FELIX dari Elevan Property akan segera membalas dengan informasi properti yang sesuai dengan kebutuhan Anda.\n\nKami siap membantu Anda menemukan rumah, villa, apartemen, atau properti lainnya yang sempurna.\n\nSalam hangat,\n*LEO FELIX*\n*Elevan Property*', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"primaryProvider\":\"chatgpt\",\"fallbackUsed\":true,\"fallbackProvider\":\"private_agent\"}', '2026-05-27 08:26:41', '2026-05-27 08:26:41'),
+(126, 8, 'customer', 'Halo, saya mau tanya properti di Surabaya', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"agentUserId\":\"LFGKT49002\",\"messageId\":\"debug_222740\",\"platform\":\"fonnte\"}', '2026-05-28 15:27:40', '2026-05-28 15:27:40'),
+(127, 8, 'ai', 'Halo Test Customer Debug, terima kasih telah menghubungi kami! 🏠\n\nPesan Anda sudah kami terima. LEO FELIX dari Elevan Property akan segera membalas dengan informasi properti yang sesuai dengan kebutuhan Anda.\n\nKami siap membantu Anda menemukan rumah, villa, apartemen, atau properti lainnya yang sempurna.\n\nSalam hangat,\n*LEO FELIX*\n*Elevan Property*', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"primaryProvider\":\"chatgpt\",\"fallbackUsed\":true,\"fallbackProvider\":\"private_agent\"}', '2026-05-28 15:27:50', '2026-05-28 15:27:50'),
+(128, 8, 'customer', 'Halo, saya mau tanya properti di Surabaya dong', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"agentUserId\":\"LFGKT49002\",\"messageId\":\"e2e_223548\",\"platform\":\"fonnte\"}', '2026-05-28 15:35:48', '2026-05-28 15:35:48'),
+(129, 8, 'ai', 'Halo Test Customer Debug, terima kasih telah menghubungi kami! 🏠\n\nPesan Anda sudah kami terima. LEO FELIX dari Elevan Property akan segera membalas dengan informasi properti yang sesuai dengan kebutuhan Anda.\n\nKami siap membantu Anda menemukan rumah, villa, apartemen, atau properti lainnya yang sempurna.\n\nSalam hangat,\n*LEO FELIX*\n*Elevan Property*', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"primaryProvider\":\"chatgpt\",\"fallbackUsed\":true,\"fallbackProvider\":\"private_agent\"}', '2026-05-28 15:35:57', '2026-05-28 15:35:57'),
+(130, 9, 'customer', 'Tes dari luar via ngrok - real simulation', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"agentUserId\":\"LFGKT49002\",\"messageId\":\"real_223742\",\"platform\":\"fonnte\"}', '2026-05-28 15:37:43', '2026-05-28 15:37:43'),
+(131, 9, 'ai', 'Hello Customer Real, thank you for reaching out! 🏠\n\nWe\'ve received your message. LEO FELIX from Elevan Property will get back to you shortly with property information tailored to your needs.\n\nWe\'re here to help you find the perfect house, villa, apartment, or property.\n\nWarm regards,\n*LEO FELIX*\n*Elevan Property*', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"primaryProvider\":\"chatgpt\",\"fallbackUsed\":true,\"fallbackProvider\":\"private_agent\"}', '2026-05-28 15:37:52', '2026-05-28 15:37:52'),
+(132, 10, 'customer', 'Halo saya mau cek properti di Surabaya selatan', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"agentUserId\":\"LFGKT49002\",\"messageId\":\"incoming_224417\",\"platform\":\"fonnte\"}', '2026-05-28 15:44:17', '2026-05-28 15:44:17'),
+(133, 10, 'ai', 'Halo Budi Santoso, terima kasih telah menghubungi kami! 🏠\n\nPesan Anda sudah kami terima. LEO FELIX dari Elevan Property akan segera membalas dengan informasi properti yang sesuai dengan kebutuhan Anda.\n\nKami siap membantu Anda menemukan rumah, villa, apartemen, atau properti lainnya yang sempurna.\n\nSalam hangat,\n*LEO FELIX*\n*Elevan Property*', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"primaryProvider\":\"chatgpt\",\"fallbackUsed\":true,\"fallbackProvider\":\"private_agent\"}', '2026-05-28 15:44:25', '2026-05-28 15:44:25');
 
 -- --------------------------------------------------------
 
 --
--- Table structure for table `chat_sessions`
+-- Struktur dari tabel `chat_sessions`
 --
 
 CREATE TABLE `chat_sessions` (
@@ -186,20 +201,25 @@ CREATE TABLE `chat_sessions` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `chat_sessions`
+-- Dumping data untuk tabel `chat_sessions`
 --
 
 INSERT INTO `chat_sessions` (`id`, `name`, `normalizedName`, `phone`, `normalizedPhone`, `source`, `lastMessageAt`, `createdAt`, `updatedAt`, `location`, `normalizedLocation`) VALUES
 (1, 'nigel', 'nigel', '082233556796', '6282233556796', 'website_chatbot', '2026-05-22 07:09:34', '2026-05-11 06:25:50', '2026-05-22 07:09:34', 'sidoarjo', 'sidoarjo'),
-(2, 'clarence', 'clarence', '+62821-3311-936', '628213311936', 'website_chatbot', '2026-05-12 04:37:46', '2026-05-12 04:37:46', '2026-05-12 04:37:46', 'surabaya', 'surabaya'),
+(2, 'nigel', 'nigel', '8213311936', '628213311936', 'contact_form', '2026-05-27 07:29:26', '2026-05-12 04:37:46', '2026-05-27 07:29:26', 'surabaya', 'surabaya'),
 (3, 'clarrence', 'clarrence', '0821-3311-936', '628213311936', 'website_chatbot', '2026-05-12 04:58:43', '2026-05-12 04:58:17', '2026-05-12 04:58:43', 'surabaya', 'surabaya'),
 (4, 'clarance', 'clarance', '0821-3311-936', '628213311936', 'website_chatbot', '2026-05-12 05:21:30', '2026-05-12 05:21:30', '2026-05-12 05:21:30', 'surabaya', 'surabaya'),
-(5, 'NIGEL', 'nigel', '082233556796', '6282233556796', 'website_chatbot', '2026-05-21 10:20:51', '2026-05-18 06:50:28', '2026-05-21 10:20:51', 'surabaya', 'surabaya');
+(5, 'NIGEL', 'nigel', '082233556796', '6282233556796', 'website_chatbot', '2026-05-21 10:20:51', '2026-05-18 06:50:28', '2026-05-21 10:20:51', 'surabaya', 'surabaya'),
+(6, 'Test Customer', 'test customer', '628100000001', '628100000001', 'fonnte_nigel_kuncoro', NULL, '2026-05-27 08:26:22', '2026-05-27 08:26:22', NULL, NULL),
+(7, 'Test Customer', 'test customer', '628100000001', '628100000001', 'fonnte_leo_felix', NULL, '2026-05-27 08:26:34', '2026-05-27 08:26:34', NULL, NULL),
+(8, 'Test Customer Debug', 'test customer debug', '628999888777', '628999888777', 'fonnte_leo_felix', NULL, '2026-05-28 15:27:40', '2026-05-28 15:27:40', NULL, NULL),
+(9, 'Customer Real', 'customer real', '628111222333', '628111222333', 'fonnte_leo_felix', NULL, '2026-05-28 15:37:43', '2026-05-28 15:37:43', NULL, NULL),
+(10, 'Budi Santoso', 'budi santoso', '6285156789012', '6285156789012', 'fonnte_leo_felix', NULL, '2026-05-28 15:44:17', '2026-05-28 15:44:17', NULL, NULL);
 
 -- --------------------------------------------------------
 
 --
--- Table structure for table `contacts`
+-- Struktur dari tabel `contacts`
 --
 
 CREATE TABLE `contacts` (
@@ -214,7 +234,7 @@ CREATE TABLE `contacts` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `contacts`
+-- Dumping data untuk tabel `contacts`
 --
 
 INSERT INTO `contacts` (`id`, `name`, `email`, `phone`, `subject`, `message`, `createdAt`, `updatedAt`) VALUES
@@ -281,12 +301,13 @@ INSERT INTO `contacts` (`id`, `name`, `email`, `phone`, `subject`, `message`, `c
 (61, 'rahma', 'cek@gmail.com', '082233556796', 'Villa', 'sewa hotel di malang ada apa saja', '2026-05-18 06:29:48', '2026-05-18 06:29:48'),
 (62, 'nigel', 'dokumen.nigel2@gmail.com', '082233556796', 'hotel', 'tolong berikan list hotel di surabaya', '2026-05-21 10:23:27', '2026-05-21 10:23:27'),
 (63, 'nigel', 'dokumen.nigel2@gmail.com', '082233556796', 'hotel', 'tolong berikan list hotel di surabaya', '2026-05-21 10:24:04', '2026-05-21 10:24:04'),
-(64, 'nigel', 'dokumen.nigel2@gmail.com', '082233556796', 'hotel', 'tolong berikan list hotel di surabaya', '2026-05-21 10:35:26', '2026-05-21 10:35:26');
+(64, 'nigel', 'dokumen.nigel2@gmail.com', '082233556796', 'hotel', 'tolong berikan list hotel di surabaya', '2026-05-21 10:35:26', '2026-05-21 10:35:26'),
+(65, 'nigel', 'dokumen@gmail.com', '8213311936', 'rumah', 'Mau tanya join member', '2026-05-27 07:29:18', '2026-05-27 07:29:18');
 
 -- --------------------------------------------------------
 
 --
--- Table structure for table `logs`
+-- Struktur dari tabel `logs`
 --
 
 CREATE TABLE `logs` (
@@ -299,7 +320,7 @@ CREATE TABLE `logs` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `logs`
+-- Dumping data untuk tabel `logs`
 --
 
 INSERT INTO `logs` (`id`, `action`, `details`, `createdAt`, `updatedAt`, `level`) VALUES
@@ -493,12 +514,39 @@ INSERT INTO `logs` (`id`, `action`, `details`, `createdAt`, `updatedAt`, `level`
 (190, 'PAGE_VIEW', 'Navigated from /login to /', '2026-05-26 01:58:55', '2026-05-26 01:58:55', 'info'),
 (191, 'PAGE_VIEW', 'Navigated from / to /login', '2026-05-26 03:17:07', '2026-05-26 03:17:07', 'info'),
 (192, 'PAGE_VIEW', 'Navigated from /login to /register', '2026-05-26 03:17:13', '2026-05-26 03:17:13', 'info'),
-(193, 'PAGE_VIEW', 'Navigated from /register to /login', '2026-05-26 03:18:18', '2026-05-26 03:18:18', 'info');
+(193, 'PAGE_VIEW', 'Navigated from /register to /login', '2026-05-26 03:18:18', '2026-05-26 03:18:18', 'info'),
+(194, 'PAGE_VIEW', 'Navigated from / to /', '2026-05-27 07:07:33', '2026-05-27 07:07:33', 'info'),
+(195, 'PAGE_VIEW', 'Navigated from / to /login', '2026-05-27 07:07:35', '2026-05-27 07:07:35', 'info'),
+(196, 'PAGE_VIEW', 'Navigated from /login to /', '2026-05-27 07:07:53', '2026-05-27 07:07:53', 'info'),
+(197, 'PAGE_VIEW', 'Navigated from / to /profile', '2026-05-27 07:07:57', '2026-05-27 07:07:57', 'info'),
+(198, 'PAGE_VIEW', 'Navigated from /profile to /login', '2026-05-27 07:28:12', '2026-05-27 07:28:12', 'info'),
+(199, 'PAGE_VIEW', 'Navigated from /login to /contact', '2026-05-27 07:28:18', '2026-05-27 07:28:18', 'info'),
+(200, 'PAGE_VIEW', 'Navigated from /contact to /login', '2026-05-27 07:32:38', '2026-05-27 07:32:38', 'info'),
+(201, 'PAGE_VIEW', 'Navigated from /login to /', '2026-05-27 07:32:58', '2026-05-27 07:32:58', 'info'),
+(202, 'PAGE_VIEW', 'Navigated from / to /', '2026-05-27 07:33:01', '2026-05-27 07:33:01', 'info'),
+(203, 'PAGE_VIEW', 'Navigated from / to /rumah123', '2026-05-27 07:33:02', '2026-05-27 07:33:02', 'info'),
+(204, 'PAGE_VIEW', 'Navigated from /rumah123 to /profile', '2026-05-27 07:33:06', '2026-05-27 07:33:06', 'info'),
+(205, 'PAGE_VIEW', 'Navigated from / to /profile', '2026-05-27 07:34:43', '2026-05-27 07:34:43', 'info'),
+(206, 'PAGE_VIEW', 'Navigated from /profile to /login', '2026-05-27 07:36:02', '2026-05-27 07:36:02', 'info'),
+(207, 'PAGE_VIEW', 'Navigated from /login to /', '2026-05-27 07:36:22', '2026-05-27 07:36:22', 'info'),
+(208, 'PAGE_VIEW', 'Navigated from / to /profile', '2026-05-27 07:36:27', '2026-05-27 07:36:27', 'info'),
+(209, 'PAGE_VIEW', 'Navigated from /profile to /login', '2026-05-27 07:37:58', '2026-05-27 07:37:58', 'info'),
+(210, 'PAGE_VIEW', 'Navigated from / to /login', '2026-05-27 07:58:19', '2026-05-27 07:58:19', 'info'),
+(211, 'PAGE_VIEW', 'Navigated from /login to /', '2026-05-27 08:16:58', '2026-05-27 08:16:58', 'info'),
+(212, 'PAGE_VIEW', 'Navigated from / to /profile', '2026-05-27 08:17:00', '2026-05-27 08:17:00', 'info'),
+(213, 'PAGE_VIEW', 'Navigated from / to /about', '2026-05-28 15:30:05', '2026-05-28 15:30:05', 'info'),
+(214, 'PAGE_VIEW', 'Navigated from /about to /profile', '2026-05-28 15:31:21', '2026-05-28 15:31:21', 'info'),
+(215, 'PAGE_VIEW', 'Navigated from /profile to /', '2026-05-28 15:31:23', '2026-05-28 15:31:23', 'info'),
+(216, 'PAGE_VIEW', 'Navigated from / to /profile', '2026-05-28 15:31:26', '2026-05-28 15:31:26', 'info'),
+(217, 'PAGE_VIEW', 'Navigated from /profile to /', '2026-05-28 15:31:28', '2026-05-28 15:31:28', 'info'),
+(218, 'PAGE_VIEW', 'Navigated from / to /login', '2026-05-28 15:31:30', '2026-05-28 15:31:30', 'info'),
+(219, 'PAGE_VIEW', 'Navigated from /login to /', '2026-05-28 15:31:39', '2026-05-28 15:31:39', 'info'),
+(220, 'PAGE_VIEW', 'Navigated from / to /profile', '2026-05-28 15:31:41', '2026-05-28 15:31:41', 'info');
 
 -- --------------------------------------------------------
 
 --
--- Table structure for table `properties`
+-- Struktur dari tabel `properties`
 --
 
 CREATE TABLE `properties` (
@@ -531,7 +579,7 @@ CREATE TABLE `properties` (
 -- --------------------------------------------------------
 
 --
--- Table structure for table `users`
+-- Struktur dari tabel `users`
 --
 
 CREATE TABLE `users` (
@@ -548,25 +596,26 @@ CREATE TABLE `users` (
   `created_date` datetime DEFAULT NULL,
   `created_by` varchar(255) DEFAULT NULL,
   `status` int(11) NOT NULL DEFAULT 1,
-  `privilege` varchar(255) DEFAULT NULL
+  `privilege` varchar(255) DEFAULT NULL,
+  `fonnte_token` varchar(100) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `users`
+-- Dumping data untuk tabel `users`
 --
 
-INSERT INTO `users` (`id`, `user_id`, `name`, `birthdate`, `phone`, `username`, `password`, `refresh_token`, `updated_date`, `update_by`, `created_date`, `created_by`, `status`, `privilege`) VALUES
-(1, 'SA6EDRU001', 'NIGEL KUNCORO', '1998-05-04', '082233556796', 'nigel123', '$2b$10$Rld5zga/CswkKyQPgPi6GO./sa5.OuVwgApiGxbZmCRudUD9TNHD2', NULL, '2026-05-26 01:55:38', 'nigel123', '2026-05-22 03:26:55', 'Self-Register', 1, 'agent'),
-(2, 'LFGKT49002', 'LEO FELIX', '2000-05-25', '+62821-3311-936', 'leon123', '$2b$10$TGeqAjXzANa7ccU7EKMDbeDf4WDkB7ivVxzKI/AE90VZjMI/K6DTO', NULL, '2026-05-25 10:09:50', 'leon123', '2026-05-25 10:05:33', 'Self-Register', 1, 'agent'),
-(3, 'CEMPL3Z003', 'CLARENCE MARIO', '1993-03-24', '0821-1136-7154', 'clarence123', '$2b$10$jvnn536K239gxQRcOqNIauJxZxTq9iBcJYLWDstvTItZGkAIsA07e', NULL, NULL, NULL, '2026-05-26 01:56:29', 'Self-Register', 1, 'agent'),
-(4, 'DTDE8RX004', 'DESY TALIM', '1995-08-27', '0821-1331-8191', 'desy54321', '$2b$10$ZCZK0Lzlenn2y1ni3gtITOdJs9GISQcG1eatRxh0PEBKk0BXwyhNq', NULL, NULL, NULL, '2026-05-26 01:57:21', 'Self-Register', 1, 'agent'),
-(5, 'ITJMESP005', 'IFAN TJANDRA', '2000-05-12', '+62881036588874', 'ifansiapa', '$2b$10$XK.IYefPk7hTE8hXNPJriOpueghFfkUH0.9m413E/PMBg2rESDmge', NULL, '2026-05-26 03:17:07', 'ifansiapa', '2026-05-26 01:58:48', 'Self-Register', 1, 'agent'),
-(6, 'IE1BGVY006', 'IFAN ELDY', '1998-04-16', '0881-0365-88874', 'ifaneldy', '$2b$10$FDHol/1mitgKFZwNmTZjIu1WgsRmRr28BTspMm5jlKxPlkbifhwFu', NULL, NULL, NULL, '2026-05-26 03:18:16', 'Self-Register', 1, 'agent');
+INSERT INTO `users` (`id`, `user_id`, `name`, `birthdate`, `phone`, `username`, `password`, `refresh_token`, `updated_date`, `update_by`, `created_date`, `created_by`, `status`, `privilege`, `fonnte_token`) VALUES
+(1, 'SA6EDRU001', 'NIGEL KUNCORO', '1998-05-04', '082233556796', 'nigel123', '$2b$10$B8Oh28Z/ES302i/cYeDCteBS5K.qy6QcANtHvMK3hpbhOnCT7Jk8m', NULL, '2026-05-27 07:36:02', 'nigel123', '2026-05-22 03:26:55', 'Self-Register', 1, 'agent', 'm5HDmV4hAYRFBgTdkfDR'),
+(2, 'LFGKT49002', 'LEO FELIX', '2000-05-25', '08213311936', 'leon123', '$2b$10$dD7LNUYLX2hcEV5OpbiHueMaAn5yO3LDIbsnMoZ77tUh15kiSS5Wq', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJMRkdLVDQ5MDAyIiwidXNlck5hbWUiOiJMRU8gRkVMSVgiLCJ1c2VybmFtZSI6Imxlb24xMjMiLCJwcml2aWxlZ2UiOiJhZ2VudCIsImlhdCI6MTc3OTk4MjI5OCwiZXhwIjoxNzgwMDY4Njk4fQ.H5ArnsG0WsM6_Nux8QTRrbgTTBIs7tezmEHwQ9Zos4E', '2026-05-28 15:33:44', 'leon123', '2026-05-25 10:05:33', 'Self-Register', 1, 'agent', '9bGkufaXLBiGGfVGiNGU'),
+(3, 'CEMPL3Z003', 'CLARENCE MARIO', '1993-03-24', '0821-1136-7154', 'clarence123', '$2b$10$jvnn536K239gxQRcOqNIauJxZxTq9iBcJYLWDstvTItZGkAIsA07e', NULL, NULL, NULL, '2026-05-26 01:56:29', 'Self-Register', 1, 'agent', NULL),
+(4, 'DTDE8RX004', 'DESY TALIM', '1995-08-27', '0821-1331-8191', 'desy54321', '$2b$10$ZCZK0Lzlenn2y1ni3gtITOdJs9GISQcG1eatRxh0PEBKk0BXwyhNq', NULL, NULL, NULL, '2026-05-26 01:57:21', 'Self-Register', 1, 'agent', NULL),
+(5, 'ITJMESP005', 'IFAN TJANDRA', '2000-05-12', '+62881036588874', 'ifansiapa', '$2b$10$XK.IYefPk7hTE8hXNPJriOpueghFfkUH0.9m413E/PMBg2rESDmge', NULL, '2026-05-26 03:17:07', 'ifansiapa', '2026-05-26 01:58:48', 'Self-Register', 1, 'agent', NULL),
+(6, 'IE1BGVY006', 'IFAN ELDY', '1998-04-16', '0881-0365-88874', 'ifaneldy', '$2b$10$FDHol/1mitgKFZwNmTZjIu1WgsRmRr28BTspMm5jlKxPlkbifhwFu', NULL, NULL, NULL, '2026-05-26 03:18:16', 'Self-Register', 1, 'agent', NULL);
 
 -- --------------------------------------------------------
 
 --
--- Table structure for table `whatsapp_inbound_messages`
+-- Struktur dari tabel `whatsapp_inbound_messages`
 --
 
 CREATE TABLE `whatsapp_inbound_messages` (
@@ -593,38 +642,38 @@ CREATE TABLE `whatsapp_inbound_messages` (
 --
 
 --
--- Indexes for table `chat_messages`
+-- Indeks untuk tabel `chat_messages`
 --
 ALTER TABLE `chat_messages`
   ADD PRIMARY KEY (`id`),
   ADD KEY `chatSessionId` (`chatSessionId`);
 
 --
--- Indexes for table `chat_sessions`
+-- Indeks untuk tabel `chat_sessions`
 --
 ALTER TABLE `chat_sessions`
   ADD PRIMARY KEY (`id`);
 
 --
--- Indexes for table `contacts`
+-- Indeks untuk tabel `contacts`
 --
 ALTER TABLE `contacts`
   ADD PRIMARY KEY (`id`);
 
 --
--- Indexes for table `logs`
+-- Indeks untuk tabel `logs`
 --
 ALTER TABLE `logs`
   ADD PRIMARY KEY (`id`);
 
 --
--- Indexes for table `properties`
+-- Indeks untuk tabel `properties`
 --
 ALTER TABLE `properties`
   ADD PRIMARY KEY (`id`);
 
 --
--- Indexes for table `users`
+-- Indeks untuk tabel `users`
 --
 ALTER TABLE `users`
   ADD PRIMARY KEY (`id`),
@@ -637,7 +686,7 @@ ALTER TABLE `users`
   ADD KEY `users_phone` (`phone`);
 
 --
--- Indexes for table `whatsapp_inbound_messages`
+-- Indeks untuk tabel `whatsapp_inbound_messages`
 --
 ALTER TABLE `whatsapp_inbound_messages`
   ADD PRIMARY KEY (`id`),
@@ -647,57 +696,57 @@ ALTER TABLE `whatsapp_inbound_messages`
   ADD KEY `whatsapp_inbound_messages_created_at` (`createdAt`);
 
 --
--- AUTO_INCREMENT for dumped tables
+-- AUTO_INCREMENT untuk tabel yang dibuang
 --
 
 --
--- AUTO_INCREMENT for table `chat_messages`
+-- AUTO_INCREMENT untuk tabel `chat_messages`
 --
 ALTER TABLE `chat_messages`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=120;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=134;
 
 --
--- AUTO_INCREMENT for table `chat_sessions`
+-- AUTO_INCREMENT untuk tabel `chat_sessions`
 --
 ALTER TABLE `chat_sessions`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=11;
 
 --
--- AUTO_INCREMENT for table `contacts`
+-- AUTO_INCREMENT untuk tabel `contacts`
 --
 ALTER TABLE `contacts`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=65;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=66;
 
 --
--- AUTO_INCREMENT for table `logs`
+-- AUTO_INCREMENT untuk tabel `logs`
 --
 ALTER TABLE `logs`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=194;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=221;
 
 --
--- AUTO_INCREMENT for table `properties`
+-- AUTO_INCREMENT untuk tabel `properties`
 --
 ALTER TABLE `properties`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
--- AUTO_INCREMENT for table `users`
+-- AUTO_INCREMENT untuk tabel `users`
 --
 ALTER TABLE `users`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 
 --
--- AUTO_INCREMENT for table `whatsapp_inbound_messages`
+-- AUTO_INCREMENT untuk tabel `whatsapp_inbound_messages`
 --
 ALTER TABLE `whatsapp_inbound_messages`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
--- Constraints for dumped tables
+-- Ketidakleluasaan untuk tabel pelimpahan (Dumped Tables)
 --
 
 --
--- Constraints for table `chat_messages`
+-- Ketidakleluasaan untuk tabel `chat_messages`
 --
 ALTER TABLE `chat_messages`
   ADD CONSTRAINT `chat_messages_ibfk_1` FOREIGN KEY (`chatSessionId`) REFERENCES `chat_sessions` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
