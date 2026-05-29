@@ -48,6 +48,34 @@ app.get('/', (req, res) => {
   res.json({ success: true, message: `${appName} backend is running.` });
 });
 
+// ─── Raw webhook logger (khusus untuk debug Fonnte/WATI webhook) ────────────
+// Catat SEMUA request yang masuk ke /api/fonnte-chat/webhook dan /api/wati/webhook
+// Hapus atau nonaktifkan middleware ini di production jika tidak dibutuhkan
+app.use((req, res, next) => {
+  const webhookPaths = [
+    '/api/fonnte-chat/webhook',
+    '/api/fonnte/webhook',
+    '/api/wati/webhook',
+    '/api/whatsapp/webhook'
+  ];
+  if (webhookPaths.includes(req.path) && req.method === 'POST') {
+    const contentType  = req.headers['content-type'] || '(no content-type)';
+    const forwarded    = req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.ip || 'unknown';
+    const userAgent    = req.headers['user-agent'] || '(no user-agent)';
+
+    console.log('\n╔══════════════════════════════════════════════════════════╗');
+    console.log('║         INCOMING WEBHOOK REQUEST DETECTED                ║');
+    console.log('╠══════════════════════════════════════════════════════════╣');
+    console.log(`║ Path        : ${req.path.padEnd(43)} ║`);
+    console.log(`║ Method      : ${req.method.padEnd(43)} ║`);
+    console.log(`║ IP/Forward  : ${String(forwarded).substring(0, 43).padEnd(43)} ║`);
+    console.log(`║ Content-Type: ${String(contentType).substring(0, 43).padEnd(43)} ║`);
+    console.log(`║ User-Agent  : ${String(userAgent).substring(0, 43).padEnd(43)} ║`);
+    console.log('╚══════════════════════════════════════════════════════════╝');
+  }
+  next();
+});
+
 app.use('/api', routes);
 
 async function ensureRequiredDatabaseColumns() {
@@ -103,7 +131,27 @@ sequelize.sync()
       console.log(`Backend listening at http://localhost:${port}`);
       console.log(`CORS Allowed Origins: ${allowedOrigins.join(', ')}`);
 
-      // Warmup Rumah123 cache in background after server starts
+      // ─── Auto-start Fonnte Message Poller ─────────────────────────────
+      // Polling aktif mengambil pesan masuk dari Fonnte API karena
+      // "Webhook ?" Fonnte tidak selalu fire untuk incoming messages.
+      const pollingEnabled  = String(process.env.FONNTE_POLLING_ENABLED  || 'true').toLowerCase() !== 'false';
+      const pollingInterval = parseInt(process.env.FONNTE_POLLING_INTERVAL_MS || '10000');
+
+      if (pollingEnabled) {
+        setTimeout(async () => {
+          try {
+            const FonnteChatCtrl = require('./controllers/fonnteChatController');
+            await FonnteChatCtrl.poller.start(pollingInterval);
+            console.log(`[FONNTE POLLER] ✅ Auto-started (interval: ${pollingInterval / 1000}s)`);
+          } catch (pollErr) {
+            console.error('[FONNTE POLLER] ❌ Gagal auto-start:', pollErr.message);
+          }
+        }, 3000); // delay 3s agar DB connection stabil dulu
+      } else {
+        console.log('[FONNTE POLLER] ℹ️  Dinonaktifkan via FONNTE_POLLING_ENABLED=false');
+      }
+
+      // ─── Warmup Rumah123 cache ─────────────────────────────────────────
       if (process.env.APIFY_API_TOKEN && process.env.APIFY_API_TOKEN !== 'isi_apify_token_anda') {
         const { warmupCache } = require('./services/rumah123ContextService');
         const warmupLocations = (process.env.RUMAH123_WARMUP_LOCATIONS || 'Jakarta Selatan,Surabaya,Bandung,Bali').split(',').map(s => s.trim());
