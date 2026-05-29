@@ -1,631 +1,568 @@
 /**
  * fonnteChatController.js
  *
- * Multi-agent WhatsApp chat handler untuk platform FONNTE.
- * Mirip dengan watiChatController.js, namun menggunakan infrastruktur Fonnte:
+ * Multi-agent Fonnte WhatsApp handler.
  *
- *  ─ Setiap agent punya token Fonnte sendiri (kolom fonnte_token di tabel users)
- *  ─ Setiap agent punya nomor WA sendiri (kolom phone di tabel users)
- *  ─ Fonnte webhook → backend identifikasi agent via field "device"
- *    ("device" = nomor WA agent yang terpasang di Fonnte)
- *  ─ Balas pesan menggunakan token Fonnte milik agent itu sendiri
+ * ARSITEKTUR:
+ *   - Setiap agent punya fonnte_token sendiri (kolom fonnte_token di tabel users)
+ *   - Webhook Fonnte masuk → deteksi event → cari agent by device phone
+ *   - Generate AI reply (ChatGPT → Claude → Private Agent)
+ *   - Kirim balasan pakai fonnte_token milik agent itu sendiri
  *
- * Architecture:
- *   Webhook → Identifikasi agent (by device phone) → Cek fonnte_token ada
- *   → Find/create session → Simpan pesan customer
- *   → Generate AI reply (ChatGPT → Claude → PrivateAgent)
- *   → Kirim balas via Fonnte API (pakai token agent) → Simpan AI reply
- *   → Log ke terminal
+ * DETECTION LOGIC:
+ *   Diambil PERSIS dari simple server (webhook-fonnte.zip) yang terbukti bekerja:
+ *   - incoming      : body.sender && (body.message !== undefined || body.inboxid !== undefined)
+ *   - message_status: body.status !== undefined || body.state !== undefined || body.stateid !== undefined
  *
- * Fonnte Webhook Payload:
- *   {
- *     "sender"   : "6281234567890",   ← nomor customer (yang kirim pesan)
- *     "message"  : "Halo, saya mau tanya...",
- *     "device"   : "628213311936",    ← nomor WA agent di Fonnte (KUNCI ROUTING)
- *     "pushname" : "Budi Santoso",    ← nama display customer
- *     "key"      : "ABCD1234",        ← message ID Fonnte (opsional)
- *     "timestamp": 1716800000         ← unix timestamp (opsional)
- *   }
+ * ENDPOINT UTAMA:
+ *   POST /api/fonnte-chat/webhook  ← set ini di Fonnte Dashboard
  */
 
-const axios = require('axios');
+'use strict';
+
+const axios  = require('axios');
 const { User, ChatSession, ChatMessage } = require('../models');
 const { generateChatGPTWhatsappReply, isChatGPTFallbackEligibleError } = require('../services/openaiService');
-const { generateClaudeWhatsappReply } = require('../services/claudeService');
-const { generatePrivateWhatsappReply } = require('./chatbotPrivateController');
-const { safeLog } = require('../utils/safeLog');
+const { generateClaudeWhatsappReply }   = require('../services/claudeService');
+const { generatePrivateWhatsappReply }  = require('./chatbotPrivateController');
+const { safeLog }                       = require('../utils/safeLog');
 
-/* ═══════════════════════════════════════════════════════════════
-   SECTION 1 — PHONE UTILITIES
-═══════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════════════════════════
+   BAGIAN 1 — UTILITY FUNCTIONS
+══════════════════════════════════════════════════════════════════════════════ */
 
-class PhoneUtils {
-  /**
-   * Normalize phone ke format 628xxxxxxxxx
-   *   +62 821-3311-936  → 628213311936
-   *   0821-3311-936     → 628213311936
-   *   6282133110936     → 628213311936
-   */
-  static normalize(phone = '') {
-    return String(phone || '')
-      .replace(/\+62/g, '62')
-      .replace(/^0/, '62')
-      .replace(/[\s\-()]/g, '');
-  }
-
-  /** Validasi format nomor WA Indonesia */
-  static isValid(phone = '') {
-    return /^628\d{8,}$/.test(this.normalize(phone));
-  }
+/**
+ * Normalisasi nomor telepon ke format 628xxxxxxxxx
+ *   +62 821-3311-936  → 628213311936
+ *   0821-3311-936     → 628213311936
+ */
+function normalizePhone(phone) {
+  return String(phone || '')
+    .replace(/\+62/g, '62')
+    .replace(/^0/, '62')
+    .replace(/[\s\-()]/g, '');
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   SECTION 2 — AGENT LOOKUP (FONNTE-SPECIFIC)
-   Hanya agent yang memiliki KEDUA field: phone DAN fonnte_token
-═══════════════════════════════════════════════════════════════ */
+/**
+ * Deteksi jenis event dari payload Fonnte.
+ *
+ * DIAMBIL PERSIS dari simple server (webhook-fonnte.zip) yang terbukti bekerja.
+ * Jangan ubah urutan pengecekan.
+ *
+ * @param {object} body - req.body dari webhook Fonnte
+ * @returns {'send'|'incoming'|'message_status'|'unknown'}
+ */
+function detectEventType(body) {
+  if (!body || typeof body !== 'object') return 'unknown';
 
-class AgentFonnteeLookup {
-  /**
-   * Cari agent berdasarkan nomor WA device Fonnte.
-   *
-   * Hanya agent yang punya fonnte_token (tidak null/kosong) yang eligible.
-   * Sehingga agent yang belum setup Fonnte tidak ikut diproses.
-   *
-   * @param {string} devicePhone - Nomor WA yang terpakai di Fonnte (field "device")
-   * @returns {User|null}
-   */
-  static async findByDevicePhone(devicePhone) {
-    if (!devicePhone) {
-      console.warn('[FONNTE] Tidak ada devicePhone untuk agent lookup');
-      return null;
-    }
+  // send event (kalau Fonnte kirim notif setelah send)
+  if (body.eventType === 'send') return 'send';
 
-    try {
-      const normalizedDevice = PhoneUtils.normalize(devicePhone);
+  // incoming: ada sender DAN (message terdefinisi ATAU inboxid terdefinisi)
+  // Penting: gunakan !== undefined, bukan !!, supaya message:"" (kosong) tetap detected
+  if (body.sender && (body.message !== undefined || body.inboxid !== undefined)) return 'incoming';
 
-      // Ambil semua agent aktif yang sudah punya fonnte_token
-      const eligibleAgents = await User.findAll({
-        where  : { privilege: 'agent', status: 1 },
-        attributes: ['id', 'user_id', 'name', 'phone', 'username', 'fonnte_token']
-      });
+  // message status (read receipt, delivered, dll)
+  if (body.status !== undefined || body.state !== undefined || body.stateid !== undefined) return 'message_status';
 
-      // Filter hanya yang punya fonnte_token terisi
-      const withFonnte = eligibleAgents.filter(
-        a => a.fonnte_token && String(a.fonnte_token).trim().length > 5
-      );
-
-      if (withFonnte.length === 0) {
-        console.warn('[FONNTE] Tidak ada agent dengan fonnte_token yang terdaftar di database');
-        return null;
-      }
-
-      // Cari yang phone-nya cocok dengan devicePhone dari webhook
-      for (const agent of withFonnte) {
-        if (!agent.phone) continue;
-        const agentNorm = PhoneUtils.normalize(agent.phone);
-        if (agentNorm === normalizedDevice) {
-          console.log(`[FONNTE AGENT] ✅ Ditemukan: ${agent.name} (${agent.phone}) via device phone match`);
-          return agent;
-        }
-      }
-
-      // Log debug kalau tidak ketemu
-      console.warn(`[FONNTE AGENT] ⚠️ Tidak ada agent match untuk device: ${devicePhone} (normalized: ${normalizedDevice})`);
-      console.warn(`[FONNTE AGENT] Agent dengan Fonnte aktif:`,
-        withFonnte.map(a => `${a.name}: ${PhoneUtils.normalize(a.phone || '')}`)
-      );
-
-      return null;
-
-    } catch (error) {
-      console.error('[FONNTE AGENT LOOKUP ERROR]', error.message);
-      safeLog('FONNTE_AGENT_LOOKUP_ERROR', { devicePhone, error: error.message }, 'error');
-      return null;
-    }
-  }
-
-  /**
-   * Ambil semua agent aktif yang sudah setup Fonnte
-   */
-  static async getAllWithFonnte() {
-    try {
-      const agents = await User.findAll({
-        where  : { privilege: 'agent', status: 1 },
-        attributes: ['id', 'user_id', 'name', 'phone', 'username', 'fonnte_token', 'created_date'],
-        order  : [['created_date', 'ASC']]
-      });
-
-      return agents.filter(a => a.fonnte_token && String(a.fonnte_token).trim().length > 5);
-    } catch (error) {
-      console.error('[FONNTE GET AGENTS ERROR]', error.message);
-      return [];
-    }
-  }
+  return 'unknown';
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   SECTION 3 — SEND MESSAGE via FONNTE (Per-Agent Token)
-   Berbeda dari fonnteService.js yang pakai env global FONNTE_TOKEN.
-   Di sini kita pakai token milik agent (users.fonnte_token)
-═══════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════════════════════════
+   BAGIAN 2 — AGENT LOOKUP (dari database)
+══════════════════════════════════════════════════════════════════════════════ */
 
-class FonnteApiSender {
-  /**
-   * Kirim pesan WhatsApp menggunakan token Fonnte milik agent.
-   *
-   * @param {string} targetPhone  - Nomor tujuan (customer) 628xxxxxxxxx
-   * @param {string} message      - Isi pesan
-   * @param {string} agentToken   - Token Fonnte dari users.fonnte_token
-   * @returns {{ success, target, response }}
-   */
-  static async send(targetPhone, message, agentToken) {
-    if (!agentToken || String(agentToken).trim().length < 5) {
-      throw new Error('Token Fonnte agent tidak valid atau kosong');
-    }
+/**
+ * Ambil semua agent aktif yang sudah punya fonnte_token di database.
+ */
+async function getAllAgentsWithFonnte() {
+  const agents = await User.findAll({
+    where      : { privilege: 'agent', status: 1 },
+    attributes : ['id', 'user_id', 'name', 'phone', 'username', 'fonnte_token'],
+    order      : [['created_date', 'ASC']]
+  });
 
-    const target = PhoneUtils.normalize(targetPhone);
-
-    if (!PhoneUtils.isValid(target)) {
-      throw new Error(`Nomor tujuan tidak valid: ${targetPhone}`);
-    }
-
-    // Fonnte API pakai form-urlencoded
-    const payload = new URLSearchParams();
-    payload.append('target',      target);
-    payload.append('message',     String(message).trim());
-    payload.append('countryCode', '0');
-    payload.append('typing',      'true');
-
-    try {
-      const response = await axios.post('https://api.fonnte.com/send', payload, {
-        headers: {
-          'Authorization' : String(agentToken).trim(),
-          'Content-Type'  : 'application/x-www-form-urlencoded'
-        },
-        timeout: 30000
-      });
-
-      // Fonnte kadang return status: false di body meski HTTP 200
-      if (response.data && response.data.status === false) {
-        const reason = response.data.reason || response.data.detail || 'Fonnte gagal kirim pesan';
-        throw new Error(`Fonnte: ${reason}`);
-      }
-
-      return {
-        success  : true,
-        target,
-        response : response.data
-      };
-
-    } catch (error) {
-      const status    = error?.response?.status;
-      const reason    = error?.response?.data?.reason
-        || error?.response?.data?.detail
-        || error?.message
-        || 'Unknown Fonnte error';
-
-      throw new Error(`Fonnte send error${status ? ` (${status})` : ''}: ${reason}`);
-    }
-  }
+  return agents.filter(a => a.fonnte_token && String(a.fonnte_token).trim().length > 5);
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   SECTION 4 — AI REPLY GENERATOR (ChatGPT → Claude → PrivateAgent)
-═══════════════════════════════════════════════════════════════ */
+/**
+ * Cari agent berdasarkan nomor device Fonnte (field "device" di payload).
+ * Mencocokkan dengan kolom phone di database setelah normalisasi.
+ *
+ * @param {string} devicePhone - Nomor WA yang terdaftar di Fonnte (field "device")
+ * @returns {User|null}
+ */
+async function findAgentByDevice(devicePhone) {
+  if (!devicePhone) return null;
 
-class AiReplyGenerator {
-  static async generate(session, customerMessage, agentName) {
-    // Priority 1: ChatGPT
-    try {
-      console.log('[FONNTE AI] Mencoba ChatGPT...');
-      const reply = await generateChatGPTWhatsappReply(session, [], customerMessage, '');
-      return { reply, provider: 'chatgpt', primaryProvider: 'chatgpt', fallbackUsed: false };
-    } catch (err) {
-      const recoverable = isChatGPTFallbackEligibleError(err);
-      console.warn(`[FONNTE AI] ChatGPT gagal: ${err.message} (recoverable: ${recoverable})`);
+  const normDevice = normalizePhone(devicePhone);
+  const agents     = await getAllAgentsWithFonnte();
+
+  for (const agent of agents) {
+    if (agent.phone && normalizePhone(agent.phone) === normDevice) {
+      console.log(`[FONNTE AGENT] ✅ Match: ${agent.name} (${agent.phone})`);
+      return agent;
     }
+  }
 
-    // Priority 2: Claude
-    try {
-      console.log('[FONNTE AI] Mencoba Claude...');
-      const reply = await generateClaudeWhatsappReply(session, [], customerMessage, '');
-      return { reply, provider: 'claude', primaryProvider: 'chatgpt', fallbackUsed: true, fallbackProvider: 'claude' };
-    } catch (err) {
-      console.warn(`[FONNTE AI] Claude gagal: ${err.message}`);
-    }
+  console.warn(`[FONNTE AGENT] Tidak ada match untuk device: ${devicePhone} (normalized: ${normDevice})`);
+  console.warn(`[FONNTE AGENT] Agent terdaftar:`,
+    agents.map(a => `${a.name}: ${normalizePhone(a.phone || '')}`).join(', ')
+  );
 
-    // Priority 3: Private Agent (selalu berhasil)
-    console.log('[FONNTE AI] Menggunakan Private Agent...');
-    const result = generatePrivateWhatsappReply({
-      name      : session.name || 'Valued Customer',
-      phone     : session.phone,
-      message   : customerMessage,
-      agentName : agentName || 'Property Consultant'
+  return null;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   BAGIAN 3 — KIRIM PESAN via FONNTE (per-agent token)
+══════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Kirim pesan WhatsApp menggunakan token Fonnte milik agent.
+ *
+ * @param {string} targetPhone - Nomor tujuan (customer)
+ * @param {string} message     - Isi pesan
+ * @param {string} agentToken  - Token dari users.fonnte_token
+ */
+async function sendViaFonnte(targetPhone, message, agentToken) {
+  const target = normalizePhone(targetPhone);
+
+  const params = new URLSearchParams();
+  params.append('target',      target);
+  params.append('message',     String(message).trim());
+  params.append('countryCode', '0');
+
+  const response = await axios.post('https://api.fonnte.com/send', params, {
+    headers : {
+      'Authorization' : String(agentToken).trim(),
+      'Content-Type'  : 'application/x-www-form-urlencoded'
+    },
+    timeout : 30000
+  });
+
+  if (response.data && response.data.status === false) {
+    const reason = response.data.reason || response.data.detail || 'Fonnte: gagal kirim';
+    throw new Error(reason);
+  }
+
+  return response.data;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   BAGIAN 4 — AI REPLY (ChatGPT → Claude → Private Agent)
+══════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Generate AI reply dengan fallback chain.
+ * Selalu berhasil (private_agent tidak bisa gagal).
+ */
+async function generateAIReply(session, message, agentName) {
+  // Coba ChatGPT
+  try {
+    console.log('[FONNTE AI] Mencoba ChatGPT...');
+    const reply = await generateChatGPTWhatsappReply(session, [], message, '');
+    return { reply, provider: 'chatgpt' };
+  } catch (err) {
+    console.warn('[FONNTE AI] ChatGPT gagal:', err.message);
+  }
+
+  // Coba Claude
+  try {
+    console.log('[FONNTE AI] Mencoba Claude...');
+    const reply = await generateClaudeWhatsappReply(session, [], message, '');
+    return { reply, provider: 'claude' };
+  } catch (err) {
+    console.warn('[FONNTE AI] Claude gagal:', err.message);
+  }
+
+  // Private Agent (selalu berhasil)
+  console.log('[FONNTE AI] Menggunakan Private Agent...');
+  const result = generatePrivateWhatsappReply({
+    name      : session.name || 'Valued Customer',
+    phone     : session.phone,
+    message,
+    agentName : agentName || 'Property Consultant'
+  });
+
+  return { reply: result.reply, provider: 'private_agent' };
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   BAGIAN 5 — PROSES PESAN MASUK (background)
+   Dipanggil setelah response 200 dikirim ke Fonnte
+══════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Proses lengkap untuk satu pesan masuk:
+ *   1. Simpan pesan customer ke DB
+ *   2. Generate AI reply
+ *   3. Simpan AI reply ke DB
+ *   4. Kirim balasan via Fonnte (pakai token agent)
+ */
+async function processIncomingMessage(body, agent) {
+  const sender    = String(body.sender || '').trim();
+  const name      = String(body.name || body.pushname || 'Customer').trim();
+  const message   = String(body.message || '').trim();
+  const messageId = body.inboxid || body.key || body.id || `fonnte_${Date.now()}`;
+
+  // ── Print ke terminal ──────────────────────────────────────────────
+  const divider = '─'.repeat(60);
+  console.log('');
+  console.log(divider);
+  console.log(`[FONNTE] Agent    : ${agent.name} - ${agent.phone}`);
+  console.log(`[FONNTE] Customer : ${sender} (${name})`);
+  console.log(`[FONNTE] Message  : ${message.substring(0, 80) || '(media/non-teks)'}`);
+  console.log(divider);
+  console.log('');
+
+  // ── Skip media/non-teks ─────────────────────────────────────────────
+  if (!message) {
+    console.log('[FONNTE] Pesan media/non-teks → skip AI');
+    return;
+  }
+
+  // ── Find/create session ─────────────────────────────────────────────
+  const normSender = normalizePhone(sender);
+  const source     = `fonnte_${agent.name.toLowerCase().replace(/\s+/g, '_')}`;
+
+  let session = await ChatSession.findOne({ where: { normalizedPhone: normSender, source } });
+
+  if (!session) {
+    session = await ChatSession.create({
+      name              : name,
+      normalizedName    : name.toLowerCase(),
+      phone             : sender,
+      normalizedPhone   : normSender,
+      source,
+      location          : null,
+      normalizedLocation: null
     });
+    console.log(`[FONNTE SESSION] Sesi baru: ID ${session.id}`);
+  }
 
-    return {
-      reply          : result.reply,
-      provider       : 'private_agent',
-      primaryProvider: 'chatgpt',
-      fallbackUsed   : true,
-      fallbackProvider: 'private_agent'
+  // ── Simpan pesan customer ───────────────────────────────────────────
+  await ChatMessage.create({
+    chatSessionId : session.id,
+    role          : 'customer',
+    message,
+    channel       : 'whatsapp',
+    metadata      : JSON.stringify({ agentName: agent.name, messageId, platform: 'fonnte' })
+  });
+
+  // ── Generate AI reply ───────────────────────────────────────────────
+  let aiResult;
+  try {
+    aiResult = await generateAIReply(session, message, agent.name);
+  } catch (err) {
+    console.error('[FONNTE AI ERROR]', err.message);
+    const appName = process.env.APP_NAME || 'Elevan Property';
+    aiResult = {
+      reply    : `Halo ${name}, terima kasih menghubungi ${agent.name} dari ${appName}. Pesan Anda sudah diterima. 🙏`,
+      provider : 'fallback'
     };
   }
-}
 
-/* ═══════════════════════════════════════════════════════════════
-   SECTION 5 — MESSAGE PROCESSOR (ChatSession + ChatMessage)
-   Source format: "fonnte_[agent_name_slug]"
-   Contoh: "fonnte_leo_felix"
-═══════════════════════════════════════════════════════════════ */
+  console.log(`[FONNTE AI] Reply (${aiResult.provider}): ${aiResult.reply.substring(0, 60)}...`);
 
-class MessageProcessor {
-  static async findOrCreateSession(customerPhone, agentName, customerName = 'Customer') {
-    try {
-      const normalizedPhone = PhoneUtils.normalize(customerPhone);
-      const agentSlug       = agentName.toLowerCase().replace(/\s+/g, '_');
-      const source          = `fonnte_${agentSlug}`;
+  // ── Simpan AI reply ─────────────────────────────────────────────────
+  await ChatMessage.create({
+    chatSessionId : session.id,
+    role          : 'ai',
+    message       : aiResult.reply,
+    channel       : 'whatsapp',
+    metadata      : JSON.stringify({ aiProvider: aiResult.provider })
+  });
 
-      let session = await ChatSession.findOne({ where: { normalizedPhone, source } });
+  // ── Kirim via Fonnte (pakai token agent sendiri) ─────────────────────
+  try {
+    await sendViaFonnte(sender, aiResult.reply, agent.fonnte_token);
+    console.log(`[FONNTE SEND] ✅ Terkirim ke ${sender} via agent ${agent.name}`);
 
-      if (!session) {
-        session = await ChatSession.create({
-          name              : customerName,
-          normalizedName    : customerName.toLowerCase(),
-          phone             : customerPhone,
-          normalizedPhone,
-          source,
-          location          : null,
-          normalizedLocation: null
-        });
-        console.log(`[FONNTE SESSION] Sesi baru dibuat: ID ${session.id} → ${agentName}`);
-      }
+    safeLog('FONNTE_REPLY_SENT', {
+      sessionId  : session.id,
+      agent      : agent.name,
+      recipient  : sender,
+      aiProvider : aiResult.provider
+    });
 
-      return session;
-    } catch (error) {
-      console.error('[FONNTE SESSION ERROR]', error.message);
-      throw error;
-    }
-  }
+  } catch (err) {
+    console.error(`[FONNTE SEND] ❌ Gagal kirim ke ${sender}: ${err.message}`);
 
-  static async saveCustomerMessage(session, message, metadata = {}) {
-    try {
-      const saved = await ChatMessage.create({
-        chatSessionId: session.id,
-        role          : 'customer',
-        message,
-        channel       : 'whatsapp',
-        metadata      : JSON.stringify(metadata)
-      });
-      console.log(`[FONNTE MSG] Pesan customer disimpan: ID ${saved.id}`);
-      return saved;
-    } catch (error) {
-      console.error('[FONNTE SAVE MESSAGE ERROR]', error.message);
-      throw error;
-    }
-  }
-
-  static async saveAiReply(session, reply, aiResult) {
-    try {
-      const saved = await ChatMessage.create({
-        chatSessionId: session.id,
-        role          : 'ai',
-        message       : reply,
-        channel       : 'whatsapp',
-        metadata      : JSON.stringify({
-          aiProvider      : aiResult.provider,
-          primaryProvider : aiResult.primaryProvider,
-          fallbackUsed    : aiResult.fallbackUsed,
-          fallbackProvider: aiResult.fallbackProvider || null
-        })
-      });
-      console.log(`[FONNTE MSG] AI reply disimpan: ID ${saved.id}`);
-      return saved;
-    } catch (error) {
-      console.error('[FONNTE SAVE AI REPLY ERROR]', error.message);
-      throw error;
-    }
+    safeLog('FONNTE_REPLY_SEND_FAILED', {
+      sessionId : session.id,
+      agent     : agent.name,
+      error     : err.message
+    }, 'error');
   }
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   SECTION 6 — LOGGER (Terminal Display)
-═══════════════════════════════════════════════════════════════ */
-
-class Logger {
-  /**
-   * Format terminal mirip watiChatController:
-   *
-   * ────────────────────────────────────────────────────────────
-   * [FONNTE] Agent     : LEO FELIX - 628213311936
-   *          Customer  : 6281234567890 (Budi Santoso)
-   *          Timestamp : 2026-05-27T10:00:00.000Z
-   *          Message   : Saya mau cari rumah di Surabaya...
-   * ────────────────────────────────────────────────────────────
-   */
-  static logInbound(agentName, agentPhone, customerPhone, customerName, message, timestamp = null) {
-    const divider = '─'.repeat(62);
-    const ts      = timestamp ? new Date(Number(timestamp) * 1000).toISOString() : new Date().toISOString();
-
-    console.log('');
-    console.log(divider);
-    console.log(`[FONNTE] Agent     : ${agentName} - ${agentPhone}`);
-    console.log(`         Customer  : ${customerPhone} (${customerName})`);
-    console.log(`         Timestamp : ${ts}`);
-    console.log(`         Message   : ${String(message).trim()}`);
-    console.log(divider);
-    console.log('');
-  }
-
-  static logRaw(payload) {
-    console.log('[FONNTE DEBUG] Raw webhook payload:');
-    console.log(JSON.stringify(payload, null, 2));
-  }
-
-  static logResult(agentName, sent, aiProvider, error = null) {
-    const status = sent ? '✅ TERKIRIM' : '❌ GAGAL KIRIM';
-    console.log(`[FONNTE RESULT] ${agentName} → AI: ${aiProvider} → Send: ${status}${error ? ` | Error: ${error}` : ''}`);
-  }
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   SECTION 7 — MAIN CONTROLLER CLASS
-═══════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════════════════════════
+   BAGIAN 6 — CONTROLLER CLASS
+══════════════════════════════════════════════════════════════════════════════ */
 
 class FonnteChatController {
 
-  /**
-   * POST /api/fonnte-chat/webhook
-   *
-   * Fonnte webhook payload (inbound message):
-   * {
-   *   "sender"   : "6281234567890",   ← nomor pengirim (customer)
-   *   "message"  : "Halo, saya mau tanya...",
-   *   "device"   : "628213311936",    ← nomor WA agent di Fonnte ← KUNCI ROUTING
-   *   "pushname" : "Budi Santoso",    ← nama display customer
-   *   "key"      : "ABCD1234",        ← message ID (opsional)
-   *   "timestamp": 1716800000         ← unix timestamp (opsional)
-   * }
-   *
-   * Syarat agar pesan diproses:
-   *   1. Field "sender" ada (nomor customer)
-   *   2. Field "message" ada
-   *   3. Field "device" ada (nomor agent)
-   *   4. Agent ditemukan di database (users.phone match device)
-   *   5. Agent punya fonnte_token tidak kosong
-   *
-   * Jika agent tidak ditemukan atau tidak punya fonnte_token:
-   *   → Tetap tampilkan pesan di terminal (JANGAN block)
-   *   → Return 200 dengan warning
-   */
+  /* ─────────────────────────────────────────────────────────────────────
+     POST /api/fonnte-chat/webhook
+     ─────────────────────────────────────────────────────────────────────
+     Endpoint utama. Konfigurasikan URL ini di Fonnte Dashboard.
+
+     Alur:
+       1. Terima payload → log raw
+       2. detectEventType (persis dari simple server yang bekerja)
+       3. Jika bukan incoming → langsung return 200
+       4. Jika incoming → return 200 DULU ke Fonnte, lalu proses background
+          (agar Fonnte tidak timeout menunggu AI/DB)
+  ───────────────────────────────────────────────────────────────────── */
   static async handleInboundMessage(req, res) {
-    try {
-      const payload = req.body;
+    const body = req.body || {};
 
-      // Debug: tampilkan raw payload
-      Logger.logRaw(payload);
+    // ── Log raw payload ─────────────────────────────────────────────
+    console.log('\n╔══════════ FONNTE WEBHOOK MASUK ══════════╗');
+    console.log(`║ Time  : ${new Date().toISOString().padEnd(31)} ║`);
+    console.log(`║ Keys  : ${String(Object.keys(body).join(', ')).substring(0, 31).padEnd(31)} ║`);
+    console.log('╚══════════════════════════════════════════╝');
+    console.log('[FONNTE RAW]', JSON.stringify(body).substring(0, 300));
 
-      // ─── Parse payload ────────────────────────────────────────────────
-      //
-      // Fonnte field priority:
-      //   customer phone → sender || from || phone
-      //   device phone   → device || to || target
-      //   message text   → message || text || body
-      //   customer name  → pushname || name || senderName
-      //   message id     → key || id || messageId
-      //   timestamp      → timestamp
+    // ── Detect event type ───────────────────────────────────────────
+    const eventType = detectEventType(body);
+    console.log(`[FONNTE EVENT] Type: ${eventType}`);
 
-      const customerPhone   = payload.sender   || payload.from    || payload.phone   || '';
-      const devicePhone     = payload.device   || payload.to      || payload.target  || '';
-      const customerMessage = String(payload.message || payload.text || payload.body || '').trim();
-      const customerName    = payload.pushname || payload.name    || payload.senderName || 'Customer';
-      const messageId       = payload.key      || payload.id      || payload.messageId  || `fonnte_${Date.now()}`;
-      const msgTimestamp    = payload.timestamp || null;
+    // ── Handle status update ────────────────────────────────────────
+    if (eventType === 'message_status') {
+      const info = `state=${body.state || '-'} status=${body.status || '-'} id=${body.id || body.stateid || '-'}`;
+      console.log(`[FONNTE STATUS] ${info}`);
+      return res.status(200).json({ status: true, type: 'message_status', message: 'Status diterima' });
+    }
 
-      // ─── Handle Fonnte status webhook (sent/delivered/read) ─────────
-      // Fonnte mengirim status update terpisah: {device, id, state, stateid, status}
-      // Ini BUKAN pesan masuk — cukup return 200 tanpa proses
-      const isStatusUpdate = (
-        !customerPhone &&
-        !customerMessage &&
-        (payload.status === 'sent' || payload.status === 'delivered' ||
-         payload.status === 'read'  || payload.state  === 'sent'  ||
-         payload.state  === 'delivered' || payload.state  === 'read')
-      );
-      if (isStatusUpdate) {
-        console.log(`[FONNTE STATUS] 📬 Status update: device=${payload.device || '-'} status=${payload.status || payload.state || '-'} id=${payload.id || payload.stateid || '-'}`);
-        return res.status(200).json({ success: true, message: 'Status update diterima' });
-      }
+    // ── Handle send notification ────────────────────────────────────
+    if (eventType === 'send') {
+      return res.status(200).json({ status: true, type: 'send', message: 'Send event diterima' });
+    }
 
-      // ─── Validasi field wajib ────────────────────────────────────────
-      if (!customerPhone || !customerMessage) {
-        console.warn('[FONNTE WEBHOOK] ⚠️ Payload tidak lengkap:', {
-          hasSender  : !!customerPhone,
-          hasMessage : !!customerMessage,
-          keys       : Object.keys(payload)
-        });
-        // Tetap return 200 agar Fonnte tidak retry terus-menerus
-        return res.status(200).json({
-          success : false,
-          message : 'Payload tidak valid: harus ada sender dan message',
-          hint    : 'Pastikan Fonnte mengirim field: sender, message, device'
-        });
-      }
+    // ── Handle unknown ──────────────────────────────────────────────
+    if (eventType !== 'incoming') {
+      return res.status(200).json({ status: true, type: 'unknown', message: 'Event diterima' });
+    }
 
-      // ─── Cari agent dari database ────────────────────────────────────
-      //
-      // KUNCI ROUTING: field "device" = nomor WA agent yang terpasang di Fonnte
-      // Cari di users.phone (setelah normalisasi)
-      // Agent WAJIB punya fonnte_token (tidak null) untuk diproses
+    // ── INCOMING MESSAGE ────────────────────────────────────────────
+    // Respond 200 SEKARANG sebelum proses AI (hindari Fonnte timeout)
+    res.status(200).json({ status: true, type: 'incoming', message: 'Webhook diterima' });
 
-      let agent       = null;
-      let agentSource = null;
+    // Proses di background (tidak block response)
+    setImmediate(async () => {
+      try {
+        const devicePhone = body.device || body.to || '';
 
-      // Strategi 1: device field (nomor WA agent di Fonnte)
-      if (devicePhone) {
-        agent = await AgentFonnteeLookup.findByDevicePhone(devicePhone);
-        if (agent) agentSource = 'device_field';
-      }
-
-      // Strategi 2 (fallback): coba customerPhone juga — mungkin agent yang kirim pesan
-      // (misalnya dalam testing, pengirim adalah agent itu sendiri)
-      if (!agent && customerPhone) {
-        agent = await AgentFonnteeLookup.findByDevicePhone(customerPhone);
-        if (agent) {
-          agentSource = 'sender_is_agent';
-          console.log(`[FONNTE AGENT] ℹ️ Pengirim (sender) adalah agent: ${agent.name}`);
+        // Strategi 1: cari agent by device phone
+        let agent = null;
+        if (devicePhone) {
+          agent = await findAgentByDevice(devicePhone);
         }
+
+        // Strategi 2: jika device kosong/tidak cocok, pakai agent pertama
+        if (!agent) {
+          const allAgents = await getAllAgentsWithFonnte();
+          if (allAgents.length > 0) {
+            agent = allAgents[0];
+            console.log(`[FONNTE AGENT] Auto-select: ${agent.name}`);
+          }
+        }
+
+        if (!agent) {
+          console.warn('[FONNTE] Tidak ada agent dengan fonnte_token aktif di database');
+          return;
+        }
+
+        await processIncomingMessage(body, agent);
+
+      } catch (err) {
+        console.error('[FONNTE BACKGROUND ERROR]', err.message, err.stack);
+        safeLog('FONNTE_BACKGROUND_ERROR', { error: err.message }, 'error');
       }
+    });
+  }
 
-      // ─── Selalu tampilkan di terminal (meski agent tidak ditemukan) ──
-      const displayName  = agent?.name  || 'UNASSIGNED';
-      const displayPhone = agent?.phone || devicePhone || 'N/A';
+  /* ─────────────────────────────────────────────────────────────────────
+     POST /api/fonnte-chat/chaining
+     ─────────────────────────────────────────────────────────────────────
+     Untuk Fonnte "Webhook Chaining" mode.
+     Fonnte mengirim pesan dan menunggu reply langsung di response body:
+       { status: true, message: "teks balasan" }
+  ───────────────────────────────────────────────────────────────────── */
+  static async handleChainingWebhook(req, res) {
+    const body = req.body || {};
 
-      Logger.logInbound(displayName, displayPhone, customerPhone, customerName, customerMessage, msgTimestamp);
+    console.log('\n[FONNTE CHAINING] Payload masuk:', JSON.stringify(body).substring(0, 200));
 
-      // ─── Jika agent tidak ditemukan / tidak punya fonnte_token ─────────
-      if (!agent) {
-        const reason = devicePhone
-          ? `Nomor device "${devicePhone}" tidak cocok dengan agent manapun yang punya Fonnte API`
-          : 'Field "device" tidak ada di payload Fonnte';
+    const eventType = detectEventType(body);
 
-        console.warn(`[FONNTE WEBHOOK] ⚠️ ${reason}`);
-        console.warn('[FONNTE WEBHOOK] 💡 Tips: Pastikan users.fonnte_token dan users.phone sudah diisi di halaman Profile.');
+    // Status update → tidak perlu reply
+    if (eventType === 'message_status' || eventType !== 'incoming') {
+      return res.status(200).json({ status: true, message: '' });
+    }
 
-        safeLog('FONNTE_AGENT_NOT_FOUND', { devicePhone, customerPhone, reason }, 'warn');
+    const sender    = String(body.sender || '').trim();
+    const name      = String(body.name || body.pushname || 'Customer').trim();
+    const message   = String(body.message || '').trim();
+    const devicePhone = body.device || body.to || '';
 
-        return res.status(200).json({
-          success       : false,
-          messageLogged : true,
-          message       : 'Pesan ditampilkan di terminal, tapi agent tidak ditemukan atau belum setup Fonnte API.',
-          hint          : reason
+    if (!sender || !message) {
+      return res.status(200).json({ status: true, message: '' });
+    }
+
+    // Cari agent
+    let agent = devicePhone ? await findAgentByDevice(devicePhone) : null;
+    if (!agent) {
+      const all = await getAllAgentsWithFonnte();
+      if (all.length > 0) agent = all[0];
+    }
+
+    if (!agent) {
+      return res.status(200).json({ status: true, message: '' });
+    }
+
+    console.log(`[FONNTE CHAINING] Agent: ${agent.name} | Customer: ${sender} (${name})`);
+
+    // Generate AI reply
+    let aiReply = '';
+    try {
+      const normSender = normalizePhone(sender);
+      const source     = `fonnte_${agent.name.toLowerCase().replace(/\s+/g, '_')}`;
+
+      let session = await ChatSession.findOne({ where: { normalizedPhone: normSender, source } });
+      if (!session) {
+        session = await ChatSession.create({
+          name: name, normalizedName: name.toLowerCase(),
+          phone: sender, normalizedPhone: normSender,
+          source, location: null, normalizedLocation: null
         });
       }
 
-      // ─── Proses pesan ────────────────────────────────────────────────
-      const result = await FonnteChatController._processMessage(
-        agent,
-        customerPhone,
-        customerMessage,
-        messageId,
-        customerName
-      );
+      await ChatMessage.create({
+        chatSessionId: session.id, role: 'customer', message, channel: 'whatsapp',
+        metadata: JSON.stringify({ platform: 'fonnte_chaining' })
+      });
+
+      const aiResult = await generateAIReply(session, message, agent.name);
+      aiReply = aiResult.reply;
+
+      await ChatMessage.create({
+        chatSessionId: session.id, role: 'ai', message: aiReply, channel: 'whatsapp',
+        metadata: JSON.stringify({ aiProvider: aiResult.provider })
+      });
+
+    } catch (err) {
+      console.error('[FONNTE CHAINING ERROR]', err.message);
+      const appName = process.env.APP_NAME || 'Elevan Property';
+      aiReply = `Halo ${name}, terima kasih menghubungi ${agent.name} dari ${appName}. 🙏`;
+    }
+
+    // Kirim reply langsung di response (format Fonnte Chaining)
+    return res.status(200).json({ status: true, message: aiReply });
+  }
+
+  /* ─────────────────────────────────────────────────────────────────────
+     POST /api/fonnte-chat/webhook-raw
+     Debug endpoint — log semua payload mentah dari Fonnte
+  ───────────────────────────────────────────────────────────────────── */
+  static async webhookRawCatcher(req, res) {
+    const body = req.body || {};
+    const ts   = new Date().toISOString();
+
+    console.log('\n╔════════════ RAW CATCHER ════════════╗');
+    console.log(`║ ${ts.padEnd(36)} ║`);
+    console.log(`║ Keys: ${String(Object.keys(body).join(', ')).substring(0, 31).padEnd(31)} ║`);
+    console.log('╚═════════════════════════════════════╝');
+    console.log('[RAW PAYLOAD]', JSON.stringify(body, null, 2));
+
+    const eventType = detectEventType(body);
+    console.log('[RAW CATCHER] Detected event:', eventType);
+
+    if (eventType === 'incoming') {
+      console.log('[RAW CATCHER] ✅ Ini incoming message → teruskan ke handler...');
+      return FonnteChatController.handleInboundMessage(req, res);
+    }
+
+    return res.status(200).json({
+      status     : true,
+      caught     : true,
+      eventType,
+      payloadKeys: Object.keys(body),
+      raw        : body
+    });
+  }
+
+  /* ─────────────────────────────────────────────────────────────────────
+     POST /api/fonnte-chat/simulate
+     Test endpoint — simulasi pesan masuk tanpa WA asli
+  ───────────────────────────────────────────────────────────────────── */
+  static async simulateInboundMessage(req, res) {
+    const {
+      sender   = '628999888777',
+      message  = 'Halo, saya mau tanya properti',
+      device   = null,
+      name     = 'Test Customer',
+      dry_run  = false
+    } = req.body || {};
+
+    console.log('\n[FONNTE SIMULATE] 🧪 Simulasi pesan masuk');
+    console.log(`  From   : ${sender} (${name})`);
+    console.log(`  Device : ${device || '(auto)'}`);
+    console.log(`  Message: ${message}`);
+    console.log(`  Dry run: ${dry_run}`);
+
+    if (!sender || !message) {
+      return res.status(400).json({ success: false, message: 'Wajib ada: sender dan message' });
+    }
+
+    let agent = device ? await findAgentByDevice(device) : null;
+    if (!agent) {
+      const all = await getAllAgentsWithFonnte();
+      if (all.length > 0) agent = all[0];
+    }
+
+    if (!agent) {
+      return res.status(404).json({
+        success : false,
+        message : 'Tidak ada agent dengan fonnte_token. Cek /api/fonnte-chat/status'
+      });
+    }
+
+    if (dry_run) {
+      return res.json({
+        success  : true,
+        dry_run  : true,
+        agent    : agent.name,
+        sender,
+        message,
+        hint     : 'Dry run — tidak ada AI / tidak ada kirim'
+      });
+    }
+
+    // Proses penuh
+    try {
+      const fakeBody = { sender, message, name, device: device || agent.phone, inboxid: `sim_${Date.now()}` };
+      await processIncomingMessage(fakeBody, agent);
 
       return res.json({
         success : true,
-        data    : result,
-        message : 'Pesan Fonnte berhasil diproses'
+        message : 'Simulate selesai. Lihat terminal untuk output.',
+        agent   : agent.name,
+        sender
       });
 
-    } catch (error) {
-      console.error('[FONNTE WEBHOOK ERROR]', error.message);
-      safeLog('FONNTE_WEBHOOK_ERROR', error.message, 'error');
-      return res.status(500).json({
-        success : false,
-        message : 'Gagal memproses webhook Fonnte',
-        error   : error.message
-      });
+    } catch (err) {
+      return res.status(500).json({ success: false, message: err.message });
     }
   }
 
-  /**
-   * Internal: Proses lengkap (simpan → AI → kirim balasan)
-   */
-  static async _processMessage(agent, customerPhone, customerMessage, messageId, customerName = 'Customer') {
-    // 1. Buat / temukan sesi chat
-    const session = await MessageProcessor.findOrCreateSession(customerPhone, agent.name, customerName);
-
-    // 2. Simpan pesan customer
-    await MessageProcessor.saveCustomerMessage(session, customerMessage, {
-      agentName   : agent.name,
-      agentUserId : agent.user_id,
-      messageId,
-      platform    : 'fonnte'
-    });
-
-    safeLog('FONNTE_INBOUND_MESSAGE', {
-      sessionId     : session.id,
-      agentName     : agent.name,
-      messageLength : customerMessage.length
-    });
-
-    // 3. Generate AI reply (dengan fallback chain)
-    let aiReply  = null;
-    let aiResult = null;
-    let aiError  = null;
-
-    try {
-      aiResult = await AiReplyGenerator.generate(session, customerMessage, agent.name);
-      aiReply  = aiResult.reply;
-
-      await MessageProcessor.saveAiReply(session, aiReply, aiResult);
-      console.log(`[FONNTE AI] Reply generated (${aiResult.provider}), length: ${aiReply.length}`);
-
-    } catch (error) {
-      aiError = error.message;
-      console.error('[FONNTE AI ERROR]', aiError);
-      safeLog('FONNTE_AI_FAILED', { sessionId: session.id, error: aiError }, 'error');
-
-      // Default fallback message
-      const appName = process.env.APP_NAME || 'Elevan Property';
-      aiReply  = `Halo, terima kasih telah menghubungi ${agent.name} dari ${appName}. Pesan Anda sudah kami terima dan akan segera dibalas. 🙏`;
-      aiResult = { provider: 'default_fallback', primaryProvider: 'unknown', fallbackUsed: true };
-    }
-
-    // 4. Kirim balasan via Fonnte menggunakan token agent sendiri
-    let fonnteSent  = false;
-    let fonnteError = null;
-
-    try {
-      const sendResult = await FonnteApiSender.send(customerPhone, aiReply, agent.fonnte_token);
-      fonnteSent = true;
-
-      console.log(`[FONNTE SEND] ✅ Berhasil kirim ke ${customerPhone}`);
-      safeLog('FONNTE_REPLY_SENT', {
-        sessionId  : session.id,
-        recipient  : customerPhone,
-        agentName  : agent.name,
-        aiProvider : aiResult.provider
-      });
-
-    } catch (error) {
-      fonnteError = error.message;
-      console.error('[FONNTE SEND ERROR]', fonnteError);
-      safeLog('FONNTE_REPLY_SEND_FAILED', {
-        sessionId : session.id,
-        error     : fonnteError
-      }, 'error');
-    }
-
-    // 5. Log ringkasan hasil ke terminal
-    Logger.logResult(agent.name, fonnteSent, aiResult?.provider || 'unknown', fonnteError);
-
-    return {
-      sessionId     : session.id,
-      agentName     : agent.name,
-      agentPhone    : agent.phone,
-      customerPhone,
-      aiReply,
-      aiProvider    : aiResult?.provider   || null,
-      fallbackUsed  : aiResult?.fallbackUsed || false,
-      fonnteSent,
-      errors: {
-        ai     : aiError     || null,
-        fonnte : fonnteError || null
-      }
-    };
-  }
-
-  /* ─── GET Endpoints ─────────────────────────────────────────── */
-
-  /**
-   * GET /api/fonnte-chat/agents
-   * Daftar semua agent yang sudah setup Fonnte API
-   */
+  /* ─────────────────────────────────────────────────────────────────────
+     GET /api/fonnte-chat/agents
+  ───────────────────────────────────────────────────────────────────── */
   static async getAgentsWithFonnte(req, res) {
     try {
-      const agents = await AgentFonnteeLookup.getAllWithFonnte();
-
+      const agents = await getAllAgentsWithFonnte();
       return res.json({
         success : true,
         data    : {
@@ -633,80 +570,53 @@ class FonnteChatController {
             user_id      : a.user_id,
             name         : a.name,
             phone        : a.phone,
-            fonnte_ready : !!(a.fonnte_token && a.fonnte_token.trim().length > 5),
-            // JANGAN return fonnte_token token ke client untuk keamanan
+            fonnte_ready : true
+            // TIDAK return fonnte_token ke client (security)
           })),
-          totalAgents    : agents.length
+          total: agents.length
         }
       });
-
-    } catch (error) {
-      console.error('[FONNTE GET AGENTS ERROR]', error.message);
-      return res.status(500).json({
-        success : false,
-        message : 'Gagal mengambil daftar agent',
-        error   : error.message
-      });
+    } catch (err) {
+      return res.status(500).json({ success: false, message: err.message });
     }
   }
 
-  /**
-   * GET /api/fonnte-chat/agent-chats/:agentName
-   * Daftar semua sesi chat untuk satu agent
-   */
+  /* ─────────────────────────────────────────────────────────────────────
+     GET /api/fonnte-chat/agent-chats/:agentName
+  ───────────────────────────────────────────────────────────────────── */
   static async getAgentChats(req, res) {
     try {
-      const { agentName }          = req.params;
+      const { agentName }              = req.params;
       const { limit = 50, offset = 0 } = req.query;
 
-      if (!agentName) {
-        return res.status(400).json({ success: false, message: 'agentName parameter diperlukan' });
-      }
-
-      const agentSlug = agentName.toLowerCase().replace(/\s+/g, '_');
-      const source    = `fonnte_${agentSlug}`;
-
+      const source   = `fonnte_${agentName.toLowerCase().replace(/\s+/g, '_')}`;
       const sessions = await ChatSession.findAll({
         where  : { source },
         order  : [['updatedAt', 'DESC']],
         limit  : Math.min(parseInt(limit)  || 50, 200),
         offset : parseInt(offset) || 0
       });
-
       const total = await ChatSession.count({ where: { source } });
 
       return res.json({
-        success : true,
-        data    : {
-          agent   : agentName,
-          sessions,
-          pagination: { total, limit: Math.min(parseInt(limit) || 50, 200), offset: parseInt(offset) || 0 }
-        }
+        success: true,
+        data   : { agent: agentName, sessions, pagination: { total, limit: parseInt(limit) || 50 } }
       });
-
-    } catch (error) {
-      console.error('[FONNTE GET AGENT CHATS ERROR]', error.message);
-      return res.status(500).json({ success: false, message: 'Gagal mengambil chat agent', error: error.message });
+    } catch (err) {
+      return res.status(500).json({ success: false, message: err.message });
     }
   }
 
-  /**
-   * GET /api/fonnte-chat/chat-history/:sessionId
-   * Riwayat percakapan dalam satu sesi
-   */
+  /* ─────────────────────────────────────────────────────────────────────
+     GET /api/fonnte-chat/chat-history/:sessionId
+  ───────────────────────────────────────────────────────────────────── */
   static async getChatHistory(req, res) {
     try {
-      const { sessionId } = req.params;
-      const { limit = 100 } = req.query;
-
-      if (!sessionId) {
-        return res.status(400).json({ success: false, message: 'sessionId parameter diperlukan' });
-      }
+      const { sessionId }  = req.params;
+      const { limit = 100} = req.query;
 
       const session = await ChatSession.findByPk(sessionId);
-      if (!session) {
-        return res.status(404).json({ success: false, message: 'Sesi tidak ditemukan' });
-      }
+      if (!session) return res.status(404).json({ success: false, message: 'Sesi tidak ditemukan' });
 
       const messages = await ChatMessage.findAll({
         where : { chatSessionId: sessionId },
@@ -715,61 +625,179 @@ class FonnteChatController {
       });
 
       return res.json({
-        success : true,
-        data    : {
-          session: {
-            id           : session.id,
-            customerName : session.name,
-            customerPhone: session.phone,
-            source       : session.source,
-            createdAt    : session.createdAt
-          },
+        success: true,
+        data   : {
+          session : { id: session.id, name: session.name, phone: session.phone, source: session.source },
           messages,
-          messageCount : messages.length
+          count   : messages.length
         }
       });
-
-    } catch (error) {
-      console.error('[FONNTE GET CHAT HISTORY ERROR]', error.message);
-      return res.status(500).json({ success: false, message: 'Gagal mengambil riwayat chat', error: error.message });
+    } catch (err) {
+      return res.status(500).json({ success: false, message: err.message });
     }
   }
 
-  /**
-   * GET /api/fonnte-chat/status
-   * Status konfigurasi Fonnte untuk semua agent
-   */
+  /* ─────────────────────────────────────────────────────────────────────
+     GET /api/fonnte-chat/status
+  ───────────────────────────────────────────────────────────────────── */
   static async getFonnteStatus(req, res) {
     try {
-      const agentsWithFonnte = await AgentFonnteeLookup.getAllWithFonnte();
-      const allAgents        = await User.findAll({
+      const allAgents = await User.findAll({
         where      : { privilege: 'agent', status: 1 },
         attributes : ['user_id', 'name', 'phone', 'fonnte_token']
       });
 
-      const statusList = allAgents.map(a => ({
-        user_id      : a.user_id,
-        name         : a.name,
-        has_phone    : !!(a.phone && a.phone.trim()),
-        has_fonnte   : !!(a.fonnte_token && a.fonnte_token.trim().length > 5),
-        fonnte_ready : !!(a.phone && a.phone.trim() && a.fonnte_token && a.fonnte_token.trim().length > 5)
-      }));
+      const ready = allAgents.filter(a => a.fonnte_token && a.fonnte_token.trim().length > 5);
 
       return res.json({
         success : true,
         data    : {
-          totalAgents       : allAgents.length,
-          fonnteReadyAgents : agentsWithFonnte.length,
-          agents            : statusList
+          total       : allAgents.length,
+          fonnte_ready: ready.length,
+          agents      : allAgents.map(a => ({
+            user_id     : a.user_id,
+            name        : a.name,
+            phone       : a.phone,
+            has_phone   : !!(a.phone && a.phone.trim()),
+            has_token   : !!(a.fonnte_token && a.fonnte_token.trim().length > 5),
+            ready       : !!(a.phone && a.fonnte_token && a.fonnte_token.trim().length > 5)
+          }))
         },
-        message : `${agentsWithFonnte.length} dari ${allAgents.length} agent sudah setup Fonnte API`
+        message: `${ready.length} dari ${allAgents.length} agent siap Fonnte`
+      });
+    } catch (err) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  /* ─────────────────────────────────────────────────────────────────────
+     GET /api/fonnte-chat/debug-info
+  ───────────────────────────────────────────────────────────────────── */
+  static async getDebugInfo(req, res) {
+    try {
+      const agents = await User.findAll({
+        where      : { privilege: 'agent', status: 1 },
+        attributes : ['user_id', 'name', 'phone', 'fonnte_token']
       });
 
-    } catch (error) {
-      console.error('[FONNTE STATUS ERROR]', error.message);
-      return res.status(500).json({ success: false, message: 'Gagal cek status Fonnte', error: error.message });
+      return res.json({
+        success: true,
+        data   : {
+          server: { port: process.env.PORT || 5005, webhookUrl: 'POST /api/fonnte-chat/webhook' },
+          agents: agents.map(a => ({
+            user_id          : a.user_id,
+            name             : a.name,
+            phone_raw        : a.phone,
+            phone_normalized : normalizePhone(a.phone || ''),
+            has_fonnte_token : !!(a.fonnte_token && a.fonnte_token.trim().length > 5),
+            ready            : !!(a.phone && a.fonnte_token && a.fonnte_token.trim().length > 5)
+          }))
+        }
+      });
+    } catch (err) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  /* ─────────────────────────────────────────────────────────────────────
+     GET /api/fonnte-chat/check-fonnte-api
+     Test apakah Fonnte API bisa dihubungi (cek device info)
+  ───────────────────────────────────────────────────────────────────── */
+  static async checkFonnteApi(req, res) {
+    try {
+      const agents = await getAllAgentsWithFonnte();
+      if (agents.length === 0) {
+        return res.status(404).json({ success: false, message: 'Tidak ada agent dengan fonnte_token' });
+      }
+
+      const target    = agents.find(a => a.name === 'LEO FELIX') || agents[0];
+      const tokenStr  = String(target.fonnte_token).trim();
+      const results   = {};
+
+      for (const ep of [
+        { label: 'device',   method: 'get',  url: 'https://api.fonnte.com/device'  },
+        { label: 'retrive',  method: 'get',  url: 'https://api.fonnte.com/retrive' },
+        { label: 'receive',  method: 'get',  url: 'https://api.fonnte.com/receive' }
+      ]) {
+        try {
+          const r = await axios({ method: ep.method, url: ep.url,
+            headers: { Authorization: tokenStr }, timeout: 8000 });
+          results[ep.label] = { status: r.status, preview: JSON.stringify(r.data).substring(0, 300) };
+        } catch (err) {
+          results[ep.label] = { status: err?.response?.status || 'error', error: err.message };
+        }
+      }
+
+      return res.json({ success: true, agent: target.name, results });
+    } catch (err) {
+      return res.status(500).json({ success: false, message: err.message });
     }
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   BAGIAN 7 — POLLER (Fallback jika Webhook tidak fire)
+
+   Catatan: Fonnte tidak punya endpoint GET untuk ambil pesan masuk.
+   Semua endpoint (retrive, receive, inbox) return 404 di Free plan.
+   Poller tetap ada tapi tidak akan bisa ambil pesan baru.
+   Solusi utama adalah webhook (Fonnte Dashboard).
+══════════════════════════════════════════════════════════════════════════════ */
+
+class FonntePoller {
+  constructor() {
+    this.handle    = null;
+    this.isRunning = false;
+    this.pollCount = 0;
+    this.lastPoll  = null;
+  }
+
+  async start(intervalMs = 10000) {
+    if (this.isRunning) {
+      console.log('[FONNTE POLLER] Sudah berjalan');
+      return;
+    }
+    this.isRunning = true;
+    console.log(`[FONNTE POLLER] Start (interval: ${intervalMs / 1000}s)`);
+    console.log('[FONNTE POLLER] ℹ️  Catatan: Fonnte Free tidak punya API polling.');
+    console.log('[FONNTE POLLER] ℹ️  Gunakan webhook untuk terima pesan masuk.');
+    this.handle = setInterval(() => this._tick(), intervalMs);
+  }
+
+  stop() {
+    if (this.handle) clearInterval(this.handle);
+    this.isRunning = false;
+    console.log('[FONNTE POLLER] Stopped');
+  }
+
+  getStatus() {
+    return { isRunning: this.isRunning, pollCount: this.pollCount, lastPoll: this.lastPoll };
+  }
+
+  async _tick() {
+    this.pollCount++;
+    this.lastPoll = new Date();
+    // Fonnte tidak punya polling API — tidak ada yang bisa di-fetch
+  }
+}
+
+const fonntePoller = new FonntePoller();
+FonnteChatController.poller = fonntePoller;
+
+// Poller control endpoints
+FonnteChatController.getPollerStatus = async (req, res) => {
+  return res.json({ success: true, data: fonntePoller.getStatus() });
+};
+
+FonnteChatController.startPoller = async (req, res) => {
+  const ms = parseInt(req.body?.intervalMs || process.env.FONNTE_POLLING_INTERVAL_MS || '10000');
+  await fonntePoller.start(ms);
+  return res.json({ success: true, message: 'Poller dimulai', data: fonntePoller.getStatus() });
+};
+
+FonnteChatController.stopPoller = async (req, res) => {
+  fonntePoller.stop();
+  return res.json({ success: true, message: 'Poller dihentikan' });
+};
 
 module.exports = FonnteChatController;

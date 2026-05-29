@@ -68,11 +68,20 @@ router.get('/wati/agents/list', watiChatController.getRegisteredAgents);
 router.get('/wati/status', watiChatController.getWatiStatus);
 
 // Fonnte WhatsApp Chat Controller (Multi-Agent, Per-Agent Token)
-router.post('/fonnte-chat/webhook', fonnteChatController.handleInboundMessage);
-router.get('/fonnte-chat/agents', fonnteChatController.getAgentsWithFonnte);
+router.post('/fonnte-chat/webhook',         fonnteChatController.handleInboundMessage);
+router.post('/fonnte-chat/chaining',        fonnteChatController.handleChainingWebhook);
+router.post('/fonnte-chat/webhook-raw',     fonnteChatController.webhookRawCatcher);
+router.post('/fonnte-chat/simulate',        fonnteChatController.simulateInboundMessage);
+router.get('/fonnte-chat/debug-info',       fonnteChatController.getDebugInfo);
+router.get('/fonnte-chat/agents',           fonnteChatController.getAgentsWithFonnte);
 router.get('/fonnte-chat/agent-chats/:agentName', fonnteChatController.getAgentChats);
 router.get('/fonnte-chat/chat-history/:sessionId', fonnteChatController.getChatHistory);
-router.get('/fonnte-chat/status', fonnteChatController.getFonnteStatus);
+router.get('/fonnte-chat/status',           fonnteChatController.getFonnteStatus);
+// Poller & diagnostics endpoints
+router.get('/fonnte-chat/poller-status',    fonnteChatController.getPollerStatus);
+router.post('/fonnte-chat/poller-start',    fonnteChatController.startPoller);
+router.post('/fonnte-chat/poller-stop',     fonnteChatController.stopPoller);
+router.get('/fonnte-chat/check-fonnte-api', fonnteChatController.checkFonnteApi);
 
 // =============================================================
 // Auth Routes (Login & Register Users)
