@@ -18,10 +18,14 @@ frontend/src/
 │   ├── RegisterView.vue      ← Register form
 │   └── ProfileView.vue       ← User profile (requires auth)
 ├── components/
-│   └── FloatingChatbot.vue   ← Main chatbot widget (~950 lines)
+│   ├── FloatingChatbot.vue   ← Main chatbot widget (~950 lines)
+│   ├── Navbar.vue            ← Navigation bar
+│   ├── PortfolioCard.vue     ← Property card component
+│   └── PropertyFilter.vue   ← Property search filter
 ├── services/
 │   ├── api.js                ← Axios instance with interceptors
 │   ├── authApi.js            ← Token memory management
+│   ├── profileApi.js         ← Profile get/update API calls
 │   └── chatbotApi.js         ← Chatbot API calls
 └── router/
     └── index.js              ← Vue Router with auth guards
@@ -170,7 +174,9 @@ Session ID stored in cookie with TTL from `GET /api/chatbot/config`:
 
 ### First Message — Property Context
 On the first message of a new session:
-1. Loads `frontend/public/json_data/indonesia_property_36_provinces_flat.json`
+1. Fetches `/json_data/indonesia_property_36_provinces_flat.json`
+   - Dev mode: Vite proxy → `localhost:5005/json_data/` → `backend/asset/json_data/`
+   - File **TIDAK lagi** di `frontend/public/json_data/` (migrasi Juni 2026)
 2. Sends it as `propertyContext` in POST body
 
 Backend uses this + live Rumah123 data for full property-aware AI prompt.
@@ -224,6 +230,54 @@ Response: {
 
 ---
 
+## Module: Profile (`ProfileView.vue`)
+
+`frontend/src/views/ProfileView.vue` — halaman profil agent. Requires auth.
+
+### Form Layout
+
+```
+┌─────────────────────────────────────────┐
+│ User ID         [disabled, read-only]   │
+│                                         │
+│ Nama Lengkap *  [editable]              │
+│ Nomor HP *      [editable]              │
+│ Tanggal Lahir   [editable]              │
+│                                         │
+│ ── Keamanan & Integrasi ──              │
+│                                         │
+│ Username 🔒     [disabled, read-only]  │
+│ Password *      [editable, show/hide 👁️]│
+│ Fonnte API      [editable, opsional]    │
+└─────────────────────────────────────────┘
+```
+
+### Field Rules
+
+| Field | Wajib | Keterangan |
+|---|---|---|
+| Nama Lengkap | ✅ | |
+| Nomor HP | ✅ | |
+| Password | ✅ | Min 6 karakter, dikosongkan setelah save |
+| Username | ❌ | Read-only, tidak bisa diubah, **tidak dikirim ke backend** |
+| Fonnte API | ❌ | Token Fonnte pribadi agent, kirim `null` jika kosong |
+
+### Payload ke Backend (`PUT /api/profile/update-agent`)
+
+```json
+{
+  "name": "NIGEL KUNCORO",
+  "phone": "082233556796",
+  "birthdate": "1995-01-15",
+  "password": "••••••",
+  "fonnte_token": "abc123..." 
+}
+```
+
+> `username` **TIDAK dikirim** ke backend.
+
+---
+
 ## Build / Deploy
 
 ```bash
@@ -234,5 +288,27 @@ cd frontend && npm run dev
 cd frontend && npm run build
 ```
 
-Vite config proxies `/api` to `http://localhost:5005` in dev mode.
-For production: configure nginx/caddy to proxy `/api` to Node.js backend.
+Vite config proxies:
+- `/api` → `http://localhost:5005` (backend API)
+- `/json_data` → `http://localhost:5005` (static JSON dari backend/asset/json_data/)
+
+For production: configure nginx/caddy to proxy `/api` and `/json_data` to Node.js backend.
+
+---
+
+## Vite Proxy Config (Juni 2026)
+
+```javascript
+// frontend/vite.config.js
+proxy: {
+  '/json_data': {
+    target: `http://localhost:${PORT || 5005}`,
+    changeOrigin: true
+  }
+}
+```
+
+Backend `server.js`:
+```javascript
+app.use('/json_data', express.static(path.join(__dirname, 'asset/json_data')));
+```

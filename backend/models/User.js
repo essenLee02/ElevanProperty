@@ -90,6 +90,12 @@ const User = sequelize.define('User', {
     allowNull: true,
     defaultValue: null,
     comment: 'Fonnte token milik agent (untuk kirim WA via Fonnte)'
+  },
+  dialog360_token: {
+    type: DataTypes.STRING(200),
+    allowNull: true,
+    defaultValue: null,
+    comment: '360dialog API key milik agent (D360-API-KEY header). Dapat dari sandbox: kirim START ke +551146733492'
   }
 }, {
   tableName: 'users',

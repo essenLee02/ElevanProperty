@@ -846,7 +846,7 @@ exports.privateAgentStatus = (_req, res) => {
       rumah123Enabled: rumah123DataEnabled,
       rumah123Status:  rumah123DataEnabled ? 'ON (live Rumah123 data)' : 'OFF (static JSON catalog)',
       catalogEnabled:  true,
-      catalogPath:     'frontend/public/json_data/indonesia_property_36_provinces_flat.json',
+      catalogPath:     'backend/asset/json_data/indonesia_property_36_provinces_flat.json',
     },
     rumah123Integration: {
       enabled:     apifyReady && rumah123DataEnabled,

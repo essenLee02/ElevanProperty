@@ -46,13 +46,14 @@ function getKnownLocations() {
 }
 
 // ─── JSON Property Loader ────────────────────────────────────────────────────
-// Reads indonesia_property_36_provinces_flat.json from the frontend public
-// folder and normalises each record to the camelCase shape expected by the
-// downstream filter / search functions.  The result is cached after first load.
+// Reads indonesia_property_36_provinces_flat.json from backend/asset/json_data/
+// (single source of truth — backend serves this file, frontend proxies to it).
+// Normalises each record to the camelCase shape expected by the downstream
+// filter / search functions. Result is cached after first load.
 
 const JSON_DATA_PATH = path.resolve(
   __dirname,
-  '../../frontend/public/json_data/indonesia_property_36_provinces_flat.json'
+  '../asset/json_data/indonesia_property_36_provinces_flat.json'
 );
 
 let _jsonPropertiesCache = null;

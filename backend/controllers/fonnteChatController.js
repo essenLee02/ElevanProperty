@@ -26,6 +26,9 @@ const { generateChatGPTWhatsappReply, isChatGPTFallbackEligibleError } = require
 const { generateClaudeWhatsappReply }   = require('../services/claudeService');
 const { generatePrivateWhatsappReply }  = require('./chatbotPrivateController');
 const { safeLog }                       = require('../utils/safeLog');
+const { isTerminalActive }              = require('../utils/terminalSwitch');
+const { hasPropertyKeyword }            = require('../utils/propertyKeywordFilter');
+const { getWhatsappPropertyContext }    = require('../utils/whatsappPropertyContext');
 
 /* ══════════════════════════════════════════════════════════════════════════════
    BAGIAN 1 — UTILITY FUNCTIONS
@@ -153,30 +156,32 @@ async function sendViaFonnte(targetPhone, message, agentToken) {
 ══════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * Generate AI reply dengan fallback chain.
- * Selalu berhasil (private_agent tidak bisa gagal).
+ * Generate AI reply dengan property context + fallback chain.
+ * Flow: ChatGPT (+ context) → Claude (+ context) → Private Agent
+ *
+ * @param {object} session      - ChatSession dari DB
+ * @param {string} message      - Pesan customer
+ * @param {string} agentName    - Nama agent
+ * @param {string} propertyCtx  - Konteks properti (dari Rumah123 atau flat JSON)
  */
-async function generateAIReply(session, message, agentName) {
-  // Coba ChatGPT
+async function generateAIReply(session, message, agentName, propertyCtx = '') {
+  // Coba ChatGPT dengan property context
   try {
-    console.log('[FONNTE AI] Mencoba ChatGPT...');
-    const reply = await generateChatGPTWhatsappReply(session, [], message, '');
+    const reply = await generateChatGPTWhatsappReply(session, [], message, propertyCtx);
     return { reply, provider: 'chatgpt' };
   } catch (err) {
     console.warn('[FONNTE AI] ChatGPT gagal:', err.message);
   }
 
-  // Coba Claude
+  // Coba Claude dengan property context
   try {
-    console.log('[FONNTE AI] Mencoba Claude...');
-    const reply = await generateClaudeWhatsappReply(session, [], message, '');
+    const reply = await generateClaudeWhatsappReply(session, [], message, propertyCtx);
     return { reply, provider: 'claude' };
   } catch (err) {
     console.warn('[FONNTE AI] Claude gagal:', err.message);
   }
 
   // Private Agent (selalu berhasil)
-  console.log('[FONNTE AI] Menggunakan Private Agent...');
   const result = generatePrivateWhatsappReply({
     name      : session.name || 'Valued Customer',
     phone     : session.phone,
@@ -204,22 +209,10 @@ async function processIncomingMessage(body, agent) {
   const name      = String(body.name || body.pushname || 'Customer').trim();
   const message   = String(body.message || '').trim();
   const messageId = body.inboxid || body.key || body.id || `fonnte_${Date.now()}`;
-
-  // ── Print ke terminal ──────────────────────────────────────────────
-  const divider = '─'.repeat(60);
-  console.log('');
-  console.log(divider);
-  console.log(`[FONNTE] Agent    : ${agent.name} - ${agent.phone}`);
-  console.log(`[FONNTE] Customer : ${sender} (${name})`);
-  console.log(`[FONNTE] Message  : ${message.substring(0, 80) || '(media/non-teks)'}`);
-  console.log(divider);
-  console.log('');
+  const ts        = new Date().toISOString();
 
   // ── Skip media/non-teks ─────────────────────────────────────────────
-  if (!message) {
-    console.log('[FONNTE] Pesan media/non-teks → skip AI');
-    return;
-  }
+  if (!message) return;
 
   // ── Find/create session ─────────────────────────────────────────────
   const normSender = normalizePhone(sender);
@@ -237,10 +230,9 @@ async function processIncomingMessage(body, agent) {
       location          : null,
       normalizedLocation: null
     });
-    console.log(`[FONNTE SESSION] Sesi baru: ID ${session.id}`);
   }
 
-  // ── Simpan pesan customer ───────────────────────────────────────────
+  // ── Simpan pesan customer (selalu, terlepas dari keyword) ───────────
   await ChatMessage.create({
     chatSessionId : session.id,
     role          : 'customer',
@@ -249,20 +241,50 @@ async function processIncomingMessage(body, agent) {
     metadata      : JSON.stringify({ agentName: agent.name, messageId, platform: 'fonnte' })
   });
 
-  // ── Generate AI reply ───────────────────────────────────────────────
+  // ── Cek kata kunci properti ─────────────────────────────────────────
+  // Hanya balas jika ada kata kunci terkait properti.
+  // Pesan lain (obrolan biasa) disimpan ke DB tapi tidak dibalas AI.
+  const isPropertyQuery = hasPropertyKeyword(message);
+
+  if (!isPropertyQuery) {
+    if (isTerminalActive('FONNTE')) {
+      const D = '─'.repeat(62);
+      console.log('');
+      console.log(D);
+      console.log(`[FONNTE] ⬇  PESAN MASUK (tidak ada kata kunci properti — tidak dibalas)`);
+      console.log(`[FONNTE]    Agent    : ${agent.name} (${agent.phone})`);
+      console.log(`[FONNTE]    Customer : ${sender} (${name})`);
+      console.log(`[FONNTE]    Time     : ${ts}`);
+      console.log(`[FONNTE]    Message  : ${message.substring(0, 100)}`);
+      console.log(`[FONNTE]    Status   : 📥 Disimpan ke DB, AI skip (bukan query properti)`);
+      console.log(D);
+      console.log('');
+    }
+    return; // Tidak kirim balasan
+  }
+
+  // ── Ambil property context (Rumah123 → flat JSON fallback) ──────────
+  let propertyCtx  = '';
+  let ctxSource    = 'none';
+  try {
+    const ctxResult = await getWhatsappPropertyContext(message);
+    propertyCtx = ctxResult.contextText || '';
+    ctxSource   = ctxResult.source      || 'none';
+  } catch (err) {
+    console.warn('[FONNTE CONTEXT] Gagal ambil property context:', err.message);
+  }
+
+  // ── Generate AI reply dengan property context ───────────────────────
   let aiResult;
   try {
-    aiResult = await generateAIReply(session, message, agent.name);
+    aiResult = await generateAIReply(session, message, agent.name, propertyCtx);
   } catch (err) {
-    console.error('[FONNTE AI ERROR]', err.message);
     const appName = process.env.APP_NAME || 'Elevan Property';
     aiResult = {
-      reply    : `Halo ${name}, terima kasih menghubungi ${agent.name} dari ${appName}. Pesan Anda sudah diterima. 🙏`,
+      reply    : `Halo ${name}, terima kasih menghubungi ${agent.name} dari ${appName}. Kami akan segera membantu mencari properti yang sesuai kebutuhan Anda. 🏠`,
       provider : 'fallback'
     };
   }
-
-  console.log(`[FONNTE AI] Reply (${aiResult.provider}): ${aiResult.reply.substring(0, 60)}...`);
 
   // ── Simpan AI reply ─────────────────────────────────────────────────
   await ChatMessage.create({
@@ -270,29 +292,48 @@ async function processIncomingMessage(body, agent) {
     role          : 'ai',
     message       : aiResult.reply,
     channel       : 'whatsapp',
-    metadata      : JSON.stringify({ aiProvider: aiResult.provider })
+    metadata      : JSON.stringify({ aiProvider: aiResult.provider, contextSource: ctxSource })
   });
 
   // ── Kirim via Fonnte (pakai token agent sendiri) ─────────────────────
+  let fonnteSent  = false;
+  let fonnteError = null;
+
   try {
     await sendViaFonnte(sender, aiResult.reply, agent.fonnte_token);
-    console.log(`[FONNTE SEND] ✅ Terkirim ke ${sender} via agent ${agent.name}`);
-
+    fonnteSent = true;
     safeLog('FONNTE_REPLY_SENT', {
       sessionId  : session.id,
       agent      : agent.name,
       recipient  : sender,
-      aiProvider : aiResult.provider
+      aiProvider : aiResult.provider,
+      ctxSource
     });
-
   } catch (err) {
-    console.error(`[FONNTE SEND] ❌ Gagal kirim ke ${sender}: ${err.message}`);
+    fonnteError = err.message;
+    safeLog('FONNTE_REPLY_SEND_FAILED', { sessionId: session.id, agent: agent.name, error: err.message }, 'error');
+  }
 
-    safeLog('FONNTE_REPLY_SEND_FAILED', {
-      sessionId : session.id,
-      agent     : agent.name,
-      error     : err.message
-    }, 'error');
+  // ── LOG RINGKASAN TERMINAL ───────────────────────────────────────────
+  if (isTerminalActive('FONNTE')) {
+    const D          = '─'.repeat(62);
+    const sendStatus = fonnteSent
+      ? `✅ Terkirim ke ${sender}`
+      : `❌ Gagal: ${fonnteError}`;
+
+    console.log('');
+    console.log(D);
+    console.log(`[FONNTE] ⬇  PESAN PROPERTI MASUK`);
+    console.log(`[FONNTE]    Agent    : ${agent.name} (${agent.phone})`);
+    console.log(`[FONNTE]    Customer : ${sender} (${name})`);
+    console.log(`[FONNTE]    Time     : ${ts}`);
+    console.log(`[FONNTE]    Message  : ${message.substring(0, 100)}`);
+    console.log(`[FONNTE]    Context  : ${ctxSource}`);
+    console.log(`[FONNTE]    AI       : ${aiResult.provider}`);
+    console.log(`[FONNTE]    Reply    : ${aiResult.reply.substring(0, 80)}...`);
+    console.log(`[FONNTE]    Send     : ${sendStatus}`);
+    console.log(D);
+    console.log('');
   }
 }
 

@@ -470,7 +470,7 @@ async function loadPropertyContextSample(userMessage = '') {
     }
 
     return {
-      sourceFile:        'frontend/public/json_data/indonesia_property_36_provinces_flat.json',
+      sourceFile:        'backend/asset/json_data/indonesia_property_36_provinces_flat.json',
       userLocation:      profile.location,
       totalRecords:      properties.length,
       sampleSize:        selected.length,

@@ -32,8 +32,8 @@ class ChatbotController {
     }
 
     const lines = [
-      `PROPERTY CATALOG CONTEXT (sent by frontend from indonesia_property_36_provinces_flat.json):`,
-      `Source file: ${propertyContext.sourceFile || 'frontend/public/json_data/indonesia_property_36_provinces_flat.json'}`,
+      `PROPERTY CATALOG CONTEXT (from indonesia_property_36_provinces_flat.json):`,
+      `Source file: ${propertyContext.sourceFile || 'backend/asset/json_data/indonesia_property_36_provinces_flat.json'}`,
       `Total records in dataset: ${propertyContext.totalRecords || 'unknown'}`,
       `Context records provided: ${propertyContext.sampleSize || propertyContext.properties.length} properties`,
       `Selection strategy: ${propertyContext.selectionStrategy || 'not specified'}`,

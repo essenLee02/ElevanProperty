@@ -48,11 +48,52 @@ app.get('/', (req, res) => {
   res.json({ success: true, message: `${appName} backend is running.` });
 });
 
+// ─── Serve JSON data files from backend/asset/json_data/ ─────────────────────
+// Sumber tunggal (single source of truth) untuk semua JSON catalog properti.
+// Frontend dan backend sama-sama menggunakan file ini via path /json_data/...
+app.use('/json_data', express.static(path.join(__dirname, 'asset/json_data')));
+
+// ─── Root POST handler — untuk webhook platform yang tidak menyertakan path ──
+// Fonnte / Dialog / WATI kadang dikonfigurasi hanya ke base URL (tanpa /api/...)
+// Handler ini meneruskan ke controller yang aktif sesuai MASSEGE_TERMINAL di .env
+//
+// Contoh: Fonnte Dashboard webhook = https://ngrok-url/  (tanpa path)
+//         → POST / masuk sini → diteruskan ke fonnteChatController
+app.post('/', (req, res) => {
+  const active = String(process.env.MASSEGE_TERMINAL || 'FONNTE')
+    .toUpperCase().split(',')[0].trim();
+
+  console.log(`\n[ROOT WEBHOOK] POST / diterima — routing ke: ${active}`);
+  console.log(`[ROOT WEBHOOK] MASSEGE_TERMINAL = ${process.env.MASSEGE_TERMINAL || '(tidak di-set, default: FONNTE)'}`);
+
+  if (active === 'FONNTE') {
+    const FonnteChatController = require('./controllers/fonnteChatController');
+    return FonnteChatController.handleInboundMessage(req, res);
+  }
+
+  if (active === 'DIALOG') {
+    const DialogChatController = require('./controllers/dialogChatController');
+    return DialogChatController.handleInboundMessage(req, res);
+  }
+
+  if (active === 'WATI') {
+    const WatiChatController = require('./controllers/watiChatController');
+    return WatiChatController.handleInboundMessage(req, res);
+  }
+
+  // Fallback jika MASSEGE_TERMINAL tidak dikenali
+  return res.status(200).json({
+    success : true,
+    message : 'Webhook diterima. Set MASSEGE_TERMINAL=FONNTE|DIALOG|WATI di .env untuk routing.'
+  });
+});
+
 // ─── Raw webhook logger (khusus untuk debug Fonnte/WATI webhook) ────────────
 // Catat SEMUA request yang masuk ke /api/fonnte-chat/webhook dan /api/wati/webhook
 // Hapus atau nonaktifkan middleware ini di production jika tidak dibutuhkan
 app.use((req, res, next) => {
   const webhookPaths = [
+    '/',
     '/api/fonnte-chat/webhook',
     '/api/fonnte/webhook',
     '/api/wati/webhook',
@@ -116,6 +157,23 @@ async function ensureRequiredDatabaseColumns() {
   } catch (error) {
     if (!String(error.message || '').toLowerCase().includes('no description found')) {
       console.warn('Chat session schema check warning:', error.message);
+    }
+  }
+
+  // ─── Tambah kolom dialog360_token ke tabel users (jika belum ada) ──────
+  try {
+    const usersTable = await queryInterface.describeTable('users');
+    if (usersTable && !usersTable.dialog360_token) {
+      await queryInterface.addColumn('users', 'dialog360_token', {
+        type     : DataTypes.STRING(200),
+        allowNull: true,
+        after    : 'fonnte_token'
+      });
+      console.log('Database migration completed: added users.dialog360_token column');
+    }
+  } catch (error) {
+    if (!String(error.message || '').toLowerCase().includes('no description found')) {
+      console.warn('Users schema check warning (dialog360_token):', error.message);
     }
   }
 }

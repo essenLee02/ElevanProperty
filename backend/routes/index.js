@@ -21,6 +21,7 @@ const rumah123Controller = require('../controllers/rumah123Controller');
 const whatsappInboundController = require('../controllers/whatsappInboundController');
 const watiChatController   = require('../controllers/watiChatController');
 const fonnteChatController = require('../controllers/fonnteChatController');
+const dialogChatController = require('../controllers/dialogChatController');
 
 // Auth controllers (Login & Register Users)
 const registerController = require('../controllers/registerController');
@@ -110,6 +111,17 @@ router.get('/auth/protected-test', verifyToken, (req, res) => {
     isSuccess: 1
   });
 });
+
+// =============================================================
+// 360dialog WhatsApp Chat Controller (Multi-Agent)
+// =============================================================
+router.post('/dialog-chat/webhook',              dialogChatController.handleInboundMessage);
+router.post('/dialog-chat/setup-webhook',        dialogChatController.setupWebhook);
+router.post('/dialog-chat/simulate',             dialogChatController.simulateInboundMessage);
+router.get('/dialog-chat/status',                dialogChatController.getDialogStatus);
+router.get('/dialog-chat/agents',                dialogChatController.getAgentsWithDialog);
+router.get('/dialog-chat/agent-chats/:agentName', dialogChatController.getAgentChats);
+router.get('/dialog-chat/chat-history/:sessionId', dialogChatController.getChatHistory);
 
 // Module Logger
 router.post('/log', logController.saveLog);

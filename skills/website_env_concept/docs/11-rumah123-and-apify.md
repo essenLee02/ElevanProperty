@@ -108,9 +108,41 @@ Backend:
 
 ## Static JSON Fallback
 
-File: `frontend/public/json_data/indonesia_property_36_provinces_flat.json`
+**Sumber tunggal (migrasi Juni 2026):**
+```
+backend/asset/json_data/indonesia_property_36_provinces_flat.json
+backend/asset/json_data/indonesia_property_36_provinces_associative.json
+```
 
-- Coverage: 36 provinces, flat array format
-- Loaded by `FloatingChatbot.vue` on first message and sent as `propertyContext`
-- Bundled with the frontend app (no API call needed)
-- Used when Apify quota is exceeded or `RUMAH123_DATA=OFF`
+- Coverage: 36 provinces, 7920 properties, flat array format
+- **Sebelumnya**: `frontend/public/json_data/` (dihapus)
+- **Sekarang**: Backend serve via `app.use('/json_data', express.static(...))` di server.js
+- Frontend fetch `/json_data/...` → Vite proxy → backend (dev mode)
+- Used when Apify quota exceeded atau `RUMAH123_DATA=OFF`
+
+---
+
+## WhatsApp Context (Juni 2026)
+
+Semua 3 WA controller (Fonnte, WATI, 360dialog) menggunakan data properti yang sama:
+
+```javascript
+// backend/utils/whatsappPropertyContext.js
+const ctx = await getWhatsappPropertyContext(customerMessage);
+// ctx.source = 'rumah123' | 'flat_json'
+// ctx.contextText = teks yang diinjeksi ke AI prompt
+```
+
+Flow:
+```
+getWhatsappPropertyContext("cari rumah di surabaya")
+    ↓ extract: location="surabaya", type="house", tx="sale"
+    ↓
+[1] getRumah123Listings({ location: "surabaya", propertyType: "house" })
+    → formatRumah123ContextForLLM(listings)  ← max 20 listings
+    ↓ jika gagal/kosong:
+[2] searchFlatJson("surabaya", "house", "sale")
+    → formatFlatJsonForLLM(properties)  ← max 8 properties
+```
+
+Lihat detail di `13-whatsapp-terminal-multiagent.md`.

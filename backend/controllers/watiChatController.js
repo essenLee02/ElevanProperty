@@ -16,6 +16,9 @@ const { generateChatGPTWhatsappReply, isChatGPTFallbackEligibleError } = require
 const { generateClaudeWhatsappReply } = require('../services/claudeService');
 const { generatePrivateWhatsappReply } = require('./chatbotPrivateController');
 const { safeLog } = require('../utils/safeLog');
+const { isTerminalActive } = require('../utils/terminalSwitch');
+const { hasPropertyKeyword } = require('../utils/propertyKeywordFilter');
+const { getWhatsappPropertyContext } = require('../utils/whatsappPropertyContext');
 
 /**
  * ═══════════════════════════════════════════════════════════════
@@ -129,39 +132,22 @@ class AiReplyGenerator {
   /**
    * Generate AI reply with fallback chain: ChatGPT → Claude → PrivateAgent
    */
-  static async generate(session, customerMessage, agentName) {
+  static async generate(session, customerMessage, agentName, propertyCtx = '') {
     const appName = process.env.APP_NAME || 'Elevan Property';
 
-    // Priority 1: ChatGPT
+    // Priority 1: ChatGPT (dengan property context)
     try {
-      console.log('[WATI AI] Attempting ChatGPT...');
-      const reply = await generateChatGPTWhatsappReply(session, [], customerMessage, '');
-      return {
-        reply,
-        provider: 'chatgpt',
-        primaryProvider: 'chatgpt',
-        fallbackUsed: false
-      };
+      const reply = await generateChatGPTWhatsappReply(session, [], customerMessage, propertyCtx);
+      return { reply, provider: 'chatgpt', primaryProvider: 'chatgpt', fallbackUsed: false };
     } catch (error) {
       const isRecoverable = isChatGPTFallbackEligibleError(error);
       console.warn('[WATI AI] ChatGPT failed:', error.message, `(Recoverable: ${isRecoverable})`);
-
-      if (!isRecoverable) {
-        console.error('[WATI AI] ChatGPT error not recoverable, skipping to Claude');
-      }
     }
 
-    // Priority 2: Claude
+    // Priority 2: Claude (dengan property context)
     try {
-      console.log('[WATI AI] Attempting Claude...');
-      const reply = await generateClaudeWhatsappReply(session, [], customerMessage, '');
-      return {
-        reply,
-        provider: 'claude',
-        primaryProvider: 'chatgpt',
-        fallbackUsed: true,
-        fallbackProvider: 'claude'
-      };
+      const reply = await generateClaudeWhatsappReply(session, [], customerMessage, propertyCtx);
+      return { reply, provider: 'claude', primaryProvider: 'chatgpt', fallbackUsed: true, fallbackProvider: 'claude' };
     } catch (error) {
       console.warn('[WATI AI] Claude failed:', error.message);
     }
@@ -308,15 +294,17 @@ class Logger {
    * ────────────────────────────────────────────────────────────
    */
   static logInboundMessage(agentName, agentPhone, customerPhone, customerMessage, timestamp = null) {
+    if (!isTerminalActive('WATI')) return;
+
     const divider = '─'.repeat(60);
     const ts = timestamp || new Date().toISOString();
 
     console.log('');
     console.log(divider);
-    console.log(`Agent     : ${agentName} - ${agentPhone}`);
-    console.log(`Customer  : ${customerPhone}`);
-    console.log(`Timestamp : ${ts}`);
-    console.log(`Message   : ${String(customerMessage).trim()}`);
+    console.log(`[WATI] Agent     : ${agentName} - ${agentPhone}`);
+    console.log(`[WATI] Customer  : ${customerPhone}`);
+    console.log(`[WATI] Timestamp : ${ts}`);
+    console.log(`[WATI] Message   : ${String(customerMessage).trim()}`);
     console.log(divider);
     console.log('');
   }
@@ -512,7 +500,7 @@ class WatiChatController {
     // Create/find session
     const session = await MessageProcessor.findOrCreateSession(customerPhone, agent.name, customerName);
 
-    // Save customer message
+    // Save customer message (always)
     await MessageProcessor.saveCustomerMessage(session, customerMessage, {
       agentName: agent.name,
       agentUserId: agent.user_id,
@@ -525,13 +513,40 @@ class WatiChatController {
       messageLength: customerMessage.length
     });
 
+    // ── Cek kata kunci properti ─────────────────────────────────────────────
+    const isPropertyQuery = hasPropertyKeyword(customerMessage);
+    if (!isPropertyQuery) {
+      if (isTerminalActive('WATI')) {
+        console.log(`[WATI] 📥 Pesan disimpan (bukan query properti — tidak dibalas): ${customerMessage.substring(0, 60)}`);
+      }
+      return {
+        sessionId: session.id, agentName: agent.name, agentPhone: agent.phone,
+        customerPhone, aiReply: null, aiProvider: null,
+        skipped: true, skipReason: 'no_property_keyword'
+      };
+    }
+
+    // ── Ambil property context ───────────────────────────────────────────────
+    let propertyCtx = '';
+    let ctxSource   = 'none';
+    try {
+      const ctxResult = await getWhatsappPropertyContext(customerMessage);
+      propertyCtx = ctxResult.contextText || '';
+      ctxSource   = ctxResult.source      || 'none';
+      if (isTerminalActive('WATI')) {
+        console.log(`[WATI CONTEXT] Source: ${ctxSource}`);
+      }
+    } catch (err) {
+      console.warn('[WATI CONTEXT] Gagal ambil context:', err.message);
+    }
+
     // Generate AI reply
     let aiReply = null;
     let aiResult = null;
     let aiError = null;
 
     try {
-      aiResult = await AiReplyGenerator.generate(session, customerMessage, agent.name);
+      aiResult = await AiReplyGenerator.generate(session, customerMessage, agent.name, propertyCtx);
       aiReply = aiResult.reply;
 
       // Save AI reply

@@ -1,8 +1,13 @@
 # 09. Fonnte WhatsApp & Contact Form
 
-> **Scope:** Fonnte digunakan HANYA untuk contact form (`/contact`).
-> **JANGAN** gunakan Fonnte di `watiChatController.js`.
-> Untuk agent-customer chat → lihat file `08-wati-whatsapp-integration.md`.
+> **Ada dua controller Fonnte yang berbeda — jangan tertukar:**
+>
+> | Controller | Route | Tujuan |
+> |---|---|---|
+> | `fonnteWebhookController.js` | `POST /api/fonnte/webhook` | Fonnte AI reply untuk contact form (global token `.env`) |
+> | `fonnteChatController.js` | `POST /api/fonnte-chat/webhook` | **Multi-agent chat** — per-agent token dari DB |
+>
+> File ini menjelaskan **KEDUANYA**. WATI = lihat `08-wati-whatsapp-integration.md`.
 
 ---
 
@@ -178,3 +183,66 @@ GET /api/contact/ai-whatsapp-status
 ```
 
 Returns Fonnte token status + AI provider status.
+
+---
+
+## fonnteChatController — Multi-Agent Chat (Per-Agent Token)
+
+`backend/controllers/fonnteChatController.js`
+
+Berbeda dari `fonnteWebhookController` — controller ini menggunakan token **per-agent** dari `users.fonnte_token`, bukan token global dari `.env`.
+
+> Detail lengkap lihat `13-whatsapp-terminal-multiagent.md`
+
+### Fitur Utama (Update Juni 2026)
+
+1. **Keyword Filter** — hanya membalas pesan terkait properti
+   - Engine: `propertyKeywordFilter.hasPropertyKeyword(message)`
+   - Non-property (sewa mobil, beli laptop, cari bebek, dll) → SKIP
+   - Pesan tetap disimpan ke DB tapi tidak dibalas AI
+
+2. **Property Context** — AI mendapat data properti nyata
+   - Try Rumah123 live data (Apify) → jika gagal: flat JSON
+   - Engine: `whatsappPropertyContext.getWhatsappPropertyContext(message)`
+
+3. **MASSEGE_TERMINAL** — kontrol platform mana yang tampil di terminal
+   - Set `MASSEGE_TERMINAL=FONNTE` di `.env`
+
+4. **Root POST handler** — handle webhook URL tanpa path
+   - `POST /` → route ke FONNTE/DIALOG/WATI sesuai `MASSEGE_TERMINAL`
+
+### Fonnte Dashboard Config (LEO FELIX)
+
+```
+Webhook ?        : https://[ngrok]/           ← atau /api/fonnte-chat/webhook
+Webhook Status ? : https://[ngrok]/
+Webhook Chaining?: https://[ngrok]/api/fonnte-chat/chaining
+```
+
+### Agent Saat Ini
+
+| Agent | Phone | Token | Device |
+|---|---|---|---|
+| LEO FELIX | 0881036588874 | PiBSZQXu6HKWhKkEDu9e | ✅ Connected |
+| NIGEL KUNCORO | 082233556796 | m5HDmV4hAYRFBgTdkfDR | ⚠️ Disconnected |
+| CLARENCE MARIO | 0821-1136-7154 | NULL | ❌ Belum setup |
+| DESY TALIM | 0821-1331-8191 | NULL | ❌ Belum setup |
+| IFAN TJANDRA | +62881036588874 | NULL | ❌ Belum setup |
+| IFAN ELDY | 0881-0365-88874 | NULL | ❌ Belum setup |
+
+### Curl Test (property keyword — harus dibalas)
+
+```powershell
+curl -X POST http://localhost:5005/ ^
+  -H "Content-Type: application/json" ^
+  -d "{\"sender\":\"628111111111\",\"name\":\"Budi\",\"message\":\"ada rumah sewa 3 kamar?\",\"device\":\"62881036588874\",\"inboxid\":\"T1\"}"
+```
+
+### Curl Test (non-property — harus SKIP)
+
+```powershell
+curl -X POST http://localhost:5005/ ^
+  -H "Content-Type: application/json" ^
+  -d "{\"sender\":\"628111111111\",\"name\":\"Budi\",\"message\":\"mau cari nasi goreng\",\"device\":\"62881036588874\",\"inboxid\":\"T2\"}"
+# Terminal: "📥 Disimpan, tidak dibalas"
+```

@@ -27,7 +27,15 @@ export default defineConfig(({ mode }) => {
       host: devHost,
       port: devPort,
       strictPort: toBoolean(env.VITE_DEV_SERVER_STRICT_PORT, true),
-      open: toBoolean(env.VITE_DEV_SERVER_OPEN, false)
+      open: toBoolean(env.VITE_DEV_SERVER_OPEN, false),
+      proxy: {
+        // Proxy /json_data/* ke backend — sumber tunggal dari backend/asset/json_data/
+        // Frontend tidak perlu menyimpan salinan JSON di public/json_data/
+        '/json_data': {
+          target: `http://localhost:${env.PORT || 5005}`,
+          changeOrigin: true
+        }
+      }
     },
     preview: {
       host: previewHost,
