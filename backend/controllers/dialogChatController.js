@@ -51,13 +51,10 @@
 
 const axios  = require('axios');
 const { User, ChatSession, ChatMessage } = require('../models');
-const { generateChatGPTWhatsappReply }   = require('../services/openaiService');
-const { generateClaudeWhatsappReply }    = require('../services/claudeService');
-const { generatePrivateWhatsappReply }   = require('./chatbotPrivateController');
 const { safeLog }                        = require('../utils/safeLog');
 const { isTerminalActive }               = require('../utils/terminalSwitch');
 const { hasPropertyKeyword }             = require('../utils/propertyKeywordFilter');
-const { getWhatsappPropertyContext }     = require('../utils/whatsappPropertyContext');
+const { generateWhatsAppAIReply }        = require('../services/whatsappAIService');
 
 /* ══════════════════════════════════════════════════════════════════════════════
    SECTION 1 — CONFIG
@@ -229,33 +226,8 @@ async function registerWebhook(agentToken, agentUserId, webhookUrl) {
    SECTION 6 — AI REPLY (ChatGPT → Claude → Private Agent)
 ══════════════════════════════════════════════════════════════════════════════ */
 
-async function generateAIReply(session, message, agentName, propertyCtx = '') {
-  // ChatGPT (dengan property context)
-  try {
-    const reply = await generateChatGPTWhatsappReply(session, [], message, propertyCtx);
-    return { reply, provider: 'chatgpt' };
-  } catch (err) {
-    console.warn('[DIALOG AI] ChatGPT gagal:', err.message);
-  }
-
-  // Claude (dengan property context)
-  try {
-    const reply = await generateClaudeWhatsappReply(session, [], message, propertyCtx);
-    return { reply, provider: 'claude' };
-  } catch (err) {
-    console.warn('[DIALOG AI] Claude gagal:', err.message);
-  }
-
-  // Private Agent (selalu berhasil)
-  const result = generatePrivateWhatsappReply({
-    name      : session.name || 'Customer',
-    phone     : session.phone,
-    message,
-    agentName : agentName || 'Property Consultant'
-  });
-
-  return { reply: result.reply, provider: 'private_agent' };
-}
+// ✅ UPDATED: generateAIReply removed — now using whatsappAIService.generateWhatsAppAIReply
+// This centralizes AI logic across all WhatsApp platforms (Fonnte, WATI, 360dialog)
 
 /* ══════════════════════════════════════════════════════════════════════════════
    SECTION 7 — TERMINAL LOGGER
@@ -364,27 +336,27 @@ async function processIncomingMessage(msg, contacts, agent) {
     return;
   }
 
-  // ── Ambil property context ────────────────────────────────────────────────
-  let propertyCtx = '';
-  let ctxSource   = 'none';
-  try {
-    const ctxResult = await getWhatsappPropertyContext(messageText);
-    propertyCtx = ctxResult.contextText || '';
-    ctxSource   = ctxResult.source      || 'none';
-  } catch (err) {
-    console.warn('[360DIALOG CONTEXT] Gagal ambil context:', err.message);
-  }
-
-  // ── Generate AI reply dengan property context ─────────────────────────────
+  // ── Generate AI reply (dengan property context injection) ────────────────
+  // ✅ NEW: Menggunakan whatsappAIService untuk konsistensi dengan chatbot
+  // Ini menggunakan ChatGPT → Claude → Private Agent chain
   let aiResult;
+  let ctxSource = 'none';
   try {
-    aiResult = await generateAIReply(session, messageText, agent.name, propertyCtx);
+    const result = await generateWhatsAppAIReply({
+      session,
+      message: messageText,
+      agentName: agent.name,
+    });
+    aiResult = result;
+    ctxSource = result.contextSource || 'none';
   } catch (err) {
     const appName = process.env.APP_NAME || 'Elevan Property';
     aiResult = {
       reply    : `Halo ${senderName}, terima kasih menghubungi ${agent.name} dari ${appName}. Kami akan segera membantu mencari properti untuk Anda. 🏠`,
-      provider : 'fallback'
+      provider : 'fallback',
+      contextSource: 'none'
     };
+    ctxSource = 'none';
   }
 
   if (isTerminalActive('DIALOG')) {

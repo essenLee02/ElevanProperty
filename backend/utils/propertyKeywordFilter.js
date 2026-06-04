@@ -30,25 +30,27 @@
 ══════════════════════════════════════════════════════════════════════════════ */
 
 const PROPERTY_TYPES = [
-  // Hunian
-  'apartemen', 'apartment', 'apt',
+  // Hunian — apartemen & semua variasi ejaan umum
+  'apartemen', 'apartmen', 'apartment', 'apt',
   'villa', 'vila',
   'kost', 'kos', 'kosan', 'boarding house', 'boarding',
-  'kontrakan', 'bedeng',
+  'kontrakan', 'kontrakkan', 'bedeng',
   // Komersial
-  'ruko', 'shophouse', 'shop house',
-  'kantor', 'office',
-  'gudang', 'warehouse',
-  'toko', 'store',
-  'hotel', 'motel', 'penginapan',
+  'ruko', 'rukan', 'shophouse', 'shop house',
+  'kantor', 'office', 'perkantoran',
+  'gudang', 'warehouse', 'pergudangan',
+  'toko', 'store', 'pertokoan',
+  'hotel', 'motel', 'penginapan', 'resort',
   'klinik', 'kios',
   // Tanah / kavling
   'kavling', 'kapling', 'tanah kavling',
+  'lahan', 'tanah',
   // Istilah properti umum
   'properti', 'property', 'perumahan',
   'cluster', 'residensial', 'residential',
   'townhouse', 'town house',
   'studio', 'loft', 'penthouse',
+  'hunian', 'tempat tinggal',
   // "rumah" ditangani secara khusus (lihat fungsi hasPropertyType)
 ];
 

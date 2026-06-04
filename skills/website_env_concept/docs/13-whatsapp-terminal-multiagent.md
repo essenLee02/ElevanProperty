@@ -86,11 +86,12 @@ Jika Fonnte Dashboard webhook = `https://ngrok-url/` (tanpa path) → tetap dite
 
 **Tipe Properti** (harus ada salah satu):
 - rumah *(kecuali "rumah makan", "rumah sakit", "rumah tangga")*
-- apartemen, apartment, apt *(word boundary — tidak match "laptop")*
+- apartemen, **apartmen** (typo), apartment, apt *(word boundary — tidak match "laptop")*
 - villa, vila, kost, kos, kosan, boarding
-- ruko, shophouse, toko *(word boundary)*
-- kantor, office, gudang, warehouse
-- hotel, motel, kavling, properti, perumahan, cluster
+- ruko, rukan, shophouse, toko *(word boundary)*
+- kantor, office, perkantoran, gudang, warehouse, pergudangan
+- hotel, motel, resort, kavling, properti, perumahan, cluster
+- hunian, tempat tinggal
 
 **Kata Aksi** (harus ada salah satu, valid hanya bersama Tipe Properti):
 - sewa, rental, ngontrak, beli, jual, cari, nyari
@@ -104,15 +105,26 @@ Jika Fonnte Dashboard webhook = `https://ngrok-url/` (tanpa path) → tetap dite
 - dp rumah, cicilan rumah, uang muka rumah
 - agen properti, developer, shm, hgb, listing properti
 
-### Contoh Nyata
+### 10 Contoh Pesan Customer (User Examples — Juni 2026)
+
+| # | Pesan | Trigger? | Alasan |
+|---|---|---|---|
+| 1 | "saya mau sewa apartmen di surabaya, ada apa saja?" | ✅ YA | "sewa"(aksi) + "apartmen"(tipe, typo OK) |
+| 2 | "Tolong berikan list atau daftar villa yang ada di Malang" | ✅ YA | "berikan/list"(aksi) + "villa"(tipe) |
+| 3 | "Berikan harga rumah yang dijual di Aceh" | ✅ YA | "dijual"(aksi) + "rumah"(tipe) |
+| 4 | "Saya ingin cari gudang yang disewakan selama 2 tahun di Gersik" | ✅ YA | "cari"(aksi) + "gudang"(tipe) |
+| 5 | "Ada toko di semarang, yang disewakan harga 7-9 juta per tahunnya?" | ✅ YA | "ada"(aksi) + "toko"(tipe) |
+| 6 | "Ada hotel dengan fasilitas kamar mandi, kolam renang? Saya mau hotel yang ada view gunung" | ✅ YA | "ada"(aksi) + "hotel"(tipe) |
+| 7 | "Hotel yang dekat pantai Selatan Jogja, ada dimana? Berapa harga sewanya?" | ✅ YA | "ada"(aksi) + "hotel"(tipe) + "sewa"(transaksi) |
+| 8 | "Berikan daftar harga rumah di Madiun?" | ✅ YA | "berikan"(aksi) + "rumah"(tipe) |
+| 9 | "Saya mau cari villa di batu, dekat dengan wisata BNS. saya mau villa yang murah." | ✅ YA | "cari"(aksi) + "villa"(tipe) |
+| 10 | "Kalau harga 2 milliar untuk perkantoran yang dijual di Kediri, apakah ada?" | ✅ YA | "dijual"(aksi) + "perkantoran"(tipe) |
+| 11 | "Saya lagi cari kos di Semarang, saya mau fasilitas kamar mandi dalam, wifi, laundry dan AC." | ✅ YA | "cari"(aksi) + "kos"(tipe) |
+
+### Contoh Negative Cases (TIDAK Dibalas)
 
 | Pesan | Trigger? | Alasan |
 |---|---|---|
-| "sewa rumah 3 kamar" | ✅ YA | "sewa"(aksi) + "rumah"(tipe) |
-| "ada apartemen kosong?" | ✅ YA | "ada"(aksi) + "apartemen"(tipe) |
-| "KPR syariah berapa persen?" | ✅ YA | "kpr" (mandiri) |
-| "jual tanah kavling murah" | ✅ YA | "jual"(aksi) + "tanah"(tipe) + "kavling"(mandiri) |
-| "mau tanya soal perumahan" | ✅ YA | "tanya"(aksi) + "perumahan"(tipe) |
 | **"Km mau cari bebek goreng?"** | ❌ TIDAK | "cari"(aksi) tapi TIDAK ada tipe properti |
 | **"sewa mobil dong"** | ❌ TIDAK | "sewa"(aksi) tapi "mobil" bukan tipe properti |
 | **"jual laptop bekas"** | ❌ TIDAK | "jual"(aksi) + "laptop" bukan tipe + "apt" tidak match karena word boundary |

@@ -24,6 +24,7 @@ const { getRumah123Listings,
         mapTransactionTypeToApify }           = require('../services/rumah123ContextService');
 const { loadResponseSkillPrompt,
         getSkillRegistryStatus }              = require('../services/skillPromptService');
+const { hasPropertyKeyword }                  = require('../utils/propertyKeywordFilter');
 
 // ─── LanguageDetector ─────────────────────────────────────────────────────────
 
@@ -90,19 +91,26 @@ class LanguageDetector {
 
   /**
    * Return true when the message or extracted filters indicate clear property intent.
+   * Uses advanced propertyKeywordFilter untuk deteksi akurat (tipe properti + aksi).
    *
    * @param {string} message
    * @param {object} filters  - Extracted filters from propertyRecommendationService
    * @returns {boolean}
    */
   static hasPropertyIntent(message = '', filters = {}) {
-    return Boolean(
-      filters.transactionType ||
-      filters.buildingType    ||
-      filters.location        ||
-      filters.budget          ||
-      /saran|rekomendasi|recommend|pilihan|opsi|cari|mau|ingin|butuh|need|find|ada apa|apa saja/i.test(message)
-    );
+    // Check 1: Extracted filters dari recommendation service
+    if (filters.transactionType || filters.buildingType || filters.location || filters.budget) {
+      return true;
+    }
+
+    // Check 2: Advanced keyword filter (propertyKeywordFilter.js)
+    //          Deteksi: (Tipe Properti + Aksi) ATAU Kata Kunci Mandiri
+    if (hasPropertyKeyword(message)) {
+      return true;
+    }
+
+    // Check 3: Fallback ke regex untuk backward compatibility
+    return /saran|rekomendasi|recommend|pilihan|opsi|cari|mau|ingin|butuh|need|find|ada apa|apa saja/i.test(message);
   }
 }
 

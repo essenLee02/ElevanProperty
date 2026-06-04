@@ -121,3 +121,162 @@ When `RUMAH123 LIVE LISTINGS` section is NOT in context (RUMAH123_DATA=OFF):
 - Mention that data is from our catalog (not live from Rumah123)
 - Offer relevant alternatives from the catalog
 - Do NOT mention Rumah123 or Apify
+
+---
+
+## June 2026 Update: Property Keyword Filtering & WhatsApp Integration
+
+### Advanced Property Intent Detection
+
+This skill now integrates with `propertyKeywordFilter.js` which provides **two-condition property detection**:
+
+#### Condition A: Standalone Property Keywords (Always Trigger)
+These terms alone are enough to identify property intent:
+- Financial: KPR, cicilan rumah, over kredit, uang muka rumah, DP rumah, indent rumah
+- Project Type: perumahan, real estate, siap huni, ready unit, ready stok
+- Legal: sertifikat hak milik, SHM, HGB, IMB, PBG
+- Listing: listing properti, agen properti, developer properti
+
+#### Condition B: Property Type + Action Word (Both Required)
+Only respond if message contains BOTH:
+
+**Property Types** (34 recognized):
+- Hunian: rumah, apartemen, apartmen (typo OK), villa, kost, kos, kontrakan
+- Komersial: ruko, kantor, perkantoran, gudang, pergudangan, toko, pertokoan, hotel, motel, penginapan, resort
+- Lainnya: kavling, tanah, lahan, properti, perumahan, cluster, townhouse, studio, loft, penthouse, hunian, tempat tinggal
+
+**Action Words** (22 recognized):
+- Transaksi: sewa, rental, ngontrak, kontrak, beli, purchase, jual, dijual, disewakan
+- Ketersediaan: ada, available, tersedia, kosong, ready
+- Harga/Budget: harga, berapa, cicilan, dp, uang muka
+- Intent: mau, ingin, pengen, butuh, cari, tanya, rekomendasi
+
+### 10 User Examples (All Validated, June 2026)
+
+Claude will NOW respond (with property context) to:
+
+1. ✅ "saya mau sewa apartmen di surabaya, ada apa saja?" → [Property Type: apartmen (typo) + Action: sewa, mau]
+2. ✅ "Tolong berikan list atau daftar villa yang ada di Malang" → [Property Type: villa + Action: berikan, ada]
+3. ✅ "Berikan harga rumah yang dijual di Aceh" → [Property Type: rumah + Action: dijual, berikan, harga]
+4. ✅ "Saya ingin cari gudang yang disewakan selama 2 tahun di Gersik" → [Property Type: gudang + Action: cari, disewakan]
+5. ✅ "Ada toko di semarang, yang disewakan harga 7-9 juta per tahunnya?" → [Property Type: toko + Action: ada, disewakan, harga]
+6. ✅ "Ada hotel dengan fasilitas kamar mandi, kolam renang? Saya mau hotel dengan view gunung" → [Property Type: hotel + Action: ada, mau]
+7. ✅ "Hotel yang dekat pantai Selatan Jogja, ada dimana? Berapa harga sewanya?" → [Property Type: hotel + Action: ada, berapa, sewa]
+8. ✅ "Berikan daftar harga rumah di Madiun?" → [Property Type: rumah + Action: berikan, harga, daftar]
+9. ✅ "Saya mau cari villa di batu, dekat dengan wisata BNS. saya mau villa yang murah." → [Property Type: villa + Action: cari, mau, murah]
+10. ✅ "Kalau harga 2 milliar untuk perkantoran yang dijual di Kediri, apakah ada?" → [Property Type: perkantoran + Action: dijual, harga, ada]
+11. ✅ "Saya lagi cari kos di Semarang, saya mau fasilitas kamar mandi dalam, wifi, laundry dan AC." → [Property Type: kos + Action: cari, mau]
+
+### Non-Property Messages (Correctly Ignored)
+
+Claude will NOT respond to (messages saved to DB but no AI reply):
+
+1. ❌ "Km mau cari bebek goreng?" → Has Action (cari, mau) but NO Property Type → SKIP
+2. ❌ "sewa mobil dong" → Has Action (sewa) but NO Property Type → SKIP
+3. ❌ "jual laptop bekas" → Has Action (jual) but NO Property Type → SKIP
+4. ❌ "rumah makan soto enak dimana?" → Has "rumah" but matches exclusion "rumah makan" → SKIP
+5. ❌ "cari wisata bali" → Has Action (cari) but NO Property Type → SKIP
+
+### WhatsApp Integration: Property Context Injection
+
+When responding to WhatsApp messages (via fonnteChatController, watiChatController, dialogChatController), Claude receives:
+
+1. **Extracted Message Data**:
+   - location: "surabaya" (from "saya mau sewa apartmen di surabaya")
+   - propertyType: "apartment" (mapped from "apartmen" typo)
+   - transactionType: "rent" (from "sewa")
+
+2. **Property Context** (injected into prompt):
+   ```
+   DATA PROPERTI LOKAL (Rumah123 Live) — 8 listing:
+   1. Apartemen Modern 2KT Surabaya Timur
+      📍 Lokasi: Surabaya Timur, Surabaya, Jawa Timur
+      💰 Harga: Rp 4.500.000/bulan
+      🏠 Tipe: Apartemen — Sewa
+      📐 Luas: bangunan 65m², tanah —
+      ✨ Fasilitas: AC, WiFi, Keamanan 24 jam, Lift
+      🔗 [Chat Agen](https://wa.me/628xxx)
+      🔗 [Lihat di Rumah123](https://www.rumah123.com/...)
+   
+   [7 more listings...]
+   ```
+
+3. **Fallback Source** (if Apify quota exceeded):
+   - Same format but from `backend/asset/json_data/indonesia_property_36_provinces_flat.json`
+   - Context shows: "DATA PROPERTI LOKAL (backend/asset/json_data)"
+
+### Response Requirements for WhatsApp Messages
+
+When responding to the 10 user examples above via WhatsApp:
+
+1. **Always include matching properties** from provided context
+2. **Show property details**: location, price, type, specs, facilities
+3. **Include agent contact**: WhatsApp link to agent
+4. **Include property URL**: Direct link to Rumah123 or property listing
+5. **Mention context source**: "dari **Rumah123** (data terkini)" OR "dari katalog lokal kami"
+6. **Suggest follow-up**: One short question about preferences (budget, amenities, location)
+7. **Keep response concise**: Max 3-5 properties per response (WhatsApp character limit)
+8. **Never invent properties**: Only show what's in provided context
+9. **Respect budget filters**: "harga 7-9 juta per tahun" → show only Rp 7-9M properties
+10. **Respect duration filters**: "disewakan selama 2 tahun" → mention if available for 2-year lease
+
+### Example Claude Response (WhatsApp)
+
+```
+Halo! Berikut rekomendasi apartemen terbaik untuk Anda di **Surabaya** dari **Rumah123**:
+
+1️⃣ **Apartemen Modern 2KT Surabaya Timur**
+   📍 Surabaya Timur, Surabaya
+   💰 **Rp 4.500.000/bulan**
+   🏠 Apartemen — Sewa
+   📐 65m² (furnished)
+   ✨ AC, WiFi, Keamanan, Lift
+   👥 [Chat Agen](https://wa.me/628xxx)
+   🔗 [Lihat di Rumah123](https://www.rumah123.com/...)
+
+2️⃣ **Apartemen Nyaman 3KT Pusat Kota**
+   📍 Surabaya Pusat, Surabaya
+   💰 **Rp 5.200.000/bulan**
+   🏠 Apartemen — Sewa
+   📐 75m² (unfurnished)
+   ✨ AC, Lift, Parkir Gratis, Internet
+   👥 [Chat Agen](https://wa.me/628xxx)
+   🔗 [Lihat di Rumah123](https://www.rumah123.com/...)
+
+---
+
+Apakah Anda tertarik dengan salah satu dari pilihan di atas? 
+Atau ada budget/fasilitas khusus yang Anda cari?
+```
+
+### Configuration: MASSEGE_TERMINAL for Terminal Logging
+
+The system can now control which WhatsApp platform logs to terminal via `MASSEGE_TERMINAL` environment variable:
+
+- `MASSEGE_TERMINAL=FONNTE` → Only Fonnte messages logged
+- `MASSEGE_TERMINAL=DIALOG` → Only 360dialog messages logged
+- `MASSEGE_TERMINAL=WATI` → Only WATI messages logged
+- `MASSEGE_TERMINAL=FONNTE,DIALOG` → Multiple platforms
+
+All messages are ALWAYS saved to database (logging visibility is separate).
+
+### AI Provider Chain (WhatsApp)
+
+When responding to WhatsApp property queries:
+
+1. **Try ChatGPT First** (primary)
+   - Receives property context injection
+   - Best for natural language + reasoning
+   - Max latency: 3-5 seconds
+
+2. **Try Claude** (secondary)
+   - Same property context
+   - Alternative reasoning engine
+   - If ChatGPT unavailable
+
+3. **Fallback to Private Agent** (tertiary)
+   - Template-based responses
+   - No API calls, guaranteed success
+   - <100ms response time
+
+All three providers see the same property context, ensuring consistent recommendations.

@@ -12,13 +12,10 @@
 
 const { User, ChatSession, ChatMessage } = require('../models');
 const WatiService = require('../services/watiService');
-const { generateChatGPTWhatsappReply, isChatGPTFallbackEligibleError } = require('../services/openaiService');
-const { generateClaudeWhatsappReply } = require('../services/claudeService');
-const { generatePrivateWhatsappReply } = require('./chatbotPrivateController');
 const { safeLog } = require('../utils/safeLog');
 const { isTerminalActive } = require('../utils/terminalSwitch');
 const { hasPropertyKeyword } = require('../utils/propertyKeywordFilter');
-const { getWhatsappPropertyContext } = require('../utils/whatsappPropertyContext');
+const { generateWhatsAppAIReply } = require('../services/whatsappAIService');
 
 /**
  * ═══════════════════════════════════════════════════════════════
@@ -128,59 +125,9 @@ class AgentLookup {
  * ═══════════════════════════════════════════════════════════════
  */
 
-class AiReplyGenerator {
-  /**
-   * Generate AI reply with fallback chain: ChatGPT → Claude → PrivateAgent
-   */
-  static async generate(session, customerMessage, agentName, propertyCtx = '') {
-    const appName = process.env.APP_NAME || 'Elevan Property';
-
-    // Priority 1: ChatGPT (dengan property context)
-    try {
-      const reply = await generateChatGPTWhatsappReply(session, [], customerMessage, propertyCtx);
-      return { reply, provider: 'chatgpt', primaryProvider: 'chatgpt', fallbackUsed: false };
-    } catch (error) {
-      const isRecoverable = isChatGPTFallbackEligibleError(error);
-      console.warn('[WATI AI] ChatGPT failed:', error.message, `(Recoverable: ${isRecoverable})`);
-    }
-
-    // Priority 2: Claude (dengan property context)
-    try {
-      const reply = await generateClaudeWhatsappReply(session, [], customerMessage, propertyCtx);
-      return { reply, provider: 'claude', primaryProvider: 'chatgpt', fallbackUsed: true, fallbackProvider: 'claude' };
-    } catch (error) {
-      console.warn('[WATI AI] Claude failed:', error.message);
-    }
-
-    // Priority 3: Private Agent (always succeeds)
-    try {
-      console.log('[WATI AI] Using private agent fallback...');
-      const result = generatePrivateWhatsappReply({
-        name: session.customerName || 'Valued Customer',
-        phone: session.customerPhone,
-        message: customerMessage,
-        agentName: agentName || 'Property Consultant'
-      });
-
-      return {
-        reply: result.reply,
-        provider: 'private_agent',
-        primaryProvider: 'chatgpt',
-        fallbackUsed: true,
-        fallbackProvider: 'private_agent'
-      };
-    } catch (error) {
-      const errorMsg = `All AI providers failed: ${error.message}`;
-      console.error('[WATI AI]', errorMsg);
-      safeLog('WATI_ALL_AI_PROVIDERS_FAILED', {
-        customerPhone: session.customerPhone,
-        error: error.message
-      }, 'error');
-
-      throw new Error(errorMsg);
-    }
-  }
-}
+// ✅ UPDATED: AiReplyGenerator removed — now using whatsappAIService.generateWhatsAppAIReply
+// This centralizes AI logic across all WhatsApp platforms (Fonnte, WATI, 360dialog)
+// Maintains same interface: { reply, provider, contextSource }
 
 /**
  * ═══════════════════════════════════════════════════════════════
@@ -526,38 +473,32 @@ class WatiChatController {
       };
     }
 
-    // ── Ambil property context ───────────────────────────────────────────────
-    let propertyCtx = '';
-    let ctxSource   = 'none';
-    try {
-      const ctxResult = await getWhatsappPropertyContext(customerMessage);
-      propertyCtx = ctxResult.contextText || '';
-      ctxSource   = ctxResult.source      || 'none';
-      if (isTerminalActive('WATI')) {
-        console.log(`[WATI CONTEXT] Source: ${ctxSource}`);
-      }
-    } catch (err) {
-      console.warn('[WATI CONTEXT] Gagal ambil context:', err.message);
-    }
-
-    // Generate AI reply
+    // ── Generate AI reply (dengan property context injection) ────────────
+    // ✅ NEW: Menggunakan whatsappAIService untuk konsistensi dengan chatbot
+    // Property context fetching sudah otomatis di whatsappAIService
     let aiReply = null;
     let aiResult = null;
-    let aiError = null;
+    let ctxSource = 'none';
 
     try {
-      aiResult = await AiReplyGenerator.generate(session, customerMessage, agent.name, propertyCtx);
+      aiResult = await generateWhatsAppAIReply({
+        session,
+        message: customerMessage,
+        agentName: agent.name,
+      });
       aiReply = aiResult.reply;
+      ctxSource = aiResult.contextSource || 'none';
 
       // Save AI reply
       await MessageProcessor.saveAiReply(session, aiReply, aiResult);
 
       console.log('[WATI AI] Reply generated:', {
         provider: aiResult.provider,
-        replyLength: aiReply.length
+        replyLength: aiReply.length,
+        contextSource: ctxSource
       });
     } catch (error) {
-      aiError = error.message;
+      const aiError = error.message;
       console.error('[WATI AI ERROR]', aiError);
       safeLog('WATI_AI_FAILED', { sessionId: session.id, error: aiError }, 'error');
 
@@ -568,6 +509,7 @@ class WatiChatController {
         primaryProvider: 'unknown',
         fallbackUsed: true
       };
+      ctxSource = 'none';
     }
 
     // Send reply via WATI
