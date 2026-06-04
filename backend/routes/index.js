@@ -124,7 +124,7 @@ router.get('/dialog-chat/agent-chats/:agentName', dialogChatController.getAgentC
 router.get('/dialog-chat/chat-history/:sessionId', dialogChatController.getChatHistory);
 
 // Module Logger
-router.post('/log', logController.saveLog);
+router.post('/log', logController.insertLog);
 
 // Module Rumah123 (Apify Scraper)
 router.get('/rumah123/status', rumah123Controller.status);

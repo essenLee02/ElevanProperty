@@ -89,23 +89,24 @@ async function generateWhatsAppAIReply(params) {
   }
 
   // ── Step 4: Fallback to Private Agent dengan PROPERTY DATA LENGKAP ─────────
-  // Sama persis dengan chatbot web — bukan template generic
+  // Gunakan generatePrivateTerminalMassege untuk format WhatsApp dengan images & agent name
   try {
     // Lazy require untuk hindari circular dependency
-    const { generatePrivateChatbotResponse } = require('../controllers/chatbotPrivateController');
+    const { generatePrivateTerminalMassege } = require('../controllers/chatbotPrivateController');
 
     // Build recommendation context (same as chatbotController.js)
     const recommendationContext = await buildRecommendationContextForLLM(message, history);
 
-    const result = await generatePrivateChatbotResponse({
+    const result = await generatePrivateTerminalMassege({
       session,
       history,
       userMessage:           message,
+      agentName:             agentName,  // Pass agent name untuk footer
       recommendationContext,
       externalError:         new Error('ChatGPT and Claude unavailable for WhatsApp reply'),
     });
 
-    console.log(`[WhatsAppAI] Private Agent used (${result.exactMatches || 0} exact, ` +
+    console.log(`[WhatsAppAI] Private Agent (terminal message) used (${result.exactMatches || 0} exact, ` +
                 `${result.alternatives || 0} alt, ${result.rumah123Listings || 0} rumah123)`);
 
     return {

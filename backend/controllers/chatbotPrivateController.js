@@ -515,6 +515,164 @@ class ResponseBuilder {
   }
 }
 
+// ─── ResponseBuilderWhatsApp ──────────────────────────────────────────────────
+// Format khusus untuk WhatsApp terminal message (Fonnte, WATI, 360dialog)
+// Dengan property images, agent name, dan bolder formatting untuk readability
+
+class ResponseBuilderWhatsApp {
+  /** @type {'id'|'en'} */
+  #lang;
+  /** @type {string} */
+  #agentName;
+
+  constructor(lang = 'en', agentName = 'Elevan Property') {
+    this.#lang      = lang;
+    this.#agentName = agentName;
+  }
+
+  #summarizeRequest(filters = {}) {
+    const parts = [];
+    if (filters.transactionType) parts.push(PropertyFormatter.humanTransactionType(filters.transactionType, this.#lang));
+    if (filters.buildingType)    parts.push(PropertyFormatter.humanBuildingType(filters.buildingType, this.#lang));
+    if (filters.location)        parts.push(filters.location);
+    if (filters.budget?.text)    parts.push(filters.budget.text);
+    return parts.length
+      ? parts.join(' ')
+      : (this.#lang === 'id' ? 'kebutuhan properti Anda' : 'your property request');
+  }
+
+  offTopic() {
+    return this.#lang === 'id'
+      ? 'Maaf, saya hanya dapat membantu pertanyaan seputar jual, beli, atau sewa properti. Silakan tanyakan kebutuhan properti seperti rumah, villa, hotel, apartemen, kos-kosan, ruko, kantor, atau gudang yang ingin Anda cari.'
+      : 'Sorry, I can only help with questions about buying, selling, or renting property. Please ask me about the property type, location, budget, or facilities you are looking for.';
+  }
+
+  clarification() {
+    return this.#lang === 'id'
+      ? 'Boleh saya pastikan, Anda mencari properti untuk *sewa*, *beli*, atau *jual*? Silakan sebutkan juga lokasi dan budget agar saya bisa mencarikan pilihan terbaik dari Rumah123 dan katalog kami.'
+      : 'May I confirm whether you are looking to *rent*, *buy*, or *sell* a property? You can also mention the location and budget so I can find the best options from Rumah123 and our catalog.';
+  }
+
+  #filterAlternativesByLocation(alternatives = [], location = '') {
+    if (!location) return alternatives;
+    const normLoc = location.toLowerCase().trim();
+    return alternatives.filter(item => {
+      const itemLoc = [item.location, item.city, item.district, item.province]
+        .filter(Boolean)
+        .map(s => String(s).toLowerCase())
+        .join(' ');
+      return itemLoc.includes(normLoc);
+    });
+  }
+
+  #catalogItemWhatsApp(item, index, lang = 'en') {
+    const isId   = lang === 'id';
+    const imgTag = item.imageUrl
+      ? `\n   ![${item.title || 'Properti'}](${item.imageUrl})`
+      : '';
+
+    return [
+      `${index + 1}. *${item.title || (isId ? 'Properti' : 'Property')}*${imgTag}`,
+      `   📍 Lokasi: ${PropertyFormatter.formatLocation(item)}`,
+      `   💰 Harga: *${item.price || '-'}*`,
+      `   🏠 Tipe: ${PropertyFormatter.humanBuildingType(item.buildingType, lang)} — ${PropertyFormatter.humanTransactionType(item.transactionType, lang)}`,
+      `   📐 Luas: bangunan ${item.buildingArea || '-'}, tanah ${item.landArea || '-'}`,
+      `   🏷️ Fasilitas: ${PropertyFormatter.formatFacilities(item.facilities)}`,
+    ].join('\n');
+  }
+
+  #catalogListWhatsApp(properties = [], lang = 'en', limit = 6) {
+    return properties.slice(0, limit)
+      .map((item, i) => this.#catalogItemWhatsApp(item, i, lang))
+      .join('\n\n');
+  }
+
+  #addFooter() {
+    const isId = this.#lang === 'id';
+    return isId
+      ? `\n\nKami siap membantu Anda menemukan rumah, villa, apartemen, atau properti lainnya yang cocok untuk Anda.\nApakah ada yang ingin Anda tanyakan lebih lanjut?\n\n\nSalam hangat,\n*${this.#agentName}*\n*Elevan Property*`
+      : `\n\nWe are ready to help you find a house, villa, apartment, or other property that suits you.\nWould you like to know more details?\n\n\nWarm regards,\n*${this.#agentName}*\n*Elevan Property*`;
+  }
+
+  exactMatch({ rumah123Listings = [], catalogMatches = [], filters = {} }) {
+    const summary  = this.#summarizeRequest(filters);
+    const hasR123  = rumah123Listings.length > 0;
+    const hasCat   = catalogMatches.length > 0;
+    const isId     = this.#lang === 'id';
+    const lines    = [];
+
+    if (hasR123) {
+      const count = Math.min(rumah123Listings.length, 6); // WhatsApp limit: max 6
+      lines.push(isId
+        ? `Berikut *${count} pilihan ${summary}* terbaik dari *Rumah123* (data terkini):\n`
+        : `Here are the *top ${count} ${summary}* listings from *Rumah123* (live data):\n`
+      );
+      lines.push(PropertyFormatter.rumah123List(rumah123Listings, this.#lang, 6));
+    }
+
+    if (hasCat && !hasR123) {
+      lines.push(isId
+        ? `Berikut pilihan *${summary}* dari katalog properti kami:\n`
+        : `Here are matching *${summary}* options from our catalog:\n`
+      );
+      lines.push(this.#catalogListWhatsApp(catalogMatches, this.#lang, 6));
+    }
+
+    lines.push(this.#addFooter());
+    return lines.join('\n');
+  }
+
+  alternative({ alternatives = [], rumah123Listings = [], filters = {} }) {
+    const summary    = this.#summarizeRequest(filters);
+    const location   = filters.location || '';
+    const hasR123    = rumah123Listings.length > 0;
+    const filteredAlt = location
+      ? this.#filterAlternativesByLocation(alternatives, location)
+      : alternatives;
+    const hasAlt     = filteredAlt.length > 0;
+    const isId       = this.#lang === 'id';
+
+    if (!hasR123 && !hasAlt) {
+      const locationNote = location ? ` di *${location}*` : '';
+      const msg = isId
+        ? `Maaf, saat ini belum ada properti yang sesuai dengan *${summary}*${locationNote} di katalog maupun Rumah123. Apakah Anda ingin mencoba lokasi, tipe properti, atau range harga lain?`
+        : `Sorry, there is currently no property matching *${summary}*${locationNote} in our catalog or Rumah123. Would you like to try another location, property type, or price range?`;
+      return msg + this.#addFooter();
+    }
+
+    const lines = [];
+
+    if (hasR123) {
+      const count = Math.min(rumah123Listings.length, 6);
+      lines.push(isId
+        ? `Berikut *${count} listing terbaik* dari *Rumah123* untuk *${summary}* (data terkini):\n`
+        : `Here are the *top ${count} listings* from *Rumah123* for *${summary}* (live data):\n`
+      );
+      lines.push(PropertyFormatter.rumah123List(rumah123Listings, this.#lang, 6));
+    } else if (location) {
+      lines.push(isId
+        ? `⚠️ Maaf, belum ada listing yang tersedia di *${location}* dari Rumah123 untuk *${summary}*.\n`
+        : `⚠️ Sorry, no listings are currently available in *${location}* from Rumah123 for *${summary}*.\n`
+      );
+    }
+
+    if (hasAlt) {
+      if (hasR123) {
+        lines.push(isId ? '\n---\n*Alternatif dari Katalog Kami:*\n' : '\n---\n*Alternatives from Our Catalog:*\n');
+      } else {
+        lines.push(isId
+          ? `Namun berikut pilihan alternatif dari katalog kami untuk *${summary}*:\n`
+          : `Here are some alternative options from our catalog for *${summary}*:\n`
+        );
+      }
+      lines.push(this.#catalogListWhatsApp(filteredAlt, this.#lang, 6));
+    }
+
+    lines.push(this.#addFooter());
+    return lines.join('\n');
+  }
+}
+
 // ─── ChatbotPrivateService ────────────────────────────────────────────────────
 
 class ChatbotPrivateService {
@@ -668,7 +826,11 @@ class ChatbotPrivateService {
    * @param {Error}    params.externalError         - Error from the failed AI provider
    * @returns {Promise<object>}                     Result object with reply + metadata
    */
-  static async generateResponse({ session, history = [], userMessage = '', recommendationContext = null, externalError = null }) {
+  /**
+   * Generate response untuk chatbot web.
+   * Menggunakan ResponseBuilder (format web biasa).
+   */
+  static async generateResponseForChatbot({ session, history = [], userMessage = '', recommendationContext = null, externalError = null }) {
     const skillInfo = this.loadSkillInfo();
     const lang      = LanguageDetector.detect(userMessage);
     const builder   = new ResponseBuilder(lang);
@@ -717,6 +879,73 @@ class ChatbotPrivateService {
       rumah123Listings:rumah123Listings.length,
       alternatives:    context.alternatives.length,
       fallbackReason:  externalError?.message || 'External AI provider unavailable.',
+    });
+  }
+
+  /**
+   * Generate response untuk WhatsApp terminal message (Fonnte, WATI, 360dialog).
+   * Menggunakan ResponseBuilderWhatsApp (format WhatsApp dengan images + agent name).
+   *
+   * @param {object} params
+   * @param {object} params.session
+   * @param {string[]} params.history
+   * @param {string} params.userMessage
+   * @param {string} params.agentName - Agent name untuk footer (e.g., "LEO FELIX")
+   * @param {object} params.recommendationContext
+   * @param {Error} params.externalError
+   * @returns {Promise<{reply, source, controller, fallbackUsed, ...}>}
+   */
+  static async generateResponseForTerminalMassege({ session, history = [], userMessage = '', agentName = '', recommendationContext = null, externalError = null }) {
+    const skillInfo = this.loadSkillInfo();
+    const lang      = LanguageDetector.detect(userMessage);
+    const builder   = new ResponseBuilderWhatsApp(lang, agentName);
+
+    console.warn('[WHATSAPP PRIVATE AGENT ACTIVE]', {
+      reason:    externalError?.message || 'External AI provider unavailable.',
+      sessionId: session?.id            || null,
+      language:  lang,
+      agent:     agentName,
+    });
+
+    // Resolve filters — use provided context or extract on the fly
+    const filters = recommendationContext?.filters || extractPropertyFilters(userMessage, history);
+
+    // Guard: reject off-topic messages immediately
+    if (LanguageDetector.isOffTopic(userMessage)) {
+      return this.#wrap(builder.offTopic(), { skillInfo, filters });
+    }
+
+    // Guard: ask for clarification when intent is unclear
+    if (!LanguageDetector.hasPropertyIntent(userMessage, filters)) {
+      return this.#wrap(builder.clarification(), { skillInfo, filters });
+    }
+
+    // Fetch Rumah123 live data and build catalog context in parallel for speed
+    const [rumah123Listings, context] = await Promise.all([
+      this.fetchRumah123Listings(filters, session?.location),
+      recommendationContext
+        ? Promise.resolve(recommendationContext)
+        : buildRecommendationContextForLLM(userMessage, history),
+    ]);
+
+    const catalogMatches = this.resolveCatalogMatches(context);
+
+    // Select reply strategy
+    let reply;
+    if (rumah123Listings.length > 0 || catalogMatches.length > 0) {
+      reply = builder.exactMatch({ rumah123Listings, catalogMatches, filters: context.filters });
+    } else {
+      reply = builder.alternative({ alternatives: context.alternatives, rumah123Listings, filters: context.filters });
+    }
+
+    return this.#wrap(reply, {
+      skillInfo,
+      filters:         context.filters,
+      exactMatches:    catalogMatches.length,
+      rumah123Listings:rumah123Listings.length,
+      alternatives:    context.alternatives.length,
+      fallbackReason:  externalError?.message || 'External AI provider unavailable.',
+      agentName,
     });
   }
 
@@ -993,7 +1222,8 @@ exports.debugTestRumah123 = async (req, res) => {
 
 // ─── Shared exports (used by chatbotController.js as fallback) ────────────────
 
-module.exports.generatePrivateChatbotResponse  = (params)  => ChatbotPrivateService.generateResponse(params);
+module.exports.generatePrivateChatbotResponse  = (params)  => ChatbotPrivateService.generateResponseForChatbot(params);
+module.exports.generatePrivateTerminalMassege  = (params)  => ChatbotPrivateService.generateResponseForTerminalMassege(params);
 module.exports.generatePrivateContactReply     = (payload) => ChatbotPrivateService.generateContactFormReply(payload);
 
 /**
