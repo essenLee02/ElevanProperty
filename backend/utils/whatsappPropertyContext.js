@@ -166,10 +166,11 @@ async function getWhatsappPropertyContext(customerMessage) {
   console.log(`[PropertyContext] Params — location: "${location}" | type: "${propertyType}" | tx: "${transactionType}"`);
 
   // ── Coba Rumah123 live data ──────────────────────────────────────────────
-  const apifyToken = process.env.APIFY_API_TOKEN;
-  const apifyReady = apifyToken && apifyToken !== 'isi_apify_token_anda';
+  const apifyToken         = process.env.APIFY_API_TOKEN;
+  const apifyReady         = apifyToken && apifyToken !== 'isi_apify_token_anda';
+  const rumah123DataEnabled = String(process.env.RUMAH123_DATA || 'ON').toUpperCase() === 'ON';
 
-  if (apifyReady) {
+  if (apifyReady && rumah123DataEnabled) {
     try {
       const listings = await getRumah123Listings({
         location,
@@ -187,7 +188,11 @@ async function getWhatsappPropertyContext(customerMessage) {
       console.warn(`[PropertyContext] Rumah123 error: ${err.message} → fallback to flat JSON`);
     }
   } else {
-    console.log(`[PropertyContext] Apify token tidak tersedia → flat JSON`);
+    if (!rumah123DataEnabled) {
+      console.log(`[PropertyContext] RUMAH123_DATA=OFF → langsung flat JSON`);
+    } else {
+      console.log(`[PropertyContext] Apify token tidak tersedia → flat JSON`);
+    }
   }
 
   // ── Fallback: flat JSON ──────────────────────────────────────────────────

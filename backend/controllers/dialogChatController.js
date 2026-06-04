@@ -359,10 +359,6 @@ async function processIncomingMessage(msg, contacts, agent) {
     ctxSource = 'none';
   }
 
-  if (isTerminalActive('DIALOG')) {
-    console.log(`[360DIALOG AI] Provider: ${aiResult.provider} | Context: ${ctxSource}`);
-  }
-
   // ── Simpan AI reply ───────────────────────────────────────────────────────
   await ChatMessage.create({
     chatSessionId : session.id,
@@ -373,11 +369,12 @@ async function processIncomingMessage(msg, contacts, agent) {
   });
 
   // ── Kirim reply via 360dialog ─────────────────────────────────────────────
+  let dialogSent = false;
+  let dialogError = null;
+
   try {
     await sendViaDialog(senderPhone, aiResult.reply, agent.dialog360_token);
-    if (isTerminalActive('DIALOG')) {
-      console.log(`[360DIALOG SEND] ✅ Terkirim ke ${senderPhone} via ${agent.name}`);
-    }
+    dialogSent = true;
 
     safeLog('DIALOG360_REPLY_SENT', {
       sessionId  : session.id,
@@ -385,12 +382,37 @@ async function processIncomingMessage(msg, contacts, agent) {
       recipient  : senderPhone,
       aiProvider : aiResult.provider
     });
-
   } catch (err) {
-    if (isTerminalActive('DIALOG')) {
-      console.error(`[360DIALOG SEND] ❌ Gagal: ${err.message}`);
-    }
+    dialogError = err.message;
     safeLog('DIALOG360_SEND_FAILED', { sessionId: session.id, error: err.message }, 'error');
+  }
+
+  // ── LOG RINGKASAN TERMINAL (FULL RESPONSE) ──────────────────────────
+  if (isTerminalActive('DIALOG')) {
+    const D          = '═'.repeat(80);
+    const sendStatus = dialogSent
+      ? `✅ Terkirim`
+      : `❌ Gagal: ${dialogError}`;
+
+    console.log('');
+    console.log(D);
+    console.log(`[360DIALOG] ⬇  PESAN PROPERTI MASUK & DIBALAS`);
+    console.log(D);
+    console.log(`Agent    : ${agent.name} (${agent.phone})`);
+    console.log(`Customer : ${senderPhone} (${senderName})`);
+    console.log(`Time     : ${msgTimestamp ? new Date(Number(msgTimestamp) * 1000).toISOString() : new Date().toISOString()}`);
+    console.log(`Message  : ${messageText}`);
+    console.log(`Context  : ${ctxSource}`);
+    console.log(`AI       : ${aiResult.provider}`);
+    console.log(D);
+    console.log('RESPONSE:');
+    console.log(D);
+    // Tampilkan full reply (bisa multi-line)
+    console.log(aiResult.reply);
+    console.log(D);
+    console.log(`Send Status: ${sendStatus}`);
+    console.log(D);
+    console.log('');
   }
 }
 

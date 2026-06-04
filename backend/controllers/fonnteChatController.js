@@ -286,24 +286,30 @@ async function processIncomingMessage(body, agent) {
     safeLog('FONNTE_REPLY_SEND_FAILED', { sessionId: session.id, agent: agent.name, error: err.message }, 'error');
   }
 
-  // ── LOG RINGKASAN TERMINAL ───────────────────────────────────────────
+  // ── LOG RINGKASAN TERMINAL (FULL RESPONSE) ──────────────────────────
   if (isTerminalActive('FONNTE')) {
-    const D          = '─'.repeat(62);
+    const D          = '═'.repeat(80);
     const sendStatus = fonnteSent
-      ? `✅ Terkirim ke ${sender}`
+      ? `✅ Terkirim`
       : `❌ Gagal: ${fonnteError}`;
 
     console.log('');
     console.log(D);
-    console.log(`[FONNTE] ⬇  PESAN PROPERTI MASUK`);
-    console.log(`[FONNTE]    Agent    : ${agent.name} (${agent.phone})`);
-    console.log(`[FONNTE]    Customer : ${sender} (${name})`);
-    console.log(`[FONNTE]    Time     : ${ts}`);
-    console.log(`[FONNTE]    Message  : ${message.substring(0, 100)}`);
-    console.log(`[FONNTE]    Context  : ${ctxSource}`);
-    console.log(`[FONNTE]    AI       : ${aiResult.provider}`);
-    console.log(`[FONNTE]    Reply    : ${aiResult.reply.substring(0, 80)}...`);
-    console.log(`[FONNTE]    Send     : ${sendStatus}`);
+    console.log(`[FONNTE] ⬇  PESAN PROPERTI MASUK & DIBALAS`);
+    console.log(D);
+    console.log(`Agent    : ${agent.name} (${agent.phone})`);
+    console.log(`Customer : ${sender} (${name})`);
+    console.log(`Time     : ${ts}`);
+    console.log(`Message  : ${message}`);
+    console.log(`Context  : ${ctxSource}`);
+    console.log(`AI       : ${aiResult.provider}`);
+    console.log(D);
+    console.log('RESPONSE:');
+    console.log(D);
+    // Tampilkan full reply (bisa multi-line)
+    console.log(aiResult.reply);
+    console.log(D);
+    console.log(`Send Status: ${sendStatus}`);
     console.log(D);
     console.log('');
   }

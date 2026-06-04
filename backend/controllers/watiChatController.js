@@ -491,12 +491,6 @@ class WatiChatController {
 
       // Save AI reply
       await MessageProcessor.saveAiReply(session, aiReply, aiResult);
-
-      console.log('[WATI AI] Reply generated:', {
-        provider: aiResult.provider,
-        replyLength: aiReply.length,
-        contextSource: ctxSource
-      });
     } catch (error) {
       const aiError = error.message;
       console.error('[WATI AI ERROR]', aiError);
@@ -519,8 +513,6 @@ class WatiChatController {
     try {
       const sendResult = await WatiService.sendMessage(customerPhone, aiReply, agent.phone);
       watiSent = true;
-
-      console.log('[WATI SEND] Reply sent successfully');
       safeLog('WATI_REPLY_SENT', {
         sessionId: session.id,
         recipient: customerPhone,
@@ -533,6 +525,34 @@ class WatiChatController {
         sessionId: session.id,
         error: watiError
       }, 'error');
+    }
+
+    // ── LOG RINGKASAN TERMINAL (FULL RESPONSE) ──────────────────────────
+    if (isTerminalActive('WATI')) {
+      const D          = '═'.repeat(80);
+      const sendStatus = watiSent
+        ? `✅ Terkirim`
+        : `❌ Gagal: ${watiError}`;
+
+      console.log('');
+      console.log(D);
+      console.log(`[WATI] ⬇  PESAN PROPERTI MASUK & DIBALAS`);
+      console.log(D);
+      console.log(`Agent    : ${agent.name} (${agent.phone})`);
+      console.log(`Customer : ${customerPhone} (${customerName})`);
+      console.log(`Time     : ${new Date().toISOString()}`);
+      console.log(`Message  : ${customerMessage}`);
+      console.log(`Context  : ${ctxSource}`);
+      console.log(`AI       : ${aiResult.provider}`);
+      console.log(D);
+      console.log('RESPONSE:');
+      console.log(D);
+      // Tampilkan full reply (bisa multi-line)
+      console.log(aiReply);
+      console.log(D);
+      console.log(`Send Status: ${sendStatus}`);
+      console.log(D);
+      console.log('');
     }
 
     return {

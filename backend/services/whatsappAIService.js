@@ -3,105 +3,125 @@
  *
  * Unified AI response service untuk semua WhatsApp controllers (Fonnte, WATI, 360dialog).
  *
- * Ini adalah wrapper yang menghubungkan WhatsApp controllers dengan chatbot AI logic:
- * - Chat GPT API (primary)
- * - Claude API (secondary fallback)
- * - Private Agent (tertiary fallback)
+ * Menghubungkan WhatsApp controllers dengan AI logic yang SAMA dengan chatbot:
+ *   1. ChatGPT (primary)
+ *   2. Claude (secondary fallback)
+ *   3. Private Agent dengan property recommendations dari katalog/Rumah123 (tertiary fallback)
  *
- * Semua WhatsApp platforms menggunakan service ini untuk consistency.
- *
- * Flow:
- *   1. Keyword filter check (hasPropertyKeyword)
- *   2. Property context injection (getWhatsappPropertyContext)
- *   3. AI provider chain (ChatGPT → Claude → Private Agent)
- *   4. Response formatting untuk WhatsApp
- *   5. Save ke DB + kirim via platform API
+ * PERBAIKAN:
+ *   - Bug: Import generateChatGPTWhatsappReply dari aiProviderService → undefined
+ *   - Fix: Gunakan generateWhatsappReplyWithProviderFallback (fungsi yang benar)
+ *   - Bug: Private Agent fallback hanya template generic, tidak ada property data
+ *   - Fix: Private Agent fallback menggunakan ChatbotPrivateService.generateResponse()
+ *          yang sama dengan chatbot web (fetch Rumah123 + katalog JSON)
  */
 
 'use strict';
 
-const { buildRecommendationContextForLLM,
-        extractPropertyFilters,
-        getVisibleMatchesFromAlternatives } = require('./propertyRecommendationService');
+// ── AI provider chain (ChatGPT → Claude dengan fallback otomatis) ──────────────
+// BENAR: generateWhatsappReplyWithProviderFallback diekspor dari aiProviderService
+// SALAH: generateChatGPTWhatsappReply & generateClaudeWhatsappReply TIDAK diekspor
+const { generateWhatsappReplyWithProviderFallback } = require('./aiProviderService');
 
-const { getRumah123Listings,
-        mapBuildingTypeToApify,
-        mapTransactionTypeToApify } = require('./rumah123ContextService');
+// ── Property context untuk WhatsApp ──────────────────────────────────────────
+const { getWhatsappPropertyContext }                = require('../utils/whatsappPropertyContext');
 
-const { getWhatsappPropertyContext } = require('../utils/whatsappPropertyContext');
-
-const { generateChatGPTWhatsappReply,
-        generateClaudeWhatsappReply } = require('./aiProviderService');
-
-const { generatePrivateWhatsappReply } = require('../controllers/chatbotPrivateController');
+// ── Untuk Private Agent fallback: sama dengan chatbot ─────────────────────────
+const { buildRecommendationContextForLLM }         = require('./propertyRecommendationService');
+const { getConversationHistory }                    = require('./sessionService');
 
 /**
  * Generate AI reply untuk WhatsApp message dengan full provider chain.
  *
+ * Chain: ChatGPT → Claude → Private Agent (dengan property data lengkap)
+ *
  * Digunakan oleh: fonnteChatController, watiChatController, dialogChatController
  *
  * @param {object} params
- *   @param {object} session - ChatSession object
- *   @param {string} message - Customer's message text
+ *   @param {object} session   - ChatSession object (id, name, phone, location, ...)
+ *   @param {string} message   - Customer's message text
  *   @param {string} agentName - Name of WhatsApp agent
- *   @param {object} options - Optional: { context, location, propertyType, transactionType }
+ *   @param {object} options   - Optional: { context, contextSource }
  * @returns {Promise<{ reply, provider, contextSource }>}
- *   @returns {string} reply - AI-generated response
- *   @returns {string} provider - 'chatgpt' | 'claude' | 'private_agent'
- *   @returns {string} contextSource - 'rumah123' | 'flat_json' | 'none'
  */
 async function generateWhatsAppAIReply(params) {
   const { session, message, agentName, options = {} } = params;
 
-  // ── Fetch property context (if not already provided) ──────────────────────
-  let propertyCtx = options.context || '';
+  // ── Step 1: Fetch property context ─────────────────────────────────────────
+  let propertyCtx  = options.context || '';
   let contextSource = 'none';
 
   if (!propertyCtx) {
     try {
-      const ctxResult = await getWhatsappPropertyContext(message);
-      propertyCtx = ctxResult.contextText || '';
-      contextSource = ctxResult.source || 'none';
+      const ctxResult  = await getWhatsappPropertyContext(message);
+      propertyCtx      = ctxResult.contextText || '';
+      contextSource    = ctxResult.source       || 'none';
     } catch (err) {
-      console.warn('[WhatsAppAI] Failed to fetch property context:', err.message);
+      console.warn('[WhatsAppAI] Context fetch failed:', err.message);
     }
   } else {
     contextSource = options.contextSource || 'provided';
   }
 
-  // ── AI Provider Chain ──────────────────────────────────────────────────────
-
-  // [1] Try ChatGPT
+  // ── Step 2: Get conversation history (sama dengan chatbot) ─────────────────
+  let history = [];
   try {
-    const reply = await generateChatGPTWhatsappReply(session, [], message, propertyCtx);
-    return { reply, provider: 'chatgpt', contextSource };
+    history = await getConversationHistory(session.id, 10);
   } catch (err) {
-    console.warn('[WhatsAppAI] ChatGPT failed:', err.message);
+    console.warn('[WhatsAppAI] History fetch failed:', err.message);
   }
 
-  // [2] Try Claude
+  // ── Step 3: Try ChatGPT → Claude (unified fallback, defined in aiProviderService) ─
   try {
-    const reply = await generateClaudeWhatsappReply(session, [], message, propertyCtx);
-    return { reply, provider: 'claude', contextSource };
-  } catch (err) {
-    console.warn('[WhatsAppAI] Claude failed:', err.message);
-  }
-
-  // [3] Fallback to Private Agent (always succeeds)
-  try {
-    const result = generatePrivateWhatsappReply({
-      name:       session.name || 'Customer',
-      phone:      session.phone,
+    const result = await generateWhatsappReplyWithProviderFallback(
+      session,
+      history,
       message,
-      agentName:  agentName || 'Property Consultant',
-    });
-    return { reply: result.reply, provider: 'private_agent', contextSource };
-  } catch (err) {
-    console.error('[WhatsAppAI] All providers failed:', err.message);
-    // Last resort: generic fallback
+      propertyCtx
+    );
     return {
-      reply: `Halo ${session.name || 'teman'}! 👋\n\nTerima kasih atas pertanyaan Anda. Tim kami sedang memproses informasi properti yang sesuai untuk Anda. Harap tunggu sebentar.\n\nSalam,\nElevan Property`,
-      provider: 'fallback_generic',
+      reply:         result.reply,
+      provider:      result.provider,
+      contextSource,
+    };
+  } catch (err) {
+    console.warn('[WhatsAppAI] ChatGPT + Claude both failed:', err.message);
+  }
+
+  // ── Step 4: Fallback to Private Agent dengan PROPERTY DATA LENGKAP ─────────
+  // Sama persis dengan chatbot web — bukan template generic
+  try {
+    // Lazy require untuk hindari circular dependency
+    const { generatePrivateChatbotResponse } = require('../controllers/chatbotPrivateController');
+
+    // Build recommendation context (same as chatbotController.js)
+    const recommendationContext = await buildRecommendationContextForLLM(message, history);
+
+    const result = await generatePrivateChatbotResponse({
+      session,
+      history,
+      userMessage:           message,
+      recommendationContext,
+      externalError:         new Error('ChatGPT and Claude unavailable for WhatsApp reply'),
+    });
+
+    console.log(`[WhatsAppAI] Private Agent used (${result.exactMatches || 0} exact, ` +
+                `${result.alternatives || 0} alt, ${result.rumah123Listings || 0} rumah123)`);
+
+    return {
+      reply:         result.reply,
+      provider:      'private_agent',
+      contextSource,
+    };
+  } catch (err) {
+    console.error('[WhatsAppAI] Private Agent also failed:', err.message);
+
+    // ── Last resort: minimal generic reply ────────────────────────────────────
+    const name = session?.name || 'Pelanggan';
+    const agent = agentName    || process.env.APP_NAME || 'Elevan Property';
+    return {
+      reply: `Halo *${name}*! 👋\n\nTerima kasih telah menghubungi kami. Tim *${agent}* akan segera membalas pesan Anda dengan informasi properti yang sesuai.\n\nMohon tunggu sebentar 🙏`,
+      provider:      'fallback_generic',
       contextSource: 'none',
     };
   }
@@ -118,59 +138,54 @@ async function generateWhatsAppAIReply(params) {
 async function analyzePropertyMessage(message) {
   const { hasPropertyKeyword } = require('../utils/propertyKeywordFilter');
 
-  // Check keyword filter
   if (!hasPropertyKeyword(message)) {
     return null; // Not a property query
   }
 
-  // Fetch property context
   try {
     const result = await getWhatsappPropertyContext(message);
     return {
-      isPropertyQuery: true,
-      context: result.contextText,
-      contextSource: result.source,
-      location: result.location,
-      propertyType: result.propertyType,
-      transactionType: result.transactionType,
+      isPropertyQuery:  true,
+      context:          result.contextText,
+      contextSource:    result.source,
+      location:         result.location,
+      propertyType:     result.propertyType,
+      transactionType:  result.transactionType,
     };
   } catch (err) {
     console.warn('[WhatsAppAI] Property analysis failed:', err.message);
-    // Return empty context but still mark as property query
     return {
-      isPropertyQuery: true,
-      context: '',
-      contextSource: 'error',
-      location: null,
-      propertyType: null,
-      transactionType: null,
+      isPropertyQuery:  true,
+      context:          '',
+      contextSource:    'error',
+      location:         null,
+      propertyType:     null,
+      transactionType:  null,
     };
   }
 }
 
 /**
  * Format response untuk WhatsApp dengan metadata.
- * Digunakan untuk logging dan DB storage.
  *
  * @param {object} params
- *   @param {string} reply - AI response text
- *   @param {string} provider - AI provider name
- *   @param {string} contextSource - Context source (rumah123/flat_json/none)
- *   @param {string} agentName - WhatsApp agent name
- *   @param {string} customerPhone - Customer phone number
- * @returns {object} { text, metadata }
+ *   @param {string} reply           - AI response text
+ *   @param {string} provider        - AI provider name
+ *   @param {string} contextSource   - Context source (rumah123/flat_json/none)
+ *   @param {string} agentName       - WhatsApp agent name
+ *   @param {string} customerPhone   - Customer phone number
+ * @returns {{ text, metadata }}
  */
 function formatWhatsAppResponse(params) {
   const { reply, provider, contextSource, agentName, customerPhone } = params;
-
   return {
     text: reply,
     metadata: {
-      aiProvider: provider,
+      aiProvider:    provider,
       contextSource,
       agentName,
-      timestamp: new Date().toISOString(),
-      channel: 'whatsapp',
+      timestamp:     new Date().toISOString(),
+      channel:       'whatsapp',
     },
   };
 }
