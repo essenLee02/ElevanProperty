@@ -38,6 +38,7 @@
               <template v-else>
                 <ul class="navbar-nav me-auto">
                   <li class="nav-item"><router-link class="page-scroll" active-class="active" to="/rumah123">Rumah 123</router-link></li>
+                  <li class="nav-item"><router-link class="page-scroll" active-class="active" to="/facility">Master Fasilitas</router-link></li>
                 </ul>
 
                 <ul class="navbar-nav ms-auto auth-nav">
@@ -63,6 +64,15 @@
                       >
                         <span class="item-icon">👤</span>
                         <span class="item-text">Profil Saya</span>
+                      </router-link>
+
+                      <router-link
+                        to="/facility"
+                        class="dropdown-menu-item profile-item"
+                        @click="showSettingsMenu = false"
+                      >
+                        <span class="item-icon">🏷️</span>
+                        <span class="item-text">Master Fasilitas</span>
                       </router-link>
 
                       <div class="dropdown-divider"></div>

@@ -8,6 +8,8 @@ import Rumah123View from '../views/Rumah123View.vue'
 import LoginView from '../views/LoginView.vue'
 import RegisterView from '../views/RegisterView.vue'
 import ProfileView from '../views/ProfileView.vue'
+import FacilityListView from '../views/FacilityListView.vue'
+import FacilityMasterView from '../views/FacilityMasterView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -49,6 +51,25 @@ const router = createRouter({
       name: 'profile',
       component: ProfileView,
       meta: { layout: 'auth', requiresAuth: true }  // Hanya untuk user sudah login
+    },
+    // Master Data — Facility
+    {
+      path: '/facility',
+      name: 'facility-list',
+      component: FacilityListView,
+      meta: { layout: 'auth', requiresAuth: true }
+    },
+    {
+      path: '/facility/add',
+      name: 'facility-add',
+      component: FacilityMasterView,
+      meta: { layout: 'auth', requiresAuth: true }
+    },
+    {
+      path: '/facility/edit/:facility_id',
+      name: 'facility-edit',
+      component: FacilityMasterView,
+      meta: { layout: 'auth', requiresAuth: true }
     }
   ]
 })

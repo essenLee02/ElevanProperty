@@ -57,6 +57,9 @@ const loginController            = require('../controllers/loginController');
 const refreshTokenController     = require('../controllers/refreshTokenController');
 const profileController          = require('../controllers/profileController');
 
+// Master data controllers
+const facilityMasterController   = require('../controllers/facilityMasterController');
+
 const { verifyToken, requirePrivilege } = require('../middleware/verifyToken');
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -179,5 +182,17 @@ router.post('/rumah123/warmup',    verifyToken,            rumah123Controller.tr
 
 // Debug chatbot (development only)
 router.get('/chatbot/debug/test-rumah123', verifyToken,    chatbotPrivateController.debugTestRumah123);
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   MASTER DATA — FACILITY (Butuh login)
+══════════════════════════════════════════════════════════════════════════════ */
+
+router.get('/facility/list',                        verifyToken, facilityMasterController.showDataFacility);
+router.get('/facility/categories',                  verifyToken, facilityMasterController.getCategories);
+router.get('/facility/detail/:facility_id',         verifyToken, facilityMasterController.getDetailFacility);
+router.post('/facility/insert',                     verifyToken, facilityMasterController.insertDataFacility);
+router.put('/facility/update/:facility_id',         verifyToken, facilityMasterController.updateDataFacility);
+router.patch('/facility/toggle-status/:facility_id',verifyToken, facilityMasterController.toggleStatusFacility);
+router.delete('/facility/delete/:facility_id',      verifyToken, facilityMasterController.deleteFacility);
 
 module.exports = router;
