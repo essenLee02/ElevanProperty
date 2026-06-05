@@ -463,12 +463,16 @@ class FonnteChatController {
         metadata: JSON.stringify({ platform: 'fonnte_chaining' })
       });
 
-      const aiResult = await generateAIReply(session, message, agent.name);
-      aiReply = aiResult.reply;
+      const result = await generateWhatsAppAIReply({
+        session,
+        message,
+        agentName: agent.name,
+      });
+      aiReply = result.reply;
 
       await ChatMessage.create({
         chatSessionId: session.id, role: 'ai', message: aiReply, channel: 'whatsapp',
-        metadata: JSON.stringify({ aiProvider: aiResult.provider })
+        metadata: JSON.stringify({ aiProvider: result.provider })
       });
 
     } catch (err) {

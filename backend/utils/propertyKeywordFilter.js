@@ -30,27 +30,39 @@
 ══════════════════════════════════════════════════════════════════════════════ */
 
 const PROPERTY_TYPES = [
+  // ── Bahasa Indonesia ──────────────────────────────────────────────────────
   // Hunian — apartemen & semua variasi ejaan umum
-  'apartemen', 'apartmen', 'apartment', 'apt',
+  'apartemen', 'apartmen',
   'villa', 'vila',
   'kost', 'kos', 'kosan', 'boarding house', 'boarding',
   'kontrakan', 'kontrakkan', 'bedeng',
   // Komersial
   'ruko', 'rukan', 'shophouse', 'shop house',
-  'kantor', 'office', 'perkantoran',
-  'gudang', 'warehouse', 'pergudangan',
-  'toko', 'store', 'pertokoan',
-  'hotel', 'motel', 'penginapan', 'resort',
+  'kantor', 'perkantoran',
+  'gudang', 'pergudangan',
+  'toko', 'pertokoan',
+  'penginapan', 'resort',
   'klinik', 'kios',
   // Tanah / kavling
   'kavling', 'kapling', 'tanah kavling',
   'lahan', 'tanah',
   // Istilah properti umum
-  'properti', 'property', 'perumahan',
-  'cluster', 'residensial', 'residential',
+  'properti', 'perumahan',
+  'cluster', 'residensial',
   'townhouse', 'town house',
-  'studio', 'loft', 'penthouse',
   'hunian', 'tempat tinggal',
+
+  // ── English (bilingual support) ───────────────────────────────────────────
+  // Residential
+  'house', 'home', 'apartment', 'apt',
+  'room', 'bedroom',
+  // Commercial
+  'office', 'warehouse', 'store',
+  'hotel', 'motel',
+  // Land / property
+  'property', 'residential', 'land', 'lot',
+  // Lifestyle
+  'studio', 'loft', 'penthouse',
   // "rumah" ditangani secara khusus (lihat fungsi hasPropertyType)
 ];
 
@@ -68,22 +80,40 @@ const RUMAH_EXCLUSIONS = [
 ══════════════════════════════════════════════════════════════════════════════ */
 
 const ACTION_WORDS = [
+  // ── Bahasa Indonesia ──────────────────────────────────────────────────────
   // Transaksi
   'sewa', 'sewain', 'rental', 'ngontrak', 'kontrak',
   'beli', 'purchase',
   'jual', 'dijual', 'disewakan', 'dikontrakkan',
   'cari', 'nyari', 'mencari',
   // Ketersediaan
-  'ada', 'available', 'tersedia', 'kosong', 'ready',
+  'ada', 'tersedia', 'kosong', 'ready',
   'masih ada', 'masih kosong', 'masih available',
   // Harga / transaksi
   'harga', 'berapa', 'cicilan', 'dp',
   'uang muka', 'biaya',
-  // Pertanyaan umum (hanya valid jika ada property type juga)
+  // Harga relatif
+  'murah', 'termurah', 'terjangkau', 'ekonomis', 'hemat',
+  'mahal', 'premium', 'mewah',
+  // Pertanyaan umum
   'mau', 'ingin', 'pengen', 'butuh', 'perlu',
   'tanya', 'nanya',
   'rekomendasi', 'rekomen',
   'listing', 'unit', 'stok', 'stock',
+
+  // ── English (bilingual support) ───────────────────────────────────────────
+  // Transactions
+  'buy', 'sell', 'rent', 'lease',
+  // Search intent
+  'get', 'find', 'search', 'look for', 'looking for', 'looking',
+  'want', 'need', 'require',
+  // Price / availability
+  'available', 'price', 'cost', 'how much',
+  'cheap', 'cheaper', 'cheapest', 'affordable', 'budget',
+  'expensive', 'luxury',
+  // Query words
+  'recommend', 'suggestion', 'suggest', 'show',
+  'list', 'info', 'information', 'details',
 ];
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -118,11 +148,14 @@ const STANDALONE_KEYWORDS = [
    4. FUNGSI DETEKSI
 ══════════════════════════════════════════════════════════════════════════════ */
 
-// Kata pendek/ambigu yang perlu word-boundary agar tidak match substring
-// Contoh: "apt" bisa ada di "laptop", "toko" di "kotoran", dll.
+// Kata pendek/ambigu yang perlu word-boundary agar tidak match substring.
+// Contoh: "apt" bisa ada di "laptop", "lot" di "pilot", "room" di "classroom".
 const PROPERTY_TYPES_STRICT_BOUNDARY = new Set([
+  // Bahasa Indonesia
   'apt', 'toko', 'kos', 'loft', 'studio', 'vila', 'unit',
-  'villa', 'hotel', 'motel', 'kios', 'store',
+  'villa', 'hotel', 'motel', 'kios',
+  // English — semua kata pendek wajib word-boundary
+  'house', 'home', 'room', 'lot', 'land', 'store',
 ]);
 
 /**
@@ -303,8 +336,8 @@ function extractTransactionTypeFromMessage(message) {
   if (!message) return '';
   const lower = message.toLowerCase();
 
-  if (lower.match(/\b(sewa|rental|ngontrak|kontrak|disewakan|kost|kos|boarding)\b/i)) return 'rent';
-  if (lower.match(/\b(beli|jual|dijual|purchase|kpr|inden|dp|cicilan|over kredit)\b/i)) return 'sale';
+  if (lower.match(/\b(sewa|rental|ngontrak|kontrak|disewakan|kost|kos|boarding|rent|lease)\b/i)) return 'rent';
+  if (lower.match(/\b(beli|jual|dijual|purchase|buy|sell|kpr|inden|dp|cicilan|over kredit)\b/i)) return 'sale';
 
   return '';
 }

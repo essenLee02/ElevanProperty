@@ -1,127 +1,169 @@
 # 02 — Property Intent, Terminology, and Data
 
-## Transaction Intent Mapping
+## Two-Condition Detection Logic
 
-| User Terms | Meaning |
+A message is treated as a property query when it satisfies **either** condition:
+
+```
+Condition A: Property Type KEYWORD + Action Word
+Condition B: Standalone property keyword alone (always triggers)
+```
+
+If only an action word is present without a property type → NOT a property query.  
+Example: "sewa mobil" → sewa (action) + mobil (not property) → SKIP.
+
+---
+
+## Bilingual Support
+
+Both Indonesian and English queries are fully recognized.
+
+**English property types recognized:**
+```
+house, home, room, apartment, apt, hotel, motel, villa, office,
+warehouse, store, shophouse, property, residential, land, lot,
+studio, loft, penthouse, boarding house
+```
+
+**English action words recognized:**
+```
+get, find, want, need, looking for, looking, buy, rent, sell, lease,
+cheap, cheaper, cheapest, affordable, murah, terjangkau,
+price, cost, how much, recommend, show, list, available
+```
+
+---
+
+## Transaction Intent
+
+| User Term | Detected Type |
 |---|---|
-| sewa, disewakan, kontrak, kontrakan | rent |
+| sewa, disewakan, kontrak, ngontrak, kos | rent |
 | rent, rental, lease | rent |
-| beli, membeli, cari untuk dibeli | purchase |
+| beli, membeli | purchase |
 | buy, purchase | purchase |
 | jual, dijual | sale |
 | sell, sale | sale |
 
-## Complex or Unsupported Transaction Terms
+Complex schemes (lelang, joint venture, barter, sewa-beli, lease-to-own):  
+Acknowledge, explain limitation, redirect to rent/sale, or escalate.
 
-| User Term | Handling |
-|---|---|
-| lelang, auction | explain that auction is not directly handled unless catalog has it; offer sale alternatives |
-| joint venture, kerja sama | explain that this needs human/business confirmation |
-| sewa-beli, lease-to-own | explain limitation and ask whether user wants rent or sale options first |
-| barter, tukar properti | explain limitation and escalate if needed |
-| investasi umum | answer only if related to available catalog/property options; avoid financial promises |
+---
 
 ## Building Type Mapping
 
-| User Terms | Catalog Type |
+| User Terms (ID + EN) | Catalog Type |
 |---|---|
-| rumah, house, home | house |
-| kontrakan, rumah kontrakan | house with rent intent |
-| apartemen, apartment, condo | apartment |
-| hotel | hotel |
-| villa, vila | villa |
-| kos, kos-kosan, kost, tempat kos | boarding_house |
-| kamar kos, boarding room | boarding_house |
-| ruko, shophouse | shophouse |
-| toko | not always shophouse; clarify if needed |
-| kantor, office | office |
-| gudang, warehouse | warehouse |
-| lainnya, others | others |
+| rumah, house, home, residential | house |
+| kontrakan, rumah kontrakan | house (rent intent) |
+| apartemen, apartment, condo, unit, studio | apartment |
+| kos, kost, kosan, indekos, boarding house | boarding_house |
+| hotel, motel, penginapan | hotel |
+| villa, vila, resort | villa |
+| ruko, rukan, shophouse, toko, store | shophouse |
+| kantor, office, perkantoran | office |
+| gudang, warehouse, pergudangan | warehouse |
+| kavling, tanah, lahan, lot, land | others |
+| loft, penthouse | others |
 
-## Price Periods
+**Type priority (to avoid substring collisions):**
 
-Understand and preserve price period context:
-
-```text
-per night / per malam
-per day / per hari
-per week / per minggu
-per month / per bulan
-per year / per tahun
+```
+warehouse and shophouse are checked BEFORE house
+(because "warehouse" contains "house" as a substring)
 ```
 
-If the period is not clear, do not invent it. Use the catalog price display as provided.
+---
 
-## Budget Expressions
+## Standalone Keywords (always property queries)
 
-Understand:
+Any of these alone — without a property type — is enough to trigger:
 
-```text
-5 juta - 10 juta per tahun
-Rp 5.000.000 sampai Rp 10.000.000 per tahun
-under 10 million per year
-max 10 juta
-di bawah 10 juta
-sekitar 8 juta
-5jt sampai 10jt
-murah
-budget terbatas
+```
+KPR, kredit pemilikan, over kredit, inden, pre-launch
+uang muka rumah, DP rumah, cicilan rumah
+perumahan, real estate, siap huni
+ready unit, ready stok, unit ready, unit available, unit kosong
+sertifikat hak milik, SHM, HGB, IMB, PBG
+agen properti, developer properti, developer
+listing properti, listing property, properti dijual, properti disewakan
+berapa kamar, berapa lantai, luas bangunan, luas tanah
+fasilitas perumahan, akses tol, dekat sekolah, dekat mall
 ```
 
-If user says "murah" without a number, provide available lower-priced catalog options or ask one short budget clarification.
+---
 
-## Catalog Data Fields
+## Exclusion Words (prevent false positives)
 
-Use property fields exactly as provided:
+"Rumah" alone is ambiguous. If followed by these → NOT a property query:
 
-```text
-id
-title
-description
-price
-location
-province
-city
-district
-area
-address
-facilities
-building_area
-land_area
-building_type
-transaction_type
-image
-status
+```
+rumah makan, rumah sakit, rumah tangga, rumah ibadah, rumah tahanan
+rumah duka, rumah produksi
 ```
 
-## Data Integrity Rules
+---
 
-- Use `title` as the property name.
-- Use `price` exactly as provided.
-- Use location, address, city, and province exactly as provided.
-- Use facilities only when present in catalog data.
-- Do not invent missing fields.
-- Do not translate property title, address, city, province, price, ID, or image URL.
+## Location Extraction
 
-## Facilities
+Locations are extracted from message using:
 
-Recognize common facilities:
+1. Pattern `di [kota]` / `in [city]`
+2. Direct city name match against 50+ Indonesian cities
+3. `di daerah`, `area`, `kawasan`, `kota`, `wilayah` prefix support
 
-```text
-AC
-Wi-Fi
-furnished
-full furnished
-parking
-carport
-security
-kitchen
-water heater
-garden
-pool
-storage room
-bed
-wardrobe
+Supported cities include: Jakarta, Surabaya, Bandung, Semarang, Yogyakarta, Malang, Bali,
+Denpasar, Medan, Makassar, Balikpapan, Samarinda, Palembang, Pekanbaru, Batam,
+and all 36 provinces.
+
+---
+
+## Price Sort Detection
+
+| Keywords | Sort Direction |
+|---|---|
+| cheap, cheaper, cheapest, affordable, murah, terjangkau, hemat, budget | ascending (cheapest first) |
+| expensive, luxury, premium, mewah, mahal, termahal | descending (most expensive first) |
+| (none) | default catalog order |
+
+---
+
+## Explicit Fallback Type Detection
+
+When customer explicitly mentions an alternative type:
+
+| Pattern | Detected |
+|---|---|
+| "kalau tidak ada hotel, villa saja" | primaryType: hotel, fallbackTypes: [villa] |
+| "hotel atau villa" | primaryType: hotel, fallbackTypes: [villa] |
+| "jika gak ada rumah, apartemen juga boleh" | primaryType: house, fallbackTypes: [apartment] |
+
+Fallback types are only used **after** the primary type has no results.
+
+---
+
+## Budget Parsing
+
+Supported budget formats:
+
+```
+"Rp 5.000.000/bulan"       → value: 5000000, period: month
+"budget 2 miliar"           → value: 2000000000, no period
+"harga 500 jt - 1 M"       → min: 500000000, max: 1000000000
+"500 juta sampai 1 miliar"  → range
+"di bawah 3 juta per tahun" → max: 3000000, period: year
 ```
 
-If facilities are stored as boolean fields or arrays, present only available facilities.
+Period terms: bulan/month, tahun/year, malam/night, harian/daily.
+
+---
+
+## Facility Terms
+
+Recognized facilities:
+
+```
+ac, wifi, wi-fi, parking, parkir, kitchen, dapur,
+full furnish, furnished, security, kolam renang / pool,
+gym, lift, laundry
+```

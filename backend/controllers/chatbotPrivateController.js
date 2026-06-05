@@ -18,7 +18,8 @@ const { findOrCreateSession,
         saveAssistantMessage }                = require('../services/sessionService');
 const { buildRecommendationContextForLLM,
         extractPropertyFilters,
-        getVisibleMatchesFromAlternatives }   = require('../services/propertyRecommendationService');
+        getVisibleMatchesFromAlternatives,
+        searchProperties }                    = require('../services/propertyRecommendationService');
 const { getRumah123Listings,
         mapBuildingTypeToApify,
         mapTransactionTypeToApify }           = require('../services/rumah123ContextService');
@@ -553,16 +554,80 @@ class ResponseBuilderWhatsApp {
       : 'May I confirm whether you are looking to *rent*, *buy*, or *sell* a property? You can also mention the location and budget so I can find the best options from Rumah123 and our catalog.';
   }
 
+  /**
+   * Filter alternatives by location (existing helper — kept for backward compat).
+   * @deprecated Use #filterByTypeAndLocation instead.
+   */
   #filterAlternativesByLocation(alternatives = [], location = '') {
     if (!location) return alternatives;
     const normLoc = location.toLowerCase().trim();
     return alternatives.filter(item => {
       const itemLoc = [item.location, item.city, item.district, item.province]
-        .filter(Boolean)
-        .map(s => String(s).toLowerCase())
-        .join(' ');
+        .filter(Boolean).map(s => String(s).toLowerCase()).join(' ');
       return itemLoc.includes(normLoc);
     });
+  }
+
+  /**
+   * Filter alternatives dengan STRICT TYPE + GRACEFUL LOCATION.
+   *
+   * TIPE: Selalu strict — jika buildingType ditetapkan, hanya tampilkan tipe yang sama.
+   *        Fallback types eksplisit (user bilang "atau villa") juga diperbolehkan.
+   *
+   * LOKASI: Prefer lokasi yang diminta, tapi tidak mandatory:
+   *   - Tahap 1: Tipe yang sama DI lokasi yang diminta (ideal)
+   *   - Tahap 2: Tipe yang sama di kota/kab yang sama (area berbeda)
+   *   - Tahap 3: Tipe yang sama dari mana saja (last resort, semua kota)
+   *
+   * Perbedaan dengan behavior lama:
+   *   Lama: type + location keduanya strict → empty jika tidak ada di kota itu
+   *   Baru: type strict, location graceful → tetap tampil meski dari kota lain
+   *
+   * @param {object[]} alternatives
+   * @param {object}   filters - { buildingType, location, fallbackTypes }
+   * @returns {{ items: object[], locationScope: 'exact'|'city'|'national' }}
+   */
+  #filterByTypeAndLocation(alternatives = [], filters = {}) {
+    // ── Step 1: Filter by TYPE (strict — always enforced) ─────────────────
+    let byType = alternatives;
+    if (filters.buildingType) {
+      const allowedTypes = [filters.buildingType, ...(filters.fallbackTypes || [])].filter(Boolean);
+      byType = alternatives.filter(item =>
+        allowedTypes.some(t =>
+          String(item.buildingType || '').toLowerCase() === t.toLowerCase()
+        )
+      );
+    }
+
+    if (!byType.length) return { items: [], locationScope: 'exact' };
+
+    if (!filters.location) return { items: byType, locationScope: 'national' };
+
+    const normLoc = filters.location.toLowerCase().trim();
+
+    // ── Step 2: Prefer same location (exact city/area match) ──────────────
+    const atExactLoc = byType.filter(item => {
+      const itemLoc = [item.location, item.city, item.district, item.province, item.address]
+        .filter(Boolean).map(s => String(s).toLowerCase()).join(' ');
+      return itemLoc.includes(normLoc);
+    });
+
+    if (atExactLoc.length > 0) return { items: atExactLoc, locationScope: 'exact' };
+
+    // ── Step 3: Try city-level match (for district-level requests) ─────────
+    // e.g. "Ngagel Jaya Selatan Surabaya" → fall back to any part of Surabaya
+    const cityWords = normLoc.split(/\s+/).filter(w => w.length >= 4);
+    for (const cityWord of cityWords) {
+      const atCity = byType.filter(item => {
+        const itemLoc = [item.city, item.province, item.location]
+          .filter(Boolean).map(s => String(s).toLowerCase()).join(' ');
+        return itemLoc.includes(cityWord);
+      });
+      if (atCity.length > 0) return { items: atCity, locationScope: 'city' };
+    }
+
+    // ── Step 4: National fallback — same type, any city ───────────────────
+    return { items: byType, locationScope: 'national' };
   }
 
   #catalogItemWhatsApp(item, index, lang = 'en') {
@@ -622,26 +687,52 @@ class ResponseBuilderWhatsApp {
     return lines.join('\n');
   }
 
-  alternative({ alternatives = [], rumah123Listings = [], filters = {} }) {
-    const summary    = this.#summarizeRequest(filters);
-    const location   = filters.location || '';
-    const hasR123    = rumah123Listings.length > 0;
-    const filteredAlt = location
-      ? this.#filterAlternativesByLocation(alternatives, location)
-      : alternatives;
-    const hasAlt     = filteredAlt.length > 0;
-    const isId       = this.#lang === 'id';
+  /**
+   * Build alternative reply dengan STRICT TYPE MATCHING.
+   *
+   * Aturan:
+   * - Jika buildingType ditetapkan → HANYA tampilkan tipe yang sama (+ fallbackTypes jika ada)
+   * - Jika ada fallbackTypes eksplisit (user bilang "kalau tidak ada hotel, villa oke") →
+   *   tampilkan tipe-tipe tersebut saja
+   * - TIDAK tampilkan campuran tipe berbeda tanpa persetujuan user
+   * - Jelaskan kepada customer mengapa ini ditampilkan (beda area / beda harga / dll)
+   */
+  /**
+   * Build alternative reply dengan STRICT TYPE + GRACEFUL LOCATION.
+   *
+   * Tipe selalu dijaga strict. Lokasi degradasi bertahap:
+   *   'exact'    → properti TEPAT di lokasi yang diminta (mungkin beda district)
+   *   'city'     → properti di kota yang sama (district berbeda)
+   *   'national' → properti tipe yang sama dari kota lain
+   */
+  alternative({ alternatives = [], rumah123Listings = [], filters = {}, budgetExpanded = null }) {
+    const summary  = this.#summarizeRequest(filters);
+    const location = filters.location || '';
+    const hasR123  = rumah123Listings.length > 0;
+    const isId     = this.#lang === 'id';
 
+    // ── Filter: strict type, graceful location ──────────────────────────────
+    const { items: filteredAlt, locationScope } = this.#filterByTypeAndLocation(alternatives, filters);
+    const hasAlt = filteredAlt.length > 0;
+
+    // ── Tidak ada sama sekali (tipe tidak tersedia di mana pun) ────────────
     if (!hasR123 && !hasAlt) {
-      const locationNote = location ? ` di *${location}*` : '';
-      const msg = isId
-        ? `Maaf, saat ini belum ada properti yang sesuai dengan *${summary}*${locationNote} di katalog maupun Rumah123. Apakah Anda ingin mencoba lokasi, tipe properti, atau range harga lain?`
-        : `Sorry, there is currently no property matching *${summary}*${locationNote} in our catalog or Rumah123. Would you like to try another location, property type, or price range?`;
-      return msg + this.#addFooter();
+      const typeNote = filters.buildingType
+        ? (isId
+            ? ` *${PropertyFormatter.humanBuildingType(filters.buildingType, 'id')}*`
+            : ` *${PropertyFormatter.humanBuildingType(filters.buildingType, 'en')}*`)
+        : '';
+      const locNote  = location ? (isId ? ` di *${location}*` : ` in *${location}*`) : '';
+
+      return (isId
+        ? `Maaf, saat ini belum ada${typeNote} yang tersedia${locNote} di katalog maupun Rumah123.\n\nApakah Anda ingin mencoba lokasi atau range harga yang berbeda?`
+        : `Sorry, there is currently no${typeNote} available${locNote} in our catalog or Rumah123.\n\nWould you like to try a different location or price range?`
+      ) + this.#addFooter();
     }
 
     const lines = [];
 
+    // ── Rumah123 results ────────────────────────────────────────────────────
     if (hasR123) {
       const count = Math.min(rumah123Listings.length, 6);
       lines.push(isId
@@ -649,27 +740,317 @@ class ResponseBuilderWhatsApp {
         : `Here are the *top ${count} listings* from *Rumah123* for *${summary}* (live data):\n`
       );
       lines.push(PropertyFormatter.rumah123List(rumah123Listings, this.#lang, 6));
-    } else if (location) {
-      lines.push(isId
-        ? `⚠️ Maaf, belum ada listing yang tersedia di *${location}* dari Rumah123 untuk *${summary}*.\n`
-        : `⚠️ Sorry, no listings are currently available in *${location}* from Rumah123 for *${summary}*.\n`
-      );
     }
 
+    // ── Catalog alternatives ────────────────────────────────────────────────
     if (hasAlt) {
       if (hasR123) {
-        lines.push(isId ? '\n---\n*Alternatif dari Katalog Kami:*\n' : '\n---\n*Alternatives from Our Catalog:*\n');
+        lines.push(isId ? '\n---\n*Pilihan Lain dari Katalog:*\n' : '\n---\n*More from Our Catalog:*\n');
       } else {
-        lines.push(isId
-          ? `Namun berikut pilihan alternatif dari katalog kami untuk *${summary}*:\n`
-          : `Here are some alternative options from our catalog for *${summary}*:\n`
-        );
+        // Konteks berbeda tergantung alasan mengapa ini alternatif
+        let contextMsg;
+
+        if (budgetExpanded) {
+          contextMsg = isId
+            ? `⚠️ Tidak ada *${summary}* yang sesuai budget tersebut. Berikut pilihan *${PropertyFormatter.humanBuildingType(filters.buildingType, 'id')}* terdekat dengan range harga yang disesuaikan:\n`
+            : `⚠️ No *${summary}* found at that budget. Here are the closest *${PropertyFormatter.humanBuildingType(filters.buildingType, 'en')}* options at a nearby price range:\n`;
+
+        } else if (locationScope === 'city') {
+          // Kota sama, district berbeda — persis seperti kasus Ngagel Jaya Selatan → Dukuh Kupang
+          contextMsg = isId
+            ? `⚠️ Tidak ada *${summary}* di area tersebut. Berikut pilihan *${PropertyFormatter.humanBuildingType(filters.buildingType, 'id')}* di bagian lain kota *${location}*:\n`
+            : `⚠️ No *${summary}* at that specific area. Here are *${PropertyFormatter.humanBuildingType(filters.buildingType, 'en')}* options in other parts of *${location}*:\n`;
+
+        } else if (locationScope === 'national' && location) {
+          contextMsg = isId
+            ? `⚠️ Belum ada *${PropertyFormatter.humanBuildingType(filters.buildingType, 'id')}* sewa di *${location}* saat ini. Berikut pilihan terdekat di kota lain:\n`
+            : `⚠️ No *${PropertyFormatter.humanBuildingType(filters.buildingType, 'en')}* for rent in *${location}* right now. Here are the closest options from other cities:\n`;
+
+        } else {
+          contextMsg = isId
+            ? `Berikut pilihan *${summary}* yang tersedia dari katalog kami:\n`
+            : `Here are available *${summary}* options from our catalog:\n`;
+        }
+
+        lines.push(contextMsg);
       }
+
       lines.push(this.#catalogListWhatsApp(filteredAlt, this.#lang, 6));
     }
 
     lines.push(this.#addFooter());
     return lines.join('\n');
+  }
+
+  /**
+   * Wrap a single qualification question with the agent footer.
+   * Used during the conversation qualification phase (Q0–Q12).
+   *
+   * @param {string} question - The question text (already formatted)
+   * @returns {string}
+   */
+  qualificationQuestion(question) {
+    const isId = this.#lang === 'id';
+    const signature = isId
+      ? `\n\nSalam hangat,\n*${this.#agentName}*\n*Elevan Property*`
+      : `\n\nWarm regards,\n*${this.#agentName}*\n*Elevan Property*`;
+    return question + signature;
+  }
+}
+
+// ─── ConversationQualifier ────────────────────────────────────────────────────
+//
+// Implementasi CUSTOMER FLOW skill untuk WhatsApp chatbot.
+//
+// Tujuan: daripada langsung tampilkan daftar properti, tanyakan kebutuhan
+// customer dulu secara sistematis (Q0–Q12) sehingga rekomendasi yang
+// diberikan benar-benar sesuai kebutuhan.
+//
+// KAPAN TAMPILKAN LISTING:
+//   a) Customer eksplisit minta list/katalog/rekomendasi
+//   b) Sudah cukup info: transactionType + buildingType + location terkumpul
+//   c) AI sudah tanya 4+ pertanyaan (hindari over-qualifying)
+//
+// REFERENSI: CUSTOMER (RENTER/BUYER) FLOW — Q0 s/d Q12
+
+class ConversationQualifier {
+
+  /* ─── Internal text helpers ──────────────────────────────────────────────── */
+
+  static #allText(history, userMessage) {
+    return [...history.map(h => h.message || ''), userMessage].join(' ').toLowerCase();
+  }
+
+  static #aiText(history) {
+    return history.filter(h => h.role === 'ai').map(h => h.message || '').join(' ').toLowerCase();
+  }
+
+  static #customerText(history, userMessage) {
+    return [
+      ...history.filter(h => h.role !== 'ai').map(h => h.message || ''),
+      userMessage
+    ].join(' ').toLowerCase();
+  }
+
+  static #has(text, keywords) {
+    return keywords.some(kw => text.includes(kw.toLowerCase()));
+  }
+
+  /* ─── Public: does customer want a listing RIGHT NOW? ───────────────────── */
+
+  /**
+   * Returns true when customer's latest message explicitly requests
+   * a listing, catalog, or recommendations — skip qualification, show list.
+   *
+   * @param {string} userMessage
+   * @returns {boolean}
+   */
+  static wantsListingNow(userMessage) {
+    const lower = userMessage.toLowerCase();
+    return this.#has(lower, [
+      // Bahasa Indonesia
+      'kasih', 'tampilkan', 'carikan', 'tolong cari', 'cari dong',
+      'lihatkan', 'lihat dong', 'ada apa', 'apa ada', 'pilihan apa',
+      'rekomendasikan', 'rekomen', 'rekomendasi', 'daftar', 'katalog',
+      'ada berapa', 'ada yang', 'tunjukkan', 'langsung',
+      'ada apa saja', 'apa saja yang', 'info properti',
+      // English
+      'show me', 'show list', 'give me', 'send me', 'find me', 'get me',
+      "what do you have", "what's available", 'any available', 'any listing',
+      'recommend', 'suggestion', 'options', 'catalog', 'list me',
+    ]);
+  }
+
+  /* ─── Public: build customer profile from conversation ─────────────────── */
+
+  /**
+   * Analyze the full conversation (history + current message + extracted filters)
+   * and return a "CustomerProfile" object that drives the qualification flow.
+   *
+   * @param {object[]} history    - [{role, message}] conversation history
+   * @param {string}   userMessage- Latest customer message
+   * @param {object}   filters    - Extracted filters from propertyRecommendationService
+   * @returns {object} CustomerProfile
+   */
+  static buildProfile(history = [], userMessage = '', filters = {}) {
+    const custText = this.#customerText(history, userMessage);
+    const aiText   = this.#aiText(history);
+    const aiCount  = history.filter(h => h.role === 'ai').length;
+
+    return {
+      /* ── Core filters (from propertyRecommendationService) ── */
+      transactionType : filters.transactionType || '',   // 'rent'|'sale'|''
+      buildingType    : filters.buildingType    || '',   // 'house'|'apartment'|...
+      location        : filters.location        || '',   // 'malang'|'surabaya'|...
+      budget          : filters.budget          || null, // { min, max, text } | null
+
+      /* ── Derived from customer messages ── */
+      hasFurnishing: this.#has(custText, [
+        'furnished', 'semi-furnished', 'semifurnished', 'unfurnished',
+        'kosongan', 'full furnish', 'sudah ada furnitur', 'mau yang kosong',
+        'perabot', 'furniture', 'furnish',
+      ]),
+      hasMoveInDate: this.#has(custText, [
+        'januari', 'februari', 'maret', 'april', 'mei', 'juni',
+        'juli', 'agustus', 'september', 'oktober', 'november', 'desember',
+        'january', 'february', 'march', 'may', 'june', 'july', 'august',
+        'october', 'november', 'december',
+        'bulan ini', 'bulan depan', 'next month', 'this month',
+        'segera', 'soon', 'asap', 'secepatnya', 'besok', 'minggu ini',
+        'this week', 'next week', 'langsung masuk', 'immediate',
+        'sudah mau', 'ingin segera', 'ready to move',
+      ]),
+      hasHouseholdInfo: this.#has(custText, [
+        'keluarga', 'suami', 'istri', 'anak', 'orang tua',
+        'sendiri', 'pasangan', 'berdua', 'bertiga', 'berempat',
+        'family', 'wife', 'husband', 'children', 'parents', 'alone', 'partner',
+        'couple', '2 orang', '3 orang', '4 orang', 'anak-anak', 'ortu',
+      ]),
+      hasSearchHistory: this.#has(custText, [
+        'sudah lihat', 'pernah lihat', 'sudah survey', 'sudah cari',
+        'belum cocok', 'tidak cocok', 'kurang cocok', 'sudah', 'pernah',
+        'have seen', 'already visited', 'viewed', "haven't found", 'not a match',
+      ]),
+      hasRedFlags: this.#has(custText, [
+        'tidak mau', 'jangan', 'avoid', 'tidak suka', 'kurang suka',
+        'hadap barat', 'west facing', 'bising', 'noisy', 'gang sempit',
+        'banjir', 'jauh', 'lorong', 'tua banget',
+      ]),
+      hasAlternativeArea: this.#has(custText, [
+        'atau', 'or', 'sekitar', 'nearby', 'area lain', 'wilayah lain',
+        'bisa juga', 'bisa di', 'juga oke', 'juga boleh', 'sekitarnya',
+      ]),
+
+      /* ── AI conversation state (what AI already asked) ── */
+      aiCount,
+      aiAskedTxType     : this.#has(aiText, ['sewa atau beli', 'rent or buy', 'beli atau sewa', 'buy or rent']),
+      aiAskedPropType   : this.#has(aiText, ['tipe properti', 'property type', 'jenis properti', 'rumah, apartemen']),
+      aiAskedLocation   : this.#has(aiText, ['daerah', 'kota mana', 'which area', 'which city', 'lokasi mana']),
+      aiAskedSearchHist : this.#has(aiText, ['sudah lihat berapa', 'how many properties', 'belum cocok', 'sudah survey']),
+      aiAskedBudget     : this.#has(aiText, ['kisaran', 'anggaran', 'budget', 'harga yang', 'price range']),
+      aiAskedMoveIn     : this.#has(aiText, ['masuk bulan', 'pindah bulan', 'rencananya masuk', 'move in', 'moving']),
+      aiAskedHousehold  : this.#has(aiText, ['tinggal bersama', 'akan tinggal', 'living with', 'who will be']),
+      aiAskedFurnish    : this.#has(aiText, ['furnished', 'furnitur', 'furnishing', 'semi-furnished']),
+    };
+  }
+
+  /* ─── Public: readiness score ───────────────────────────────────────────── */
+
+  /**
+   * Compute how much key info we have (0–5).
+   * Score ≥ 3 (transactionType + buildingType + location) = ready to show listings.
+   *
+   * @param {object} profile - From buildProfile()
+   * @returns {number}
+   */
+  static readinessScore(profile) {
+    let s = 0;
+    if (profile.transactionType) s++;
+    if (profile.buildingType)    s++;
+    if (profile.location)        s++;
+    if (profile.budget)          s++;
+    if (profile.hasMoveInDate)   s++;
+    return s;
+  }
+
+  /* ─── Public: determine next qualification question ────────────────────── */
+
+  /**
+   * Returns the text of the next question to ask, or null when enough info
+   * has been collected and we should switch to showing property listings.
+   *
+   * Questions follow the CUSTOMER FLOW order (Q0–Q12).
+   * Already-answered and already-asked questions are skipped automatically.
+   *
+   * @param {object}      profile      - From buildProfile()
+   * @param {'id'|'en'}   lang
+   * @param {object|null} priceAnchors - { low, high } price strings from catalog
+   * @returns {string|null}
+   */
+  static getNextQuestion(profile, lang = 'id', priceAnchors = null) {
+    const isId = lang === 'id';
+    const tx   = profile.transactionType;  // 'rent' | 'sale' | ''
+    const type = profile.buildingType;     // 'house' | 'apartment' | ...
+    const loc  = profile.location;
+
+    const txLabel   = tx === 'rent' ? (isId ? 'sewa'  : 'rent')  : (isId ? 'beli'  : 'buy');
+    const txLabelPP = tx === 'rent' ? (isId ? 'sewa'  : 'rent')  : (isId ? 'dibeli': 'buy');
+    const typeLabel = type ? PropertyFormatter.humanBuildingType(type, lang) : null;
+
+    /* ── Q0/Q1 combined: both transaction type AND property type unknown ── */
+    if (!tx && !type) {
+      return isId
+        ? `Halo! 😊 Saya siap bantu carikan properti yang cocok untuk Anda.\n\nBoleh saya tanya dulu — Anda sedang cari untuk *sewa* atau *beli*? Dan tipe properti apa yang diinginkan?\n\nKami punya: *rumah, apartemen, villa, kos-kosan, ruko, kantor, gudang*, dan banyak lagi 🏡`
+        : `Hello! 😊 I'm here to help you find the right property.\n\nMay I ask first — are you looking to *rent* or *buy*? And what type of property do you have in mind?\n\nWe have: *house, apartment, villa, boarding house, shophouse, office, warehouse*, and more 🏡`;
+    }
+
+    /* ── Q1: transaction type missing (property type known) ── */
+    if (!tx && !profile.aiAskedTxType) {
+      return isId
+        ? `Untuk *${typeLabel}* yang Anda cari — rencananya untuk *sewa* atau *beli*? 🏠`
+        : `For the *${typeLabel}* you're looking for — are you planning to *rent* or *buy*? 🏠`;
+    }
+
+    /* ── Q0b: property type missing (transaction type known) ── */
+    if (!type && !profile.aiAskedPropType) {
+      return isId
+        ? `Oke, mau *${txLabel}* properti. Tipe apa yang Anda cari? 🏡\n\nKami punya: *rumah, apartemen, villa, kos-kosan, ruko, kantor, gudang*, dan banyak pilihan lainnya.`
+        : `Got it, looking to *${txLabel}* a property. What type are you looking for? 🏡\n\nWe have: *house, apartment, villa, boarding house, shophouse, office, warehouse*, and many more.`;
+    }
+
+    /* ── Location: not yet established ── */
+    if (!loc && !profile.aiAskedLocation) {
+      return typeLabel
+        ? (isId
+            ? `Oke, mau *${txLabel} ${typeLabel}*. 📍\n\nDi kota atau area mana yang Anda pertimbangkan?`
+            : `Got it, looking to *${txLabel} a ${typeLabel}*. 📍\n\nWhich city or area are you considering?`)
+        : (isId
+            ? `Properti untuk *${txLabel}* — di kota atau area mana yang Anda inginkan? 📍`
+            : `Looking to *${txLabel}* — which city or area do you have in mind? 📍`);
+    }
+
+    /* ── Q2: search history (highest-value question — fire early, once) ── */
+    if (!profile.hasSearchHistory && !profile.aiAskedSearchHist && profile.aiCount <= 3 && loc) {
+      return isId
+        ? `Sudah lihat berapa properti di *${loc}*? Apa yang membuat belum cocok dari yang sudah dilihat?`
+        : `How many properties have you seen in *${loc}*? What hasn't quite worked about the ones you've viewed?`;
+    }
+
+    /* ── Q3: budget via two price anchors (NEVER a direct ask) ── */
+    if (!profile.budget && !profile.aiAskedBudget && loc) {
+      if (priceAnchors) {
+        return isId
+          ? `Di *${loc}* kami ada yang di kisaran *${priceAnchors.low}* dan ada yang *${priceAnchors.high}*. Kira-kira yang mana lebih sesuai dengan rencana Anda?`
+          : `In *${loc}* we have options around *${priceAnchors.low}* and others around *${priceAnchors.high}*. Which range feels closer to your plans?`;
+      }
+      return isId
+        ? `Di *${loc}* kami punya pilihan dengan berbagai kisaran harga. Apakah Anda lebih prefer yang *terjangkau/ekonomis* atau yang *menengah ke atas*? 💰`
+        : `In *${loc}* we have options across different price ranges. Do you prefer something more *affordable/economy* or *mid-to-premium range*? 💰`;
+    }
+
+    /* ── Q8: move-in date (MANDATORY — never skipped) ── */
+    if (!profile.hasMoveInDate && !profile.aiAskedMoveIn) {
+      return isId
+        ? `Rencananya masuk atau pindah bulan apa? 📅`
+        : `What month are you planning to move in? 📅`;
+    }
+
+    /* ── Q4: household composition (infers bedrooms, reveals decision maker) ── */
+    if (!profile.hasHouseholdInfo && !profile.aiAskedHousehold) {
+      return isId
+        ? `Nanti akan tinggal bersama siapa saja? Biar saya bisa carikan yang pas jumlah kamarnya 🛏️`
+        : `Who will be living there with you? That helps me find the right number of bedrooms 🛏️`;
+    }
+
+    /* ── Q11: furnishing preference (sewa only) ── */
+    if (!profile.hasFurnishing && !profile.aiAskedFurnish && tx === 'rent') {
+      return isId
+        ? `Untuk furnitur, lebih prefer yang sudah *furnished*, *semi-furnished*, atau *kosongan* saja? 🛋️`
+        : `For furnishing, do you prefer *fully furnished*, *semi-furnished*, or *unfurnished*? 🛋️`;
+    }
+
+    /* ── All key questions asked → ready to show listings ── */
+    return null;
   }
 }
 
@@ -895,32 +1276,112 @@ class ChatbotPrivateService {
    * @param {Error} params.externalError
    * @returns {Promise<{reply, source, controller, fallbackUsed, ...}>}
    */
-  static async generateResponseForTerminalMassege({ session, history = [], userMessage = '', agentName = '', recommendationContext = null, externalError = null }) {
+  /**
+   * Generate response untuk WhatsApp terminal message (Fonnte, WATI, 360dialog).
+   *
+   * QUALIFICATION FLOW (sebelum tampil listing):
+   *   Implements CUSTOMER (RENTER/BUYER) FLOW Q0–Q12.
+   *   Menanyakan kebutuhan customer terlebih dahulu; baru tampilkan listing
+   *   ketika cukup info terkumpul.
+   *
+   * KAPAN LANGSUNG TAMPILKAN LISTING:
+   *   a) Customer eksplisit minta list/katalog/rekomendasi, ATAU
+   *   b) readiness >= 3 (transactionType + buildingType + location semua ada), ATAU
+   *   c) AI sudah bertanya 4+ kali (hindari over-qualifying).
+   *
+   * @param {object} params
+   * @param {object}   params.session
+   * @param {object[]} params.history
+   * @param {string}   params.userMessage
+   * @param {string}   params.agentName      - Untuk footer (misal "LEO FELIX")
+   * @param {object}   params.recommendationContext
+   * @param {Error}    params.externalError
+   */
+  static async generateResponseForTerminalMassege({
+    session, history = [], userMessage = '', agentName = '',
+    recommendationContext = null, externalError = null
+  }) {
     const skillInfo = this.loadSkillInfo();
     const lang      = LanguageDetector.detect(userMessage);
     const builder   = new ResponseBuilderWhatsApp(lang, agentName);
 
     console.warn('[WHATSAPP PRIVATE AGENT ACTIVE]', {
-      reason:    externalError?.message || 'External AI provider unavailable.',
-      sessionId: session?.id            || null,
-      language:  lang,
-      agent:     agentName,
+      reason   : externalError?.message || 'External AI provider unavailable.',
+      sessionId: session?.id || null,
+      language : lang,
+      agent    : agentName,
     });
 
-    // Resolve filters — use provided context or extract on the fly
-    const filters = recommendationContext?.filters || extractPropertyFilters(userMessage, history);
-
-    // Guard: reject off-topic messages immediately
+    // ── Guard: off-topic pesan (bukan properti sama sekali) ──────────────────
     if (LanguageDetector.isOffTopic(userMessage)) {
-      return this.#wrap(builder.offTopic(), { skillInfo, filters });
+      return this.#wrap(builder.offTopic(), { skillInfo });
     }
 
-    // Guard: ask for clarification when intent is unclear
-    if (!LanguageDetector.hasPropertyIntent(userMessage, filters)) {
-      return this.#wrap(builder.clarification(), { skillInfo, filters });
+    // ── Resolve filters dari context atau extract baru ───────────────────────
+    const filters = recommendationContext?.filters
+      || extractPropertyFilters(userMessage, history);
+
+    // ── Build customer profile dari seluruh percakapan ───────────────────────
+    const profile = ConversationQualifier.buildProfile(history, userMessage, filters);
+
+    console.log('[PrivateAgent/Qualifier]', {
+      tx       : profile.transactionType || '(unknown)',
+      type     : profile.buildingType    || '(unknown)',
+      location : profile.location        || '(unknown)',
+      readiness: ConversationQualifier.readinessScore(profile),
+      aiCount  : profile.aiCount,
+    });
+
+    // ── Decision: langsung tampil listing atau tanya dulu? ───────────────────
+    //
+    //   a) Customer eksplisit minta list → listing
+    //   b) AI sudah tanya 4+ kali        → listing (hindari frustrasi)
+    //   c) readiness >= 3 (tx+type+loc)  → listing
+    //   d) Semua else                     → qualification question
+    const wantsListing  = ConversationQualifier.wantsListingNow(userMessage);
+    const readiness     = ConversationQualifier.readinessScore(profile);
+    const shouldList    = wantsListing || profile.aiCount >= 4 || readiness >= 3;
+
+    if (!shouldList) {
+      // ── QUALIFICATION FLOW ─────────────────────────────────────────────────
+      // Coba dapatkan price anchors dari catalog lokal (cepat, tanpa Rumah123)
+      let priceAnchors = null;
+
+      if (filters.location || filters.buildingType) {
+        try {
+          const catalogProps = await searchProperties(filters);
+          const withPrice    = catalogProps.filter(p => p.price && p.price !== '-');
+
+          if (withPrice.length >= 2) {
+            // Sort sederhana berdasarkan teks harga (untuk ambil low/high sample)
+            const sorted = [...withPrice].sort((a, b) => {
+              const pa = this.#roughPrice(a.price);
+              const pb = this.#roughPrice(b.price);
+              return pa - pb;
+            });
+
+            priceAnchors = {
+              low : sorted[0].price,
+              high: sorted[sorted.length - 1].price,
+            };
+          }
+        } catch (_err) {
+          // Non-fatal — lanjut tanpa price anchors
+        }
+      }
+
+      const nextQuestion = ConversationQualifier.getNextQuestion(profile, lang, priceAnchors);
+
+      if (nextQuestion) {
+        const reply = builder.qualificationQuestion(nextQuestion);
+        console.log(`[PrivateAgent/Qualifier] Asking Q (aiCount=${profile.aiCount})`);
+        return this.#wrap(reply, { skillInfo, filters, qualificationMode: true });
+      }
+      // nextQuestion = null berarti semua pertanyaan sudah terjawab → lanjut ke listing
     }
 
-    // Fetch Rumah123 live data and build catalog context in parallel for speed
+    // ── LISTING FLOW ──────────────────────────────────────────────────────────
+    // Fetch Rumah123 + catalog context secara paralel (speed optimization)
     const [rumah123Listings, context] = await Promise.all([
       this.fetchRumah123Listings(filters, session?.location),
       recommendationContext
@@ -930,23 +1391,61 @@ class ChatbotPrivateService {
 
     const catalogMatches = this.resolveCatalogMatches(context);
 
-    // Select reply strategy
+    // Pilih strategi reply
     let reply;
     if (rumah123Listings.length > 0 || catalogMatches.length > 0) {
       reply = builder.exactMatch({ rumah123Listings, catalogMatches, filters: context.filters });
     } else {
-      reply = builder.alternative({ alternatives: context.alternatives, rumah123Listings, filters: context.filters });
+      reply = builder.alternative({
+        alternatives    : context.alternatives,
+        rumah123Listings,
+        filters         : context.filters,
+        budgetExpanded  : context.budgetExpanded || null,
+      });
+    }
+
+    // ── Q8 mandatory follow-up (jika move-in date belum pernah ditanyakan) ───
+    // Sisipkan sebelum tanda tangan agent agar tidak terlewat.
+    if (!profile.hasMoveInDate && !profile.aiAskedMoveIn) {
+      const moveInQ = lang === 'id'
+        ? '\n\nOmong-omong, rencananya masuk atau pindah bulan apa? 📅'
+        : '\n\nBy the way, what month are you planning to move in? 📅';
+      // Sisipkan sebelum "Salam hangat" / "Warm regards"
+      const insertBefore = lang === 'id' ? '\n\nSalam hangat,' : '\n\nWarm regards,';
+      if (reply.includes(insertBefore)) {
+        reply = reply.replace(insertBefore, moveInQ + insertBefore);
+      } else {
+        reply += moveInQ;
+      }
     }
 
     return this.#wrap(reply, {
       skillInfo,
-      filters:         context.filters,
-      exactMatches:    catalogMatches.length,
-      rumah123Listings:rumah123Listings.length,
-      alternatives:    context.alternatives.length,
-      fallbackReason:  externalError?.message || 'External AI provider unavailable.',
+      filters          : context.filters,
+      exactMatches     : catalogMatches.length,
+      rumah123Listings : rumah123Listings.length,
+      alternatives     : context.alternatives.length,
+      fallbackReason   : externalError?.message || 'External AI provider unavailable.',
       agentName,
     });
+  }
+
+  /**
+   * Rough price parser untuk sorting price anchors.
+   * Tidak perlu presisi — hanya untuk membandingkan low vs high.
+   *
+   * @param {string} priceStr
+   * @returns {number}
+   * @private
+   */
+  static #roughPrice(priceStr = '') {
+    const text = String(priceStr).toLowerCase().replace(/[.,]/g, '');
+    const num  = (text.match(/\d+/) || ['0'])[0];
+    let   val  = Number(num) || 0;
+    if (/miliar|billion/.test(text)) val *= 1_000_000_000;
+    else if (/juta|jt|million/.test(text)) val *= 1_000_000;
+    else if (/ribu|thousand/.test(text)) val *= 1_000;
+    return val || Infinity;
   }
 
   /**

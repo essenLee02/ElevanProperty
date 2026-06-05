@@ -52,9 +52,15 @@
 const axios  = require('axios');
 const { User, ChatSession, ChatMessage } = require('../models');
 const { safeLog }                        = require('../utils/safeLog');
-const { isTerminalActive }               = require('../utils/terminalSwitch');
 const { hasPropertyKeyword }             = require('../utils/propertyKeywordFilter');
 const { generateWhatsAppAIReply }        = require('../services/whatsappAIService');
+const {
+  normalizePhone,
+  findOrCreateSession,
+  saveMessage,
+  logTerminalSummary,
+  logTerminalSkip,
+} = require('../utils/whatsappUtils');
 
 /* ══════════════════════════════════════════════════════════════════════════════
    SECTION 1 — CONFIG
@@ -74,14 +80,8 @@ function getBaseUrl() {
 
 /* ══════════════════════════════════════════════════════════════════════════════
    SECTION 2 — PHONE UTILITIES
+   normalizePhone diimport dari whatsappUtils (shared dengan WATI & Fonnte)
 ══════════════════════════════════════════════════════════════════════════════ */
-
-function normalizePhone(phone) {
-  return String(phone || '')
-    .replace(/\+62/g, '62')
-    .replace(/^0/, '62')
-    .replace(/[\s\-()]/g, '');
-}
 
 /* ══════════════════════════════════════════════════════════════════════════════
    SECTION 3 — EVENT DETECTION
@@ -231,9 +231,13 @@ async function registerWebhook(agentToken, agentUserId, webhookUrl) {
 
 /* ══════════════════════════════════════════════════════════════════════════════
    SECTION 7 — TERMINAL LOGGER
+   logTerminalSummary & logTerminalSkip diimport dari whatsappUtils.
+   logIncomingMessage (raw preview) & logStatusUpdate tetap lokal karena
+   spesifik untuk format 360dialog.
 ══════════════════════════════════════════════════════════════════════════════ */
 
 function logIncomingMessage(agentName, agentPhone, senderPhone, senderName, messageText, msgType, timestamp) {
+  const { isTerminalActive } = require('../utils/terminalSwitch');
   if (!isTerminalActive('DIALOG')) return;
 
   const divider = '─'.repeat(62);
@@ -253,6 +257,7 @@ function logIncomingMessage(agentName, agentPhone, senderPhone, senderName, mess
 }
 
 function logStatusUpdate(recipientId, status, msgId) {
+  const { isTerminalActive } = require('../utils/terminalSwitch');
   if (!isTerminalActive('DIALOG')) return;
   console.log(`[360DIALOG STATUS] recipient=${recipientId} status=${status} id=${msgId}`);
 }
@@ -305,77 +310,76 @@ async function processIncomingMessage(msg, contacts, agent) {
     return;
   }
 
-  // ── Find / create session ─────────────────────────────────────────────────
-  const normSender  = normalizePhone(senderPhone);
-  const source      = `dialog360_${agent.name.toLowerCase().replace(/\s+/g, '_')}`;
+  const ts = msgTimestamp
+    ? new Date(Number(msgTimestamp) * 1000).toISOString()
+    : new Date().toISOString();
 
-  let session = await ChatSession.findOne({ where: { normalizedPhone: normSender, source } });
-  if (!session) {
-    session = await ChatSession.create({
-      name: senderName, normalizedName: senderName.toLowerCase(),
-      phone: senderPhone, normalizedPhone: normSender,
-      source, location: null, normalizedLocation: null
-    });
-  }
+  // ── Find / create session (shared util) ──────────────────────────────────
+  const session = await findOrCreateSession({
+    customerPhone : senderPhone,
+    customerName  : senderName,
+    agentName     : agent.name,
+    platform      : 'dialog360'
+  });
 
   // ── Simpan pesan customer (selalu) ───────────────────────────────────────
-  await ChatMessage.create({
-    chatSessionId : session.id,
-    role          : 'customer',
-    message       : messageText,
-    channel       : 'whatsapp',
-    metadata      : JSON.stringify({ agentName: agent.name, messageId, platform: 'dialog360', msgType })
+  await saveMessage(session, 'customer', messageText, {
+    agentName : agent.name,
+    messageId,
+    platform  : 'dialog360',
+    msgType
   });
 
   // ── Cek kata kunci properti ───────────────────────────────────────────────
   const isPropertyQuery = hasPropertyKeyword(messageText);
   if (!isPropertyQuery) {
-    if (isTerminalActive('DIALOG')) {
-      console.log(`[360DIALOG] 📥 Pesan disimpan (bukan query properti — tidak dibalas): ${messageText.substring(0, 60)}`);
-    }
+    logTerminalSkip({
+      platform      : 'DIALOG',
+      tag           : '[360DIALOG]',
+      agent,
+      customerPhone : senderPhone,
+      customerName  : senderName,
+      ts,
+      message       : messageText
+    });
     return;
   }
 
-  // ── Generate AI reply (dengan property context injection) ────────────────
-  // ✅ NEW: Menggunakan whatsappAIService untuk konsistensi dengan chatbot
-  // Ini menggunakan ChatGPT → Claude → Private Agent chain
+  // ── Generate AI reply (ChatGPT → Claude → Private Agent) ─────────────────
   let aiResult;
   let ctxSource = 'none';
+
   try {
     const result = await generateWhatsAppAIReply({
       session,
-      message: messageText,
+      message  : messageText,
       agentName: agent.name,
     });
-    aiResult = result;
+    aiResult  = result;
     ctxSource = result.contextSource || 'none';
   } catch (err) {
     const appName = process.env.APP_NAME || 'Elevan Property';
     aiResult = {
-      reply    : `Halo ${senderName}, terima kasih menghubungi ${agent.name} dari ${appName}. Kami akan segera membantu mencari properti untuk Anda. 🏠`,
-      provider : 'fallback',
-      contextSource: 'none'
+      reply         : `Halo ${senderName}, terima kasih menghubungi ${agent.name} dari ${appName}. Kami akan segera membantu mencari properti untuk Anda. 🏠`,
+      provider      : 'fallback',
+      contextSource : 'none'
     };
     ctxSource = 'none';
   }
 
   // ── Simpan AI reply ───────────────────────────────────────────────────────
-  await ChatMessage.create({
-    chatSessionId : session.id,
-    role          : 'ai',
-    message       : aiResult.reply,
-    channel       : 'whatsapp',
-    metadata      : JSON.stringify({ aiProvider: aiResult.provider, contextSource: ctxSource })
+  await saveMessage(session, 'ai', aiResult.reply, {
+    aiProvider    : aiResult.provider,
+    contextSource : ctxSource
   });
 
   // ── Kirim reply via 360dialog ─────────────────────────────────────────────
-  let dialogSent = false;
+  let dialogSent  = false;
   let dialogError = null;
 
   try {
     await sendViaDialog(senderPhone, aiResult.reply, agent.dialog360_token);
     dialogSent = true;
-
     safeLog('DIALOG360_REPLY_SENT', {
       sessionId  : session.id,
       agent      : agent.name,
@@ -387,33 +391,20 @@ async function processIncomingMessage(msg, contacts, agent) {
     safeLog('DIALOG360_SEND_FAILED', { sessionId: session.id, error: err.message }, 'error');
   }
 
-  // ── LOG RINGKASAN TERMINAL (FULL RESPONSE) ──────────────────────────
-  if (isTerminalActive('DIALOG')) {
-    const D          = '═'.repeat(80);
-    const sendStatus = dialogSent
-      ? `✅ Terkirim`
-      : `❌ Gagal: ${dialogError}`;
-
-    console.log('');
-    console.log(D);
-    console.log(`[360DIALOG] ⬇  PESAN PROPERTI MASUK & DIBALAS`);
-    console.log(D);
-    console.log(`Agent    : ${agent.name} (${agent.phone})`);
-    console.log(`Customer : ${senderPhone} (${senderName})`);
-    console.log(`Time     : ${msgTimestamp ? new Date(Number(msgTimestamp) * 1000).toISOString() : new Date().toISOString()}`);
-    console.log(`Message  : ${messageText}`);
-    console.log(`Context  : ${ctxSource}`);
-    console.log(`AI       : ${aiResult.provider}`);
-    console.log(D);
-    console.log('RESPONSE:');
-    console.log(D);
-    // Tampilkan full reply (bisa multi-line)
-    console.log(aiResult.reply);
-    console.log(D);
-    console.log(`Send Status: ${sendStatus}`);
-    console.log(D);
-    console.log('');
-  }
+  // ── Log terminal (shared util, format sama dengan Fonnte & WATI) ──────────
+  logTerminalSummary({
+    platform      : 'DIALOG',
+    tag           : '[360DIALOG]',
+    agent,
+    customerPhone : senderPhone,
+    customerName  : senderName,
+    ts,
+    message       : messageText,
+    ctxSource,
+    aiProvider    : aiResult.provider,
+    aiReply       : aiResult.reply,
+    sendStatus    : dialogSent ? '✅ Terkirim' : `❌ Gagal: ${dialogError}`
+  });
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -739,6 +730,44 @@ class DialogChatController {
           session  : { id: session.id, name: session.name, phone: session.phone, source: session.source },
           messages,
           count    : messages.length
+        }
+      });
+    } catch (err) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     GET /api/dialog-chat/debug-info
+     Dilindungi verifyToken di routes.
+  ───────────────────────────────────────────────────────────────────────── */
+  static async getDebugInfo(req, res) {
+    try {
+      const allAgents = await User.findAll({
+        where      : { privilege: 'agent', status: 1 },
+        attributes : ['user_id', 'name', 'phone', 'dialog360_token']
+      });
+
+      const mode    = String(process.env.DIALOG360_SANDBOX || 'true').toLowerCase() !== 'false'
+        ? 'sandbox' : 'production';
+
+      return res.json({
+        success: true,
+        data   : {
+          server : {
+            port       : process.env.PORT || 5005,
+            webhookUrl : 'POST /api/dialog-chat/webhook',
+            mode
+          },
+          agents : allAgents.map(a => ({
+            user_id          : a.user_id,
+            name             : a.name,
+            phone_raw        : a.phone,
+            phone_normalized : normalizePhone(a.phone || ''),
+            has_token        : !!(a.dialog360_token && a.dialog360_token.trim().length > 5),
+            ready            : !!(a.phone && a.dialog360_token && a.dialog360_token.trim().length > 5)
+            // TIDAK return dialog360_token ke client (security)
+          }))
         }
       });
     } catch (err) {

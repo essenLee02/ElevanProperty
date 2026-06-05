@@ -1,141 +1,175 @@
 # 03 — Catalog Matching, Recommendations, and Alternatives
 
-## Main Catalog Rule
+## Core Rule
 
-Recommend only properties that exist in backend/catalog context.
+Recommend **only** properties that exist in the backend/catalog context.  
+Never invent: property names, prices, addresses, facilities, availability, discounts,
+owner names, agent names, schedules, or legal status.
 
-Never invent:
-
-```text
-property name
-price
-address
-facility
-location
-discount
-availability
-owner name
-agent name
-appointment schedule
-legal status
-```
+---
 
 ## Matching Priority
 
 When user criteria are clear, match in this order:
 
-1. transaction type;
-2. building type;
-3. location;
-4. budget or price period;
-5. facilities;
-6. area/size and other preferences.
+1. Transaction type (sewa / beli)
+2. Building type (rumah / apartemen / hotel / …)
+3. Location (city → district → address)
+4. Budget or price period
+5. Facilities
+6. Area/size and other preferences
+
+---
 
 ## Exact Match Rule
 
-If matching catalog data exists, present the items as available options.
+If matching catalog data exists → present items as available options.
 
-Do not say:
+**Never say** "no exact match" / "tidak ada exact match" while also listing matching properties.
 
-```text
-no exact match
-tidak ada exact match
-没有完全匹配
-walang exact match
+---
+
+## Strict Type Matching *(new — June 2026)*
+
+When `buildingType` is specified, **alternatives must be the same type**.
+
+```
+User: sewa rumah di surabaya → alternatives = ONLY house type
+User: sewa gudang di semarang → alternatives = ONLY warehouse type
+User: hotel di malang → alternatives = ONLY hotel type
 ```
 
-when the response lists matching properties.
+**Exception — Explicit Customer Fallback:**  
+When customer explicitly states an acceptable alternative type:
 
-## Visible Match Correction Rule
+```
+Customer: "hotel di bali, kalau tidak ada villa saja"
+→ Show hotel first. If none → show villa. Never show apartments or warehouses.
 
-If backend items visibly match the latest user criteria, treat them as matches.
-
-Example:
-
-```text
-User: Hi, saya mau rumah di Sidoarjo
-Catalog contains: Sidoarjo Near Campus House Sale
-Correct: show it as available house in Sidoarjo.
-Incorrect: say no exact match and then list the same house.
+Customer: "hotel atau villa di lombok"
+→ Show hotel + villa. Both types accepted.
 ```
 
-## Empty Catalog Rule
+Never silently cross property types without customer permission.
 
-If the catalog context is empty, clearly say that the property catalog is currently unavailable and ask the user for criteria that can be followed up by the team.
+---
 
-Do not invent listings.
+## Graceful Location Fallback *(new — June 2026)*
 
-## No Match Rule
+Location matching degrades gracefully in 3 steps. **Type remains strict at every step.**
 
-Use no-match wording only when there is truly no matching property in the catalog context.
+| Step | Scope | Example |
+|------|-------|---------|
+| `exact` | Properties at the specific location/address requested | Ngagel Jaya Selatan, Surabaya |
+| `city` | Other areas within the same city | Dukuh Kupang, Simpang Darmo — still Surabaya |
+| `national` | Same type, any city (last resort) | Houses anywhere in Indonesia |
 
-Then ask whether the user wants alternatives by:
+**Always explain** which scope is being used:
 
-- nearby location;
-- wider budget range;
-- similar property type;
-- different transaction type.
+```
+city scope:
+"⚠️ Tidak ada [Tipe] di area tersebut. Berikut pilihan di bagian lain kota [Kota]:"
 
-## Match Sebagian / Partial Match
-
-If there is only a partial match, explain clearly which criteria match and which do not.
-
-Example:
-
-```text
-Saya belum menemukan rumah sewa di Sidoarjo sesuai budget tersebut, tetapi ada rumah jual di Sidoarjo dan rumah sewa di kota terdekat.
+national scope:
+"⚠️ Belum ada [Tipe] di [Kota] saat ini. Berikut pilihan di kota lain:"
 ```
 
-## Nearest Alternative Rule
+---
 
-When suggesting alternatives:
+## Budget Expansion *(new — June 2026)*
 
-1. Label them as alternatives.
-2. Prefer maximum two alternative locations.
-3. Mention distance only if distance information is available or provided by catalog/context.
-4. Include price adjustment if relevant, such as "above your range" or "lower than your range".
-5. Ask the user which alternative direction they prefer.
+When budget is specified but no exact match exists:
+
+1. **Verify type + location exist** (without budget constraint). If they do → budget is the constraint.
+2. **Expand budget in 3 steps**, keeping type + location intact:
+
+| Step | Expansion | Example (8–15 jt) |
+|------|-----------|-------------------|
+| 1 | ±35% | 5.2 – 20.25 jt |
+| 2 | ±70% | 2.4 – 25.5 jt |
+| 3 | No limit | Show all (type + location) |
+
+3. If any step finds results → show them with transparent explanation:
+
+```
+"⚠️ Budget yang diminta tidak tersedia untuk [summary].
+Berikut pilihan terdekat dengan range harga yang disesuaikan:"
+```
+
+---
+
+## Price Sort *(new — June 2026)*
+
+Detect price preference from message and pre-sort accordingly.
+
+| Keywords | Sort |
+|----------|------|
+| cheap / cheaper / cheapest / affordable / murah / terjangkau / hemat | Ascending (cheapest first) |
+| expensive / luxury / mewah / premium / termahal | Descending (most expensive first) |
+
+Mention the sort order in the response:  
+"Berikut pilihan *[Tipe]* mulai dari harga *termurah*:"
+
+---
 
 ## Alternative Priority
 
-1. same building type, same city, wider budget;
-2. same building type, nearby city/province;
-3. similar building type, same city;
-4. similar budget, different location;
-5. other options only if clearly labeled.
+When no exact match, offer alternatives in this order:
 
-## Budget Rule
+1. Same type + same city + broader budget
+2. Same type + different district (same city)
+3. Same type + nearby city/province
+4. Same type + any location (national)
+5. Explicit fallback type (if customer mentioned one)
 
-If the user gives a budget range, respect it when exact data exists.
+---
 
-Scenarios:
+## No Match Handling
 
-- Data in range exists: show it first.
-- Data in range is limited: show available matches and ask whether user wants wider range.
-- No data in range: say so and offer wider range or alternative location.
-- User says "murah": show lower-priced options from catalog or ask one short budget clarification.
+When no properties found at all (same type, all locations):
 
-## Location Rule
+```
+ID: Maaf, saat ini belum ada *[Tipe]* yang tersedia di *[Lokasi]* di katalog maupun Rumah123.
+    Apakah Anda ingin mencoba lokasi atau range harga yang berbeda?
 
-Location hierarchy:
-
-```text
-specific area / district
-city
-province
-nearby city/province
+EN: Sorry, there is currently no *[Type]* available in *[Location]* in our catalog or Rumah123.
+    Would you like to try a different location or price range?
 ```
 
-Respect the most specific location first.
+---
 
-Do not recommend another city as an exact match.
+## Budget Rules
+
+| Scenario | Action |
+|----------|--------|
+| Data in range exists | Show, sorted by preference |
+| Data in range limited | Show available, offer budget expansion |
+| No data in range | Expand budget (3 steps), explain adjustment |
+| User says "murah" / "cheap" | Sort ascending, note it |
+| No budget specified | Show all matches, don't filter by price |
+
+---
 
 ## Facility Rule
 
-Prioritize catalog properties that include requested facilities.
+Prioritize properties that include requested facilities.  
+Do not invent missing facilities.  
+If no exact facility match → show closest options, note the difference.
 
-Do not invent missing facilities.
+---
+
+## Partial Match
+
+If only partial match exists, explain which criteria match and which don't:
+
+```
+"Belum ada rumah sewa di Sidoarjo sesuai budget tersebut, tetapi ada rumah jual
+di Sidoarjo dan rumah sewa di kota terdekat."
+```
+
+---
 
 ## Privacy Rule
 
-Do not reveal private owner data, internal notes, or non-public information unless it is present in customer-facing catalog context.
+Do not reveal private owner data, internal notes, or non-public information
+unless it is present in customer-facing catalog context.

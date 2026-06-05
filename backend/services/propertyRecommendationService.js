@@ -1,16 +1,21 @@
 const path = require('path');
 const fs = require('fs');
 
+// URUTAN PENTING: Tipe lebih spesifik harus dicek SEBELUM tipe yang lebih umum.
+// Contoh masalah jika urutan salah:
+//   'house' keyword matches "warehouse" (substring!)
+//   'shop' keyword matches "shophouse" prefix
+// Solusi: letakkan 'warehouse' dan 'shophouse' SEBELUM 'house'.
 const PROPERTY_TYPES = {
-  hotel: ['hotel', 'hotels', 'penginapan'],
-  villa: ['villa', 'vila'],
-  house: ['rumah', 'house', 'home', 'kontrakan', 'residential'],
-  apartment: ['apartemen', 'apartment', 'apart'],
+  hotel         : ['hotel', 'hotels', 'penginapan'],
+  villa         : ['villa', 'vila'],
+  apartment     : ['apartemen', 'apartment', 'apart'],
   boarding_house: ['kos', 'kost', 'boarding house', 'boarding_house', 'indekos'],
-  shophouse: ['ruko', 'shophouse', 'toko'],
-  office: ['kantor', 'office'],
-  warehouse: ['gudang', 'warehouse'],
-  others: ['lainnya', 'others', 'other']
+  warehouse     : ['gudang', 'warehouse'],           // ← SEBELUM house (warehouse ⊃ "house")
+  shophouse     : ['ruko', 'shophouse', 'toko'],     // ← SEBELUM house (shophouse ⊃ "house")
+  office        : ['kantor', 'office'],
+  house         : ['rumah', 'house', 'home', 'kontrakan', 'residential'], // ← SETELAH warehouse/shophouse
+  others        : ['lainnya', 'others', 'other']
 };
 
 const TRANSACTION_TYPES = {
@@ -207,13 +212,48 @@ function extractFromHistory(history = []) {
   return extractSingleMessageFilters(recentUserMessages);
 }
 
+/**
+ * Deteksi tipe properti fallback yang eksplisit disebutkan customer.
+ *
+ * Pattern yang dikenali:
+ *   "kalau tidak ada hotel, villa saja"      → fallbackTypes: ['villa']
+ *   "jika gak ada rumah, apartemen juga oke" → fallbackTypes: ['apartment']
+ *   "hotel atau villa"                        → primaryType: hotel, fallbackTypes: ['villa']
+ *
+ * @param {string} message
+ * @returns {string[]} Array of fallback buildingType keys
+ */
+function detectFallbackTypes(message = '') {
+  const text    = normalizeText(message);
+  const results = [];
+
+  // Pattern 1: "kalau/jika tidak/ga ada [type]"
+  const fallbackRegex = /(?:kalau|jika|bila|kalo)\s+(?:tidak|gak|ga|ngga|ga ada|tidak ada)\s+(?:ada\s+)?([a-z\s]+?)(?:,|\.|;|$|\s+(?:kasih|berikan|saran|aja|saja|juga|ok|oke|bisa|boleh))/gi;
+  let m;
+  while ((m = fallbackRegex.exec(text)) !== null) {
+    const t = detectBuildingType(m[1].trim());
+    if (t) results.push(t);
+  }
+
+  // Pattern 2: "[type] atau [type]" / "[type] dan [type]"  (multi-type explicit)
+  const multiTypeRegex = /\b([a-z]+)\s+(?:atau|or|dan|and|\/)\s+([a-z]+)\b/gi;
+  while ((m = multiTypeRegex.exec(text)) !== null) {
+    const t = detectBuildingType(m[2].trim());
+    if (t) results.push(t);
+  }
+
+  // Deduplicate
+  return [...new Set(results)];
+}
+
 function extractSingleMessageFilters(message = '') {
   return {
-    buildingType: detectBuildingType(message),
+    buildingType  : detectBuildingType(message),
     transactionType: detectTransactionType(message),
-    location: detectLocation(message),
-    budget: detectBudget(message),
-    facilities: detectFacilities(message)
+    location      : detectLocation(message),
+    budget        : detectBudget(message),
+    facilities    : detectFacilities(message),
+    fallbackTypes : detectFallbackTypes(message),  // tipe-tipe alternatif eksplisit
   };
 }
 
@@ -250,6 +290,54 @@ function extractPropertyFilters(message = '', history = []) {
     budget: current.budget || previous.budget || null,
     facilities: current.facilities?.length ? current.facilities : previous.facilities || []
   };
+}
+
+/**
+ * Deteksi apakah user minta properti dengan harga tertentu.
+ *
+ * @param {string} message
+ * @returns {'asc'|'desc'|''}
+ *   'asc'  = user minta termurah (cheap, murah, affordable)
+ *   'desc' = user minta termahal (expensive, mewah, luxury)
+ *   ''     = tidak ada preferensi harga
+ */
+function detectPriceSort(message = '') {
+  const text = normalizeText(message);
+  const cheapWords = [
+    'cheap', 'cheaper', 'cheapest', 'affordable', 'low price', 'low cost',
+    'budget', 'low budget', 'economy', 'economical',
+    'murah', 'termurah', 'paling murah', 'terjangkau', 'hemat', 'ekonomis',
+  ];
+  const expensiveWords = [
+    'expensive', 'luxury', 'premium', 'high end', 'most expensive',
+    'mahal', 'termahal', 'paling mahal', 'mewah',
+  ];
+
+  if (cheapWords.some(w => text.includes(w))) return 'asc';
+  if (expensiveWords.some(w => text.includes(w))) return 'desc';
+  return '';
+}
+
+/**
+ * Sort properties by parsed price value.
+ * Properties without a parseable price are pushed to the end.
+ *
+ * @param {object[]} properties
+ * @param {'asc'|'desc'} direction
+ * @returns {object[]}
+ */
+function sortByPrice(properties = [], direction = 'asc') {
+  return [...properties].sort((a, b) => {
+    const pA = parsePropertyPrice(a)?.value ?? null;
+    const pB = parsePropertyPrice(b)?.value ?? null;
+
+    // Null values go to end regardless of sort direction
+    if (pA === null && pB === null) return 0;
+    if (pA === null) return 1;
+    if (pB === null) return -1;
+
+    return direction === 'asc' ? pA - pB : pB - pA;
+  });
 }
 
 function isRecommendationRequest(message = '') {
@@ -359,56 +447,143 @@ function getVisibleMatchesFromAlternatives(alternatives = [], filters = {}) {
 }
 
 
+/**
+ * Cari properti dengan memperlebar range harga secara bertahap.
+ *
+ * Jika customer minta gudang di Semarang harga 8-15 jt tapi tidak ada:
+ *   Tahap 1: coba 5-18 jt  (±35%)
+ *   Tahap 2: coba 2-21 jt  (±70%)
+ *   Tahap 3: tanpa limit harga (tipe + lokasi tetap dijaga)
+ *
+ * buildingType, transactionType, dan location TIDAK pernah dilonggarkan.
+ *
+ * @param {object[]} source  - Semua properti dari catalog
+ * @param {object}   filters - Filters asli (harus punya filters.budget)
+ * @returns {{ results: object[], expandedBudget: object|null, expansionStep: number }}
+ */
+function findWithExpandedBudget(source, filters) {
+  const budget = filters.budget;
+  if (!budget || (!budget.min && !budget.max)) {
+    return { results: [], expandedBudget: null, expansionStep: 0 };
+  }
+
+  const min = budget.min || 0;
+  const max = budget.max || 0;
+
+  const expansions = [
+    // Step 1: ±35%
+    { min: min ? Math.round(min * 0.65) : null, max: max ? Math.round(max * 1.35) : null, step: 1 },
+    // Step 2: ±70%
+    { min: min ? Math.round(min * 0.30) : null, max: max ? Math.round(max * 1.70) : null, step: 2 },
+    // Step 3: tanpa limit budget (tipe + lokasi tetap dijaga)
+    { min: null, max: null, step: 3 },
+  ];
+
+  for (const { min: newMin, max: newMax, step } of expansions) {
+    const results = filterProperties(source, {
+      buildingType   : filters.buildingType,
+      transactionType: filters.transactionType,
+      location       : filters.location,
+      budget         : (newMin || newMax) ? { ...budget, min: newMin, max: newMax } : null,
+    });
+
+    if (results.length > 0) {
+      return {
+        results,
+        expandedBudget: { min: newMin, max: newMax, period: budget.period },
+        expansionStep : step,
+      };
+    }
+  }
+
+  return { results: [], expandedBudget: null, expansionStep: 0 };
+}
+
+/**
+ * Get alternative properties ketika tidak ada exact match.
+ *
+ * ATURAN STRICT TYPE MATCHING:
+ *   Jika buildingType ditetapkan, alternatif HANYA dari tipe yang sama.
+ *   Tidak pernah cross-type (misal: minta rumah → jangan tampil apartemen/gudang).
+ *
+ *   Urutan relaksasi (satu per satu, bukan sekaligus):
+ *     1. Type + transaction + location (remove budget only)
+ *     2. Type + transaction (remove location constraint)
+ *     3. Type only (remove transaction constraint)
+ *
+ *   Jika customer eksplisit sebut fallback type (filters.fallbackTypes):
+ *     Misal "hotel, kalau tidak ada villa saja"
+ *     → Cari hotel dulu, jika tidak ada → cari villa
+ *
+ * @param {object} filters
+ * @returns {Promise<object[]>}
+ */
 async function getAlternatives(filters = {}) {
   const source = await getSourceProperties();
-  const alternatives = [];
-  const seen = new Set();
+  const seen   = new Set();
+  const result = [];
+
   const add = (items = []) => {
-    items.forEach((item) => {
+    for (const item of items) {
       const key = item.id || item.title;
-      if (!seen.has(key)) {
-        seen.add(key);
-        alternatives.push(item);
-      }
-    });
+      if (!seen.has(key)) { seen.add(key); result.push(item); }
+    }
   };
 
-  // Priority alternatives: keep the requested type and transaction first.
-  if (filters.buildingType || filters.transactionType) {
-    add(filterProperties(source, {
-      buildingType: filters.buildingType,
-      transactionType: filters.transactionType,
-      budget: filters.budget
-    }));
+  const bt           = filters.buildingType;
+  const tt           = filters.transactionType;
+  const loc          = filters.location;
+  const fallbackTypes = filters.fallbackTypes || [];
+
+  // ── KASUS A: buildingType ditetapkan ────────────────────────────────────
+  // Strict: HANYA tipe yang diminta + fallback eksplisit dari customer.
+  if (bt) {
+    // A1: Type + transaction + location (tanpa budget — relaksasi harga saja)
+    add(filterProperties(source, { buildingType: bt, transactionType: tt, location: loc }));
+
+    // A2: Type + transaction (relaksasi lokasi — masih kota / area lain)
+    if (result.length < 4) {
+      add(filterProperties(source, { buildingType: bt, transactionType: tt }));
+    }
+
+    // A3: Type only (relaksasi transaction juga — last resort)
+    if (result.length < 4) {
+      add(filterProperties(source, { buildingType: bt }));
+    }
+
+    // A4: Fallback types eksplisit dari customer ("kalau tidak ada rumah, apartemen juga boleh")
+    if (result.length < 4 && fallbackTypes.length > 0) {
+      for (const fbt of fallbackTypes) {
+        add(filterProperties(source, { buildingType: fbt, transactionType: tt, location: loc }));
+        if (result.length >= 8) break;
+        add(filterProperties(source, { buildingType: fbt, transactionType: tt }));
+        if (result.length >= 8) break;
+      }
+    }
+
+    // Return HANYA tipe yang sesuai (tidak campuran dengan tipe lain)
+    return result.slice(0, 8);
   }
 
-  // Then keep requested location and transaction.
-  if (filters.location || filters.transactionType) {
-    add(filterProperties(source, {
-      location: filters.location,
-      transactionType: filters.transactionType,
-      budget: filters.budget
-    }));
+  // ── KASUS B: tidak ada buildingType — lebih fleksibel ───────────────────
+  if (tt || loc) {
+    add(filterProperties(source, { transactionType: tt, location: loc }));
+    add(filterProperties(source, { transactionType: tt }));
+  }
+  if (loc) {
+    add(filterProperties(source, { location: loc }));
   }
 
-  // Then requested type regardless of budget/location.
-  if (filters.buildingType) {
-    add(filterProperties(source, {
-      buildingType: filters.buildingType,
-      transactionType: filters.transactionType
-    }));
+  // Fallback types eksplisit (meski tanpa primary buildingType)
+  if (fallbackTypes.length > 0) {
+    for (const fbt of fallbackTypes) {
+      add(filterProperties(source, { buildingType: fbt, transactionType: tt, location: loc }));
+      add(filterProperties(source, { buildingType: fbt, transactionType: tt }));
+    }
   }
 
-  // Then requested location regardless of type/budget.
-  if (filters.location) {
-    add(filterProperties(source, {
-      location: filters.location,
-      transactionType: filters.transactionType
-    }));
-  }
-
-  if (!alternatives.length) add(source.slice(0, 8));
-  return alternatives.slice(0, 8);
+  if (!result.length) add(source.slice(0, 8));
+  return result.slice(0, 8);
 }
 
 function humanBuildingType(type = '') {
@@ -479,8 +654,35 @@ function summarizeFilters(filters = {}) {
 }
 
 async function buildRecommendationContextForLLM(message = '', history = []) {
-  const filters = extractPropertyFilters(message, history);
-  let exactMatches = await searchProperties(filters);
+  const filters   = extractPropertyFilters(message, history);
+  const priceSort = detectPriceSort(message);  // 'asc' | 'desc' | ''
+
+  let exactMatches    = await searchProperties(filters);
+  let budgetExpanded  = null;  // null = tidak ada ekspansi harga
+
+  // ── Budget expansion: jika exact matches kosong karena budget terlalu ketat ─
+  // Tetap jaga buildingType + location. Hanya budget yang dilonggarkan.
+  if (!exactMatches.length && filters.budget) {
+    const source = await getSourceProperties();
+
+    // Cek apakah ada properti tipe+lokasi yang sama (tanpa constraint harga)
+    const typeLocMatch = filterProperties(source, {
+      buildingType   : filters.buildingType,
+      transactionType: filters.transactionType,
+      location       : filters.location,
+    });
+
+    if (typeLocMatch.length > 0) {
+      // Ada properti yang cocok tipe+lokasi — coba ekspansi harga
+      const expanded = findWithExpandedBudget(source, filters);
+      if (expanded.results.length > 0) {
+        exactMatches   = expanded.results;
+        budgetExpanded = expanded.expandedBudget;
+        console.log(`[PropertyRecommendation] Budget expanded (step ${expanded.expansionStep}):`, expanded.expandedBudget);
+      }
+    }
+  }
+
   let alternatives = exactMatches.length ? [] : await getAlternatives(filters);
 
   // Safety correction:
@@ -502,13 +704,33 @@ async function buildRecommendationContextForLLM(message = '', history = []) {
     }
   }
 
+  // ── Apply price sort when customer requests cheap / expensive ─────────────
+  if (priceSort) {
+    exactMatches = sortByPrice(exactMatches, priceSort);
+    alternatives = sortByPrice(alternatives, priceSort);
+  }
+
+  const priceSortNote = priceSort === 'asc'
+    ? '(Sorted by price: cheapest first — customer requested affordable/cheap options)'
+    : priceSort === 'desc'
+      ? '(Sorted by price: most expensive first — customer requested luxury/premium options)'
+      : '';
+
+  const budgetExpandNote = budgetExpanded
+    ? `(NOTE: No properties found at original budget. Budget range was expanded to find the closest matches. Inform customer that exact budget is unavailable but present these as the nearest alternatives.)`
+    : '';
+
   return {
     filters,
     exactMatches,
     alternatives,
+    priceSort,
+    budgetExpanded,
     contextText: [
       'PROPERTY SEARCH RESULT FROM BACKEND CATALOG',
       `Detected customer request: ${JSON.stringify(summarizeFilters(filters), null, 2)}`,
+      priceSortNote,
+      budgetExpandNote,
       '',
       exactMatches.length
         ? `Exact matching properties (${exactMatches.length}). The assistant must present these as available matching options and must NOT say there is no exact match:`
@@ -545,6 +767,10 @@ module.exports = {
   detectBuildingType,
   detectLocation,
   detectTransactionType,
+  detectPriceSort,
+  sortByPrice,
+  detectFallbackTypes,
+  findWithExpandedBudget,
   detectBudget,
   parsePropertyPrice,
   budgetMatches,

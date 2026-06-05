@@ -82,3 +82,29 @@ exports.verifyToken = (req, res, next) => {
   return sendError(res, HTTP.UNAUTHORIZED, null,
     'Belum login, silakan login terlebih dahulu');
 };
+
+/**
+ * Middleware: cek privilege setelah verifyToken.
+ *
+ * Gunakan selalu SETELAH verifyToken:
+ *   router.get('/admin-route', verifyToken, requirePrivilege('admin'), handler);
+ *
+ * @param {'admin'|'agent'} privilege - Level minimum yang dibutuhkan
+ */
+exports.requirePrivilege = (privilege) => (req, res, next) => {
+  if (!req.user) {
+    return sendError(res, HTTP.UNAUTHORIZED, null, 'Belum login');
+  }
+
+  const userPriv = req.user.privilege || '';
+
+  if (privilege === 'admin' && userPriv !== 'admin') {
+    return sendError(res, HTTP.FORBIDDEN, null, 'Akses ditolak — perlu privilege admin');
+  }
+
+  if (privilege === 'agent' && !['agent', 'admin'].includes(userPriv)) {
+    return sendError(res, HTTP.FORBIDDEN, null, 'Akses ditolak — perlu privilege agent');
+  }
+
+  return next();
+};

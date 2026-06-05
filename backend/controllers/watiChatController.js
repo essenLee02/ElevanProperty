@@ -1,743 +1,588 @@
 /**
  * watiChatController.js
  *
- * Multi-agent WhatsApp chat handler for WATI platform
- * Handles incoming webhooks, message routing, AI reply generation, and outbound sending
+ * Multi-agent WhatsApp handler untuk platform WATI.
  *
- * Architecture:
- *  - Webhook receiver → Identify agent from phone number → Find/create session
- *  - Save message → Generate AI reply (with fallback) → Send via WATI → Save reply
- *  - Real-time updates via Socket.io
+ * ARSITEKTUR (mengikuti pola fonnteChatController.js):
+ *  - Webhook masuk → return 200 DULU → proses AI di background (setImmediate)
+ *  - Identifikasi agent dari payload (4 strategi, karena WATI pakai shared token)
+ *  - Generate AI reply (ChatGPT → Claude → Private Agent)
+ *  - Kirim balasan via WatiService (shared WATI_API_TOKEN dari .env)
+ *  - Log ke terminal (format sama dengan Fonnte)
+ *
+ * PERBEDAAN DENGAN FONNTE:
+ *  - Fonnte: per-agent token (fonnte_token di kolom users)
+ *  - WATI: satu shared token dari WATI_API_TOKEN env
+ *  - WATI: identifikasi agent dari payload (bukan dari field "device")
+ *
+ * PERBEDAAN PAYLOAD FORMAT:
+ *  - Fonnte: { sender, message, device, name, ... }
+ *  - WATI: { waId, text: { body }, owner, senderName, assignedOperator, ... }
  */
+
+'use strict';
 
 const { User, ChatSession, ChatMessage } = require('../models');
-const WatiService = require('../services/watiService');
-const { safeLog } = require('../utils/safeLog');
-const { isTerminalActive } = require('../utils/terminalSwitch');
-const { hasPropertyKeyword } = require('../utils/propertyKeywordFilter');
-const { generateWhatsAppAIReply } = require('../services/whatsappAIService');
+const WatiService                        = require('../services/watiService');
+const { safeLog }                        = require('../utils/safeLog');
+const { hasPropertyKeyword }             = require('../utils/propertyKeywordFilter');
+const { generateWhatsAppAIReply }        = require('../services/whatsappAIService');
+const {
+  normalizePhone,
+  isValidPhone,
+  findOrCreateSession,
+  saveMessage,
+  logTerminalSummary,
+  logTerminalSkip,
+} = require('../utils/whatsappUtils');
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   SECTION 1 — AGENT LOOKUP (WATI-specific: 4-strategy identification)
+   WATI pakai shared API token, agent diidentifikasi dari payload.
+══════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * ═══════════════════════════════════════════════════════════════
- * SECTION 1: PHONE NUMBER UTILITIES
- * ═══════════════════════════════════════════════════════════════
+ * Ambil semua agent aktif dari database.
  */
-
-class PhoneUtils {
-  /**
-   * Normalize phone number to consistent format (628xxxxxxxxx)
-   * Examples:
-   *   +62 821-1136-7154 → 6282111367154
-   *   0821 1136 7154    → 6282111367154
-   *   6282111367154     → 6282111367154
-   */
-  static normalize(phone = '') {
-    return String(phone || '')
-      .replace(/\+62/g, '62')           // +62 → 62
-      .replace(/^0/, '62')               // 0xxx → 62xxx
-      .replace(/[\s\-()]/g, '');         // Remove spaces, dashes, parentheses
-  }
-
-  /**
-   * Check if phone is in valid Indonesian WhatsApp format
-   */
-  static isValid(phone = '') {
-    const normalized = this.normalize(phone);
-    return /^628\d{8,}$/.test(normalized);
+async function getAllAgents() {
+  try {
+    return await User.findAll({
+      where      : { privilege: 'agent', status: 1 },
+      attributes : ['id', 'user_id', 'name', 'phone', 'username'],
+      order      : [['created_date', 'ASC']]
+    });
+  } catch (err) {
+    console.error('[WATI GET AGENTS ERROR]', err.message);
+    return [];
   }
 }
 
 /**
- * ═══════════════════════════════════════════════════════════════
- * SECTION 2: AGENT LOOKUP
- * ═══════════════════════════════════════════════════════════════
+ * Cari agent berdasarkan nomor telepon (exact match lalu normalized match).
+ *
+ * @param {string} phoneNumber
+ * @returns {Promise<User|null>}
  */
+async function findAgentByPhone(phoneNumber) {
+  if (!phoneNumber) return null;
 
-class AgentLookup {
-  /**
-   * Find agent from User table by phone number
-   * Tries exact match first, then normalized match
-   */
-  static async findByPhone(phoneNumber) {
-    if (!phoneNumber) {
-      console.warn('[WATI] No phone number provided for agent lookup');
-      return null;
+  try {
+    const normalized = normalizePhone(phoneNumber);
+
+    // Exact match
+    const agent = await User.findOne({
+      where      : { phone: phoneNumber, privilege: 'agent', status: 1 },
+      attributes : ['id', 'user_id', 'name', 'phone', 'username']
+    });
+    if (agent) {
+      console.log(`[WATI AGENT] ✅ Exact match: ${agent.name} (${agent.phone})`);
+      return agent;
     }
 
-    try {
-      const normalized = PhoneUtils.normalize(phoneNumber);
-
-      // Try exact match first
-      let agent = await User.findOne({
-        where: { phone: phoneNumber, privilege: 'agent', status: 1 },
-        attributes: ['id', 'user_id', 'name', 'phone', 'username']
-      });
-
-      if (agent) {
-        console.log(`[WATI AGENT] Found via exact match: ${agent.name} (${agent.phone})`);
-        return agent;
+    // Normalized match — cek semua agent
+    const allAgents = await getAllAgents();
+    for (const a of allAgents) {
+      if (normalizePhone(a.phone) === normalized) {
+        console.log(`[WATI AGENT] ✅ Normalized match: ${a.name} (${a.phone}) → ${normalized}`);
+        return a;
       }
-
-      // Try normalized match — check ALL agents, not just the first one
-      const allAgents = await User.findAll({
-        where: { privilege: 'agent', status: 1 },
-        attributes: ['id', 'user_id', 'name', 'phone', 'username']
-      });
-
-      for (const a of allAgents) {
-        const agentNormalized = PhoneUtils.normalize(a.phone);
-        if (agentNormalized === normalized) {
-          console.log(`[WATI AGENT] Found via normalized match: ${a.name} (${a.phone}) → ${agentNormalized}`);
-          return a;
-        }
-      }
-
-      console.warn(`[WATI AGENT] No agent found for phone: ${phoneNumber} (normalized: ${normalized})`);
-      console.warn(`[WATI AGENT] Registered agents:`, allAgents.map(a => `${a.name}:${PhoneUtils.normalize(a.phone)}`));
-      return null;
-    } catch (error) {
-      console.error('[WATI AGENT LOOKUP ERROR]', error.message);
-      safeLog('WATI_AGENT_LOOKUP_ERROR', { phone: phoneNumber, error: error.message }, 'error');
-      return null;
     }
-  }
 
-  /**
-   * Get all active agents
-   */
-  static async getAll() {
-    try {
-      return await User.findAll({
-        where: { privilege: 'agent', status: 1 },
-        attributes: ['id', 'user_id', 'name', 'phone', 'username', 'created_date'],
-        order: [['created_date', 'ASC']]
-      });
-    } catch (error) {
-      console.error('[WATI GET AGENTS ERROR]', error.message);
-      return [];
-    }
+    console.warn(`[WATI AGENT] Tidak ada match untuk: ${phoneNumber} (normalized: ${normalized})`);
+    console.warn(`[WATI AGENT] Agent terdaftar:`, allAgents.map(a => `${a.name}:${normalizePhone(a.phone)}`));
+    return null;
+
+  } catch (err) {
+    console.error('[WATI AGENT LOOKUP ERROR]', err.message);
+    safeLog('WATI_AGENT_LOOKUP_ERROR', { phone: phoneNumber, error: err.message }, 'error');
+    return null;
   }
 }
 
 /**
- * ═══════════════════════════════════════════════════════════════
- * SECTION 3: AI REPLY GENERATION WITH FALLBACK
- * ═══════════════════════════════════════════════════════════════
+ * Identifikasi agent dari payload WATI (4 strategi).
+ *
+ * WATI Webhook Fields:
+ *   waId             = nomor pengirim (customer)
+ *   owner            = nomor bisnis WATI (bukan nomor agent personal)
+ *   assignedOperator = operator WATI yang handle percakapan
+ *   agentPhone       = field custom untuk test payload (curl)
+ *
+ * Strategi:
+ *   1. Field 'agentPhone' (custom test field)
+ *   2. assignedOperator.name → match ke nama agent di DB
+ *   3. owner field = nomor agent (jarang, tapi coba)
+ *   4. Fallback: ambil agent pertama dari DB
+ *
+ * @param {object} payload - req.body dari WATI webhook
+ * @returns {Promise<{ agent: User|null, source: string }>}
  */
+async function identifyAgent(payload) {
+  const assignedOp      = payload.assignedOperator || null;
+  const assignedPhone   = payload.agentPhone        || null;  // Custom field untuk testing
+  const businessPhone   = payload.owner             || null;  // Nomor bisnis WATI
 
-// ✅ UPDATED: AiReplyGenerator removed — now using whatsappAIService.generateWhatsAppAIReply
-// This centralizes AI logic across all WhatsApp platforms (Fonnte, WATI, 360dialog)
-// Maintains same interface: { reply, provider, contextSource }
+  let agent  = null;
+  let source = null;
 
-/**
- * ═══════════════════════════════════════════════════════════════
- * SECTION 4: MESSAGE PROCESSING
- * ═══════════════════════════════════════════════════════════════
- */
+  // Strategi 1: Field 'agentPhone' dari test payload
+  if (assignedPhone && isValidPhone(assignedPhone)) {
+    agent = await findAgentByPhone(assignedPhone);
+    if (agent) source = 'agentPhone_field';
+  }
 
-class MessageProcessor {
-  /**
-   * Find or create chat session
-   * ChatSession fields: name, normalizedName, phone, normalizedPhone, source, location, normalizedLocation
-   * Agent identity encoded in source: 'wati_leo_felix'
-   */
-  static async findOrCreateSession(customerPhone, agentName, customerName = 'Customer') {
-    try {
-      const normalizedPhone = PhoneUtils.normalize(customerPhone);
-      const agentSlug = agentName.toLowerCase().replace(/\s+/g, '_');
-      const source = `wati_${agentSlug}`;
+  // Strategi 2: assignedOperator.name → match nama ke DB
+  if (!agent && assignedOp?.name) {
+    const allAgents = await getAllAgents();
+    agent = allAgents.find(a =>
+      a.name.toLowerCase().includes(assignedOp.name.toLowerCase()) ||
+      assignedOp.name.toLowerCase().includes(a.name.toLowerCase())
+    ) || null;
+    if (agent) source = 'assignedOperator_name';
+  }
 
-      let session = await ChatSession.findOne({
-        where: { normalizedPhone, source }
-      });
+  // Strategi 3: owner = nomor agent (jarang tapi coba)
+  if (!agent && businessPhone && isValidPhone(businessPhone)) {
+    agent = await findAgentByPhone(businessPhone);
+    if (agent) source = 'owner_field';
+  }
 
-      if (session) {
-        return session;
-      }
-
-      session = await ChatSession.create({
-        name: customerName,
-        normalizedName: customerName.toLowerCase(),
-        phone: customerPhone,
-        normalizedPhone,
-        source,
-        location: null,
-        normalizedLocation: null
-      });
-
-      console.log(`[WATI SESSION] Created new session: ID ${session.id} (${agentName})`);
-      return session;
-    } catch (error) {
-      console.error('[WATI SESSION ERROR]', error.message);
-      throw error;
+  // Strategi 4: Fallback — ambil agent pertama
+  if (!agent) {
+    const allAgents = await getAllAgents();
+    if (allAgents.length > 0) {
+      agent  = allAgents[0];
+      source = 'fallback_first';
+      console.log(`[WATI AGENT] Auto-select (fallback): ${agent.name}`);
     }
   }
 
-  /**
-   * Save customer message to database
-   * ChatMessage fields: chatSessionId, role, message, channel, metadata (TEXT)
-   */
-  static async saveCustomerMessage(session, message, metadata = {}) {
-    try {
-      const saved = await ChatMessage.create({
-        chatSessionId: session.id,
-        role: 'customer',
-        message: message,
-        channel: 'whatsapp',
-        metadata: JSON.stringify(metadata)
-      });
-
-      console.log(`[WATI MESSAGE] Saved customer message: ID ${saved.id}`);
-      return saved;
-    } catch (error) {
-      console.error('[WATI SAVE MESSAGE ERROR]', error.message);
-      throw error;
-    }
+  if (agent) {
+    console.log(`[WATI AGENT] ✅ Identified: ${agent.name} (via ${source})`);
   }
 
-  /**
-   * Save AI reply to database
-   */
-  static async saveAiReply(session, reply, aiResult) {
-    try {
-      const saved = await ChatMessage.create({
-        chatSessionId: session.id,
-        role: 'ai',
-        message: reply,
-        channel: 'whatsapp',
-        metadata: JSON.stringify({
-          aiProvider: aiResult.provider,
-          primaryProvider: aiResult.primaryProvider,
-          fallbackUsed: aiResult.fallbackUsed,
-          fallbackProvider: aiResult.fallbackProvider || null
-        })
-      });
-
-      console.log(`[WATI MESSAGE] Saved AI reply: ID ${saved.id}`);
-      return saved;
-    } catch (error) {
-      console.error('[WATI SAVE AI REPLY ERROR]', error.message);
-      throw error;
-    }
-  }
+  return { agent, source };
 }
 
+/* ══════════════════════════════════════════════════════════════════════════════
+   SECTION 2 — PROSES PESAN MASUK (background)
+   Dipanggil setelah response 200 dikirim ke WATI
+══════════════════════════════════════════════════════════════════════════════ */
+
 /**
- * ═══════════════════════════════════════════════════════════════
- * SECTION 5: LOGGING & FORMATTING
- * ═══════════════════════════════════════════════════════════════
+ * Proses lengkap untuk satu pesan WATI masuk:
+ *   1. Simpan pesan customer ke DB
+ *   2. Cek kata kunci properti
+ *   3. Generate AI reply
+ *   4. Simpan AI reply ke DB
+ *   5. Kirim balasan via WATI
+ *   6. Log ke terminal
+ *
+ * @param {object} payload - WATI webhook body
+ * @param {User}   agent
  */
+async function processWatiMessage(payload, agent) {
+  const customerPhone   = String(payload.waId   || payload.from  || '').trim();
+  const customerName    = String(payload.senderName || payload.name || 'Customer').trim();
+  const customerMessage = String(payload.text?.body || payload.message || '').trim();
+  const messageId       = payload.id || payload.messageId || `wati_${Date.now()}`;
+  const ts              = new Date().toISOString();
 
-class Logger {
-  /**
-   * Log incoming WATI message in clean readable format
-   *
-   * Output example:
-   * ────────────────────────────────────────────────────────────
-   * Agent     : LEO FELIX - +62821-3311-936
-   * Customer  : +62881-3370-135
-   * Timestamp : 2026-05-26T10:00:00.000Z
-   * Message   : Saya mau mencari sewa rumah di surabaya...
-   * ────────────────────────────────────────────────────────────
-   */
-  static logInboundMessage(agentName, agentPhone, customerPhone, customerMessage, timestamp = null) {
-    if (!isTerminalActive('WATI')) return;
+  // Skip media / pesan kosong
+  if (!customerMessage) return;
 
-    const divider = '─'.repeat(60);
-    const ts = timestamp || new Date().toISOString();
+  // ── Find / create session ────────────────────────────────────────────────
+  const session = await findOrCreateSession({
+    customerPhone,
+    customerName,
+    agentName : agent.name,
+    platform  : 'wati'
+  });
 
-    console.log('');
-    console.log(divider);
-    console.log(`[WATI] Agent     : ${agentName} - ${agentPhone}`);
-    console.log(`[WATI] Customer  : ${customerPhone}`);
-    console.log(`[WATI] Timestamp : ${ts}`);
-    console.log(`[WATI] Message   : ${String(customerMessage).trim()}`);
-    console.log(divider);
-    console.log('');
+  // ── Simpan pesan customer (selalu, terlepas dari keyword) ────────────────
+  await saveMessage(session, 'customer', customerMessage, {
+    agentName   : agent.name,
+    agentUserId : agent.user_id,
+    messageId,
+    platform    : 'wati'
+  });
+
+  safeLog('WATI_INBOUND_MESSAGE', {
+    sessionId     : session.id,
+    agentName     : agent.name,
+    messageLength : customerMessage.length
+  });
+
+  // ── Cek kata kunci properti ──────────────────────────────────────────────
+  const isPropertyQuery = hasPropertyKeyword(customerMessage);
+
+  if (!isPropertyQuery) {
+    logTerminalSkip({
+      platform       : 'WATI',
+      tag            : '[WATI]',
+      agent,
+      customerPhone,
+      customerName,
+      ts,
+      message        : customerMessage
+    });
+    return;
   }
 
-  /**
-   * Log raw WATI webhook payload for debugging
-   */
-  static logRawPayload(payload) {
-    console.log('[WATI DEBUG] Raw webhook payload:');
-    console.log(JSON.stringify(payload, null, 2));
+  // ── Generate AI reply (ChatGPT → Claude → Private Agent) ────────────────
+  let aiResult;
+  let ctxSource = 'none';
+
+  try {
+    const result = await generateWhatsAppAIReply({
+      session,
+      message  : customerMessage,
+      agentName: agent.name,
+    });
+    aiResult  = result;
+    ctxSource = result.contextSource || 'none';
+  } catch (err) {
+    const appName = process.env.APP_NAME || 'Elevan Property';
+    aiResult = {
+      reply         : `Halo ${customerName}, terima kasih menghubungi ${agent.name} dari ${appName}. Kami akan segera membantu mencari properti untuk Anda. 🏠`,
+      provider      : 'fallback',
+      contextSource : 'none'
+    };
+    ctxSource = 'none';
   }
+
+  // ── Simpan AI reply ──────────────────────────────────────────────────────
+  await saveMessage(session, 'ai', aiResult.reply, {
+    aiProvider    : aiResult.provider,
+    contextSource : ctxSource
+  });
+
+  // ── Kirim via WATI ───────────────────────────────────────────────────────
+  let watiSent  = false;
+  let watiError = null;
+
+  try {
+    await WatiService.sendMessage(customerPhone, aiResult.reply, agent.phone);
+    watiSent = true;
+    safeLog('WATI_REPLY_SENT', {
+      sessionId  : session.id,
+      agent      : agent.name,
+      recipient  : customerPhone,
+      aiProvider : aiResult.provider,
+      ctxSource
+    });
+  } catch (err) {
+    watiError = err.message;
+    safeLog('WATI_REPLY_SEND_FAILED', { sessionId: session.id, agent: agent.name, error: err.message }, 'error');
+  }
+
+  // ── Log terminal (full response, format sama dengan Fonnte) ─────────────
+  logTerminalSummary({
+    platform      : 'WATI',
+    tag           : '[WATI]',
+    agent,
+    customerPhone,
+    customerName,
+    ts,
+    message       : customerMessage,
+    ctxSource,
+    aiProvider    : aiResult.provider,
+    aiReply       : aiResult.reply,
+    sendStatus    : watiSent ? '✅ Terkirim' : `❌ Gagal: ${watiError}`
+  });
 }
 
-/**
- * ═══════════════════════════════════════════════════════════════
- * SECTION 6: MAIN CONTROLLER CLASS
- * ═══════════════════════════════════════════════════════════════
- */
+/* ══════════════════════════════════════════════════════════════════════════════
+   SECTION 3 — CONTROLLER CLASS
+══════════════════════════════════════════════════════════════════════════════ */
 
 class WatiChatController {
-  /**
-   * POST /api/wati/webhook
-   *
-   * WATI actual webhook payload:
-   * {
-   *   "waId": "628xxxxxxxxx",              // Customer phone (sender)
-   *   "senderName": "Budi Santoso",        // Customer display name
-   *   "text": { "body": "Halo..." },       // Message content
-   *   "owner": "62BISNIS",                 // WATI Business number (bukan nomor agent)
-   *   "timestamp": "2026-05-25T10:00:00Z",
-   *   "id": "msg_123456",
-   *   "assignedOperator": {                // Agent yang ditugaskan di WATI (opsional)
-   *     "email": "leo@company.com",
-   *     "name": "Leo Felix"
-   *   }
-   * }
-   *
-   * CATATAN: field "owner" adalah NOMOR BISNIS, bukan nomor personal agent.
-   * Agent diidentifikasi melalui "assignedOperator" atau database lookup.
-   */
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     POST /api/wati/webhook
+     ─────────────────────────────────────────────────────────────────────────
+     Endpoint utama. Konfigurasikan URL ini di WATI Dashboard.
+
+     Alur (mengikuti pola Fonnte):
+       1. Terima payload → log raw
+       2. Return 200 DULU ke WATI (hindari timeout)
+       3. Proses AI + DB di background (setImmediate)
+  ───────────────────────────────────────────────────────────────────────── */
   static async handleInboundMessage(req, res) {
-    try {
-      const payload = req.body;
+    const payload = req.body || {};
 
-      // Log raw payload untuk debugging
-      Logger.logRawPayload(payload);
+    // ── Log raw payload ───────────────────────────────────────────────────
+    console.log('\n╔══════════ WATI WEBHOOK MASUK ═══════════════╗');
+    console.log(`║ Time  : ${new Date().toISOString().padEnd(35)} ║`);
+    console.log(`║ Keys  : ${String(Object.keys(payload).join(', ')).substring(0, 35).padEnd(35)} ║`);
+    console.log('╚═════════════════════════════════════════════╝');
+    console.log('[WATI RAW]', JSON.stringify(payload).substring(0, 300));
 
-      // ─── Parse payload (support WATI format + legacy/test format) ───────
-      const customerPhone   = payload.waId || payload.from;
-      const businessPhone   = payload.owner || payload.to;                      // Nomor bisnis WATI
-      const customerMessage = String(payload.text?.body || payload.message || '').trim();
-      const messageId       = payload.id || payload.messageId || `wati_${Date.now()}`;
-      const customerName    = payload.senderName || payload.name || 'Customer';
-      const msgTimestamp    = payload.timestamp || new Date().toISOString();
+    // ── Return 200 SEGERA ─────────────────────────────────────────────────
+    // WATI mengharapkan response cepat. Semua proses AI dilakukan di background.
+    res.status(200).json({ status: true, type: 'incoming', message: 'Webhook diterima' });
 
-      // Identifikasi agent: prioritas assignedOperator → lookup by phone
-      const assignedOp      = payload.assignedOperator || null;
-      const assignedAgentPhone = payload.agentPhone || null;                    // Field custom untuk testing
+    // ── Proses di background ──────────────────────────────────────────────
+    setImmediate(async () => {
+      try {
+        const customerPhone   = String(payload.waId   || payload.from  || '').trim();
+        const customerMessage = String(payload.text?.body || payload.message || '').trim();
 
-      // ─── Validasi field wajib ────────────────────────────────────────────
-      if (!customerPhone || !customerMessage) {
-        console.warn('[WATI WEBHOOK] ⚠️ Missing required fields:', {
-          hasCustomerPhone : !!customerPhone,
-          hasMessage       : !!customerMessage,
-          payloadKeys      : Object.keys(payload)
-        });
-        return res.status(400).json({
-          success : false,
-          message : 'Payload tidak valid: harus ada waId dan text.body',
-          hint    : 'Pastikan WATI mengirim field: waId, text.body'
-        });
-      }
-
-      if (!PhoneUtils.isValid(customerPhone)) {
-        console.warn('[WATI WEBHOOK] ⚠️ Invalid customer phone:', customerPhone);
-        return res.status(400).json({
-          success : false,
-          message : `Nomor customer tidak valid: ${customerPhone}`
-        });
-      }
-
-      // ─── Cari agent dari database (4 strategi) ──────────────────────────
-      //
-      // WATI Webhook Fields:
-      //   waId    = nomor yang kirim pesan ke WATI (customer ATAU agent yg balas)
-      //   owner   = nomor bisnis WATI (bukan nomor agent)
-      //   assignedOperator = operator WATI yang handle percakapan
-      //
-      // Kasus 1: Testing via curl  → gunakan field "agentPhone" custom
-      // Kasus 2: WATI Contact balas → waId = nomor agent (LEO FELIX reply ke WATI)
-      // Kasus 3: WATI Operator assigned → assignedOperator.name match ke database
-      // Kasus 4: owner = agent phone → jarang, tapi tetap coba
-      // Fallback: Tampilkan pesan meski tidak ada agent (JANGAN block)
-
-      let agent        = null;
-      let agentSource  = null;
-
-      // Strategi 1: Field "agentPhone" dari test payload (curl testing)
-      if (assignedAgentPhone && PhoneUtils.isValid(assignedAgentPhone)) {
-        agent = await AgentLookup.findByPhone(assignedAgentPhone);
-        if (agent) agentSource = 'agentPhone_field';
-      }
-
-      // Strategi 2: waId = nomor agent (terjadi ketika WATI Contact balas ke WATI)
-      // Contoh: LEO FELIX (+62821-3311-936) ada di WATI Contacts
-      // Leo membalas pesan dari WATI → waId = nomor Leo → match di database
-      if (!agent && customerPhone) {
-        agent = await AgentLookup.findByPhone(customerPhone);
-        if (agent) {
-          agentSource = 'waId_is_agent';
-          // Dalam kasus ini, "customer" sebenarnya adalah agent
-          // Swap: agent mengirim pesan, customerPhone perlu di-override
-          console.log(`[WATI AGENT] ℹ️ Detected WATI Contact reply flow: ${agent.name} is the sender`);
+        // Skip jika tidak ada pesan atau nomor pengirim
+        if (!customerPhone || !customerMessage) {
+          console.warn('[WATI BACKGROUND] Payload tidak lengkap — skip (waId atau message kosong)');
+          return;
         }
+
+        // Identifikasi agent dari payload
+        const { agent } = await identifyAgent(payload);
+
+        if (!agent) {
+          console.warn('[WATI BACKGROUND] Tidak ada agent ditemukan, pesan tidak diproses');
+          safeLog('WATI_AGENT_NOT_FOUND', {
+            businessPhone : payload.owner,
+            customerPhone,
+            assignedOp    : payload.assignedOperator
+          }, 'warn');
+          return;
+        }
+
+        await processWatiMessage(payload, agent);
+
+      } catch (err) {
+        console.error('[WATI BACKGROUND ERROR]', err.message, err.stack);
+        safeLog('WATI_BACKGROUND_ERROR', { error: err.message }, 'error');
       }
+    });
+  }
 
-      // Strategi 3: assignedOperator.name dari WATI → match nama ke database
-      if (!agent && assignedOp?.name) {
-        const allAgents = await AgentLookup.getAll();
-        agent = allAgents.find(a =>
-          a.name.toLowerCase().includes(assignedOp.name.toLowerCase()) ||
-          assignedOp.name.toLowerCase().includes(a.name.toLowerCase())
-        ) || null;
-        if (agent) agentSource = 'assignedOperator_name';
-      }
+  /* ─────────────────────────────────────────────────────────────────────────
+     POST /api/wati/simulate
+     Test endpoint — simulasi pesan masuk tanpa WA asli.
+     Membutuhkan autentikasi (dilindungi verifyToken di routes).
+  ───────────────────────────────────────────────────────────────────────── */
+  static async simulateInboundMessage(req, res) {
+    const {
+      sender   = '628999888777',
+      message  = 'Halo, saya mau tanya properti',
+      name     = 'Test Customer',
+      agentPhone = null,
+      dry_run  = false
+    } = req.body || {};
 
-      // Strategi 4: owner = nomor agent (jarang, tapi coba)
-      if (!agent && businessPhone && PhoneUtils.isValid(businessPhone)) {
-        agent = await AgentLookup.findByPhone(businessPhone);
-        if (agent) agentSource = 'owner_field';
-      }
+    console.log('\n[WATI SIMULATE] 🧪 Simulasi pesan masuk');
+    console.log(`  From    : ${sender} (${name})`);
+    console.log(`  Agent   : ${agentPhone || '(auto)'}`);
+    console.log(`  Message : ${message}`);
+    console.log(`  Dry run : ${dry_run}`);
 
-      if (agent) {
-        console.log(`[WATI AGENT] ✅ Found agent: ${agent.name} (via ${agentSource})`);
-      }
+    if (!sender || !message) {
+      return res.status(400).json({ success: false, message: 'Wajib ada: sender dan message' });
+    }
 
-      // ─── Tampilkan pesan di terminal (SELALU tampil, agent tidak found = ok) ─
-      const displayAgentName  = agent?.name  || assignedOp?.name  || 'UNASSIGNED';
-      const displayAgentPhone = agent?.phone || businessPhone      || 'N/A';
+    // Cari agent
+    let agent = agentPhone ? await findAgentByPhone(agentPhone) : null;
+    if (!agent) {
+      const all = await getAllAgents();
+      if (all.length > 0) agent = all[0];
+    }
 
-      Logger.logInboundMessage(displayAgentName, displayAgentPhone, customerPhone, customerMessage, msgTimestamp);
+    if (!agent) {
+      return res.status(404).json({
+        success : false,
+        message : 'Tidak ada agent aktif di database. Cek /api/wati/status'
+      });
+    }
 
-      // ─── Jika agent tidak ditemukan, log warning tapi tetap return 200 ────
-      if (!agent) {
-        const hint = assignedOp?.name
-          ? `assignedOperator "${assignedOp.name}" tidak ada di database`
-          : `Nomor bisnis "${businessPhone}" tidak match ke agent manapun`;
-
-        console.warn(`[WATI WEBHOOK] ⚠️ Agent tidak ditemukan. ${hint}`);
-        console.warn('[WATI WEBHOOK] 💡 Tips: Daftarkan agent di website Anda, atau gunakan field "agentPhone" di test payload.');
-
-        safeLog('WATI_AGENT_NOT_FOUND', { businessPhone, customerPhone, assignedOp }, 'warn');
-
-        return res.status(200).json({
-          success       : false,
-          messageLogged : true,
-          message       : `Pesan diterima & ditampilkan di terminal. Namun agent tidak ditemukan di database.`,
-          hint          : hint,
-          debug         : { businessPhone, assignedOp, customerPhone }
-        });
-      }
-
-      // ─── Proses pesan (simpan ke DB, generate AI reply, kirim ke customer) ──
-      const result = await WatiChatController._processMessage(
-        agent,
-        customerPhone,
-        customerMessage,
-        messageId,
-        customerName
-      );
-
+    if (dry_run) {
       return res.json({
         success : true,
-        data    : result,
-        message : 'Pesan berhasil diproses'
-      });
-
-    } catch (error) {
-      console.error('[WATI WEBHOOK ERROR]', error.message);
-      safeLog('WATI_WEBHOOK_ERROR', error.message, 'error');
-      return res.status(500).json({
-        success : false,
-        message : 'Gagal memproses webhook',
-        error   : error.message
+        dry_run : true,
+        agent   : agent.name,
+        sender,
+        message,
+        hint    : 'Dry run — tidak ada AI / tidak ada kirim'
       });
     }
-  }
 
-  /**
-   * Internal: Process message flow
-   */
-  static async _processMessage(agent, customerPhone, customerMessage, messageId, customerName = 'Customer') {
-    // Create/find session
-    const session = await MessageProcessor.findOrCreateSession(customerPhone, agent.name, customerName);
-
-    // Save customer message (always)
-    await MessageProcessor.saveCustomerMessage(session, customerMessage, {
-      agentName: agent.name,
-      agentUserId: agent.user_id,
-      messageId: messageId
-    });
-
-    safeLog('WATI_INBOUND_MESSAGE', {
-      sessionId: session.id,
-      agentName: agent.name,
-      messageLength: customerMessage.length
-    });
-
-    // ── Cek kata kunci properti ─────────────────────────────────────────────
-    const isPropertyQuery = hasPropertyKeyword(customerMessage);
-    if (!isPropertyQuery) {
-      if (isTerminalActive('WATI')) {
-        console.log(`[WATI] 📥 Pesan disimpan (bukan query properti — tidak dibalas): ${customerMessage.substring(0, 60)}`);
-      }
-      return {
-        sessionId: session.id, agentName: agent.name, agentPhone: agent.phone,
-        customerPhone, aiReply: null, aiProvider: null,
-        skipped: true, skipReason: 'no_property_keyword'
-      };
-    }
-
-    // ── Generate AI reply (dengan property context injection) ────────────
-    // ✅ NEW: Menggunakan whatsappAIService untuk konsistensi dengan chatbot
-    // Property context fetching sudah otomatis di whatsappAIService
-    let aiReply = null;
-    let aiResult = null;
-    let ctxSource = 'none';
-
-    try {
-      aiResult = await generateWhatsAppAIReply({
-        session,
-        message: customerMessage,
-        agentName: agent.name,
-      });
-      aiReply = aiResult.reply;
-      ctxSource = aiResult.contextSource || 'none';
-
-      // Save AI reply
-      await MessageProcessor.saveAiReply(session, aiReply, aiResult);
-    } catch (error) {
-      const aiError = error.message;
-      console.error('[WATI AI ERROR]', aiError);
-      safeLog('WATI_AI_FAILED', { sessionId: session.id, error: aiError }, 'error');
-
-      // Use default fallback message
-      aiReply = `Halo, terima kasih telah menghubungi ${agent.name} dari ${process.env.APP_NAME || 'Elevan Property'}. Pesan Anda sudah kami terima dan akan segera dibalas. 🙏`;
-      aiResult = {
-        provider: 'default_fallback',
-        primaryProvider: 'unknown',
-        fallbackUsed: true
-      };
-      ctxSource = 'none';
-    }
-
-    // Send reply via WATI
-    let watiSent = false;
-    let watiError = null;
-
-    try {
-      const sendResult = await WatiService.sendMessage(customerPhone, aiReply, agent.phone);
-      watiSent = true;
-      safeLog('WATI_REPLY_SENT', {
-        sessionId: session.id,
-        recipient: customerPhone,
-        messageId: sendResult.messageId
-      });
-    } catch (error) {
-      watiError = error.message;
-      console.error('[WATI SEND ERROR]', watiError);
-      safeLog('WATI_REPLY_SEND_FAILED', {
-        sessionId: session.id,
-        error: watiError
-      }, 'error');
-    }
-
-    // ── LOG RINGKASAN TERMINAL (FULL RESPONSE) ──────────────────────────
-    if (isTerminalActive('WATI')) {
-      const D          = '═'.repeat(80);
-      const sendStatus = watiSent
-        ? `✅ Terkirim`
-        : `❌ Gagal: ${watiError}`;
-
-      console.log('');
-      console.log(D);
-      console.log(`[WATI] ⬇  PESAN PROPERTI MASUK & DIBALAS`);
-      console.log(D);
-      console.log(`Agent    : ${agent.name} (${agent.phone})`);
-      console.log(`Customer : ${customerPhone} (${customerName})`);
-      console.log(`Time     : ${new Date().toISOString()}`);
-      console.log(`Message  : ${customerMessage}`);
-      console.log(`Context  : ${ctxSource}`);
-      console.log(`AI       : ${aiResult.provider}`);
-      console.log(D);
-      console.log('RESPONSE:');
-      console.log(D);
-      // Tampilkan full reply (bisa multi-line)
-      console.log(aiReply);
-      console.log(D);
-      console.log(`Send Status: ${sendStatus}`);
-      console.log(D);
-      console.log('');
-    }
-
-    return {
-      sessionId: session.id,
-      agentName: agent.name,
-      agentPhone: agent.phone,
-      customerPhone: customerPhone,
-      aiReply: aiReply,
-      aiProvider: aiResult?.provider || null,
-      fallbackUsed: aiResult?.fallbackUsed || false,
-      watiSent: watiSent,
-      errors: {
-        ai: aiError || null,
-        wati: watiError || null
-      }
+    // Buat fake payload WATI
+    const fakePayload = {
+      waId       : sender,
+      senderName : name,
+      text       : { body: message },
+      id         : `sim_${Date.now()}`,
+      agentPhone : agent.phone
     };
+
+    try {
+      await processWatiMessage(fakePayload, agent);
+      return res.json({
+        success : true,
+        message : 'Simulate selesai. Lihat terminal untuk output.',
+        agent   : agent.name,
+        sender
+      });
+    } catch (err) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
   }
 
-  /**
-   * GET /api/wati/agent-chats/:agentName
-   * Get all active chats for a specific agent
-   */
+  /* ─────────────────────────────────────────────────────────────────────────
+     GET /api/wati/agent-chats/:agentName
+  ───────────────────────────────────────────────────────────────────────── */
   static async getAgentChats(req, res) {
     try {
-      const { agentName } = req.params;
+      const { agentName }              = req.params;
       const { limit = 50, offset = 0 } = req.query;
 
       if (!agentName) {
-        return res.status(400).json({
-          success: false,
-          message: 'agentName parameter required'
-        });
+        return res.status(400).json({ success: false, message: 'agentName wajib diisi' });
       }
 
-      const agentSlug = agentName.toLowerCase().replace(/\s+/g, '_');
-      const source = `wati_${agentSlug}`;
-
+      const source   = `wati_${agentName.toLowerCase().replace(/\s+/g, '_')}`;
       const sessions = await ChatSession.findAll({
-        where: { source },
-        order: [['updatedAt', 'DESC']],
-        limit: Math.min(parseInt(limit) || 50, 200),
-        offset: parseInt(offset) || 0
+        where  : { source },
+        order  : [['updatedAt', 'DESC']],
+        limit  : Math.min(parseInt(limit)  || 50, 200),
+        offset : parseInt(offset) || 0
       });
-
       const total = await ChatSession.count({ where: { source } });
 
       return res.json({
         success: true,
-        data: {
-          agent: agentName,
-          sessions: sessions,
-          pagination: {
-            total,
-            limit: Math.min(parseInt(limit) || 50, 200),
-            offset: parseInt(offset) || 0
-          }
+        data   : {
+          agent     : agentName,
+          sessions,
+          pagination: { total, limit: Math.min(parseInt(limit) || 50, 200), offset: parseInt(offset) || 0 }
         }
       });
-    } catch (error) {
-      console.error('[WATI GET AGENT CHATS ERROR]', error.message);
-      return res.status(500).json({
-        success: false,
-        message: 'Failed to retrieve agent chats',
-        error: error.message
-      });
+    } catch (err) {
+      return res.status(500).json({ success: false, message: err.message });
     }
   }
 
-  /**
-   * GET /api/wati/chat-history/:sessionId
-   * Get conversation history for a session
-   */
+  /* ─────────────────────────────────────────────────────────────────────────
+     GET /api/wati/chat-history/:sessionId
+  ───────────────────────────────────────────────────────────────────────── */
   static async getChatHistory(req, res) {
     try {
-      const { sessionId } = req.params;
+      const { sessionId }   = req.params;
       const { limit = 100 } = req.query;
 
       if (!sessionId) {
-        return res.status(400).json({
-          success: false,
-          message: 'sessionId parameter required'
-        });
+        return res.status(400).json({ success: false, message: 'sessionId wajib diisi' });
       }
 
       const session = await ChatSession.findByPk(sessionId);
       if (!session) {
-        return res.status(404).json({
-          success: false,
-          message: 'Session not found'
-        });
+        return res.status(404).json({ success: false, message: 'Sesi tidak ditemukan' });
       }
 
       const messages = await ChatMessage.findAll({
-        where: { chatSessionId: sessionId },
-        order: [['createdAt', 'ASC']],
-        limit: Math.min(parseInt(limit) || 100, 500)
+        where : { chatSessionId: sessionId },
+        order : [['createdAt', 'ASC']],
+        limit : Math.min(parseInt(limit) || 100, 500)
       });
 
       return res.json({
         success: true,
-        data: {
-          session: {
-            id: session.id,
-            customerName: session.name,
-            customerPhone: session.phone,
-            agentSource: session.source,
-            source: session.source,
-            createdAt: session.createdAt
-          },
-          messages: messages,
-          messageCount: messages.length
+        data   : {
+          session  : { id: session.id, name: session.name, phone: session.phone, source: session.source },
+          messages,
+          count    : messages.length
         }
       });
-    } catch (error) {
-      console.error('[WATI GET CHAT HISTORY ERROR]', error.message);
-      return res.status(500).json({
-        success: false,
-        message: 'Failed to retrieve chat history',
-        error: error.message
-      });
+    } catch (err) {
+      return res.status(500).json({ success: false, message: err.message });
     }
   }
 
-  /**
-   * GET /api/wati/agents/list
-   * Get all registered agents with WhatsApp numbers
-   */
+  /* ─────────────────────────────────────────────────────────────────────────
+     GET /api/wati/agents/list
+     Dilindungi verifyToken di routes.
+  ───────────────────────────────────────────────────────────────────────── */
   static async getRegisteredAgents(req, res) {
     try {
-      const agents = await AgentLookup.getAll();
-
+      const agents = await getAllAgents();
       return res.json({
-        success: true,
-        data: {
-          agents: agents,
-          totalAgents: agents.length
+        success : true,
+        data    : {
+          agents: agents.map(a => ({
+            user_id : a.user_id,
+            name    : a.name,
+            phone   : a.phone
+            // TIDAK return password / token ke client (security)
+          })),
+          total: agents.length
         }
       });
-    } catch (error) {
-      console.error('[WATI GET AGENTS LIST ERROR]', error.message);
-      return res.status(500).json({
-        success: false,
-        message: 'Failed to retrieve agents',
-        error: error.message
-      });
+    } catch (err) {
+      return res.status(500).json({ success: false, message: err.message });
     }
   }
 
-  /**
-   * GET /api/wati/status
-   * Get WATI connection status & configuration
-   */
+  /* ─────────────────────────────────────────────────────────────────────────
+     GET /api/wati/status
+  ───────────────────────────────────────────────────────────────────────── */
   static async getWatiStatus(req, res) {
     try {
-      const config = WatiService.checkWatiConfig();
-      let profileOk = false;
-      let profileError = null;
+      const config   = WatiService.checkWatiConfig();
+      let profileOk  = false;
+      let profileErr = null;
 
       if (config.enabled) {
         try {
           await WatiService.getProfile();
           profileOk = true;
-        } catch (error) {
-          profileError = error.message;
+        } catch (err) {
+          profileErr = err.message;
         }
       }
 
       return res.status(config.enabled && profileOk ? 200 : 500).json({
-        success: config.enabled && profileOk,
-        wati: {
+        success : config.enabled && profileOk,
+        wati    : {
           ...config,
-          connected: profileOk,
-          error: profileError || null
+          connected : profileOk,
+          error     : profileErr || null
         },
-        message: config.enabled && profileOk
-          ? 'WATI API is configured and connected'
-          : 'WATI API configuration issue'
+        message : config.enabled && profileOk
+          ? 'WATI API terhubung dan aktif'
+          : 'Masalah konfigurasi WATI API'
       });
-    } catch (error) {
-      console.error('[WATI STATUS ERROR]', error.message);
-      return res.status(500).json({
-        success: false,
-        message: 'Failed to check WATI status',
-        error: error.message
+    } catch (err) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  /* ─────────────────────────────────────────────────────────────────────────
+     GET /api/wati/debug-info
+     Dilindungi verifyToken di routes.
+  ───────────────────────────────────────────────────────────────────────── */
+  static async getDebugInfo(req, res) {
+    try {
+      const agents = await User.findAll({
+        where      : { privilege: 'agent', status: 1 },
+        attributes : ['user_id', 'name', 'phone']
       });
+
+      return res.json({
+        success: true,
+        data   : {
+          server : { port: process.env.PORT || 5005, webhookUrl: 'POST /api/wati/webhook' },
+          wati   : WatiService.checkWatiConfig(),
+          agents : agents.map(a => ({
+            user_id          : a.user_id,
+            name             : a.name,
+            phone_raw        : a.phone,
+            phone_normalized : normalizePhone(a.phone || ''),
+            phone_valid      : isValidPhone(a.phone || ''),
+            ready            : isValidPhone(a.phone || '')
+          }))
+        }
+      });
+    } catch (err) {
+      return res.status(500).json({ success: false, message: err.message });
     }
   }
 }
