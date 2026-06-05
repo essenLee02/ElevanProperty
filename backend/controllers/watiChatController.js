@@ -25,8 +25,10 @@
 const { User, ChatSession, ChatMessage } = require('../models');
 const WatiService                        = require('../services/watiService');
 const { safeLog }                        = require('../utils/safeLog');
-const { hasPropertyKeyword }             = require('../utils/propertyKeywordFilter');
+const { hasPropertyKeyword,
+        isPropertyContextContinuation }  = require('../utils/propertyKeywordFilter');
 const { generateWhatsAppAIReply }        = require('../services/whatsappAIService');
+const { getConversationHistory }         = require('../services/sessionService');
 const {
   normalizePhone,
   isValidPhone,
@@ -213,10 +215,18 @@ async function processWatiMessage(payload, agent) {
     messageLength : customerMessage.length
   });
 
-  // ── Cek kata kunci properti ──────────────────────────────────────────────
+  // ── Cek kata kunci properti / lanjutan percakapan ───────────────────────
   const isPropertyQuery = hasPropertyKeyword(customerMessage);
 
+  let isContinuation = false;
   if (!isPropertyQuery) {
+    try {
+      const history = await getConversationHistory(session.id, 6);
+      isContinuation = isPropertyContextContinuation(customerMessage, history);
+    } catch (_) { /* skip jika history gagal */ }
+  }
+
+  if (!isPropertyQuery && !isContinuation) {
     logTerminalSkip({
       platform       : 'WATI',
       tag            : '[WATI]',

@@ -312,3 +312,50 @@ Backend `server.js`:
 ```javascript
 app.use('/json_data', express.static(path.join(__dirname, 'asset/json_data')));
 ```
+
+---
+
+## Module: Terminal Message (WhatsApp Multi-Agent)
+
+Terminal message **bukan halaman frontend** — ini adalah backend-only WhatsApp chat handler.
+Tidak ada tampilan UI di website. Interaksi terjadi di WhatsApp customer ↔ agent.
+
+> Dokumentasi lengkap: `docs/13-whatsapp-terminal-multiagent.md` dan `docs/14-private-agent-whatsapp-format.md`
+
+### Ringkasan
+
+| Controller | Platform | Endpoint | Status |
+|---|---|---|---|
+| `fonnteChatController.js` | Fonnte | `POST /api/fonnte-chat/webhook` | ✅ Working |
+| `watiChatController.js` | WATI | `POST /api/wati/webhook` | ⚠️ Code ready |
+| `dialogChatController.js` | 360dialog | `POST /api/dialog-chat/webhook` | ⚠️ Token belum diisi |
+
+### Alur Singkat
+
+```
+Customer kirim WA
+    ↓
+hasPropertyKeyword(message) → ATAU → isPropertyContextContinuation(message, history)
+    ↓
+whatsappAIService.generateWhatsAppAIReply()
+    ↓ ChatGPT → Claude → Private Agent (ResponseBuilderWhatsApp)
+Balas ke customer dengan property recommendations + agent footer
+```
+
+### MASSEGE_TERMINAL Control
+
+```env
+MASSEGE_TERMINAL=FONNTE           # Hanya Fonnte log ke terminal
+MASSEGE_TERMINAL=FONNTE,WATI,DIALOG  # Semua platform
+```
+
+### Context-Aware Continuation (Juni 2026)
+
+Jawaban singkat customer setelah AI bertanya ("sewa atau beli?") sekarang dikenali
+sebagai lanjutan percakapan properti, meskipun pesan tidak mengandung keyword properti.
+
+```
+AI     : "Untuk Gudang — rencananya sewa atau beli?"
+Customer: "saya beli"   ← hasPropertyKeyword=false, tapi isPropertyContextContinuation=true
+→ Sistem tetap membalas ✅
+```

@@ -2,11 +2,12 @@
 ## (fonnteChatController · watiChatController · dialogChatController)
 
 > Tiga controller yang menangani pesan WhatsApp masuk dari platform berbeda.
-> Semua menggunakan **keyword filter** yang sama agar hanya merespons pesan terkait properti.
+> Semua menggunakan **keyword filter + context continuation** agar hanya merespons
+> pesan terkait properti — termasuk jawaban singkat lanjutan percakapan.
 
 ---
 
-## Arsitektur Umum
+## Alur Proses Lengkap (Updated Juni 2026)
 
 ```
 Customer kirim WA
@@ -19,23 +20,104 @@ Controller terima payload
         ↓
 detectEventType() → incoming / status / unknown
         ↓
-simpan pesan ke DB (SELALU, terlepas dari keyword)
+findOrCreateSession() → ChatSession di DB
+        ↓
+Simpan pesan customer ke DB (SELALU, terlepas dari keyword)
         ↓
 hasPropertyKeyword(message)?
-    ├── TIDAK → log "📥 Disimpan, tidak dibalas" → SELESAI
-    └── YA  → getWhatsappPropertyContext(message)
-                    ↓
-                Coba Rumah123 live (Apify token)
-                    ↓ gagal/kosong
-                Fallback: backend/asset/json_data/flat.json
-                    ↓
-                generateAIReply(session, message, agent, ctx)
-                    ↓
-                ChatGPT → Claude → Private Agent
-                    ↓
-                simpan AI reply + kirim ke WA
-                    ↓
-                LOG RINGKASAN TERMINAL (satu blok di akhir)
+    └── YA ─────────────────────────────────────────────────────→ ⬇ lanjut
+    └── TIDAK → getConversationHistory(session.id, 6)
+                      ↓
+              isPropertyContextContinuation(message, history)?
+                  ├── TIDAK → log "📥 Disimpan, tidak dibalas" → SELESAI
+                  └── YA  → ⬇ lanjut
+        ↓
+generateWhatsAppAIReply({ session, message, agentName })
+    ↓
+    [1] getWhatsappPropertyContext(message)
+           → Coba Rumah123 (APIFY + RUMAH123_DATA=ON)
+           → Fallback: backend/asset/json_data/flat.json
+    [2] getConversationHistory(session.id, 10)
+    [3] ChatGPT → Claude (via generateWhatsappReplyWithProviderFallback)
+    [4] Private Agent → generateResponseForTerminalMassege() [fallback]
+        ↓
+Simpan AI reply ke DB
+        ↓
+Kirim balasan via platform API (Fonnte/WATI/360dialog)
+        ↓
+LOG RINGKASAN TERMINAL (full response, tidak truncated)
+```
+
+---
+
+## Context-Aware Continuation (NEW — Juni 2026)
+
+**File:** `backend/utils/propertyKeywordFilter.js`
+**Fungsi:** `isPropertyContextContinuation(message, history)`
+
+### Problem yang Diselesaikan
+
+```
+AI bertanya  : "Untuk Gudang yang Anda cari — rencananya untuk sewa atau beli? 🏠"
+Customer balas: "saya beli"
+
+hasPropertyKeyword("saya beli") = FALSE  ← tidak ada property type keyword
+→ Tanpa context check: pesan DIABAIKAN ❌
+
+isPropertyContextContinuation("saya beli", history) = TRUE  ← ada konteks properti
+→ Dengan context check: pesan DIBALAS ✅
+```
+
+### Logika Deteksi (5 Kondisi Harus Terpenuhi)
+
+1. **Pesan ≤ 70 karakter** — panjang pesan baru memperkenalkan topik baru
+2. **Bukan topik non-property jelas** — tidak ada "makanan", "mobil", "laptop", dll
+3. **5 pesan terakhir ada konteks properti** — histori terbaru bicara tentang properti
+4. **Pesan AI terakhir ada pertanyaan properti** — "sewa atau beli?", "harga berapa?", dll
+5. **Pesan saat ini cocok pola jawaban:**
+   - Transaksi: "sewa", "beli", "rental", "purchase"
+   - Harga: "500 juta", "3 miliar", "di bawah 2M"
+   - Lokasi: nama kota, "di jakarta"
+   - Afirmatif: "ya", "oke", "tampilkan", "lanjut"
+   - Spesifikasi: "furnished", "3 kamar", "50m2"
+   - Angka murni: "500000000"
+
+### Contoh Kasus
+
+| Pesan | History Terakhir | Hasil |
+|---|---|---|
+| "saya beli" | AI tanya sewa/beli (property) | ✅ Continuation |
+| "beli" | AI tanya sewa/beli (property) | ✅ Continuation |
+| "sewa aja" | AI tanya sewa/beli (property) | ✅ Continuation |
+| "500 juta" | AI tanya kisaran harga (property) | ✅ Continuation |
+| "surabaya" | AI tanya lokasi (property) | ✅ Continuation |
+| "furnished" | AI tanya furnishing (property) | ✅ Continuation |
+| "ya" | AI ajukan pertanyaan (property) | ✅ Continuation |
+| "tampilkan" | History properti | ✅ Continuation |
+| "saya beli" | History kosong | ❌ Skip |
+| "saya beli" | History non-property | ❌ Skip |
+| "saya mau daging sapi" | History properti | ❌ Skip (topik baru) |
+| "sewa mobil" | History properti | ❌ Skip (non-property) |
+
+### Implementasi di Controller
+
+```javascript
+// Semua 3 controller menggunakan pattern ini:
+const isPropertyQuery = hasPropertyKeyword(message);
+
+let isContinuation = false;
+if (!isPropertyQuery) {
+  try {
+    const history = await getConversationHistory(session.id, 6);
+    isContinuation = isPropertyContextContinuation(message, history);
+  } catch (_) { /* skip jika history gagal */ }
+}
+
+if (!isPropertyQuery && !isContinuation) {
+  // Log "tidak dibalas" dan return
+  return;
+}
+// Lanjut ke generateWhatsAppAIReply(...)
 ```
 
 ---
@@ -51,15 +133,48 @@ MASSEGE_TERMINAL=FONNTE,DIALOG    # Fonnte + Dialog (multi)
 MASSEGE_TERMINAL=FONNTE,DIALOG,WATI  # Semua
 ```
 
-**Catatan:** `MASSEGE_TERMINAL` mengontrol tampilan terminal saja.
-Semua platform tetap memproses pesan dan menyimpan ke DB.
+`MASSEGE_TERMINAL` hanya mengontrol tampilan terminal. Semua platform tetap memproses dan simpan ke DB.
+
+---
+
+## Terminal Log Format (Updated — Full Response)
+
+Semua 3 controller menampilkan format ini (tidak lagi truncated 80 chars):
+
+```
+════════════════════════════════════════════════════════════════════════════════
+[FONNTE] ⬇  PESAN PROPERTI MASUK & DIBALAS
+════════════════════════════════════════════════════════════════════════════════
+Agent    : LEO FELIX (628813658874)
+Customer : 628213311936 (Nigel)
+Time     : 2026-06-05T10:30:45.123Z
+Message  : saya butuh sewa hotel di surabaya
+Context  : flat_json
+AI       : chatgpt
+════════════════════════════════════════════════════════════════════════════════
+RESPONSE:
+════════════════════════════════════════════════════════════════════════════════
+⚠️ Maaf, belum ada listing yang tersedia di *Surabaya* dari Rumah123...
+
+Namun berikut pilihan alternatif dari katalog kami...
+
+1. *Surabaya Residential Area Boarding House Rent*
+   ![...](/assets/image_data/properties/boarding_house.png)
+   📍 Lokasi: Residential Area, Surabaya, Jawa Timur
+   💰 Harga: *Rp 8.750.000 / month*
+   ...
+
+Salam hangat,
+*LEO FELIX*
+*Elevan Property*
+════════════════════════════════════════════════════════════════════════════════
+Send Status: ✅ Terkirim
+════════════════════════════════════════════════════════════════════════════════
+```
 
 ---
 
 ## Root POST Handler (server.js)
-
-Fonnte dan platform lain terkadang dikonfigurasi ke base URL tanpa path.
-Backend menangani ini via handler di root:
 
 ```javascript
 app.post('/', (req, res) => {
@@ -70,163 +185,101 @@ app.post('/', (req, res) => {
 });
 ```
 
-Jika Fonnte Dashboard webhook = `https://ngrok-url/` (tanpa path) → tetap diterima.
-
 ---
 
 ## Property Keyword Filter
 
 **File:** `backend/utils/propertyKeywordFilter.js`
 
-### Logika Dua Kondisi
+```javascript
+// Export
+hasPropertyKeyword(message)               // → boolean, main check
+isPropertyContextContinuation(msg, hist)  // → boolean, NEW continuation check
+extractLocationFromMessage(message)       // → "surabaya" | ""
+extractPropertyTypeFromMessage(message)   // → "house"|"apartment"|"warehouse"|...
+extractTransactionTypeFromMessage(message)// → "sale"|"rent"|""
+```
+
+### Dua Kondisi hasPropertyKeyword
 
 ```
-(Tipe Properti + Kata Aksi) ATAU Kata Kunci Mandiri
+(Tipe Properti + Kata Aksi)  ATAU  Kata Kunci Mandiri
 ```
 
-**Tipe Properti** (harus ada salah satu):
+**Tipe Properti** (salah satu harus ada):
 - rumah *(kecuali "rumah makan", "rumah sakit", "rumah tangga")*
-- apartemen, **apartmen** (typo), apartment, apt *(word boundary — tidak match "laptop")*
+- apartemen, apartmen (typo OK), apartment, apt *(word boundary — tidak match "laptop")*
 - villa, vila, kost, kos, kosan, boarding
 - ruko, rukan, shophouse, toko *(word boundary)*
 - kantor, office, perkantoran, gudang, warehouse, pergudangan
-- hotel, motel, resort, kavling, properti, perumahan, cluster
-- hunian, tempat tinggal
+- hotel, motel, resort, kavling, properti, perumahan, cluster, hunian
 
-**Kata Aksi** (harus ada salah satu, valid hanya bersama Tipe Properti):
-- sewa, rental, ngontrak, beli, jual, cari, nyari
-- ada, available, kosong, ready, listing, unit, stok
+**Kata Aksi** (harus bersama Tipe Properti):
+- sewa, rental, ngontrak, beli, jual, cari
+- ada, available, kosong, ready, listing
 - harga, berapa, cicilan, dp, uang muka
-- mau, ingin, pengen, butuh, tanya, nanya
+- mau, ingin, pengen, butuh, tanya
 
-**Kata Kunci Mandiri** (trigger tanpa perlu Tipe Properti):
+**Kata Kunci Mandiri** (trigger tanpa Tipe Properti):
 - kpr, over kredit, inden, perumahan, real estate
-- siap huni, ready unit, ready stok, unit ready, ada unit
-- dp rumah, cicilan rumah, uang muka rumah
-- agen properti, developer, shm, hgb, listing properti
-
-### 10 Contoh Pesan Customer (User Examples — Juni 2026)
-
-| # | Pesan | Trigger? | Alasan |
-|---|---|---|---|
-| 1 | "saya mau sewa apartmen di surabaya, ada apa saja?" | ✅ YA | "sewa"(aksi) + "apartmen"(tipe, typo OK) |
-| 2 | "Tolong berikan list atau daftar villa yang ada di Malang" | ✅ YA | "berikan/list"(aksi) + "villa"(tipe) |
-| 3 | "Berikan harga rumah yang dijual di Aceh" | ✅ YA | "dijual"(aksi) + "rumah"(tipe) |
-| 4 | "Saya ingin cari gudang yang disewakan selama 2 tahun di Gersik" | ✅ YA | "cari"(aksi) + "gudang"(tipe) |
-| 5 | "Ada toko di semarang, yang disewakan harga 7-9 juta per tahunnya?" | ✅ YA | "ada"(aksi) + "toko"(tipe) |
-| 6 | "Ada hotel dengan fasilitas kamar mandi, kolam renang? Saya mau hotel yang ada view gunung" | ✅ YA | "ada"(aksi) + "hotel"(tipe) |
-| 7 | "Hotel yang dekat pantai Selatan Jogja, ada dimana? Berapa harga sewanya?" | ✅ YA | "ada"(aksi) + "hotel"(tipe) + "sewa"(transaksi) |
-| 8 | "Berikan daftar harga rumah di Madiun?" | ✅ YA | "berikan"(aksi) + "rumah"(tipe) |
-| 9 | "Saya mau cari villa di batu, dekat dengan wisata BNS. saya mau villa yang murah." | ✅ YA | "cari"(aksi) + "villa"(tipe) |
-| 10 | "Kalau harga 2 milliar untuk perkantoran yang dijual di Kediri, apakah ada?" | ✅ YA | "dijual"(aksi) + "perkantoran"(tipe) |
-| 11 | "Saya lagi cari kos di Semarang, saya mau fasilitas kamar mandi dalam, wifi, laundry dan AC." | ✅ YA | "cari"(aksi) + "kos"(tipe) |
-
-### Contoh Negative Cases (TIDAK Dibalas)
-
-| Pesan | Trigger? | Alasan |
-|---|---|---|
-| **"Km mau cari bebek goreng?"** | ❌ TIDAK | "cari"(aksi) tapi TIDAK ada tipe properti |
-| **"sewa mobil dong"** | ❌ TIDAK | "sewa"(aksi) tapi "mobil" bukan tipe properti |
-| **"jual laptop bekas"** | ❌ TIDAK | "jual"(aksi) + "laptop" bukan tipe + "apt" tidak match karena word boundary |
-| **"rumah makan enak dimana"** | ❌ TIDAK | "rumah makan" dikecualikan |
-| **"cari wisata bali"** | ❌ TIDAK | "cari"(aksi) tapi tidak ada tipe properti |
-| **"sewa tenda acara"** | ❌ TIDAK | "sewa" + "tenda" bukan properti |
-| **"sewa baju pengantin"** | ❌ TIDAK | "sewa" + "baju" bukan properti |
+- siap huni, ready unit, dp rumah, cicilan rumah
+- agen properti, developer, shm, hgb
 
 ---
 
-## Property Context (whatsappPropertyContext.js)
+## Property Context
 
 **File:** `backend/utils/whatsappPropertyContext.js`
 
-Dipanggil saat pesan lulus keyword filter.
-
 ```
 getWhatsappPropertyContext(customerMessage)
-    ↓
-extractLocationFromMessage("cari rumah di surabaya") → "surabaya"
-extractPropertyTypeFromMessage(...) → "house"
-extractTransactionTypeFromMessage(...) → "sale"
-    ↓
-[1] Coba Rumah123 live (jika APIFY_API_TOKEN ada & quota)
-    getRumah123Listings({ location, propertyType, listingType })
-    formatRumah123ContextForLLM(listings)
-    ↓ jika gagal/kosong
-[2] Fallback: backend/asset/json_data/indonesia_property_36_provinces_flat.json
-    searchFlatJson(location, propertyType, transactionType)
-    formatFlatJsonForLLM(properties)
-    ↓
-return { contextText, source: 'rumah123'|'flat_json' }
+        ↓
+Extract: location, propertyType, transactionType
+        ↓
+RUMAH123_DATA=ON? → getRumah123Listings() via Apify
+        ↓ gagal/kosong atau OFF
+flat JSON: backend/asset/json_data/indonesia_property_36_provinces_flat.json
+        ↓
+return { contextText, source: 'rumah123'|'flat_json', location, propertyType, transactionType }
 ```
 
-Context ini diinjeksi ke AI prompt → AI memberikan jawaban dengan data properti nyata.
+Respects `RUMAH123_DATA` env var (ON/OFF) untuk konsistensi dengan chatbot.
 
 ---
 
 ## Controller 1 — fonnteChatController
 
 **File:** `backend/controllers/fonnteChatController.js`
-**Endpoint:** `POST /api/fonnte-chat/webhook` (dan `POST /` via root handler)
+**Endpoint:** `POST /api/fonnte-chat/webhook` + `POST /` via root handler
 
-### Agent Setup
-```
-DB: users.fonnte_token = [token dari Fonnte Dashboard]
-DB: users.phone = nomor WA terdaftar di Fonnte (harus cocok dengan field "device")
-```
+### Agent di DB (`users` table)
 
-### Agent Saat Ini
-| Agent | Phone | Token | Status |
-|---|---|---|---|
-| LEO FELIX | 0881036588874 | PiBSZQXu6HKWhKkEDu9e | ✅ Connected |
-| NIGEL KUNCORO | 082233556796 | m5HDmV4hAYRFBgTdkfDR | ⚠️ Disconnected |
-| CLARENCE MARIO | 0821-1136-7154 | NULL | ❌ Belum setup |
-| DESY TALIM | 0821-1331-8191 | NULL | ❌ Belum setup |
-| IFAN TJANDRA | +62881036588874 | NULL | ❌ Belum setup |
-| IFAN ELDY | 0881-0365-88874 | NULL | ❌ Belum setup |
+| Agent | Phone | fonnte_token |
+|---|---|---|
+| LEO FELIX | 0881036588874 | ✅ Ada (connected & working) |
+| NIGEL KUNCORO | 082233556796 | ✅ Ada (device disconnected) |
+| CLARENCE MARIO | 0821-1136-7154 | ❌ NULL |
+| DESY TALIM | 0821-1331-8191 | ❌ NULL |
+| IFAN TJANDRA | +62881036588874 | ❌ NULL |
+| KEZIA ELDY | 0851-6365-05872 | ❌ NULL |
 
-### Fonnte Dashboard Config
-```
-Webhook ?        : https://[ngrok]/api/fonnte-chat/webhook   ← incoming messages
-Webhook Status ? : https://[ngrok]/api/fonnte-chat/webhook   ← read receipts
-Webhook Chaining?: https://[ngrok]/api/fonnte-chat/chaining  ← alternative incoming
-```
-
-### Agent Routing (3 Strategi)
-```
-1. device field match → cari agent by phone di DB
-2. fallback → auto-select agent pertama yang punya fonnte_token
-```
-
-### Terminal Log Format
-```
-──────────────────────────────────────────────────────────────────
-[FONNTE] ⬇  PESAN PROPERTI MASUK
-[FONNTE]    Agent    : LEO FELIX (0881036588874)
-[FONNTE]    Customer : 628xxx (Nama Customer)
-[FONNTE]    Time     : 2026-06-03T10:00:00.000Z
-[FONNTE]    Message  : sewa rumah 3 kamar di surabaya
-[FONNTE]    Context  : flat_json     ← atau 'rumah123'
-[FONNTE]    AI       : chatgpt       ← provider yang digunakan
-[FONNTE]    Reply    : Berikut pilihan rumah...
-[FONNTE]    Send     : ✅ Terkirim ke 628xxx
-──────────────────────────────────────────────────────────────────
-```
+Agent diisi token via halaman `/profile` → field "Fonnte API".
 
 ### API Endpoints
+
 ```
-POST /api/fonnte-chat/webhook           ← Fonnte Dashboard target
+POST /api/fonnte-chat/webhook           ← Main Fonnte webhook
 POST /api/fonnte-chat/chaining          ← Chaining mode
-POST /api/fonnte-chat/webhook-raw       ← Debug semua payload
 POST /api/fonnte-chat/simulate          ← Test tanpa WA asli
 GET  /api/fonnte-chat/status            ← Status semua agent
-GET  /api/fonnte-chat/agents            ← Daftar agent aktif
-GET  /api/fonnte-chat/agent-chats/:name ← Chat per agent
-GET  /api/fonnte-chat/chat-history/:id  ← History sesi
-GET  /api/fonnte-chat/debug-info        ← Diagnostik phone normalization
-GET  /api/fonnte-chat/check-fonnte-api  ← Test Fonnte API connection
-GET  /api/fonnte-chat/poller-status     ← Status poller
-POST /api/fonnte-chat/poller-start      ← Start poller
-POST /api/fonnte-chat/poller-stop       ← Stop poller
+GET  /api/fonnte-chat/agents            ← Agent dengan fonnte_token
+GET  /api/fonnte-chat/agent-chats/:name
+GET  /api/fonnte-chat/chat-history/:id
+GET  /api/fonnte-chat/debug-info
+GET  /api/fonnte-chat/check-fonnte-api
+GET  /api/fonnte-chat/poller-status
+POST /api/fonnte-chat/poller-start
+POST /api/fonnte-chat/poller-stop
 ```
 
 ---
@@ -235,36 +288,25 @@ POST /api/fonnte-chat/poller-stop       ← Stop poller
 
 **File:** `backend/controllers/watiChatController.js`
 **Endpoint:** `POST /api/wati/webhook`
+**Status:** ⚠️ Code ready — WA channel belum connect
 
-### Status: ⚠️ Code Ready — WA Channel Belum Connect
-
-### WATI Setup
-```
+### Env
+```env
 WATI_API_TOKEN = [dari WATI Dashboard]
 WATI_API_URL   = https://live.wati.io/[account_id]/api/v1
 ```
 
 ### Perbedaan WATI vs Fonnte
-- **WATI**: 1 nomor WA bisnis untuk semua agent (routing by agent name/session)
-- **Fonnte**: Setiap agent punya nomor WA sendiri (routing by device phone)
-
-### Webhook Payload (WATI)
-```json
-{
-  "waId": "628xxx",          ← nomor customer
-  "text": { "body": "..." }, ← isi pesan
-  "senderName": "Nama",
-  "assignedTo": "agent_name"
-}
-```
+- **WATI**: 1 nomor WA bisnis → routing by `assignedTo` field
+- **Fonnte**: Setiap agent punya nomor WA sendiri → routing by device phone
 
 ### API Endpoints
 ```
 POST /api/wati/webhook
+GET  /api/wati/status
+GET  /api/wati/agents/list
 GET  /api/wati/agent-chats/:agentName
 GET  /api/wati/chat-history/:sessionId
-GET  /api/wati/agents/list
-GET  /api/wati/status
 ```
 
 ---
@@ -273,56 +315,32 @@ GET  /api/wati/status
 
 **File:** `backend/controllers/dialogChatController.js`
 **Endpoint:** `POST /api/dialog-chat/webhook`
+**Status:** ✅ Code ready — dialog360_token belum diisi di DB
 
-### Status: ✅ Code Ready — Token Belum Diisi di DB
-
-### 360dialog API
-```
-Sandbox URL : https://waba-sandbox.360dialog.io
-Prod URL    : https://waba-v2.360dialog.io
-Auth header : D360-API-KEY: [token]
-Send endpoint: POST /v1/messages
-Webhook config: POST /v1/configs/webhook
+### Env
+```env
+DIALOG360_SANDBOX=true
+DIALOG360_WEBHOOK_BASE_URL=https://xxxx.ngrok-free.app
 ```
 
 ### Setup Sandbox
 ```
 1. Kirim "START" ke +551146733492 via WA → dapat API key
 2. Simpan ke DB:
-   UPDATE users SET dialog360_token='[KEY]' WHERE name='[AGENT]';
+   UPDATE users SET dialog360_token='[KEY]' WHERE id=[id];
 3. Daftarkan webhook:
    POST /api/dialog-chat/setup-webhook
    Body: { "agentId": "[user_id]" }
-4. Webhook dikirim dengan header X-Agent-Id → backend identifikasi agent
-```
-
-### Webhook Payload (360dialog)
-```json
-{
-  "contacts": [{ "profile": { "name": "Nama" }, "wa_id": "628xxx" }],
-  "messages": [{
-    "from": "628xxx",
-    "id": "wamid.XXX",
-    "text": { "body": "pesan teks" },
-    "timestamp": "1716800000",
-    "type": "text"
-  }]
-}
-```
-
-### DB Column
-```sql
-ALTER TABLE users ADD COLUMN dialog360_token VARCHAR(200) NULL AFTER fonnte_token;
--- Auto-migrasi di server.js (ensureRequiredDatabaseColumns)
+4. Header X-Agent-Id dikirim Fonnte per request → backend identifikasi agent
 ```
 
 ### API Endpoints
 ```
-POST /api/dialog-chat/webhook          ← 360dialog target
-POST /api/dialog-chat/setup-webhook    ← Daftarkan webhook ke 360dialog
-POST /api/dialog-chat/simulate         ← Test tanpa WA
-GET  /api/dialog-chat/status           ← Status semua agent
-GET  /api/dialog-chat/agents           ← Agent dengan token aktif
+POST /api/dialog-chat/webhook
+POST /api/dialog-chat/setup-webhook
+POST /api/dialog-chat/simulate
+GET  /api/dialog-chat/status
+GET  /api/dialog-chat/agents
 GET  /api/dialog-chat/agent-chats/:name
 GET  /api/dialog-chat/chat-history/:id
 ```
@@ -331,26 +349,15 @@ GET  /api/dialog-chat/chat-history/:id
 
 ## Shared Utilities
 
-### `backend/utils/propertyKeywordFilter.js`
 ```javascript
-hasPropertyKeyword(message)           // → boolean, main check
-extractLocationFromMessage(message)   // → "surabaya" | ""
-extractPropertyTypeFromMessage(msg)   // → "house"|"apartment"|"villa"|...
-extractTransactionTypeFromMessage(msg)// → "sale"|"rent"|""
-```
+// backend/utils/terminalSwitch.js
+isTerminalActive('FONNTE')  // → boolean
+isTerminalActive('DIALOG')
+isTerminalActive('WATI')
+getActiveTerminals()        // → ['FONNTE'] | ['FONNTE','DIALOG'] | ...
 
-### `backend/utils/whatsappPropertyContext.js`
-```javascript
-getWhatsappPropertyContext(customerMessage)
-// → { contextText: string, source: 'rumah123'|'flat_json', location, propertyType, transactionType }
-```
-
-### `backend/utils/terminalSwitch.js`
-```javascript
-isTerminalActive('FONNTE')   // → true jika MASSEGE_TERMINAL mengandung FONNTE
-isTerminalActive('DIALOG')   // → true jika MASSEGE_TERMINAL mengandung DIALOG
-isTerminalActive('WATI')     // → true jika MASSEGE_TERMINAL mengandung WATI
-getActiveTerminals()         // → ['FONNTE'] | ['FONNTE','DIALOG'] | ...
+// backend/services/sessionService.js
+getConversationHistory(sessionId, limit)  // Used untuk context continuation check
 ```
 
 ---
@@ -358,19 +365,27 @@ getActiveTerminals()         // → ['FONNTE'] | ['FONNTE','DIALOG'] | ...
 ## Quick Diagnostics
 
 ```bash
-# Cek status semua agent
+# Status semua agent
 curl http://localhost:5005/api/fonnte-chat/status
-curl http://localhost:5005/api/dialog-chat/status
-curl http://localhost:5005/api/wati/status
 
-# Simulate pesan properti (test pipeline)
+# Simulate pesan properti (test full pipeline)
 curl -X POST http://localhost:5005/api/fonnte-chat/simulate \
   -H "Content-Type: application/json" \
-  -d '{"sender":"628xxx","message":"sewa rumah 3 kamar surabaya","name":"Test"}'
+  -d '{"sender":"628213311936","message":"sewa rumah 3 kamar surabaya","name":"Test"}'
 
-# Test keyword filter (via webhook simulasi)
+# Test context continuation (jawaban singkat)
+# 1. Kirim pesan properti dulu
+# 2. Lalu kirim: "saya beli" → harus dibalas (continuation dari langkah 1)
+
+# Test non-property (harus diabaikan)
 curl -X POST http://localhost:5005/ \
   -H "Content-Type: application/json" \
-  -d '{"sender":"628xxx","name":"Test","message":"cari bebek goreng","device":"62xxx","inboxid":"T1"}'
-# → Harus: { status: true, type: "incoming" } tapi DI TERMINAL: "📥 Disimpan, tidak dibalas"
+  -d '{"sender":"628xxx","name":"Test","message":"cari bebek goreng","device":"628xxx","inboxid":"T1"}'
+# Terminal: "📥 Disimpan, tidak dibalas"
+
+# Test context continuation (harus dibalas jika ada history properti)
+curl -X POST http://localhost:5005/ \
+  -H "Content-Type: application/json" \
+  -d '{"sender":"628xxx","name":"Test","message":"saya beli","device":"628xxx","inboxid":"T2"}'
+# Jika ada history property: dibalas; jika history kosong: diabaikan
 ```

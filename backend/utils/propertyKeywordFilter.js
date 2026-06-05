@@ -342,8 +342,135 @@ function extractTransactionTypeFromMessage(message) {
   return '';
 }
 
+/* ══════════════════════════════════════════════════════════════════════════════
+   6. CONTEXT CONTINUATION — Deteksi jawaban singkat sebagai lanjutan properti
+══════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Pola jawaban singkat yang bisa merupakan lanjutan percakapan properti.
+ *
+ * Kasus pakai:
+ *   AI   → "Untuk Gudang yang Anda cari — rencananya untuk sewa atau beli?"
+ *   User → "saya beli"           ← hasPropertyKeyword = false, TAPI ini lanjutan!
+ *
+ * Logika:
+ *   1. Message singkat (≤ 70 karakter)
+ *   2. Pesan tidak memperkenalkan topik non-properti baru
+ *   3. History 5 pesan terakhir mengandung konteks properti
+ *   4. Pesan AI terakhir mengandung pertanyaan tentang properti
+ *   5. Message saat ini cocok dengan pola jawaban (transaksi, harga, lokasi, dll)
+ *
+ * @param {string}   message - Pesan customer saat ini
+ * @param {Array}    history - Riwayat percakapan [{role, message}]
+ * @returns {boolean}
+ */
+function isPropertyContextContinuation(message, history = []) {
+  if (!message || typeof message !== 'string') return false;
+  if (!Array.isArray(history) || history.length === 0) return false;
+
+  const lower = message.toLowerCase().trim();
+
+  // Pesan terlalu panjang → kemungkinan topik baru, bukan jawaban singkat
+  if (lower.length > 70) return false;
+
+  // ── Cek apakah pesan memperkenalkan topik NON-PROPERTY yang jelas ───────
+  const CLEAR_NON_PROPERTY = [
+    /\b(makanan|minuman|kuliner|restoran|cafe|kafe|masak|resep|menu)\b/,
+    /\b(kendaraan|mobil|motor|sepeda|tiket|travel|wisata|hotel liburan|penginapan wisata)\b/,
+    /\b(elektronik|laptop|hp|handphone|gadget|komputer|printer)\b/,
+    /\b(pakaian|baju|sepatu|tas|fashion|belanja online)\b/,
+    /\b(obat|dokter|sakit|rumah sakit|klinik kesehatan|apotik)\b/,
+  ];
+  for (const pattern of CLEAR_NON_PROPERTY) {
+    if (pattern.test(lower)) return false;
+  }
+
+  // ── Periksa 5 pesan terakhir apakah ada konteks properti ─────────────────
+  const recentHistory   = history.slice(-6);
+  const hasPropertyCtx  = recentHistory.some(item => hasPropertyKeyword(item.message || ''));
+  if (!hasPropertyCtx) return false;
+
+  // ── Periksa apakah pesan AI terakhir berisi pertanyaan tentang properti ──
+  const lastAIMessages = recentHistory
+    .filter(item => item.role === 'ai' || item.role === 'assistant')
+    .slice(-2);
+
+  const PROPERTY_QUESTION_PATTERNS = [
+    /sewa\s+atau\s+beli/,
+    /beli\s+atau\s+sewa/,
+    /rent\s+or\s+buy/,
+    /kisaran\s+harga/,
+    /budget/,
+    /harga\s+berapa/,
+    /berapa\s+harga/,
+    /di\s+kota\s+(apa|mana)/,
+    /lokasi\s+(apa|mana|yang|di)/,
+    /area\s+(mana|apa)/,
+    /wilayah\s+(mana|apa)/,
+    /tipe\s+properti/,
+    /jenis\s+properti/,
+    /furnished|furnish/,
+    /kamar\s+(tidur|mandi)/,
+    /berapa\s+kamar/,
+    /luas\s+(berapa|bangunan|tanah)/,
+    /fasilitas\s+(apa|yang)/,
+    /kapan\s+(masuk|pindah|rencan)/,
+    /bulan\s+apa/,
+    /ada\s+yang\s+ingin.*tanyakan/,
+    /masih\s+(ada|butuh|perlu)/,
+    /selain\s+itu/,
+  ];
+
+  const hasRecentPropertyQuestion = lastAIMessages.some(item => {
+    const msg = (item.message || '').toLowerCase();
+    return PROPERTY_QUESTION_PATTERNS.some(p => p.test(msg));
+  });
+
+  if (!hasRecentPropertyQuestion) return false;
+
+  // ── Cek apakah message saat ini terlihat seperti jawaban ─────────────────
+
+  // 1) Jawaban tipe transaksi
+  if (/\b(sewa|beli|jual|beli\s+aja|mau\s+sewa|mau\s+beli|disewa|dibeli|rent|buy|purchase|sale)\b/.test(lower))
+    return true;
+
+  // 2) Jawaban harga / budget
+  if (/\b(\d[\d.,]*\s*(juta|ribu|miliar|rb|jt|m|k|rupiah))\b/.test(lower))
+    return true;
+  if (/\b(di\s+bawah|max|maksimal|minimal|range|antara|sekitar|kurang\s+dari|lebih\s+dari)\b/.test(lower) &&
+      /\d/.test(lower))
+    return true;
+
+  // 3) Jawaban lokasi / area
+  for (const loc of INDONESIA_LOCATIONS) {
+    if (lower.includes(loc)) return true;
+  }
+  if (/\b(di\s+\w+)\b/.test(lower)) return true;  // "di jakarta", "di mana saja"
+
+  // 4) Jawaban singkat afirmatif / negatif dalam konteks
+  if (/^(ya|iya|ok|oke|siap|boleh|bisa|setuju|oke\s+dong|iya\s+dong|baik|baik\s+sekali|lanjut|kasih\s+list|tampilkan|rekomendasikan|show|lihat)$/.test(lower))
+    return true;
+  if (/^(tidak|belum|ga|gak|nggak|ngga|blum|blom|enggak|tidak\s+dulu|belum\s+ada|nanti)$/.test(lower))
+    return true;
+
+  // 5) Jawaban spesifikasi properti (luas, kamar, furnishing, dll)
+  if (/\b(furnished|unfurnished|kosong|semi|ac|wifi|parkir|garasi|kolam|renang)\b/.test(lower))
+    return true;
+  if (/\b(\d+\s*(kamar|km|lt|lb|m2|meter|lantai))\b/.test(lower))
+    return true;
+  if (/\b(besar|kecil|luas|sempit|bagus|mewah|sederhana|ekonomis|murah|mahal)\b/.test(lower))
+    return true;
+
+  // 6) Angka murni (kemungkinan jawaban harga atau ukuran)
+  if (/^\d+[\d.,]*$/.test(lower.trim()))
+    return true;
+
+  return false;
+}
+
 module.exports = {
   hasPropertyKeyword,
+  isPropertyContextContinuation,
   extractLocationFromMessage,
   extractPropertyTypeFromMessage,
   extractTransactionTypeFromMessage,

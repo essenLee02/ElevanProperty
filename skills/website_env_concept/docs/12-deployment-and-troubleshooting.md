@@ -104,6 +104,33 @@ server {
 | JWT expired on refresh | `REFRESH_TOKEN_EXPIRY` too short | Default is 1d — check `.env` |
 | Login returns 403 | User status=2 (blocked) or 3 (deleted) | Check users table in phpMyAdmin |
 | Database not syncing | MySQL not running | Start MySQL (XAMPP/MariaDB) |
+| WhatsApp mengirim generic template | Import salah di whatsappAIService | Pastikan import `generateWhatsappReplyWithProviderFallback` dari `aiProviderService` (bukan fungsi individual) |
+| "saya beli" tidak dibalas WA | Tidak ada context continuation check | Pastikan controller import `isPropertyContextContinuation` + `getConversationHistory` |
+| Terminal hanya 80 char | Kode lama pakai `.substring(0, 80)` | Hapus truncation, gunakan `console.log(aiResult.reply)` |
+| 360dialog tidak dapat agent | `dialog360_token` NULL di DB | `UPDATE users SET dialog360_token='KEY' WHERE name='...'` |
+| Private Agent balas generic | Menggunakan fungsi lama | Pastikan `whatsappAIService` panggil `generatePrivateTerminalMassege` (bukan `generatePrivateWhatsappReply`) |
+| `generatePrivateTerminalMassege is not a function` | Export belum ada | Cek `module.exports.generatePrivateTerminalMassege` di `chatbotPrivateController.js` |
+
+---
+
+## Syntax Check Cepat
+
+```bash
+# Sebelum deploy, cek semua file yang sering berubah:
+node --check backend/utils/propertyKeywordFilter.js
+node --check backend/services/whatsappAIService.js
+node --check backend/controllers/chatbotPrivateController.js
+node --check backend/controllers/fonnteChatController.js
+node --check backend/controllers/watiChatController.js
+node --check backend/controllers/dialogChatController.js
+
+# Verifikasi exports
+node -e "
+const x = require('./backend/controllers/chatbotPrivateController');
+console.log('generatePrivateChatbotResponse:', typeof x.generatePrivateChatbotResponse);
+console.log('generatePrivateTerminalMassege:', typeof x.generatePrivateTerminalMassege);
+"
+```
 
 ---
 

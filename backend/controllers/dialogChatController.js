@@ -52,8 +52,10 @@
 const axios  = require('axios');
 const { User, ChatSession, ChatMessage } = require('../models');
 const { safeLog }                        = require('../utils/safeLog');
-const { hasPropertyKeyword }             = require('../utils/propertyKeywordFilter');
+const { hasPropertyKeyword,
+        isPropertyContextContinuation }  = require('../utils/propertyKeywordFilter');
 const { generateWhatsAppAIReply }        = require('../services/whatsappAIService');
+const { getConversationHistory }         = require('../services/sessionService');
 const {
   normalizePhone,
   findOrCreateSession,
@@ -330,9 +332,18 @@ async function processIncomingMessage(msg, contacts, agent) {
     msgType
   });
 
-  // ── Cek kata kunci properti ───────────────────────────────────────────────
+  // ── Cek kata kunci properti / lanjutan percakapan ───────────────────────
   const isPropertyQuery = hasPropertyKeyword(messageText);
+
+  let isContinuation = false;
   if (!isPropertyQuery) {
+    try {
+      const history = await getConversationHistory(session.id, 6);
+      isContinuation = isPropertyContextContinuation(messageText, history);
+    } catch (_) { /* skip jika history gagal */ }
+  }
+
+  if (!isPropertyQuery && !isContinuation) {
     logTerminalSkip({
       platform      : 'DIALOG',
       tag           : '[360DIALOG]',

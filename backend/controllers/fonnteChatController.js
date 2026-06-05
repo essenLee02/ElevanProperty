@@ -24,8 +24,10 @@ const axios  = require('axios');
 const { User, ChatSession, ChatMessage } = require('../models');
 const { safeLog }                       = require('../utils/safeLog');
 const { isTerminalActive }              = require('../utils/terminalSwitch');
-const { hasPropertyKeyword }            = require('../utils/propertyKeywordFilter');
+const { hasPropertyKeyword,
+        isPropertyContextContinuation } = require('../utils/propertyKeywordFilter');
 const { generateWhatsAppAIReply }       = require('../services/whatsappAIService');
+const { getConversationHistory }        = require('../services/sessionService');
 
 /* ══════════════════════════════════════════════════════════════════════════════
    BAGIAN 1 — UTILITY FUNCTIONS
@@ -213,17 +215,34 @@ async function processIncomingMessage(body, agent) {
     metadata      : JSON.stringify({ agentName: agent.name, messageId, platform: 'fonnte' })
   });
 
-  // ── Cek kata kunci properti ─────────────────────────────────────────
-  // Hanya balas jika ada kata kunci terkait properti.
-  // Pesan lain (obrolan biasa) disimpan ke DB tapi tidak dibalas AI.
+  // ── Cek apakah pesan properti / lanjutan percakapan properti ──────────
+  //
+  // Dua kondisi yang memicu AI reply:
+  //   1. hasPropertyKeyword()          → pesan baru dengan kata kunci properti
+  //   2. isPropertyContextContinuation() → jawaban singkat atas pertanyaan AI
+  //      Contoh: AI tanya "sewa atau beli?" → customer jawab "saya beli"
+  //              "saya beli" tidak mengandung property type, tapi ini jelas lanjutan
+  //
+  // History diperlukan untuk context check, fetch di sini (bukan di service)
+  // agar kita bisa memutuskan sebelum memanggil AI.
   const isPropertyQuery = hasPropertyKeyword(message);
 
+  let isContinuation = false;
   if (!isPropertyQuery) {
+    try {
+      const history = await getConversationHistory(session.id, 6);
+      isContinuation = isPropertyContextContinuation(message, history);
+    } catch (_) {
+      // Jika gagal ambil history, abaikan continuation check (fallthrough ke skip)
+    }
+  }
+
+  if (!isPropertyQuery && !isContinuation) {
     if (isTerminalActive('FONNTE')) {
       const D = '─'.repeat(62);
       console.log('');
       console.log(D);
-      console.log(`[FONNTE] ⬇  PESAN MASUK (tidak ada kata kunci properti — tidak dibalas)`);
+      console.log(`[FONNTE] ⬇  PESAN MASUK (bukan query properti — tidak dibalas)`);
       console.log(`[FONNTE]    Agent    : ${agent.name} (${agent.phone})`);
       console.log(`[FONNTE]    Customer : ${sender} (${name})`);
       console.log(`[FONNTE]    Time     : ${ts}`);

@@ -85,18 +85,33 @@ Sets `Elevan_Refresh_Token` HttpOnly cookie.
 
 All 6 registered, `privilege='agent'`, `status=1`:
 
-| # | user_id | Name | Phone | fonnte_token |
-|---|---|---|---|---|
-| 1 | SA6EDRU001 | NIGEL KUNCORO | 082233556796 | ✅ Ada (device disconnected) |
-| 2 | LFGKT49002 | LEO FELIX | +62821-3311-936 | ✅ Ada (connected & working) |
-| 3 | CEMPL3Z003 | CLARENCE MARIO | 0821-1136-7154 | ❌ Belum diisi |
-| 4 | DTDE8RX004 | DESY TALIM | 0821-1331-8191 | ❌ Belum diisi |
-| 5 | ITJMESP005 | IFAN TJANDRA | +62881036588874 | ❌ Belum diisi |
-| 6 | IE1BGVY006 | KEZIA ELDY | 0851-6365-05872 | ❌ Belum diisi |
+| # | user_id | Name | Phone | fonnte_token | dialog360_token |
+|---|---|---|---|---|---|
+| 1 | SA6EDRU001 | NIGEL KUNCORO | 082233556796 | ✅ Ada (disconnected) | ❌ NULL |
+| 2 | LFGKT49002 | LEO FELIX | +62821-3311-936 | ✅ Ada (working) | ❌ NULL |
+| 3 | CEMPL3Z003 | CLARENCE MARIO | 0821-1136-7154 | ❌ NULL | ❌ NULL |
+| 4 | DTDE8RX004 | DESY TALIM | 0821-1331-8191 | ❌ NULL | ❌ NULL |
+| 5 | ITJMESP005 | IFAN TJANDRA | +62881036588874 | ❌ NULL | ❌ NULL |
+| 6 | IE1BGVY006 | KEZIA ELDY | 0851-6365-05872 | ❌ NULL | ❌ NULL |
 
 Agent phone numbers stored as-is from registration. Normalized to `628xxxxxxx` format at runtime for matching.
 
-`fonnte_token` diisi agent masing-masing melalui halaman `/profile` → field "Fonnte API".
+### Token Columns per Agent
+
+| Column | Platform | Cara Isi |
+|---|---|---|
+| `fonnte_token` | Fonnte WhatsApp | Via `/profile` → field "Fonnte API" |
+| `dialog360_token` | 360dialog WhatsApp | Via SQL langsung atau endpoint `/setup-webhook` |
+
+```sql
+-- Setup dialog360_token untuk agent tertentu
+UPDATE users SET dialog360_token='[API_KEY_DARI_360DIALOG]' WHERE name='LEO FELIX';
+
+-- Cek semua token
+SELECT name, phone, fonnte_token, dialog360_token FROM users;
+```
+
+Column `dialog360_token` di-auto-migrate via `ensureRequiredDatabaseColumns()` di `server.js` (tidak perlu migration manual).
 
 ---
 
