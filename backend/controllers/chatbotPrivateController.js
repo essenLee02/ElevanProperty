@@ -822,12 +822,15 @@ class ConversationQualifier {
   }
 
   static #aiText(history) {
-    return history.filter(h => h.role === 'ai').map(h => h.message || '').join(' ').toLowerCase();
+    // AI messages bisa tersimpan sebagai 'assistant' (sessionService) atau 'ai' (fonnteChatController)
+    return history.filter(h => h.role === 'assistant' || h.role === 'ai')
+      .map(h => h.message || '').join(' ').toLowerCase();
   }
 
   static #customerText(history, userMessage) {
+    // Customer messages bisa tersimpan sebagai 'user' (sessionService) atau 'customer' (fonnte/wati/dialog)
     return [
-      ...history.filter(h => h.role !== 'ai').map(h => h.message || ''),
+      ...history.filter(h => h.role === 'user' || h.role === 'customer').map(h => h.message || ''),
       userMessage
     ].join(' ').toLowerCase();
   }
@@ -875,7 +878,8 @@ class ConversationQualifier {
   static buildProfile(history = [], userMessage = '', filters = {}) {
     const custText = this.#customerText(history, userMessage);
     const aiText   = this.#aiText(history);
-    const aiCount  = history.filter(h => h.role === 'ai').length;
+    const aiCount  = history.filter(h => h.role === 'assistant' || h.role === 'ai').length;
+    // aiCount menghitung berapa kali AI sudah membalas dalam sesi ini
 
     return {
       /* ── Core filters (from propertyRecommendationService) ── */

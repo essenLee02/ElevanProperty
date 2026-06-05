@@ -20,8 +20,9 @@ const PROPERTY_TYPES = {
 
 const TRANSACTION_TYPES = {
   rent: ['sewa', 'rent', 'rental', 'kontrak', 'menginap', 'harian', 'bulanan', 'tahunan', 'per tahun', 'per bulan'],
-  sale: ['jual', 'sale', 'sell', 'dijual'],
-  purchase: ['beli', 'buy', 'purchase', 'membeli']
+  // 'beli' / 'buy' = purchase intent = sale transaction. Digabung ke 'sale' supaya
+  // konsisten dengan nilai di katalog properti dan txWord di whatsappAIService.
+  sale: ['jual', 'sale', 'sell', 'dijual', 'beli', 'buy', 'purchase', 'membeli']
 };
 
 // Base location keywords. The complete location list is expanded dynamically
@@ -200,16 +201,70 @@ function detectBudget(message = '') {
     };
   }
 
+  // Deteksi preferensi harga tanpa angka (terjangkau / murah / affordable).
+  // Ini dianggap sebagai budget "affordable" — qualification gate menerimanya
+  // dan properti akan diurutkan dari termurah.
+  const affordableWords = [
+    'terjangkau', 'murah', 'termurah', 'hemat', 'ekonomis', 'low budget',
+    'affordable', 'cheap', 'cheapest', 'economy', 'low cost', 'low price'
+  ];
+  if (affordableWords.some(w => text.includes(w))) {
+    return { text: 'affordable', min: null, max: null, period: '', preference: 'affordable' };
+  }
+
   return null;
 }
 
+/**
+ * Build cumulative property profile by processing each user message individually.
+ * Setiap field diisi oleh nilai terbaru yang ditemukan (pesan terbaru wins per field).
+ * Ini lebih akurat daripada join semua teks → satu deteksi, karena:
+ *   - Pesan "Beli" tidak akan ter-overlap dengan "hotel" dari turn lain
+ *   - Setiap jawaban kualifikasi diterapkan tepat pada field-nya
+ */
+// Role pesan customer bisa berbeda tergantung controller yang menyimpan:
+//   fonnteChatController / watiChatController / dialogChatController → 'customer'
+//   sessionService.saveUserMessage (website chatbot)               → 'user'
+// Keduanya harus diikutsertakan dalam ekstraksi history.
+const CUSTOMER_ROLES = new Set(['user', 'customer']);
+const AI_ROLES       = new Set(['assistant', 'ai']);
+
 function extractFromHistory(history = []) {
-  const recentUserMessages = (history || [])
-    .filter((item) => item.role === 'user')
-    .slice(-4)
-    .map((item) => item.message)
-    .join(' ');
-  return extractSingleMessageFilters(recentUserMessages);
+  const recentUserMsgs = (history || [])
+    .filter((item) => CUSTOMER_ROLES.has(item.role))
+    .slice(-8); // ambil maks 8 pesan customer terakhir
+
+  const accumulated = {
+    buildingType:   '',
+    transactionType:'',
+    location:       '',
+    budget:         null,
+    facilities:     [],
+    fallbackTypes:  []
+  };
+
+  for (const histMsg of recentUserMsgs) {
+    const h = extractSingleMessageFilters(histMsg.message || '');
+
+    // Jika tipe properti berubah ke tipe yang berbeda dalam percakapan yang sama,
+    // reset transactionType supaya tidak mewarisi tx dari konteks pencarian lama.
+    // Contoh: riwayat "sewa hotel" lalu customer berubah ke "mau rumah"
+    //         → tx 'rent' dari hotel tidak boleh diwarisi ke pencarian rumah.
+    if (h.buildingType && accumulated.buildingType && h.buildingType !== accumulated.buildingType) {
+      accumulated.transactionType = '';
+      accumulated.location        = '';  // lokasi lama juga direset — bisa jadi beda kota
+      accumulated.budget          = null;
+    }
+
+    if (h.buildingType)          accumulated.buildingType    = h.buildingType;
+    if (h.transactionType)       accumulated.transactionType = h.transactionType;
+    if (h.location)              accumulated.location        = h.location;
+    if (h.budget)                accumulated.budget          = h.budget;
+    if (h.facilities?.length)    accumulated.facilities      = h.facilities;
+    if (h.fallbackTypes?.length) accumulated.fallbackTypes   = h.fallbackTypes;
+  }
+
+  return accumulated;
 }
 
 /**
@@ -258,37 +313,31 @@ function extractSingleMessageFilters(message = '') {
 }
 
 function extractPropertyFilters(message = '', history = []) {
-  const current = extractSingleMessageFilters(message);
-  const previous = extractFromHistory(history);
+  const current    = extractSingleMessageFilters(message);
+  const accumulated = extractFromHistory(history);
 
-  const currentHasNewSearchAnchor = Boolean(
-    current.buildingType ||
-    current.location ||
-    current.transactionType
+  // Current message wins on each field.
+  // Transactiontype dari history TIDAK dibuang kecuali current message secara eksplisit
+  // mengganti tipe properti ke tipe yang BERBEDA (indikasi pencarian baru).
+  // Contoh yang diizinkan untuk inherit tx:
+  //   history: "beli rumah"   → tx=sale
+  //   current: "di Surabaya"  → current.tx='', current.type=''  → masih inherit 'sale'
+  // Contoh yang direset:
+  //   history: "sewa hotel"   → tx=rent, type=hotel
+  //   current: "mau rumah"    → current.type=house (berbeda!) → tx direset ke ''
+  const typeChangedToNew = Boolean(
+    current.buildingType &&
+    accumulated.buildingType &&
+    current.buildingType !== accumulated.buildingType
   );
 
-  // Current message must always win over history.
-  //
-  // Important fix:
-  // If the latest message gives a new building type or location but does not give a
-  // transaction type, do NOT inherit an old transaction type from history.
-  //
-  // Example:
-  // Old history: "sewa hotel di Malang"
-  // Latest: "saya mau rumah di Sidoarjo"
-  // Correct filters: buildingType=house, location=Sidoarjo, transactionType=''
-  // Incorrect old behavior: buildingType=house, location=Sidoarjo, transactionType=rent
-  //
-  // This prevents the chatbot from saying "no exact match" while still listing
-  // matching houses as alternatives.
-  const shouldInheritTransactionType = !currentHasNewSearchAnchor;
-
   return {
-    buildingType: current.buildingType || previous.buildingType || '',
-    transactionType: current.transactionType || (shouldInheritTransactionType ? previous.transactionType : '') || '',
-    location: current.location || previous.location || '',
-    budget: current.budget || previous.budget || null,
-    facilities: current.facilities?.length ? current.facilities : previous.facilities || []
+    buildingType:   current.buildingType    || accumulated.buildingType    || '',
+    transactionType:current.transactionType || (typeChangedToNew ? '' : accumulated.transactionType) || '',
+    location:       current.location        || accumulated.location        || '',
+    budget:         current.budget          || accumulated.budget          || null,
+    facilities:     current.facilities?.length ? current.facilities : accumulated.facilities || [],
+    fallbackTypes:  current.fallbackTypes   || accumulated.fallbackTypes   || []
   };
 }
 

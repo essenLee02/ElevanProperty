@@ -52,22 +52,44 @@ function typeLabel(type, isId) {
   return map[type] || type || (isId ? 'Properti' : 'Property');
 }
 
+const ID_KEYWORDS = [
+  // Kata ganti & modal
+  'saya', 'aku', 'mau', 'ingin', 'pengen', 'cari', 'sewa', 'beli',
+  'jual', 'ada', 'tolong', 'mohon', 'yang', 'dengan', 'dan', 'atau',
+  'tidak', 'bisa', 'siap', 'untuk', 'apa', 'boleh', 'dong', 'ya',
+  // Properti
+  'rumah', 'villa', 'vila', 'apartemen', 'hotel', 'kos', 'kost', 'ruko', 'gudang', 'kantor',
+  'properti', 'tanah', 'kontrakan',
+  // Harga & lokasi
+  'harga', 'berapa', 'budget', 'sekitar', 'kisaran', 'terjangkau', 'murah',
+  'di ', 'lokasi', 'area', 'kota', 'wilayah', 'daerah',
+  // Satuan mata uang Indonesia → pesan "3-10 juta" jelas bahasa Indonesia
+  'juta', 'ribu', 'miliar',
+];
+
 /**
  * Detect language from the customer's message.
+ * If current message is ambiguous (short / no keywords), fall back to recent history.
  * Returns true if Indonesian, false if English.
  *
  * @param {string} message
+ * @param {Array}  history  - Conversation history array [{role, message}]
  * @returns {boolean}
  */
-function isIndonesian(message) {
-  const idKeywords = [
-    'saya', 'aku', 'mau', 'ingin', 'pengen', 'cari', 'sewa', 'beli',
-    'jual', 'ada', 'tolong', 'mohon', 'harga', 'berapa', 'di ', 'yang',
-    'rumah', 'villa', 'vila', 'apartemen', 'hotel', 'kos', 'ruko', 'gudang',
-    'properti', 'apa', 'dengan', 'dan', 'atau', 'tidak', 'bisa',
-  ];
+function isIndonesian(message, history = []) {
   const lower = (message || '').toLowerCase();
-  return idKeywords.some(w => lower.includes(w));
+
+  // Check current message first
+  if (ID_KEYWORDS.some(w => lower.includes(w))) return true;
+
+  // Fallback: check last 4 customer messages in history
+  // role bisa 'user' (website chatbot) atau 'customer' (fonnte/wati/dialog)
+  const recentUserMsgs = (history || [])
+    .filter(m => m.role === 'user' || m.role === 'customer')
+    .slice(-4)
+    .map(m => (m.message || '').toLowerCase());
+
+  return recentUserMsgs.some(msg => ID_KEYWORDS.some(w => msg.includes(w)));
 }
 
 /**
@@ -103,20 +125,25 @@ function agentSignature(agentName, isId) {
  * @param {string} message   - Pesan customer terbaru
  * @param {string} agentName - Nama agent (untuk tanda tangan)
  * @param {string} contextSource
+ * @param {Array}  history   - Conversation history (untuk language detection)
  * @returns {{ reply, provider, contextSource } | null}
  */
-function buildQualifyReply(filters, message, agentName, contextSource) {
+function buildQualifyReply(filters, message, agentName, contextSource, history = []) {
   const { buildingType: type, transactionType: tx, location: loc, budget: bud } = filters;
 
   // Semua 4 info sudah ada → proceed to AI
   if (type && tx && loc && bud) return null;
 
-  const id  = isIndonesian(message);
+  const id  = isIndonesian(message, history);
   const sig = agentSignature(agentName, id);
 
   // Hitung berapa yang sudah diketahui
-  const known       = [type, tx, loc, bud].filter(Boolean).length;
-  const txWord      = tx === 'rent' ? (id ? 'sewa' : 'rent') : tx === 'sale' ? (id ? 'beli' : 'buy') : null;
+  const known   = [type, tx, loc, bud].filter(Boolean).length;
+  const txWord  = tx === 'rent'
+    ? (id ? 'sewa'  : 'rent')
+    : (tx === 'sale' || tx === 'purchase')
+      ? (id ? 'beli'  : 'buy')
+      : null;
   const typeLbl     = type ? typeLabel(type, id) : null;
   const locLbl      = loc  ? `*${loc}*` : null;
 
@@ -243,7 +270,7 @@ async function generateWhatsAppAIReply(params) {
     console.warn('[WhatsAppAI] Filter extraction failed:', err.message);
   }
 
-  const qualResponse = buildQualifyReply(filters, message, agentName, contextSource);
+  const qualResponse = buildQualifyReply(filters, message, agentName, contextSource, history);
 
   if (qualResponse) {
     console.log('[WhatsAppAI] 🛑 Qualification gate triggered — asking for missing info:', {
