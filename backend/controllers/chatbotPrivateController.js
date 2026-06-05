@@ -1334,13 +1334,22 @@ class ChatbotPrivateService {
 
     // ── Decision: langsung tampil listing atau tanya dulu? ───────────────────
     //
-    //   a) Customer eksplisit minta list → listing
-    //   b) AI sudah tanya 4+ kali        → listing (hindari frustrasi)
-    //   c) readiness >= 3 (tx+type+loc)  → listing
-    //   d) Semua else                     → qualification question
-    const wantsListing  = ConversationQualifier.wantsListingNow(userMessage);
-    const readiness     = ConversationQualifier.readinessScore(profile);
-    const shouldList    = wantsListing || profile.aiCount >= 4 || readiness >= 3;
+    // Aturan 4-info minimum (enforced juga di whatsappAIService.js):
+    //   Listing HANYA ditampilkan jika customer sudah memberikan:
+    //     ① Tipe properti  (buildingType)
+    //     ② Tipe transaksi (transactionType — sewa/beli)
+    //     ③ Lokasi         (location)
+    //     ④ Range harga    (budget)
+    //
+    // Exception: AI sudah bertanya 5+ kali → tampilkan listing untuk hindari loop
+
+    const hasAllFour = !!(
+      profile.buildingType &&
+      profile.transactionType &&
+      profile.location &&
+      profile.budget
+    );
+    const shouldList = hasAllFour || profile.aiCount >= 5;
 
     if (!shouldList) {
       // ── QUALIFICATION FLOW ─────────────────────────────────────────────────
