@@ -18,7 +18,12 @@ function isClaudeFallbackEnabled() {
 
 function getPrimaryAIProvider() {
   const value = String(process.env.AI_PRIMARY_PROVIDER || 'chatgpt').toLowerCase().trim();
-  return value === 'claude' ? 'claude' : 'chatgpt';
+
+  // Support: 'chatgpt', 'claude', 'private'
+  if (value === 'claude') return 'claude';
+  if (value === 'private') return 'private';
+
+  return 'chatgpt'; // default
 }
 
 function getAIProviderOrder() {
@@ -28,7 +33,11 @@ function getAIProviderOrder() {
     return ['claude', 'chatgpt'];
   }
 
-  return ['chatgpt', 'claude'];
+  if (primary === 'private') {
+    return ['private']; // Skip all AI providers
+  }
+
+  return ['chatgpt', 'claude']; // default
 }
 
 function canUseChatGPT() {

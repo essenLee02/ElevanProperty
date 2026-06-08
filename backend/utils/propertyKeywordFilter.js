@@ -390,15 +390,31 @@ function isPropertyContextContinuation(message, history = []) {
   const hasPropertyCtx  = recentHistory.some(item => hasPropertyKeyword(item.message || ''));
   if (!hasPropertyCtx) return false;
 
+  // ── Fast path: Jawaban yang SANGAT jelas sebagai lanjutan — tidak perlu cek AI question ──
+  // Ini menghindari race condition di mana AI message belum tersimpan ke DB.
+  //
+  // Bulan Bahasa Indonesia ("Juni 2026", "Januari", "bulan depan Maret")
+  if (/\b(januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)\b/i.test(lower)) return true;
+  // Bulan Bahasa Inggris
+  if (/\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/i.test(lower)) return true;
+  // Tahun referensi (e.g. "Juni 2026", "2027", "tahun depan 2027")
+  if (/\b(202[4-9]|203[0-9])\b/.test(lower)) return true;
+  // Jawaban tipe transaksi murni (satu kata / frasa pendek)
+  if (/^(sewa|beli|jual|beli\s+aja|mau\s+sewa|mau\s+beli|untuk\s+sewa|untuk\s+beli|rent|buy|purchase)$/.test(lower.trim())) return true;
+  // Durasi sewa singkat — jawaban Q10 ("1 tahun", "6 bulan")
+  if (/^\d+\s*(tahun|year|bulan|month)s?$/.test(lower.trim())) return true;
+  // Harga dengan satuan — jawaban Q3 ("2-4 juta/seminggu", "5 jt per bulan")
+  if (/\b\d[\d.,]*\s*(juta|ribu|miliar|rb|jt)\b/i.test(lower)) return true;
+
   // ── Periksa apakah pesan AI terakhir berisi pertanyaan tentang properti ──
   const lastAIMessages = recentHistory
     .filter(item => item.role === 'ai' || item.role === 'assistant')
     .slice(-2);
 
   const PROPERTY_QUESTION_PATTERNS = [
+    // ── Bahasa Indonesia ──────────────────────────────────────────────────────
     /sewa\s+atau\s+beli/,
     /beli\s+atau\s+sewa/,
-    /rent\s+or\s+buy/,
     /kisaran\s+harga/,
     /budget/,
     /harga\s+berapa/,
@@ -419,6 +435,38 @@ function isPropertyContextContinuation(message, history = []) {
     /ada\s+yang\s+ingin.*tanyakan/,
     /masih\s+(ada|butuh|perlu)/,
     /selain\s+itu/,
+    /rencananya\s+masuk/,
+    /masuk\s+bulan/,
+    /pindah\s+bulan/,
+    /sewa\s+untuk\s+berapa/,
+    /berapa\s+lama/,
+    /tinggal\s+bersama/,
+    // ── English equivalents (AI may respond in English) ───────────────────────
+    /rent\s+or\s+buy/,
+    /buy\s+or\s+rent/,
+    /price\s+range/,
+    /budget\s+range/,
+    /which\s+(city|area|location)/,
+    /what\s+type\s*(of\s*)?property/,
+    /planning\s+to\s+move/,
+    /move[\s-]in/,
+    /what\s+month/,
+    /when.*plan/,
+    /how\s+long.*(?:rent|lease|plan)/,
+    /lease\s+duration/,
+    /who\s+will\s+be\s+living/,
+    /living\s+with\s+you/,
+    /furnish(?:ing|ed)?\s+prefer/,
+    /prefer.*furnish/,
+    /tower\s+or\s+floor/,
+    /floor\s+prefer/,
+    /have\s+you\s+seen/,
+    /how\s+many\s+prop/,
+    /any.*(?:specific|prefer)/,
+    /would\s+you\s+like.*(?:more|know|detail)/,
+    /what.*looking\s+for/,
+    /are\s+you\s+looking\s+to/,
+    /do\s+you\s+have\s*(a\s*)?budget/,
   ];
 
   const hasRecentPropertyQuestion = lastAIMessages.some(item => {
@@ -463,6 +511,19 @@ function isPropertyContextContinuation(message, history = []) {
 
   // 6) Angka murni (kemungkinan jawaban harga atau ukuran)
   if (/^\d+[\d.,]*$/.test(lower.trim()))
+    return true;
+
+  // 7) Jawaban bulan/tahun masuk — menjawab pertanyaan move-in date
+  if (/\b(januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)\b/i.test(lower))
+    return true;
+  if (/\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/i.test(lower))
+    return true;
+  // Referensi tahun (e.g. "Juni 2026", "next year 2027")
+  if (/\b(202[4-9]|203[0-9])\b/.test(lower))
+    return true;
+
+  // 8) Durasi sewa singkat (jawaban Q10)
+  if (/\b(\d+\s*(tahun|year|bulan|month)s?)\b/i.test(lower))
     return true;
 
   return false;

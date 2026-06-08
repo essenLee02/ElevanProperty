@@ -1,4 +1,4 @@
-const { Contact } = require('../models');
+﻿const { Contact } = require('../models');
 const { validateContactForm } = require('../services/validationService');
 const { appendContactRow, getGoogleSheetsStatus } = require('../services/googleSheetsService');
 const { checkChatGPTConfig } = require('../services/openaiService');
@@ -124,7 +124,7 @@ class ContactController {
 
     const validation = validateContactForm(contactPayload);
     if (!validation.valid) {
-      return res.status(400).json({ success: false, message: validation.message, error: validation.message });
+      return res.status(process.env.HTTP_BAD_REQUEST).json({ success: false, message: validation.message, error: validation.message });
     }
 
     let googleSheetSent  = false;
@@ -208,7 +208,7 @@ class ContactController {
 
         safeLog('AI_WHATSAPP_FAILED_COMPLETELY', aiWhatsappError.message, 'error');
 
-        return res.status(200).json({
+        return res.status(process.env.HTTP_OK).json({
           success:         true,
           googleSheetSent,
           googleSheetError,
@@ -223,7 +223,7 @@ class ContactController {
     } catch (error) {
       safeLog('CONTACT_SUBMIT_FAILED', error.message, 'error');
 
-      return res.status(500).json({
+      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({
         success:         false,
         googleSheetSent,
         googleSheetError,
@@ -245,7 +245,7 @@ class ContactController {
         ...status
       });
     } catch (error) {
-      return res.status(500).json({
+      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({
         success:        false,
         message:        error.message,
         error:          error.message,

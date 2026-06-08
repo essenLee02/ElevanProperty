@@ -1,4 +1,4 @@
-/**
+﻿/**
  * whatsappInboundController.js
  *
  * Handle incoming WhatsApp messages from Fonnte webhook.
@@ -63,7 +63,7 @@ class WhatsAppInboundController {
 
       if (!payload.from || !payload.message) {
         console.warn('[WHATSAPP WEBHOOK] Invalid payload structure:', payload);
-        return res.status(400).json({ success: false, message: 'Invalid webhook payload' });
+        return res.status(process.env.HTTP_BAD_REQUEST).json({ success: false, message: 'Invalid webhook payload' });
       }
 
       const agentNumber = payload.from;
@@ -71,7 +71,7 @@ class WhatsAppInboundController {
 
       if (!agent) {
         console.warn('[WHATSAPP WEBHOOK] Message from unknown agent:', agentNumber);
-        return res.status(400).json({ success: false, message: 'Unknown agent number' });
+        return res.status(process.env.HTTP_BAD_REQUEST).json({ success: false, message: 'Unknown agent number' });
       }
 
       const senderMatch = (payload.sender || '').match(/^(.+?)\s*\(([^)]+)\)$/);
@@ -155,7 +155,7 @@ class WhatsAppInboundController {
     } catch (error) {
       console.error('[WHATSAPP WEBHOOK ERROR]', error);
       safeLog('WHATSAPP_WEBHOOK_ERROR', error.message, 'error');
-      return res.status(500).json({ success: false, message: 'Failed to process webhook' });
+      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: 'Failed to process webhook' });
     }
   }
 
@@ -190,7 +190,7 @@ class WhatsAppInboundController {
       });
     } catch (error) {
       console.error('[WHATSAPP GET MESSAGES ERROR]', error);
-      return res.status(500).json({ success: false, message: 'Failed to retrieve messages' });
+      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: 'Failed to retrieve messages' });
     }
   }
 
@@ -202,13 +202,13 @@ class WhatsAppInboundController {
       const message = await WhatsAppInbound.findByPk(req.params.id);
 
       if (!message) {
-        return res.status(404).json({ success: false, message: 'Message not found' });
+        return res.status(process.env.HTTP_NOT_FOUND).json({ success: false, message: 'Message not found' });
       }
 
       return res.json({ success: true, data: message });
     } catch (error) {
       console.error('[WHATSAPP GET MESSAGE ERROR]', error);
-      return res.status(500).json({ success: false, message: 'Failed to retrieve message' });
+      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: 'Failed to retrieve message' });
     }
   }
 
@@ -252,7 +252,7 @@ class WhatsAppInboundController {
       });
     } catch (error) {
       console.error('[WHATSAPP AGENTS STATUS ERROR]', error);
-      return res.status(500).json({ success: false, message: 'Failed to retrieve agents status' });
+      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: 'Failed to retrieve agents status' });
     }
   }
 }

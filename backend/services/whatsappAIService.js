@@ -13,8 +13,15 @@
  *        c) Lokasi          (location)
  *        d) Range harga     (budget)
  *      Jika ada yang kurang → kembalikan pertanyaan kualifikasi (tanpa panggil API AI)
- *   4. Try ChatGPT → Claude (with property context)
+ *   3.5. ★ CHECK RESPOND_CATALOG_RUN ★
+ *        OFF (default) → Skip AI providers, show summary (Private Agent)
+ *        ON           → Call ChatGPT/Claude for catalog listing
+ *   4. Try ChatGPT → Claude (with property context) — only if RESPOND_CATALOG_RUN=ON
  *   5. Fallback to Private Agent (guaranteed response)
+ *
+ * RESPOND_CATALOG_RUN ENV VAR:
+ *   OFF (default): Ask Q1-Q12, then show summary (no AI providers called)
+ *   ON:  Show catalog directly (ChatGPT/Claude called)
  */
 
 'use strict';
@@ -289,21 +296,57 @@ async function generateWhatsAppAIReply(params) {
     budget  : filters.budget?.text || 'set',
   });
 
-  // ── Step 4: Try ChatGPT → Claude ───────────────────────────────────────────
-  try {
-    const result = await generateWhatsappReplyWithProviderFallback(
-      session,
-      history,
-      message,
-      propertyCtx
-    );
-    return {
-      reply         : result.reply,
-      provider      : result.provider,
-      contextSource,
-    };
-  } catch (err) {
-    console.warn('[WhatsAppAI] ChatGPT + Claude both failed:', err.message);
+  // ── Step 3.5: CHECK AI_PRIMARY_PROVIDER & RESPOND_CATALOG_RUN ─────────────
+  //
+  // AI_PRIMARY_PROVIDER: 'chatgpt' (default) | 'claude' | 'private'
+  //   private = skip all external AI → use chatbotPrivateController only
+  //
+  // RESPOND_CATALOG_RUN: 'OFF' (default) | 'ON'
+  //   OFF = Q1–Q12 qualification mode → ChatGPT/Claude ask questions, then summary
+  //   ON  = Direct catalog mode       → ChatGPT/Claude show listings
+  //
+  // When to call AI providers:
+  //   ✅ primaryProvider = chatgpt or claude AND (any RESPOND_CATALOG_RUN value)
+  //   ❌ primaryProvider = private → always skip → use Private Agent
+  //
+  // Note: buildWhatsappReplyPrompt() already injects the correct Q1–Q12
+  // instructions into the system prompt when RESPOND_CATALOG_RUN=OFF,
+  // so ChatGPT/Claude will automatically ask qualification questions
+  // instead of showing listings.
+  const primaryProvider   = String(process.env.AI_PRIMARY_PROVIDER || 'chatgpt').toLowerCase().trim();
+  const showCatalogDirect = String(process.env.RESPOND_CATALOG_RUN || 'OFF').toUpperCase() === 'ON';
+
+  // Only skip AI if explicitly set to 'private'
+  const shouldCallAIProviders = primaryProvider !== 'private';
+
+  if (!shouldCallAIProviders) {
+    console.log('[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only');
+    // Fall through to Step 5 (Private Agent)
+
+  } else {
+    // ─ Call AI Providers (ChatGPT or Claude) ──────────────────────────────────
+    // buildWhatsappReplyPrompt injects Q1–Q12 instructions when OFF,
+    // so AI naturally asks qualification questions instead of showing catalog.
+    console.log('[WhatsAppAI] ✅ Calling AI providers:', {
+      primaryProvider,
+      respondCatalogRun : showCatalogDirect ? 'ON (catalog)' : 'OFF (Q1-Q12 summary)',
+    });
+
+    try {
+      const result = await generateWhatsappReplyWithProviderFallback(
+        session,
+        history,
+        message,
+        propertyCtx
+      );
+      return {
+        reply         : result.reply,
+        provider      : result.provider,
+        contextSource,
+      };
+    } catch (err) {
+      console.warn('[WhatsAppAI] AI providers failed — falling back to Private Agent:', err.message);
+    }
   }
 
   // ── Step 5: Fallback to Private Agent ──────────────────────────────────────

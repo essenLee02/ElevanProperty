@@ -1,4 +1,4 @@
-/**
+﻿/**
  * fonnteChatController.js
  *
  * Multi-agent Fonnte WhatsApp handler.
@@ -370,22 +370,22 @@ class FonnteChatController {
     if (eventType === 'message_status') {
       const info = `state=${body.state || '-'} status=${body.status || '-'} id=${body.id || body.stateid || '-'}`;
       console.log(`[FONNTE STATUS] ${info}`);
-      return res.status(200).json({ status: true, type: 'message_status', message: 'Status diterima' });
+      return res.status(process.env.HTTP_OK).json({ status: true, type: 'message_status', message: 'Status diterima' });
     }
 
     // ── Handle send notification ────────────────────────────────────
     if (eventType === 'send') {
-      return res.status(200).json({ status: true, type: 'send', message: 'Send event diterima' });
+      return res.status(process.env.HTTP_OK).json({ status: true, type: 'send', message: 'Send event diterima' });
     }
 
     // ── Handle unknown ──────────────────────────────────────────────
     if (eventType !== 'incoming') {
-      return res.status(200).json({ status: true, type: 'unknown', message: 'Event diterima' });
+      return res.status(process.env.HTTP_OK).json({ status: true, type: 'unknown', message: 'Event diterima' });
     }
 
     // ── INCOMING MESSAGE ────────────────────────────────────────────
     // Respond 200 SEKARANG sebelum proses AI (hindari Fonnte timeout)
-    res.status(200).json({ status: true, type: 'incoming', message: 'Webhook diterima' });
+    res.status(process.env.HTTP_OK).json({ status: true, type: 'incoming', message: 'Webhook diterima' });
 
     // Proses di background (tidak block response)
     setImmediate(async () => {
@@ -437,7 +437,7 @@ class FonnteChatController {
 
     // Status update → tidak perlu reply
     if (eventType === 'message_status' || eventType !== 'incoming') {
-      return res.status(200).json({ status: true, message: '' });
+      return res.status(process.env.HTTP_OK).json({ status: true, message: '' });
     }
 
     const sender    = String(body.sender || '').trim();
@@ -446,7 +446,7 @@ class FonnteChatController {
     const devicePhone = body.device || body.to || '';
 
     if (!sender || !message) {
-      return res.status(200).json({ status: true, message: '' });
+      return res.status(process.env.HTTP_OK).json({ status: true, message: '' });
     }
 
     // Cari agent
@@ -457,7 +457,7 @@ class FonnteChatController {
     }
 
     if (!agent) {
-      return res.status(200).json({ status: true, message: '' });
+      return res.status(process.env.HTTP_OK).json({ status: true, message: '' });
     }
 
     console.log(`[FONNTE CHAINING] Agent: ${agent.name} | Customer: ${sender} (${name})`);
@@ -501,7 +501,7 @@ class FonnteChatController {
     }
 
     // Kirim reply langsung di response (format Fonnte Chaining)
-    return res.status(200).json({ status: true, message: aiReply });
+    return res.status(process.env.HTTP_OK).json({ status: true, message: aiReply });
   }
 
   /* ─────────────────────────────────────────────────────────────────────
@@ -526,7 +526,7 @@ class FonnteChatController {
       return FonnteChatController.handleInboundMessage(req, res);
     }
 
-    return res.status(200).json({
+    return res.status(process.env.HTTP_OK).json({
       status     : true,
       caught     : true,
       eventType,
@@ -555,7 +555,7 @@ class FonnteChatController {
     console.log(`  Dry run: ${dry_run}`);
 
     if (!sender || !message) {
-      return res.status(400).json({ success: false, message: 'Wajib ada: sender dan message' });
+      return res.status(process.env.HTTP_BAD_REQUEST).json({ success: false, message: 'Wajib ada: sender dan message' });
     }
 
     let agent = device ? await findAgentByDevice(device) : null;
@@ -565,7 +565,7 @@ class FonnteChatController {
     }
 
     if (!agent) {
-      return res.status(404).json({
+      return res.status(process.env.HTTP_NOT_FOUND).json({
         success : false,
         message : 'Tidak ada agent dengan fonnte_token. Cek /api/fonnte-chat/status'
       });
@@ -595,7 +595,7 @@ class FonnteChatController {
       });
 
     } catch (err) {
-      return res.status(500).json({ success: false, message: err.message });
+      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 
@@ -619,7 +619,7 @@ class FonnteChatController {
         }
       });
     } catch (err) {
-      return res.status(500).json({ success: false, message: err.message });
+      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 
@@ -645,7 +645,7 @@ class FonnteChatController {
         data   : { agent: agentName, sessions, pagination: { total, limit: parseInt(limit) || 50 } }
       });
     } catch (err) {
-      return res.status(500).json({ success: false, message: err.message });
+      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 
@@ -658,7 +658,7 @@ class FonnteChatController {
       const { limit = 100} = req.query;
 
       const session = await ChatSession.findByPk(sessionId);
-      if (!session) return res.status(404).json({ success: false, message: 'Sesi tidak ditemukan' });
+      if (!session) return res.status(process.env.HTTP_NOT_FOUND).json({ success: false, message: 'Sesi tidak ditemukan' });
 
       const messages = await ChatMessage.findAll({
         where : { chatSessionId: sessionId },
@@ -675,7 +675,7 @@ class FonnteChatController {
         }
       });
     } catch (err) {
-      return res.status(500).json({ success: false, message: err.message });
+      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 
@@ -708,7 +708,7 @@ class FonnteChatController {
         message: `${ready.length} dari ${allAgents.length} agent siap Fonnte`
       });
     } catch (err) {
-      return res.status(500).json({ success: false, message: err.message });
+      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 
@@ -737,7 +737,7 @@ class FonnteChatController {
         }
       });
     } catch (err) {
-      return res.status(500).json({ success: false, message: err.message });
+      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 
@@ -749,7 +749,7 @@ class FonnteChatController {
     try {
       const agents = await getAllAgentsWithFonnte();
       if (agents.length === 0) {
-        return res.status(404).json({ success: false, message: 'Tidak ada agent dengan fonnte_token' });
+        return res.status(process.env.HTTP_NOT_FOUND).json({ success: false, message: 'Tidak ada agent dengan fonnte_token' });
       }
 
       const target    = agents.find(a => a.name === 'LEO FELIX') || agents[0];
@@ -772,7 +772,7 @@ class FonnteChatController {
 
       return res.json({ success: true, agent: target.name, results });
     } catch (err) {
-      return res.status(500).json({ success: false, message: err.message });
+      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 }

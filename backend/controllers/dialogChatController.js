@@ -1,4 +1,4 @@
-/**
+﻿/**
  * dialogChatController.js
  *
  * Multi-agent WhatsApp handler menggunakan 360dialog API.
@@ -458,16 +458,16 @@ class DialogChatController {
     if (eventType === 'status') {
       const s = body.statuses[0] || {};
       logStatusUpdate(s.recipient_id || '-', s.status || '-', s.id || '-');
-      return res.status(200).json({ success: true, type: 'status' });
+      return res.status(process.env.HTTP_OK).json({ success: true, type: 'status' });
     }
 
     // ── Unknown event ─────────────────────────────────────────────────────
     if (eventType !== 'incoming') {
-      return res.status(200).json({ success: true, type: 'unknown' });
+      return res.status(process.env.HTTP_OK).json({ success: true, type: 'unknown' });
     }
 
     // ── INCOMING MESSAGE — respond 200 DULU, proses di background ────────
-    res.status(200).json({ success: true, type: 'incoming', message: 'Webhook diterima' });
+    res.status(process.env.HTTP_OK).json({ success: true, type: 'incoming', message: 'Webhook diterima' });
 
     setImmediate(async () => {
       try {
@@ -516,7 +516,7 @@ class DialogChatController {
       const { agentId, webhookUrl } = req.body || {};
 
       if (!agentId) {
-        return res.status(400).json({
+        return res.status(process.env.HTTP_BAD_REQUEST).json({
           success : false,
           message : 'Wajib isi: agentId (user_id agent dari database)'
         });
@@ -529,11 +529,11 @@ class DialogChatController {
       });
 
       if (!agent) {
-        return res.status(404).json({ success: false, message: `Agent ${agentId} tidak ditemukan` });
+        return res.status(process.env.HTTP_NOT_FOUND).json({ success: false, message: `Agent ${agentId} tidak ditemukan` });
       }
 
       if (!agent.dialog360_token || String(agent.dialog360_token).trim().length < 5) {
-        return res.status(400).json({
+        return res.status(process.env.HTTP_BAD_REQUEST).json({
           success : false,
           message : `Agent ${agent.name} belum punya dialog360_token di database`,
           hint    : 'Kirim "START" ke +551146733492 via WA untuk dapat API key sandbox, lalu update DB'
@@ -564,7 +564,7 @@ class DialogChatController {
 
     } catch (err) {
       console.error('[360DIALOG SETUP ERROR]', err.message);
-      return res.status(500).json({
+      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({
         success : false,
         message : 'Gagal mendaftarkan webhook',
         error   : err.response?.data || err.message
@@ -598,7 +598,7 @@ class DialogChatController {
     }
 
     if (!agent) {
-      return res.status(404).json({
+      return res.status(process.env.HTTP_NOT_FOUND).json({
         success : false,
         message : 'Tidak ada agent dengan dialog360_token. Cek /api/dialog-chat/status'
       });
@@ -618,12 +618,50 @@ class DialogChatController {
     };
     const fakeContacts = [{ profile: { name }, wa_id: sender }];
 
-    await processIncomingMessage(fakeMsg, fakeContacts, agent);
+    try {
+      await processIncomingMessage(fakeMsg, fakeContacts, agent);
+      return res.json({
+        success : true,
+        message : 'Simulate selesai. Lihat terminal.',
+        agent   : agent.name
+      });
+    } catch (err) {
+      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
+    }
+  }
 
-    return res.json({
-      success : true,
-      message : 'Simulate selesai. Lihat terminal.',
-      agent   : agent.name
+  /* ─────────────────────────────────────────────────────────────────────────
+     POST /api/dialog-chat/webhook-raw
+     Debug endpoint — log semua payload mentah dari 360dialog.
+     Sama seperti fonnteChatController.webhookRawCatcher.
+  ───────────────────────────────────────────────────────────────────────── */
+  static async webhookRawCatcher(req, res) {
+    const body    = req.body || {};
+    const ts      = new Date().toISOString();
+    const agentId = req.headers['x-agent-id'] || '(kosong)';
+
+    console.log('\n╔════════════ 360DIALOG RAW CATCHER ═══════════╗');
+    console.log(`║ ${ts.padEnd(45)} ║`);
+    console.log(`║ Agent-Id : ${String(agentId).substring(0, 35).padEnd(35)} ║`);
+    console.log(`║ Keys     : ${String(Object.keys(body).join(', ')).substring(0, 35).padEnd(35)} ║`);
+    console.log('╚══════════════════════════════════════════════╝');
+    console.log('[360DIALOG RAW PAYLOAD]', JSON.stringify(body, null, 2));
+
+    const eventType = detectEventType(body);
+    console.log('[360DIALOG RAW CATCHER] Detected event:', eventType);
+
+    if (eventType === 'incoming') {
+      console.log('[360DIALOG RAW CATCHER] ✅ Ini incoming message → teruskan ke handler...');
+      return DialogChatController.handleInboundMessage(req, res);
+    }
+
+    return res.status(process.env.HTTP_OK).json({
+      status      : true,
+      caught      : true,
+      eventType,
+      agentId,
+      payloadKeys : Object.keys(body),
+      raw         : body
     });
   }
 
@@ -664,7 +702,7 @@ class DialogChatController {
       });
 
     } catch (err) {
-      return res.status(500).json({ success: false, message: err.message });
+      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 
@@ -688,7 +726,7 @@ class DialogChatController {
         }
       });
     } catch (err) {
-      return res.status(500).json({ success: false, message: err.message });
+      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 
@@ -714,7 +752,7 @@ class DialogChatController {
         data   : { agent: agentName, sessions, pagination: { total, limit: parseInt(limit) || 50 } }
       });
     } catch (err) {
-      return res.status(500).json({ success: false, message: err.message });
+      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 
@@ -727,7 +765,7 @@ class DialogChatController {
       const { limit = 100 } = req.query;
 
       const session = await ChatSession.findByPk(sessionId);
-      if (!session) return res.status(404).json({ success: false, message: 'Sesi tidak ditemukan' });
+      if (!session) return res.status(process.env.HTTP_NOT_FOUND).json({ success: false, message: 'Sesi tidak ditemukan' });
 
       const messages = await ChatMessage.findAll({
         where : { chatSessionId: sessionId },
@@ -744,7 +782,7 @@ class DialogChatController {
         }
       });
     } catch (err) {
-      return res.status(500).json({ success: false, message: err.message });
+      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 
@@ -782,7 +820,7 @@ class DialogChatController {
         }
       });
     } catch (err) {
-      return res.status(500).json({ success: false, message: err.message });
+      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 }

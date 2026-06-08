@@ -1,4 +1,4 @@
-const path = require('path');
+﻿const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
 const express = require('express');
@@ -82,7 +82,7 @@ app.post('/', (req, res) => {
   }
 
   // Fallback jika MASSEGE_TERMINAL tidak dikenali
-  return res.status(200).json({
+  return res.status(process.env.HTTP_OK).json({
     success : true,
     message : 'Webhook diterima. Set MASSEGE_TERMINAL=FONNTE|DIALOG|WATI di .env untuk routing.'
   });

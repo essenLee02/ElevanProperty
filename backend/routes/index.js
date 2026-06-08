@@ -127,9 +127,11 @@ router.post('/fonnte-chat/webhook-raw',  webhookLimiter, fonnteChatController.we
 
 // WATI webhook (public)
 router.post('/wati/webhook',             webhookLimiter, watiChatController.handleInboundMessage);
+router.post('/wati/webhook-raw',         webhookLimiter, watiChatController.webhookRawCatcher);
 
 // 360dialog webhook (public)
 router.post('/dialog-chat/webhook',      webhookLimiter, dialogChatController.handleInboundMessage);
+router.post('/dialog-chat/webhook-raw',  webhookLimiter, dialogChatController.webhookRawCatcher);
 
 /* ══════════════════════════════════════════════════════════════════════════════
    WHATSAPP ADMIN ROUTES — Butuh login (verifyToken)

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * chatbotPrivateController.js
  *
  * Fallback chatbot controller — activated when ChatGPT and Claude are both unavailable.
@@ -36,6 +36,12 @@ class LanguageDetector {
     'vila', 'apartemen', 'hotel', 'kos', 'kost', 'ruko', 'kantor', 'gudang',
     'harga', 'berapa', 'di ', 'ada', 'tolong', 'rekomendasi', 'saran',
     'fasilitas', 'budget', 'badget', 'tanah', 'properti',
+    // Satuan mata uang & waktu Indonesia (penting untuk "2-4 juta/seminggu", "Juni 2026")
+    'juta', 'ribu', 'miliar', 'terjangkau', 'murah', 'ekonomis', 'hemat',
+    'seminggu', 'sebulan', 'setahun', 'bulan', 'minggu', 'tahun',
+    // Bulan dalam bahasa Indonesia
+    'januari', 'februari', 'maret', 'april', 'mei', 'juni',
+    'juli', 'agustus', 'september', 'oktober', 'november', 'desember',
   ];
 
   /** Keywords for clearly off-topic subjects (non-property domains) */
@@ -65,14 +71,28 @@ class LanguageDetector {
 
   /**
    * Detect the reply language from the user's latest message.
+   * Falls back to recent customer history when the current message is ambiguous
+   * (e.g. "2-4 juta/seminggu", "Juni 2026").
    * Returns 'id' for Indonesian, 'en' otherwise.
    *
-   * @param {string} message
+   * @param {string}  message
+   * @param {Array}   history - Optional conversation history [{role, message}]
    * @returns {'id'|'en'}
    */
-  static detect(message = '') {
+  static detect(message = '', history = []) {
     const text = this.#normalize(message);
-    return this.#INDONESIAN_WORDS.some(word => text.includes(word)) ? 'id' : 'en';
+    if (this.#INDONESIAN_WORDS.some(word => text.includes(word))) return 'id';
+
+    // Fallback: check last 4 customer messages in history
+    if (Array.isArray(history) && history.length > 0) {
+      const recentCustomer = history
+        .filter(h => h.role === 'user' || h.role === 'customer')
+        .slice(-4)
+        .map(h => this.#normalize(h.message || ''));
+      if (recentCustomer.some(msg => this.#INDONESIAN_WORDS.some(w => msg.includes(w)))) return 'id';
+    }
+
+    return 'en';
   }
 
   /**
@@ -796,6 +816,80 @@ class ResponseBuilderWhatsApp {
       : `\n\nWarm regards,\n*${this.#agentName}*\n*Elevan Property*`;
     return question + signature;
   }
+
+  /**
+   * Build the customer-facing closing message (RESPOND_CATALOG_RUN=OFF summary mode).
+   * Shows a structured recap of what was collected, then hands off to agent.
+   *
+   * @param {object} brief - From ConversationQualifier.buildAgentBrief()
+   * @returns {string}
+   */
+  agentBrief(brief) {
+    const isId = this.#lang === 'id';
+
+    // ── Build summary bullets (only show fields that are known) ──────────────
+    const lines = [];
+
+    const fmt = (label, field) => {
+      if (!field || field.value === 'UNKNOWN' || field.value === null) return null;
+      const src = field.source === 'inferred' ? (isId ? ' _(terkonfirmasi nanti)_' : ' _(to reconfirm)_') : '';
+      return `✓ ${label}: *${field.value}*${src}`;
+    };
+
+    const txLabel = brief.transactionType?.value === 'rent'
+      ? (isId ? 'Sewa' : 'Rent')
+      : brief.transactionType?.value === 'sale'
+        ? (isId ? 'Beli' : 'Buy')
+        : brief.transactionType?.value;
+
+    if (txLabel && brief.transactionType?.value !== 'UNKNOWN') {
+      lines.push(`✓ ${isId ? 'Rencana' : 'Plan'}: *${txLabel}*`);
+    }
+    const typeL = fmt(isId ? 'Tipe' : 'Type', brief.buildingType);
+    if (typeL) lines.push(typeL);
+    const locL = fmt(isId ? 'Lokasi' : 'Location', brief.location);
+    if (locL) lines.push(locL);
+    const budL = fmt(isId ? 'Budget' : 'Budget', brief.budget);
+    if (budL) lines.push(budL);
+    const movL = fmt(isId ? 'Masuk' : 'Move-in', brief.moveInDate);
+    if (movL) lines.push(movL);
+    const durL = fmt(isId ? 'Durasi sewa' : 'Lease duration', brief.leaseDuration);
+    if (durL) lines.push(durL);
+    const dmL  = fmt(isId ? 'Keputusan bersama' : 'Decision maker', brief.decisionMaker);
+    if (dmL) lines.push(dmL);
+    const furL = fmt(isId ? 'Furnitur' : 'Furnishing', brief.furnishing);
+    if (furL) lines.push(furL);
+    const altL = fmt(isId ? 'Area alternatif' : 'Alt. areas', brief.alternativeAreas);
+    if (altL) lines.push(altL);
+    const rfL  = fmt(isId ? 'Hindari' : 'Avoid', brief.redFlags);
+    if (rfL) lines.push(rfL);
+    const ancL = fmt(isId ? 'Patokan lokasi' : 'Anchor', brief.anchorPoint);
+    if (ancL) lines.push(ancL);
+
+    const bulletBlock = lines.join('\n');
+
+    // ── Priority badge ────────────────────────────────────────────────────────
+    const priorityBadge = {
+      HIGH      : isId ? '🔥 Prioritas Tinggi'   : '🔥 High Priority',
+      NORMAL    : isId ? '📋 Prioritas Normal'   : '📋 Normal Priority',
+      INCOMPLETE: isId ? '⚠️ Data Belum Lengkap' : '⚠️ Incomplete Data',
+    }[brief.priority] || '';
+
+    // ── Compose full message ──────────────────────────────────────────────────
+    const header = isId
+      ? `Baik, semua sudah saya catat! 📝 ${priorityBadge}`
+      : `Got it, I've noted everything! 📝 ${priorityBadge}`;
+
+    const summary = isId
+      ? `${header}\n\n${bulletBlock}\n\n*${this.#agentName}* akan segera menghubungi Anda dengan rekomendasi properti yang paling sesuai! 🏠\n\nTerima kasih sudah menghubungi kami. 🙏`
+      : `${header}\n\n${bulletBlock}\n\n*${this.#agentName}* will reach out soon with the best matching properties! 🏠\n\nThank you for reaching out. 🙏`;
+
+    const signature = isId
+      ? `\n\nSalam hangat,\n*${this.#agentName}*\n*Elevan Property*`
+      : `\n\nWarm regards,\n*${this.#agentName}*\n*Elevan Property*`;
+
+    return summary + signature;
+  }
 }
 
 // ─── ConversationQualifier ────────────────────────────────────────────────────
@@ -925,6 +1019,86 @@ class ConversationQualifier {
         'bisa juga', 'bisa di', 'juga oke', 'juga boleh', 'sekitarnya',
       ]),
 
+      /* ── Q5: Red flags (yang tidak diinginkan) ── */
+      hasRedFlags: this.#has(custText, [
+        'tidak mau', 'jangan', 'avoid', 'tidak suka', 'kurang suka',
+        'hadap barat', 'west facing', 'bising', 'noisy', 'gang sempit',
+        'banjir', 'jauh', 'lorong', 'tua banget', 'tidak cocok', 'kurang cocok',
+        'yang pasti', 'yang jelas tidak', 'nggak mau yang',
+      ]),
+      aiAskedRedFlags: this.#has(aiText, [
+        'tidak cocok', 'pasti tidak', 'yang harus dihindari', 'hadap barat',
+        'dekat jalan ramai', 'gang sempit', 'rumah tua', 'anything you want to avoid',
+      ]),
+
+      /* ── Q6: Anchor point (patokan lokasi) ── */
+      hasAnchorPoint: this.#has(custText, [
+        'dekat sekolah', 'dekat kantor', 'dekat mall', 'dekat kampus', 'dekat rs',
+        'dekat rumah sakit', 'dekat tol', 'dekat stasiun', 'patokan', 'landmark',
+        'near school', 'near office', 'near mall', 'near campus', 'near hospital',
+      ]),
+      aiAskedAnchorPoint: this.#has(aiText, [
+        'lokasi patokan', 'ada patokan', 'dekat apa', 'near any', 'specific landmark',
+        'dekat sekolah', 'dekat kantor', 'dekat mall',
+      ]),
+
+      /* ── Q7: Area alternatif ── */
+      hasAlternativeArea: this.#has(custText, [
+        'atau di', 'bisa juga di', 'juga oke', 'juga boleh', 'sekitarnya',
+        'alternatif', 'wilayah lain', 'area lain', 'other area', 'nearby area',
+        'bisa juga', 'selain itu', 'manapun', 'fleksibel', 'flexible',
+        'or also', 'alternatively',
+      ]),
+      aiAskedAltArea: this.#has(aiText, [
+        'selain', 'area sekitar', 'besides', 'other neighborhoods', 'area lain',
+        'wilayah sekitar', 'area yang masih oke',
+      ]),
+
+      /* ── Q9: Decision maker / viewing logistics ── */
+      hasDecisionMaker: this.#has(custText, [
+        'langsung bisa', 'bisa langsung', 'perlu koordinasi', 'perlu diskusi',
+        'sama suami', 'sama istri', 'sama pasangan', 'sama keluarga', 'sendiri saja',
+        'solo decision', 'joint decision', 'discuss with', 'check with',
+        'suami dulu', 'istri dulu', 'koordinasi dulu', 'minta persetujuan',
+        'izin dulu', 'keputusan bersama', 'decide together',
+      ]),
+      aiAskedDecisionMaker: this.#has(aiText, [
+        'jadwalkan viewing', 'bisa jadwalkan', 'koordinasi dulu', 'keluarga lain',
+        'schedule a viewing', 'coordinate with family', 'check with',
+      ]),
+
+      /* ── Q10: Lease duration (sewa only) ── */
+      hasLeaseDuration: this.#has(custText, [
+        '1 tahun', '2 tahun', '3 tahun', '6 bulan', 'setahun', 'dua tahun',
+        'tiga tahun', 'per tahun', '/tahun', 'satu tahun', 'yearly',
+        '1 year', '2 years', '3 years', '6 months',
+      ]),
+      aiAskedLeaseDuration: this.#has(aiText, [
+        'sewa untuk berapa lama', 'berapa tahun', 'durasi sewa', 'lease duration',
+        'how long', 'berapa lama',
+      ]),
+
+      /* ── Q10a: Payment terms (long lease) ── */
+      hasPaymentTerms: this.#has(custText, [
+        'di muka', 'cicil', 'installment', 'upfront', 'bayar penuh',
+        'full payment', 'bayar di awal', 'full upfront', 'monthly', 'bulanan',
+        'per bulan', 'bayar bertahap',
+      ]),
+      aiAskedPaymentTerms: this.#has(aiText, [
+        'bayar di muka', 'bisa cicil', 'payment terms', 'pembayaran',
+        'full payment', 'installment',
+      ]),
+
+      /* ── Q12: Apartment specific ── */
+      hasApartmentPrefs: this.#has(custText, [
+        'tower', 'lantai', 'floor', 'hadap', 'facing', 'high floor', 'low floor',
+        'tinggi', 'rendah', 'tengah', 'mid floor', 'view',
+      ]),
+      aiAskedApartmentPrefs: this.#has(aiText, [
+        'preferensi tower', 'lantai berapa', 'floor preference', 'tower mana',
+        'hadap mana', 'facing direction',
+      ]),
+
       /* ── AI conversation state (what AI already asked) ── */
       aiCount,
       aiAskedTxType     : this.#has(aiText, ['sewa atau beli', 'rent or buy', 'beli atau sewa', 'buy or rent']),
@@ -971,7 +1145,11 @@ class ConversationQualifier {
    * @param {object|null} priceAnchors - { low, high } price strings from catalog
    * @returns {string|null}
    */
-  static getNextQuestion(profile, lang = 'id', priceAnchors = null) {
+  /**
+   * mode = 'catalog' → Ask only core Q0–Q4 + Q8 (fast path to listings)
+   * mode = 'summary' → Ask full Q0–Q12 (complete lead brief before handoff)
+   */
+  static getNextQuestion(profile, lang = 'id', priceAnchors = null, mode = 'catalog') {
     const isId = lang === 'id';
     const tx   = profile.transactionType;  // 'rent' | 'sale' | ''
     const type = profile.buildingType;     // 'house' | 'apartment' | ...
@@ -1053,8 +1231,266 @@ class ConversationQualifier {
         : `For furnishing, do you prefer *fully furnished*, *semi-furnished*, or *unfurnished*? 🛋️`;
     }
 
-    /* ── All key questions asked → ready to show listings ── */
+    /* ══════════════════════════════════════════════════════════════════════
+     * SUMMARY MODE ONLY (Q5–Q9, Q10–Q10a, Q12)
+     * Pertanyaan di bawah ini HANYA ditanyakan ketika mode = 'summary'
+     * (RESPOND_CATALOG_RUN=OFF) untuk membangun lead brief yang lengkap.
+     * Pada catalog mode, kita langsung tampilkan listing setelah Q4.
+     * ══════════════════════════════════════════════════════════════════════ */
+    if (mode === 'summary') {
+
+      /* ── Q5: Red flags (only if not captured in Q2 answer) ── */
+      if (!profile.hasRedFlags && !profile.aiAskedRedFlags && profile.aiAskedSearchHist) {
+        return isId
+          ? `Ada yang pasti tidak cocok? Misalnya yang hadap barat, dekat jalan ramai, gang sempit, atau rumah tua? 🚫`
+          : `Anything you want to avoid? Like west-facing, noisy streets, narrow alleys, or older buildings? 🚫`;
+      }
+
+      /* ── Q6: Anchor point (only if not surfaced in Q2) ── */
+      if (!profile.hasAnchorPoint && !profile.aiAskedAnchorPoint && loc) {
+        return isId
+          ? `Ada lokasi tertentu yang jadi patokan? Misalnya dekat sekolah anak, kantor, atau mall tertentu? 📍`
+          : `Any specific landmark that matters? Like near a school, office, or certain mall? 📍`;
+      }
+
+      /* ── Q7: Alternative areas (always unless already volunteered) ── */
+      if (!profile.hasAlternativeArea && !profile.aiAskedAltArea && loc) {
+        return isId
+          ? `Selain *${loc}*, area sekitar yang masih oke? 🗺️`
+          : `Besides *${loc}*, are there nearby neighborhoods you'd consider? 🗺️`;
+      }
+
+      /* ── Q9: Decision maker / viewing logistics (never ask directly) ── */
+      if (!profile.hasDecisionMaker && !profile.aiAskedDecisionMaker && profile.hasMoveInDate) {
+        return isId
+          ? `Kalau nanti ada yang cocok, langsung bisa jadwalkan viewing atau perlu koordinasi dulu sama keluarga lain? 📅`
+          : `When we find a match, can you schedule a viewing on the spot, or would you need to coordinate with family first? 📅`;
+      }
+
+      /* ── Q10: Lease duration (sewa only, duration not volunteered) ── */
+      if (tx === 'rent' && !profile.hasLeaseDuration && !profile.aiAskedLeaseDuration) {
+        return isId
+          ? `Rencananya sewa untuk berapa lama? ⏱️`
+          : `How long are you planning to lease? ⏱️`;
+      }
+
+      /* ── Q10a: Payment terms (only when lease duration ≥ 1 year) ── */
+      if (tx === 'rent' && profile.hasLeaseDuration && !profile.hasPaymentTerms && !profile.aiAskedPaymentTerms) {
+        // Only ask if customer mentioned multi-year lease
+        const custText = profile._custText || '';
+        const isLongLease = /\b[1-9]\d*\s*(tahun|year)/i.test(custText) || /\bsetahun\b|\bsatu tahun\b/i.test(custText);
+        if (isLongLease) {
+          return isId
+            ? `Untuk pembayaran, biasanya lebih cocok bayar di muka penuh atau ada yang bisa cicil? 💳`
+            : `For payment, would you prefer lump-sum upfront or is there flexibility for installments? 💳`;
+        }
+      }
+
+      /* ── Q12: Apartment-specific branching ── */
+      if (type === 'apartment' && !profile.hasApartmentPrefs && !profile.aiAskedApartmentPrefs) {
+        return isId
+          ? `Untuk apartemen, ada preferensi tower atau lantai tertentu? Misalnya hadap timur, lantai rendah/tengah/tinggi? 🏢`
+          : `For the apartment, any tower or floor preference? Like east-facing, low/mid/high floor? 🏢`;
+      }
+    }
+    /* ── End summary-only questions ── */
+
+    /* ── All applicable questions asked → ready to proceed ── */
     return null;
+  }
+
+  /* ─── Public: build agent brief from profile ────────────────────────────── */
+
+  /**
+   * Builds a structured agent brief object from the conversation profile.
+   * Used to generate the summary shown to customer + the data sent to agent.
+   *
+   * Fields are tagged as 'stated' (customer said it) or 'inferred' (AI read it).
+   *
+   * @param {object}   profile     - From buildProfile()
+   * @param {object}   filters     - Extracted property filters
+   * @param {object[]} history     - Conversation history
+   * @param {string}   userMessage - Latest customer message
+   * @returns {object} Agent brief
+   */
+  static buildAgentBrief(profile, filters = {}, history = [], userMessage = '') {
+    const custText = this.#customerText(history, userMessage);
+
+    // Helper: detect if a field was stated (explicit keywords) or inferred
+    const wasStated = (text, keywords) => this.#has(text, keywords);
+
+    const brief = {
+      // ─ Core 4 ─
+      transactionType: {
+        value : filters.transactionType || 'UNKNOWN',
+        source: wasStated(custText, ['sewa', 'beli', 'rent', 'buy', 'jual']) ? 'stated' : 'inferred',
+      },
+      buildingType: {
+        value : filters.buildingType || 'UNKNOWN',
+        source: wasStated(custText, ['rumah', 'apartemen', 'apartment', 'villa', 'kos', 'ruko', 'gudang', 'kantor', 'hotel'])
+          ? 'stated' : 'inferred',
+      },
+      location: {
+        value : filters.location || 'UNKNOWN',
+        source: 'stated', // location always stated
+      },
+      budget: {
+        value : filters.budget?.text || 'UNKNOWN',
+        source: wasStated(custText, ['juta', 'ribu', 'miliar', 'jt', 'm ', 'rb', 'budget', 'harga'])
+          ? 'stated' : 'inferred',
+      },
+
+      // ─ Extended fields ─
+      moveInDate: {
+        value : profile.hasMoveInDate
+          ? this.#extractMoveInDate(custText)
+          : 'UNKNOWN',
+        source: profile.hasMoveInDate ? 'stated' : 'UNKNOWN',
+      },
+      decisionMaker: {
+        value : this.#extractDecisionMaker(custText, profile),
+        source: profile.hasDecisionMaker || profile.hasHouseholdInfo ? 'stated' : 'UNKNOWN',
+      },
+      household: {
+        value : profile.hasHouseholdInfo
+          ? this.#extractHouseholdSummary(custText)
+          : 'UNKNOWN',
+        source: profile.hasHouseholdInfo ? 'stated' : 'UNKNOWN',
+      },
+      furnishing: {
+        value : profile.hasFurnishing
+          ? this.#extractFurnishing(custText)
+          : 'UNKNOWN',
+        source: profile.hasFurnishing ? 'stated' : 'inferred',
+      },
+      leaseDuration: {
+        value : filters.transactionType === 'rent'
+          ? (profile.hasLeaseDuration ? this.#extractLeaseDuration(custText) : 'UNKNOWN')
+          : null,
+        source: profile.hasLeaseDuration ? 'stated' : 'UNKNOWN',
+      },
+      alternativeAreas: {
+        value : profile.hasAlternativeArea
+          ? this.#extractAlternativeAreas(custText)
+          : 'UNKNOWN',
+        source: profile.hasAlternativeArea ? 'stated' : 'UNKNOWN',
+      },
+      redFlags: {
+        value : profile.hasRedFlags
+          ? this.#extractRedFlags(custText)
+          : 'UNKNOWN',
+        source: profile.hasRedFlags ? 'stated' : 'UNKNOWN',
+      },
+      anchorPoint: {
+        value : profile.hasAnchorPoint
+          ? this.#extractAnchorPoint(custText)
+          : 'UNKNOWN',
+        source: profile.hasAnchorPoint ? 'stated' : 'UNKNOWN',
+      },
+
+      // ─ Meta ─
+      score        : this.#calcBriefScore(profile, filters),
+      aiCount      : profile.aiCount,
+    };
+
+    brief.priority = brief.score >= 7 ? 'HIGH' : brief.score >= 4 ? 'NORMAL' : 'INCOMPLETE';
+    return brief;
+  }
+
+  /* ─── Private: brief field extractors ──────────────────────────────────── */
+
+  static #extractMoveInDate(custText) {
+    const months = ['januari','februari','maret','april','mei','juni','juli','agustus','september','oktober','november','desember',
+                    'january','february','march','april','may','june','july','august','september','october','november','december'];
+    for (const m of months) {
+      if (custText.includes(m)) return m.charAt(0).toUpperCase() + m.slice(1);
+    }
+    if (/bulan depan|next month/.test(custText)) return 'Bulan depan';
+    if (/bulan ini|this month/.test(custText))   return 'Bulan ini';
+    if (/secepatnya|asap|segera/.test(custText)) return 'Secepatnya (urgent)';
+    return 'Sudah disebutkan';
+  }
+
+  static #extractDecisionMaker(custText, profile) {
+    if (/sendiri|alone|solo/.test(custText))              return 'Solo (mandiri)';
+    if (/sama suami|bersama suami|with husband/.test(custText)) return 'Bersama suami';
+    if (/sama istri|bersama istri|with wife/.test(custText))    return 'Bersama istri';
+    if (/sama pasangan|with partner/.test(custText))      return 'Bersama pasangan';
+    if (/sama keluarga|with family/.test(custText))       return 'Bersama keluarga';
+    if (/langsung bisa|bisa langsung/.test(custText))     return 'Solo (bisa langsung jadwalkan)';
+    if (/koordinasi dulu|perlu diskusi/.test(custText))   return 'Perlu koordinasi (joint decision)';
+    if (profile.hasHouseholdInfo) return 'Disebutkan di Q4';
+    return 'UNKNOWN';
+  }
+
+  static #extractHouseholdSummary(custText) {
+    if (/sendiri|alone/.test(custText))       return 'Sendiri';
+    if (/berdua|pasangan|couple/.test(custText)) return 'Berdua (pasangan)';
+    if (/bertiga/.test(custText))             return '3 orang';
+    if (/berempat/.test(custText))            return '4 orang';
+    if (/\d+\s*anak/.test(custText)) {
+      const m = custText.match(/(\d+)\s*anak/);
+      return m ? `Keluarga dengan ${m[1]} anak` : 'Ada anak';
+    }
+    return 'Disebutkan';
+  }
+
+  static #extractFurnishing(custText) {
+    if (/full\s*furnish|fully furnished/.test(custText))  return 'Full furnished';
+    if (/semi\s*furnish|semi-furnished/.test(custText))   return 'Semi furnished';
+    if (/kosongan|unfurnished|kosong/.test(custText))     return 'Kosongan';
+    return 'Disebutkan';
+  }
+
+  static #extractLeaseDuration(custText) {
+    const m = custText.match(/(\d+)\s*(tahun|year)/i);
+    if (m) return `${m[1]} tahun`;
+    if (/setahun|satu tahun|1 year/.test(custText)) return '1 tahun';
+    if (/6 bulan|enam bulan|6 months/.test(custText)) return '6 bulan';
+    return 'Disebutkan';
+  }
+
+  static #extractAlternativeAreas(custText) {
+    // Return the raw text fragment around "atau", "juga oke", etc.
+    const patterns = [/selain .+?, (.+?) juga/i, /atau(?:\s+di)?\s+(\w+)/i, /(\w+) juga oke/i, /(\w+) juga boleh/i];
+    for (const p of patterns) {
+      const m = custText.match(p);
+      if (m) return m[1];
+    }
+    return 'Disebutkan';
+  }
+
+  static #extractRedFlags(custText) {
+    const flags = [];
+    if (/hadap barat|west facing/.test(custText))    flags.push('Tidak mau hadap barat');
+    if (/bising|noisy|ramai/.test(custText))         flags.push('Tidak mau bising/ramai');
+    if (/gang sempit|narrow/.test(custText))         flags.push('Tidak mau gang sempit');
+    if (/banjir|flood/.test(custText))               flags.push('Tidak mau banjir');
+    if (/tua|old building/.test(custText))           flags.push('Tidak mau bangunan tua');
+    return flags.length ? flags.join(', ') : 'Disebutkan';
+  }
+
+  static #extractAnchorPoint(custText) {
+    if (/dekat sekolah|near school/.test(custText))  return 'Dekat sekolah';
+    if (/dekat kantor|near office/.test(custText))   return 'Dekat kantor';
+    if (/dekat mall|near mall/.test(custText))       return 'Dekat mall';
+    if (/dekat kampus|near campus/.test(custText))   return 'Dekat kampus';
+    if (/dekat rs|near hospital/.test(custText))     return 'Dekat RS';
+    if (/dekat tol|near highway/.test(custText))     return 'Dekat tol';
+    return 'Disebutkan';
+  }
+
+  static #calcBriefScore(profile, filters) {
+    let s = 0;
+    if (filters.budget)                   s += 2; // budget = 2 pts (hardest to get)
+    if (filters.location)                 s += 1;
+    if (filters.buildingType)             s += 1;
+    if (filters.transactionType)          s += 1;
+    if (profile.hasMoveInDate)            s += 1;
+    if (profile.hasLeaseDuration)         s += 1;
+    if (profile.hasDecisionMaker || profile.hasHouseholdInfo) s += 1;
+    if (profile.hasFurnishing)            s += 1;
+    return Math.min(s, 9);
   }
 }
 
@@ -1217,7 +1653,7 @@ class ChatbotPrivateService {
    */
   static async generateResponseForChatbot({ session, history = [], userMessage = '', recommendationContext = null, externalError = null }) {
     const skillInfo = this.loadSkillInfo();
-    const lang      = LanguageDetector.detect(userMessage);
+    const lang      = LanguageDetector.detect(userMessage, history);
     const builder   = new ResponseBuilder(lang);
 
     console.warn('[CHATBOT PRIVATE CONTROLLER ACTIVE]', {
@@ -1306,7 +1742,7 @@ class ChatbotPrivateService {
     recommendationContext = null, externalError = null
   }) {
     const skillInfo = this.loadSkillInfo();
-    const lang      = LanguageDetector.detect(userMessage);
+    const lang      = LanguageDetector.detect(userMessage, history);
     const builder   = new ResponseBuilderWhatsApp(lang, agentName);
 
     console.warn('[WHATSAPP PRIVATE AGENT ACTIVE]', {
@@ -1336,65 +1772,93 @@ class ChatbotPrivateService {
       aiCount  : profile.aiCount,
     });
 
-    // ── Decision: langsung tampil listing atau tanya dulu? ───────────────────
-    //
-    // Aturan 4-info minimum (enforced juga di whatsappAIService.js):
-    //   Listing HANYA ditampilkan jika customer sudah memberikan:
-    //     ① Tipe properti  (buildingType)
-    //     ② Tipe transaksi (transactionType — sewa/beli)
-    //     ③ Lokasi         (location)
-    //     ④ Range harga    (budget)
-    //
-    // Exception: AI sudah bertanya 5+ kali → tampilkan listing untuk hindari loop
+    // ── CHECK MODE: RESPOND_CATALOG_RUN ─────────────────────────────────────
+    // OFF (default) → Full Q1–Q12 qualification flow → show structured brief
+    // ON            → Ask core Q0–Q4 only → show catalog listing
+    const showCatalogDirect = String(process.env.RESPOND_CATALOG_RUN || 'OFF').toUpperCase() === 'ON';
 
+    // ── Shared: fetch price anchors for Q3 (needed in both modes) ────────────
+    let priceAnchors = null;
+    if (filters.location || filters.buildingType) {
+      try {
+        const catalogProps = await searchProperties(filters);
+        const withPrice    = catalogProps.filter(p => p.price && p.price !== '-');
+        if (withPrice.length >= 2) {
+          const sorted = [...withPrice].sort((a, b) =>
+            this.#roughPrice(a.price) - this.#roughPrice(b.price)
+          );
+          priceAnchors = { low: sorted[0].price, high: sorted[sorted.length - 1].price };
+        }
+      } catch (_err) { /* non-fatal */ }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  MODE A — SUMMARY (RESPOND_CATALOG_RUN=OFF, default)
+    //  Run FULL Q1–Q12 qualification, then show structured agent brief.
+    //  Catalog is NEVER shown in this mode.
+    // ════════════════════════════════════════════════════════════════════════
+    if (!showCatalogDirect) {
+      const nextQuestion = ConversationQualifier.getNextQuestion(
+        profile, lang, priceAnchors, 'summary'
+      );
+
+      if (nextQuestion) {
+        console.log(`[PrivateAgent/SummaryMode] Asking Q (aiCount=${profile.aiCount})`);
+        return this.#wrap(builder.qualificationQuestion(nextQuestion), {
+          skillInfo, filters, qualificationMode: true, summaryMode: true,
+        });
+      }
+
+      // All Q1–Q12 answered → generate structured brief
+      console.log('[PrivateAgent/SummaryMode] ✅ All Q answered → generating agent brief');
+      const brief = ConversationQualifier.buildAgentBrief(profile, filters, history, userMessage);
+      const reply = builder.agentBrief(brief);
+
+      console.log('[PrivateAgent/SummaryMode] Brief generated:', {
+        score   : brief.score,
+        priority: brief.priority,
+        budget  : brief.budget?.value,
+        location: brief.location?.value,
+        moveIn  : brief.moveInDate?.value,
+      });
+
+      return this.#wrap(reply, {
+        skillInfo,
+        filters,
+        responseMode    : 'summary',
+        showCatalogDirect,
+        briefScore      : brief.score,
+        briefPriority   : brief.priority,
+        fallbackReason  : externalError?.message || 'External AI provider unavailable.',
+        agentName,
+      });
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  MODE B — CATALOG (RESPOND_CATALOG_RUN=ON)
+    //  Ask core Q0–Q4 + Q8 only, then show property listings.
+    // ════════════════════════════════════════════════════════════════════════
+
+    // ── Core 4 gate: keep asking until basic info collected ──────────────────
     const hasAllFour = !!(
-      profile.buildingType &&
-      profile.transactionType &&
-      profile.location &&
-      profile.budget
+      profile.buildingType && profile.transactionType &&
+      profile.location     && profile.budget
     );
     const shouldList = hasAllFour || profile.aiCount >= 5;
 
     if (!shouldList) {
-      // ── QUALIFICATION FLOW ─────────────────────────────────────────────────
-      // Coba dapatkan price anchors dari catalog lokal (cepat, tanpa Rumah123)
-      let priceAnchors = null;
-
-      if (filters.location || filters.buildingType) {
-        try {
-          const catalogProps = await searchProperties(filters);
-          const withPrice    = catalogProps.filter(p => p.price && p.price !== '-');
-
-          if (withPrice.length >= 2) {
-            // Sort sederhana berdasarkan teks harga (untuk ambil low/high sample)
-            const sorted = [...withPrice].sort((a, b) => {
-              const pa = this.#roughPrice(a.price);
-              const pb = this.#roughPrice(b.price);
-              return pa - pb;
-            });
-
-            priceAnchors = {
-              low : sorted[0].price,
-              high: sorted[sorted.length - 1].price,
-            };
-          }
-        } catch (_err) {
-          // Non-fatal — lanjut tanpa price anchors
-        }
-      }
-
-      const nextQuestion = ConversationQualifier.getNextQuestion(profile, lang, priceAnchors);
-
+      const nextQuestion = ConversationQualifier.getNextQuestion(
+        profile, lang, priceAnchors, 'catalog'
+      );
       if (nextQuestion) {
-        const reply = builder.qualificationQuestion(nextQuestion);
-        console.log(`[PrivateAgent/Qualifier] Asking Q (aiCount=${profile.aiCount})`);
-        return this.#wrap(reply, { skillInfo, filters, qualificationMode: true });
+        console.log(`[PrivateAgent/CatalogMode] Asking Q (aiCount=${profile.aiCount})`);
+        return this.#wrap(builder.qualificationQuestion(nextQuestion), {
+          skillInfo, filters, qualificationMode: true,
+        });
       }
-      // nextQuestion = null berarti semua pertanyaan sudah terjawab → lanjut ke listing
     }
 
-    // ── LISTING FLOW ──────────────────────────────────────────────────────────
-    // Fetch Rumah123 + catalog context secara paralel (speed optimization)
+    // ── Fetch listings (Rumah123 + catalog) ──────────────────────────────────
     const [rumah123Listings, context] = await Promise.all([
       this.fetchRumah123Listings(filters, session?.location),
       recommendationContext
@@ -1404,37 +1868,34 @@ class ChatbotPrivateService {
 
     const catalogMatches = this.resolveCatalogMatches(context);
 
-    // Pilih strategi reply
     let reply;
     if (rumah123Listings.length > 0 || catalogMatches.length > 0) {
       reply = builder.exactMatch({ rumah123Listings, catalogMatches, filters: context.filters });
     } else {
       reply = builder.alternative({
-        alternatives    : context.alternatives,
+        alternatives : context.alternatives,
         rumah123Listings,
-        filters         : context.filters,
-        budgetExpanded  : context.budgetExpanded || null,
+        filters      : context.filters,
+        budgetExpanded: context.budgetExpanded || null,
       });
     }
 
-    // ── Q8 mandatory follow-up (jika move-in date belum pernah ditanyakan) ───
-    // Sisipkan sebelum tanda tangan agent agar tidak terlewat.
+    // ── Q8 mandatory: append move-in question before signature ───────────────
     if (!profile.hasMoveInDate && !profile.aiAskedMoveIn) {
-      const moveInQ = lang === 'id'
+      const moveInQ   = lang === 'id'
         ? '\n\nOmong-omong, rencananya masuk atau pindah bulan apa? 📅'
         : '\n\nBy the way, what month are you planning to move in? 📅';
-      // Sisipkan sebelum "Salam hangat" / "Warm regards"
       const insertBefore = lang === 'id' ? '\n\nSalam hangat,' : '\n\nWarm regards,';
-      if (reply.includes(insertBefore)) {
-        reply = reply.replace(insertBefore, moveInQ + insertBefore);
-      } else {
-        reply += moveInQ;
-      }
+      reply = reply.includes(insertBefore)
+        ? reply.replace(insertBefore, moveInQ + insertBefore)
+        : reply + moveInQ;
     }
 
     return this.#wrap(reply, {
       skillInfo,
       filters          : context.filters,
+      responseMode     : 'catalog',
+      showCatalogDirect,
       exactMatches     : catalogMatches.length,
       rumah123Listings : rumah123Listings.length,
       alternatives     : context.alternatives.length,
@@ -1628,7 +2089,7 @@ exports.sendPrivateMessage = async (req, res) => {
 
   const validation = validateChatbotMessage(payload);
   if (!validation.valid) {
-    return res.status(400).json({ success: false, message: validation.message });
+    return res.status(process.env.HTTP_BAD_REQUEST).json({ success: false, message: validation.message });
   }
 
   try {
@@ -1673,7 +2134,7 @@ exports.sendPrivateMessage = async (req, res) => {
     });
   } catch (error) {
     console.error('[CHATBOT PRIVATE CONTROLLER ERROR]', { message: error.message, stack: error.stack });
-    return res.status(500).json({
+    return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({
       success:    false,
       source:     'private_agent',
       controller: 'chatbotPrivateController',
@@ -1724,7 +2185,7 @@ exports.debugTestRumah123 = async (req, res) => {
     });
   } catch (err) {
     console.error(`[DEBUG] Error:`, err.message);
-    return res.status(500).json({
+    return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({
       success: false,
       error: err.message,
       hint: 'Check server logs for detailed debug output'

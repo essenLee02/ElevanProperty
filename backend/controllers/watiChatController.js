@@ -1,4 +1,4 @@
-/**
+﻿/**
  * watiChatController.js
  *
  * Multi-agent WhatsApp handler untuk platform WATI.
@@ -330,7 +330,7 @@ class WatiChatController {
 
     // ── Return 200 SEGERA ─────────────────────────────────────────────────
     // WATI mengharapkan response cepat. Semua proses AI dilakukan di background.
-    res.status(200).json({ status: true, type: 'incoming', message: 'Webhook diterima' });
+    res.status(process.env.HTTP_OK).json({ status: true, type: 'incoming', message: 'Webhook diterima' });
 
     // ── Proses di background ──────────────────────────────────────────────
     setImmediate(async () => {
@@ -367,6 +367,41 @@ class WatiChatController {
   }
 
   /* ─────────────────────────────────────────────────────────────────────────
+     POST /api/wati/webhook-raw
+     Debug endpoint — log semua payload mentah dari WATI.
+     Sama seperti fonnteChatController.webhookRawCatcher.
+  ───────────────────────────────────────────────────────────────────────── */
+  static async webhookRawCatcher(req, res) {
+    const payload = req.body || {};
+    const ts      = new Date().toISOString();
+
+    console.log('\n╔════════════ WATI RAW CATCHER ════════════╗');
+    console.log(`║ ${ts.padEnd(42)} ║`);
+    console.log(`║ Keys: ${String(Object.keys(payload).join(', ')).substring(0, 37).padEnd(37)} ║`);
+    console.log('╚═══════════════════════════════════════════╝');
+    console.log('[WATI RAW PAYLOAD]', JSON.stringify(payload, null, 2));
+
+    const customerPhone   = String(payload.waId   || payload.from  || '').trim();
+    const customerMessage = String(payload.text?.body || payload.message || '').trim();
+    const hasIncoming     = !!(customerPhone && customerMessage);
+
+    console.log(`[WATI RAW CATCHER] has_incoming: ${hasIncoming}`);
+
+    if (hasIncoming) {
+      console.log('[WATI RAW CATCHER] ✅ Ini incoming message → teruskan ke handler...');
+      return WatiChatController.handleInboundMessage(req, res);
+    }
+
+    return res.status(process.env.HTTP_OK).json({
+      status      : true,
+      caught      : true,
+      hasIncoming : false,
+      payloadKeys : Object.keys(payload),
+      raw         : payload
+    });
+  }
+
+  /* ─────────────────────────────────────────────────────────────────────────
      POST /api/wati/simulate
      Test endpoint — simulasi pesan masuk tanpa WA asli.
      Membutuhkan autentikasi (dilindungi verifyToken di routes).
@@ -387,7 +422,7 @@ class WatiChatController {
     console.log(`  Dry run : ${dry_run}`);
 
     if (!sender || !message) {
-      return res.status(400).json({ success: false, message: 'Wajib ada: sender dan message' });
+      return res.status(process.env.HTTP_BAD_REQUEST).json({ success: false, message: 'Wajib ada: sender dan message' });
     }
 
     // Cari agent
@@ -398,7 +433,7 @@ class WatiChatController {
     }
 
     if (!agent) {
-      return res.status(404).json({
+      return res.status(process.env.HTTP_NOT_FOUND).json({
         success : false,
         message : 'Tidak ada agent aktif di database. Cek /api/wati/status'
       });
@@ -433,7 +468,7 @@ class WatiChatController {
         sender
       });
     } catch (err) {
-      return res.status(500).json({ success: false, message: err.message });
+      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 
@@ -446,7 +481,7 @@ class WatiChatController {
       const { limit = 50, offset = 0 } = req.query;
 
       if (!agentName) {
-        return res.status(400).json({ success: false, message: 'agentName wajib diisi' });
+        return res.status(process.env.HTTP_BAD_REQUEST).json({ success: false, message: 'agentName wajib diisi' });
       }
 
       const source   = `wati_${agentName.toLowerCase().replace(/\s+/g, '_')}`;
@@ -467,7 +502,7 @@ class WatiChatController {
         }
       });
     } catch (err) {
-      return res.status(500).json({ success: false, message: err.message });
+      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 
@@ -480,12 +515,12 @@ class WatiChatController {
       const { limit = 100 } = req.query;
 
       if (!sessionId) {
-        return res.status(400).json({ success: false, message: 'sessionId wajib diisi' });
+        return res.status(process.env.HTTP_BAD_REQUEST).json({ success: false, message: 'sessionId wajib diisi' });
       }
 
       const session = await ChatSession.findByPk(sessionId);
       if (!session) {
-        return res.status(404).json({ success: false, message: 'Sesi tidak ditemukan' });
+        return res.status(process.env.HTTP_NOT_FOUND).json({ success: false, message: 'Sesi tidak ditemukan' });
       }
 
       const messages = await ChatMessage.findAll({
@@ -503,7 +538,7 @@ class WatiChatController {
         }
       });
     } catch (err) {
-      return res.status(500).json({ success: false, message: err.message });
+      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 
@@ -527,7 +562,7 @@ class WatiChatController {
         }
       });
     } catch (err) {
-      return res.status(500).json({ success: false, message: err.message });
+      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 
@@ -549,7 +584,11 @@ class WatiChatController {
         }
       }
 
-      return res.status(config.enabled && profileOk ? 200 : 500).json({
+      const statusCode = config.enabled && profileOk
+        ? process.env.HTTP_OK
+        : process.env.HTTP_INTERNAL_SERVER_ERROR;
+
+      return res.status(statusCode).json({
         success : config.enabled && profileOk,
         wati    : {
           ...config,
@@ -561,7 +600,7 @@ class WatiChatController {
           : 'Masalah konfigurasi WATI API'
       });
     } catch (err) {
-      return res.status(500).json({ success: false, message: err.message });
+      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 
@@ -592,7 +631,7 @@ class WatiChatController {
         }
       });
     } catch (err) {
-      return res.status(500).json({ success: false, message: err.message });
+      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 }

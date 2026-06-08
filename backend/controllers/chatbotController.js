@@ -1,4 +1,4 @@
-const { validateChatbotMessage } = require('../services/validationService');
+﻿const { validateChatbotMessage } = require('../services/validationService');
 const {
   findOrCreateSession,
   getConversationHistory,
@@ -120,7 +120,7 @@ class ChatbotController {
 
     const validation = validateChatbotMessage(payload);
     if (!validation.valid) {
-      return res.status(400).json({ success: false, message: validation.message });
+      return res.status(process.env.HTTP_BAD_REQUEST).json({ success: false, message: validation.message });
     }
 
     let session = null;
@@ -254,7 +254,7 @@ class ChatbotController {
             stack:   privateError.stack
           });
 
-          return res.status(502).json({
+          return res.status(process.env.HTTP_BAD_GATEWAY).json({
             success:             false,
             message:             privateError.message || 'ChatGPT, Claude, and chatbotPrivateController failed.',
             source:              'private_agent',
@@ -264,7 +264,7 @@ class ChatbotController {
         }
       }
 
-      return res.status(502).json({
+      return res.status(process.env.HTTP_BAD_GATEWAY).json({
         success:  false,
         message:  error.message || 'AI provider failed to generate chatbot reply.',
         source:   error.provider || 'ai_provider_router',

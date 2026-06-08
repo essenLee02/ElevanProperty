@@ -1,5 +1,54 @@
 const { loadProjectSkillPrompt } = require('./skillPromptService');
 
+/* ─── Indonesian keyword list for server-side language detection ───────────── */
+const ID_DETECT_WORDS = [
+  // Pronouns & modals
+  'saya', 'aku', 'mau', 'ingin', 'pengen', 'cari', 'sewa', 'beli',
+  'jual', 'ada', 'tolong', 'mohon', 'yang', 'dengan', 'dan', 'atau',
+  'tidak', 'bisa', 'untuk', 'apa', 'ya', 'dong', 'ya', 'nih',
+  // Property
+  'rumah', 'villa', 'vila', 'apartemen', 'hotel', 'kos', 'kost', 'ruko',
+  'gudang', 'kantor', 'properti', 'tanah', 'kontrakan',
+  // Price & units — CRITICAL: "2-4 juta/seminggu" must detect as Indonesian
+  'harga', 'berapa', 'budget', 'kisaran', 'terjangkau', 'murah',
+  'juta', 'ribu', 'miliar', 'rb', 'jt',
+  // Time units (Indonesian)
+  'seminggu', 'sebulan', 'setahun', 'bulan', 'minggu', 'tahun',
+  'per\s*bulan', 'per\s*tahun', 'per\s*minggu',
+  // Month names (Indonesian) — "Juni 2026" must detect as Indonesian
+  'januari', 'februari', 'maret', 'april', 'mei', 'juni',
+  'juli', 'agustus', 'september', 'oktober', 'november', 'desember',
+  // General Indonesian
+  'lokasi', 'area', 'di ', 'kota', 'wilayah', 'daerah',
+];
+
+/**
+ * Detect dominant language from conversation.
+ * Checks current message first, then falls back to last 4 customer messages in history.
+ * Returns 'id' for Indonesian, 'en' for English.
+ *
+ * @param {string} message  - Latest customer message
+ * @param {Array}  history  - Conversation history [{role, message}]
+ * @returns {'id'|'en'}
+ */
+function detectLanguage(message = '', history = []) {
+  const checkId = (text) => {
+    const lower = (text || '').toLowerCase();
+    return ID_DETECT_WORDS.some(w => lower.includes(w));
+  };
+
+  if (checkId(message)) return 'id';
+
+  // Fallback: check last 4 customer messages
+  const customerMsgs = (history || [])
+    .filter(h => h.role === 'user' || h.role === 'customer')
+    .slice(-4);
+
+  if (customerMsgs.some(m => checkId(m.message || ''))) return 'id';
+
+  return 'en';
+}
+
 const BASE_PROPERTY_ASSISTANT_PROMPT = `
 You are a professional property assistant for a property rental and sales platform in Indonesia.
 
@@ -7,7 +56,7 @@ You must follow the project skill documentation provided below. The skill docume
 
 Core behavior:
 - Help customers buy, sell, or rent properties such as houses, villas, hotels, apartments, boarding houses, shophouses, offices, and warehouses.
-- Reply in the same language used by the customer's latest message. Support Indonesian, English, Mandarin Chinese, Traditional Chinese, Tagalog / Filipino, Malay, Japanese, Korean, Thai, Vietnamese, Spanish, French, German, Dutch, Portuguese, Arabic, Hindi, Italian, Russian, Turkish, and other clear user languages.
+- LANGUAGE RULE: Always obey the ⚠️ FORCED REPLY LANGUAGE instruction that is injected above the conversation history — it overrides all other language detection. Never switch language just because the latest message is a short answer like a number, date, month name, or single word.
 - Stay focused on property topics only.
 - Prioritize the customer's latest message over older conversation history.
 - Remember returning customers by the combination of name, phone number, and location when conversation history is provided.
@@ -103,8 +152,13 @@ Message: ${message}`;
 }
 
 function buildChatbotReplyPrompt(session, history, userMessage, propertyContext = '', provider = 'shared') {
-  return `${getProjectSkillInstruction(provider)}
+  const detectedLang = detectLanguage(userMessage, history);
+  const forcedLangInstruction = detectedLang === 'id'
+    ? `\n⚠️ FORCED REPLY LANGUAGE: Bahasa Indonesia\nCustomer ini berbicara dalam Bahasa Indonesia. SELALU balas dalam Bahasa Indonesia.\n`
+    : `\n⚠️ FORCED REPLY LANGUAGE: English\nThe customer is writing in English. Always reply in English.\n`;
 
+  return `${getProjectSkillInstruction(provider)}
+${forcedLangInstruction}
 Customer profile:
 Name: ${session.name}
 Phone: ${session.normalizedPhone}
@@ -128,8 +182,114 @@ Do not keep asking discovery questions before showing options when the customer 
 }
 
 function buildWhatsappReplyPrompt(session, history, userMessage, propertyContext = '', provider = 'shared') {
-  return `${getProjectSkillInstruction(provider)}
+  // ── Server-side language detection (overrides AI guessing) ───────────────
+  // Detect from full history + current message. Inject as hard constraint so
+  // AI never switches to English for short answers like "2-4 juta/seminggu",
+  // "Juni 2026", a number, or a single word.
+  const detectedLang = detectLanguage(userMessage, history);
+  const forcedLangInstruction = detectedLang === 'id'
+    ? `\n⚠️ FORCED REPLY LANGUAGE: Bahasa Indonesia\nCustomer ini berbicara dalam Bahasa Indonesia. SELALU balas dalam Bahasa Indonesia — termasuk ketika pesan terbaru adalah jawaban singkat, angka, nama bulan, atau tanggal seperti "Juni 2026", "2-4 juta/seminggu", "iya", "1 tahun". JANGAN beralih ke Bahasa Inggris dalam kondisi apapun.\n`
+    : `\n⚠️ FORCED REPLY LANGUAGE: English\nThe customer is writing in English. Always reply in English.\n`;
 
+  // ── Detect RESPOND_CATALOG_RUN mode ──────────────────────────────────────
+  const summaryMode = String(process.env.RESPOND_CATALOG_RUN || 'OFF').toUpperCase() !== 'ON';
+
+  // ── Summary mode: inject full Q1–Q12 qualification instructions ──────────
+  const summaryModeInstructions = summaryMode ? `
+
+## QUALIFICATION MODE (RESPOND_CATALOG_RUN=OFF)
+
+You are currently in QUALIFICATION MODE. This means:
+
+1. ❌ DO NOT show property listings or catalog.
+2. ✅ Ask Q1–Q12 qualification questions, in order, ONE question per message.
+3. ✅ Only after ALL mandatory questions are answered → show the structured brief below.
+4. ✅ Never skip Q8 (move-in date) — it is MANDATORY.
+
+### Discovery Conversation Rules (from PRD)
+
+Most customers don't know exactly what they want. Guide discovery through OPTIONS, not interrogation.
+
+**Q1 — Transaction type** (skip if already known)
+"Lagi cari untuk sewa atau beli?"
+
+**Q2 — Search history** (after location is established — HIGHEST VALUE QUESTION)
+"Sudah lihat berapa properti di area itu? Apa yang membuat belum cocok dari yang sudah dilihat?"
+→ Extracts: red flags, budget ceiling, decision maker signals, anchor point, urgency.
+
+**Q3 — Budget** (NEVER ask directly — show two contrasting options)
+"Di [area] kami ada yang di kisaran [LOW] dan ada yang [HIGH]. Kira-kira yang mana lebih sesuai?"
+→ Customer's reaction reveals real budget. Do NOT ask "berapa budget Anda?"
+
+**Q4 — Household composition** (NEVER ask bedrooms directly)
+"Nanti akan tinggal bersama siapa saja? Biar saya bisa carikan yang pas jumlah kamarnya."
+→ Infers bedrooms + decision maker signal.
+
+**Q5 — Red flags** (only if not captured in Q2)
+"Ada yang pasti tidak cocok? Misalnya yang hadap barat, dekat jalan ramai, gang sempit, atau rumah tua?"
+
+**Q6 — Anchor point** (only if not captured in Q2)
+"Ada lokasi tertentu yang jadi patokan? Misalnya dekat sekolah anak, kantor, atau mall tertentu?"
+
+**Q7 — Alternative areas** (always ask unless customer already volunteered)
+"Selain [area], area sekitar yang masih oke?"
+
+**Q8 — Move-in date** (MANDATORY — never skip, no exceptions)
+"Rencananya masuk bulan apa?"
+
+**Q9 — Decision maker** (never ask directly, always indirect)
+"Kalau nanti ada yang cocok, langsung bisa jadwalkan viewing atau perlu koordinasi dulu sama keluarga lain?"
+→ NEVER ask "siapa yang memutuskan" — ask about scheduling logistics instead.
+
+**Q10 — Lease duration** (only if transaction = sewa AND not volunteered)
+"Rencananya sewa untuk berapa lama?"
+
+**Q10a — Payment terms** (only if lease duration ≥ 1 year)
+"Untuk pembayaran, biasanya lebih cocok bayar di muka penuh atau ada yang bisa cicil?"
+
+**Q11 — Furnishing** (if not already stated)
+"Untuk furnitur, lebih prefer yang sudah furnished, semi-furnished, atau kosongan saja?"
+
+**Q12 — Apartment specific** (only if property type = apartment)
+"Ada preferensi tower atau lantai tertentu? Misalnya hadap timur, lantai rendah/tengah/tinggi?"
+
+### When to Show Summary (Brief)
+
+Show the structured brief ONLY when ALL of the following are answered:
+- Core 4: transaction type, building type, location, budget
+- Q8 (move-in date) — mandatory
+- Q4 or Q9 (household/decision maker)
+- Q7 (alternative areas)
+
+**Brief format:**
+\`\`\`
+Baik, semua sudah saya catat! 📝
+
+✓ Rencana: *[sewa/beli]*
+✓ Tipe: *[building type]*
+✓ Lokasi: *[location]*
+✓ Budget: *[budget]* (stated/inferred)
+✓ Masuk: *[move-in month]*
+✓ Keputusan bersama: *[solo/joint]*
+✓ Furnitur: *[furnished/semi/kosong]*
+✓ Area alternatif: *[areas]*
+
+[Agent name] akan segera menghubungi Anda dengan rekomendasi terbaik! 🏠
+
+Terima kasih sudah menghubungi kami. 🙏
+\`\`\`
+
+### Summary Mode Constraints
+- One question per message only.
+- Maximum 12 AI messages before showing brief (even if incomplete).
+- Never show catalog, Rumah123 listings, or property details in this mode.
+- Fields with "inferred" source = agent will reconfirm.
+- Fields with "UNKNOWN" = agent must ask.
+` : '';
+
+  return `${getProjectSkillInstruction(provider)}
+${forcedLangInstruction}
+${summaryModeInstructions}
 Customer profile:
 Name: ${session.name}
 Phone: ${session.normalizedPhone}
@@ -140,15 +300,16 @@ Recent conversation history for context only. Use the customer profile identity 
 ${formatConversationHistory(history)}
 
 Backend property catalog context for this latest WhatsApp message:
-${propertyContext || 'No backend property catalog context is available.'}
+${summaryMode ? '(Not used in qualification mode — ask Q1–Q12 first)' : (propertyContext || 'No backend property catalog context is available.')}
 
 Latest WhatsApp customer message. This is the highest-priority instruction:
 ${userMessage}
 
 Task:
-Create the final WhatsApp reply using only the backend property catalog context above.
-If exact matches are available, recommend exact matches directly.
-If no exact match is available, say that no exact match is available and then present only the backend alternatives.`;
+${summaryMode
+    ? 'Ask the next qualification question from Q1–Q12 based on what has already been answered in history. If all mandatory questions are answered, show the structured brief. NEVER show property listings.'
+    : 'Create the final WhatsApp reply using only the backend property catalog context above. If exact matches are available, recommend exact matches directly. If no exact match is available, say that no exact match is available and then present only the backend alternatives.'
+  }`;
 }
 
 function buildIntentDetectionPrompt(message, provider = 'shared') {
@@ -171,6 +332,7 @@ module.exports = {
   formatConversationHistory,
   buildContactReplyPrompt,
   buildChatbotReplyPrompt,
+  detectLanguage,
   buildWhatsappReplyPrompt,
   buildIntentDetectionPrompt,
   buildPreferenceExtractionPrompt
