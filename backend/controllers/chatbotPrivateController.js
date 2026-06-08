@@ -110,6 +110,12 @@ class LanguageDetector {
    */
   static isOffTopic(message = '') {
     const text = this.#normalize(message);
+    // Landmark/anchor answers (Q6) use place names that may appear in OFF_TOPIC_WORDS.
+    // "dekat cafe", "dekat restoran", "di jalan Dukuh Kupang" are valid Q6 answers —
+    // never block them as off-topic even if "cafe" / "restoran" is in the off-topic list.
+    const isLandmarkAnswer = /\b(dekat|deket|near|di\s+jalan|di\s+sekitar|samping|next\s+to|beside)\b/.test(text);
+    if (isLandmarkAnswer) return false;
+
     return (
       this.#OFF_TOPIC_WORDS.some(w => text.includes(w)) &&
       !this.#PROPERTY_WORDS.some(w => text.includes(w))
@@ -976,12 +982,106 @@ class ConversationQualifier {
    * @returns {object} CustomerProfile
    */
   static buildProfile(history = [], userMessage = '', filters = {}) {
-    const custText = this.#customerText(history, userMessage);
-    const aiText   = this.#aiText(history);
-    const aiCount  = history.filter(h => h.role === 'assistant' || h.role === 'ai').length;
-    // aiCount menghitung berapa kali AI sudah membalas dalam sesi ini
+    // ── Phase 0: Find active session start ──────────────────────────────────
+    // Same logic as aiPromptBuilderService.js Phase 0.
+    // If a summary brief was sent in a previous turn, all Q answers from BEFORE
+    // that summary are stale (belong to the old search). Scope custText/aiText/
+    // aiCount/histCustMsgs to only messages AFTER the last summary so that old
+    // session data (e.g. "bersama istri", "semi-furnished", "Agustus" from a
+    // previous villa search) never pollutes the current search's profile.
+    //
+    // Why this matters:
+    //   - Without this, hasMoveInDate/hasHouseholdInfo/hasFurnishing pick up
+    //     old answers → getNextQuestion() skips Q8/Q4/Q11 → summary shown
+    //     after only Q1+Q2 are answered in the new session.
+    //   - With this, custText only has active session messages → flags are
+    //     correctly false for questions never asked in the current session.
+    const SUMMARY_RE_P0 = /[✓✔]\s*Rencana\s*:/i;
+    const lastSumIdxP0 = history.reduce(
+      (idx, m, i) =>
+        (m.role === 'assistant' || m.role === 'ai') && SUMMARY_RE_P0.test(m.message || '')
+          ? i : idx,
+      -1
+    );
+    let activeSessionStart = 0;
+    if (lastSumIdxP0 >= 0) {
+      for (let i = lastSumIdxP0 + 1; i < history.length; i++) {
+        if (history[i].role === 'user' || history[i].role === 'customer') {
+          activeSessionStart = i;
+          break;
+        }
+      }
+      // No customer message after summary yet → active session is only the
+      // current message (first message of new search)
+      if (activeSessionStart === 0) activeSessionStart = history.length;
+    }
+    const activeHistory = history.slice(activeSessionStart);
 
-    return {
+    // custText / aiText / aiCount — scoped to ACTIVE session only
+    const custText = this.#customerText(activeHistory, userMessage);
+    const aiText   = this.#aiText(activeHistory);
+    const aiCount  = activeHistory.filter(h => h.role === 'assistant' || h.role === 'ai').length;
+
+    // ── Pre-compute: summary-already-shown detection ─────────────────────────
+    // Same logic as aiPromptBuilderService.js Phase 3A.
+    // Uses FULL history (not activeHistory) to find the last summary — we need
+    // to know if the current message is the FIRST message after a summary.
+    const SUMMARY_SENT_RE = /[✓✔]\s*Rencana\s*:/i;
+    const lastSummaryIdx = history.reduce(
+      (idx, m, i) =>
+        (m.role === 'assistant' || m.role === 'ai') && SUMMARY_SENT_RE.test(m.message || '')
+          ? i : idx,
+      -1
+    );
+    const custAfterSummary = lastSummaryIdx >= 0
+      ? history.slice(lastSummaryIdx + 1).filter(m => m.role === 'user' || m.role === 'customer')
+      : [];
+    const summaryAlreadyShown = lastSummaryIdx >= 0 && custAfterSummary.length === 0;
+
+    // ── Pre-compute: building-type-change detection ──────────────────────────
+    // RULES: building type change → reset Q2–Q12 (show ⚠️ in summary mode).
+    //        tx-only change (same building type) → just update tx, no reset.
+    // Uses activeHistory so we only detect type changes WITHIN the current
+    // search session, not between the current and a pre-summary session.
+    const histCustMsgs = activeHistory.filter(m => m.role === 'user' || m.role === 'customer');
+    const histCustJoined = histCustMsgs.map(m => (m.message || '').toLowerCase()).join(' ');
+    let histBuildingType = null;
+    if      (/\bvill?a\b/.test(histCustJoined))                               histBuildingType = 'villa';
+    else if (/\bapartemen\b|\bapartment\b/.test(histCustJoined))              histBuildingType = 'apartment';
+    else if (/\brumah\b|\bhouse\b|\bkontrakan\b/.test(histCustJoined))       histBuildingType = 'house';
+    else if (/\bhotel\b|\bpenginapan\b/.test(histCustJoined))                histBuildingType = 'hotel';
+    else if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(histCustJoined)) histBuildingType = 'boarding_house';
+    else if (/\bruko\b|\brukan\b/.test(histCustJoined))                       histBuildingType = 'shophouse';
+    else if (/\bkantor\b/.test(histCustJoined))                               histBuildingType = 'office';
+    else if (/\bgudang\b/.test(histCustJoined))                               histBuildingType = 'warehouse';
+
+    const curMsgLower = (userMessage || '').toLowerCase();
+    let curBuildingType = null;
+    if      (/\bvill?a\b/.test(curMsgLower))                               curBuildingType = 'villa';
+    else if (/\bapartemen\b|\bapartment\b/.test(curMsgLower))              curBuildingType = 'apartment';
+    else if (/\brumah\b|\bhouse\b|\bkontrakan\b/.test(curMsgLower))       curBuildingType = 'house';
+    else if (/\bhotel\b|\bpenginapan\b/.test(curMsgLower))                curBuildingType = 'hotel';
+    else if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(curMsgLower)) curBuildingType = 'boarding_house';
+    else if (/\bruko\b|\brukan\b/.test(curMsgLower))                       curBuildingType = 'shophouse';
+    else if (/\bkantor\b/.test(curMsgLower))                               curBuildingType = 'office';
+    else if (/\bgudang\b/.test(curMsgLower))                               curBuildingType = 'warehouse';
+
+    let histTx = null;
+    if      (/\b(sewa|kontrak|rent)\b/.test(histCustJoined)) histTx = 'rent';
+    else if (/\b(beli|buy|purchase)\b/.test(histCustJoined)) histTx = 'sale';
+
+    let curTx = null;
+    if      (/\b(sewa|kontrak|ngontrak|rent)\b/.test(curMsgLower)) curTx = 'rent';
+    else if (/\b(beli|buy|purchase)\b/.test(curMsgLower))          curTx = 'sale';
+
+    const buildingTypeChanged = Boolean(
+      histBuildingType && curBuildingType && histBuildingType !== curBuildingType
+    );
+    const txOnlyChanged = Boolean(
+      !buildingTypeChanged && histTx && curTx && histTx !== curTx
+    );
+
+    const profile = {
       /* ── Core filters (from propertyRecommendationService) ── */
       transactionType : filters.transactionType || '',   // 'rent'|'sale'|''
       buildingType    : filters.buildingType    || '',   // 'house'|'apartment'|...
@@ -1038,14 +1138,24 @@ class ConversationQualifier {
       ]),
 
       /* ── Q6: Anchor point (patokan lokasi) ── */
+      // Customer bisa menjawab nama apapun sebagai patokan: "dekat pasar",
+      // "dekat cafe", "di jalan Dukuh Kupang", "dekat PT Jaya Putra", dll.
+      // Cek generic "dekat/deket/near/di jalan" OR fixed keyword list.
       hasAnchorPoint: this.#has(custText, [
         'dekat sekolah', 'dekat kantor', 'dekat mall', 'dekat kampus', 'dekat rs',
-        'dekat rumah sakit', 'dekat tol', 'dekat stasiun', 'patokan', 'landmark',
+        'dekat rumah sakit', 'dekat tol', 'dekat stasiun', 'dekat pasar', 'dekat cafe',
+        'dekat terminal', 'dekat pabrik', 'dekat pelabuhan', 'dekat bandara',
+        'patokan', 'landmark', 'di jalan', 'di sekitar',
         'near school', 'near office', 'near mall', 'near campus', 'near hospital',
-      ]),
+        'near market', 'near station', 'near factory', 'near port',
+      ]) || /\b(dekat|deket|near|di\s+jalan|di\s+sekitar)\s+\w/.test(custText),
       aiAskedAnchorPoint: this.#has(aiText, [
         'lokasi patokan', 'ada patokan', 'dekat apa', 'near any', 'specific landmark',
         'dekat sekolah', 'dekat kantor', 'dekat mall',
+        // Q6 exact question text
+        'ada lokasi tertentu yang jadi patokan',
+        'ada lokasi tertentu',
+        'lokasi tertentu yang jadi patokan',
       ]),
 
       /* ── Q7: Area alternatif ── */
@@ -1116,6 +1226,53 @@ class ConversationQualifier {
       aiAskedHousehold  : this.#has(aiText, ['tinggal bersama', 'akan tinggal', 'living with', 'who will be']),
       aiAskedFurnish    : this.#has(aiText, ['furnished', 'furnitur', 'furnishing', 'semi-furnished']),
     };
+
+    // ── Post-processing: summary-already-shown → full reset ──────────────────
+    // Customer is starting a new search. Wipe all Q answers so getNextQuestion
+    // returns Q0/Q1 instead of a summary or mid-flow question.
+    if (summaryAlreadyShown) {
+      const resetFields = [
+        'hasFurnishing', 'hasMoveInDate', 'hasHouseholdInfo', 'hasSearchHistory',
+        'hasRedFlags', 'hasAlternativeArea', 'hasAnchorPoint', 'hasDecisionMaker',
+        'hasLeaseDuration', 'hasPaymentTerms', 'hasApartmentPrefs',
+        'aiAskedTxType', 'aiAskedPropType', 'aiAskedLocation', 'aiAskedSearchHist',
+        'aiAskedBudget', 'aiAskedMoveIn', 'aiAskedHousehold', 'aiAskedFurnish',
+        'aiAskedRedFlags', 'aiAskedAnchorPoint', 'aiAskedAltArea',
+        'aiAskedDecisionMaker', 'aiAskedLeaseDuration', 'aiAskedPaymentTerms',
+        'aiAskedApartmentPrefs',
+      ];
+      resetFields.forEach(f => { profile[f] = false; });
+      // Keep only what the CURRENT message explicitly says
+      profile.transactionType    = filters.transactionType || '';
+      profile.buildingType       = filters.buildingType    || '';
+      profile.location           = filters.location        || '';
+      profile.budget             = null;
+      profile.aiCount            = 0;
+      profile.summaryAlreadyShown = true;
+      profile.buildingTypeChanged = false;
+    }
+    // ── Post-processing: building-type change → reset Q2–Q12 answers ─────────
+    else if (buildingTypeChanged) {
+      const resetFields = [
+        'hasSearchHistory', 'hasRedFlags', 'hasAlternativeArea', 'hasAnchorPoint',
+        'hasDecisionMaker', 'hasLeaseDuration', 'hasPaymentTerms', 'hasApartmentPrefs',
+        'hasFurnishing', 'hasMoveInDate', 'hasHouseholdInfo',
+        'aiAskedSearchHist', 'aiAskedBudget', 'aiAskedMoveIn', 'aiAskedHousehold',
+        'aiAskedFurnish', 'aiAskedRedFlags', 'aiAskedAnchorPoint', 'aiAskedAltArea',
+        'aiAskedDecisionMaker', 'aiAskedLeaseDuration', 'aiAskedPaymentTerms',
+        'aiAskedApartmentPrefs',
+      ];
+      resetFields.forEach(f => { profile[f] = false; });
+      profile.budget             = null;
+      profile.location           = filters.location        || '';
+      profile.buildingTypeChanged = true;
+    }
+    // ── Post-processing: tx-only change → quietly update transaction type ─────
+    else if (txOnlyChanged && curTx) {
+      profile.transactionType = curTx;
+    }
+
+    return profile;
   }
 
   /* ─── Public: readiness score ───────────────────────────────────────────── */
@@ -1164,6 +1321,20 @@ class ConversationQualifier {
     const txLabel   = tx === 'rent' ? (isId ? 'sewa'  : 'rent')  : (isId ? 'beli'  : 'buy');
     const txLabelPP = tx === 'rent' ? (isId ? 'sewa'  : 'rent')  : (isId ? 'dibeli': 'buy');
     const typeLabel = type ? PropertyFormatter.humanBuildingType(type, lang) : null;
+
+    /* ── Priority 0: Summary already shown → restart Q1 for a new search ── */
+    if (profile.summaryAlreadyShown) {
+      if (tx && type) {
+        // Customer already specified type+tx in this message → ask location (Q2)
+        return isId
+          ? `Baik! 😊 Untuk pencarian *${txLabel} ${typeLabel}* yang baru — di kota atau area mana yang Anda pertimbangkan? 📍`
+          : `Sure! 😊 For your new *${txLabel} ${typeLabel}* search — which city or area are you considering? 📍`;
+      }
+      // Type/tx not stated yet → ask Q0/Q1
+      return isId
+        ? `Baik! 😊 Untuk pencarian baru, mau *sewa* atau *beli*? Dan tipe properti apa yang dicari?\n\nKami punya: *rumah, apartemen, villa, kos-kosan, ruko, kantor, gudang*, dan banyak lagi 🏡`
+        : `Sure! 😊 For your new search — looking to *rent* or *buy*? And what type of property?\n\nWe have: *house, apartment, villa, boarding house, shophouse, office, warehouse*, and more 🏡`;
+    }
 
     /* ── Q0/Q1 combined: both transaction type AND property type unknown ── */
     if (!tx && !type) {
@@ -1354,8 +1525,14 @@ class ConversationQualifier {
         source: profile.hasMoveInDate ? 'stated' : 'UNKNOWN',
       },
       decisionMaker: {
-        value : this.#extractDecisionMaker(custText, profile),
-        source: profile.hasDecisionMaker || profile.hasHouseholdInfo ? 'stated' : 'UNKNOWN',
+        // Gate by profile flags — if neither hasDecisionMaker nor hasHouseholdInfo
+        // is true (e.g. Q9/Q4 never asked in active session), return 'UNKNOWN'
+        // so the field is suppressed in the summary. Without this gate the
+        // extractor would scan full custText and find stale "sama istri" etc.
+        value : (profile.hasDecisionMaker || profile.hasHouseholdInfo)
+          ? this.#extractDecisionMaker(custText, profile)
+          : 'UNKNOWN',
+        source: (profile.hasDecisionMaker || profile.hasHouseholdInfo) ? 'stated' : 'UNKNOWN',
       },
       household: {
         value : profile.hasHouseholdInfo
@@ -1477,12 +1654,25 @@ class ConversationQualifier {
   }
 
   static #extractAnchorPoint(custText) {
+    // Specific named landmarks
     if (/dekat sekolah|near school/.test(custText))  return 'Dekat sekolah';
     if (/dekat kantor|near office/.test(custText))   return 'Dekat kantor';
     if (/dekat mall|near mall/.test(custText))       return 'Dekat mall';
     if (/dekat kampus|near campus/.test(custText))   return 'Dekat kampus';
     if (/dekat rs|near hospital/.test(custText))     return 'Dekat RS';
     if (/dekat tol|near highway/.test(custText))     return 'Dekat tol';
+    if (/dekat stasiun|near station/.test(custText)) return 'Dekat stasiun';
+    if (/dekat pasar|near market/.test(custText))    return 'Dekat pasar';
+    if (/dekat terminal/.test(custText))             return 'Dekat terminal';
+    if (/dekat pelabuhan|near port/.test(custText))  return 'Dekat pelabuhan';
+    if (/dekat bandara|near airport/.test(custText)) return 'Dekat bandara';
+    if (/dekat pabrik|near factory/.test(custText))  return 'Dekat pabrik';
+    // Generic "dekat/near/di jalan [place name]" — capture actual text
+    // e.g. "dekat ATOM", "di jalan Dukuh Kupang", "near Food Junction"
+    const m = custText.match(
+      /\b(?:dekat|deket|near|di\s+jalan|di\s+sekitar)\s+([A-Za-z0-9\s]{2,30}?)(?:\s*[,.\n]|$)/i
+    );
+    if (m) return m[0].trim();
     return 'Disebutkan';
   }
 

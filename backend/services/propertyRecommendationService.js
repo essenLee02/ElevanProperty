@@ -190,15 +190,24 @@ function detectBudget(message = '') {
     };
   }
 
-  const singleMatch = text.match(/(?:budget|badget|harga|rp|idr|range|sekitar|maksimal|max)?\s*[:=]?\s*(rp\s*)?([0-9]+(?:[.,][0-9]+)?\s*(?:juta|jt|miliar|ribu|rb|million|billion)?)/i);
-  if (singleMatch) {
-    const value = parseNumberToken(`${singleMatch[2]} ${unit}`);
-    return {
-      text: singleMatch[0].trim(),
-      min: null,
-      max: value,
-      period
-    };
+  // Case A: explicit budget prefix (budget/harga/rp/etc.) — monetary unit is optional
+  // e.g. "budget 5", "harga 2 juta", "rp 500"
+  const prefixedMatch = text.match(
+    /(?:budget|badget|harga|rp|idr|range|sekitar|maksimal|max)\s*[:=]?\s*(rp\s*)?([0-9]+(?:[.,][0-9]+)?(?:\s*(?:juta|jt|miliar|ribu|rb|million|billion))?)/i
+  );
+  if (prefixedMatch) {
+    const value = parseNumberToken(`${prefixedMatch[2]} ${unit}`);
+    return { text: prefixedMatch[0].trim(), min: null, max: value, period };
+  }
+
+  // Case B: no prefix — monetary unit REQUIRED to avoid matching bare dates/counts
+  // e.g. "2 juta/bulan" ✅   "1 Agustus" ❌   "25" ❌   "1 tahun" ❌
+  const unitRequiredMatch = text.match(
+    /(rp\s*)?([0-9]+(?:[.,][0-9]+)?\s*(?:juta|jt|miliar|ribu|rb|million|billion))/i
+  );
+  if (unitRequiredMatch) {
+    const value = parseNumberToken(`${unitRequiredMatch[2]} ${unit}`);
+    return { text: unitRequiredMatch[0].trim(), min: null, max: value, period };
   }
 
   // Deteksi preferensi harga tanpa angka (terjangkau / murah / affordable).

@@ -157,27 +157,61 @@ async function findAgentByDevice(devicePhone) {
  * @param {string} agentToken  - Token dari users.fonnte_token
  */
 async function sendViaFonnte(targetPhone, message, agentToken) {
-  const target = normalizePhone(targetPhone);
+  const target     = normalizePhone(targetPhone);
+  const timeout    = parseInt(process.env.FONNTE_TIMEOUT_MS    || '30000', 10);
+  const maxRetries = parseInt(process.env.FONNTE_RETRY_COUNT   || '3',     10);
+  const retryDelay = parseInt(process.env.FONNTE_RETRY_DELAY_MS || '3000', 10);
+
+  // Network error codes that warrant a retry (ETIMEDOUT = server unreachable at TCP level)
+  const RETRYABLE = new Set(['ETIMEDOUT', 'ECONNREFUSED', 'ECONNRESET', 'ENOTFOUND', 'ENETUNREACH', 'ECONNABORTED']);
 
   const params = new URLSearchParams();
   params.append('target',      target);
   params.append('message',     String(message).trim());
   params.append('countryCode', '0');
 
-  const response = await axios.post('https://api.fonnte.com/send', params, {
-    headers : {
-      'Authorization' : String(agentToken).trim(),
-      'Content-Type'  : 'application/x-www-form-urlencoded'
-    },
-    timeout : 30000
-  });
+  let lastError;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await axios.post('https://api.fonnte.com/send', params, {
+        headers : {
+          'Authorization' : String(agentToken).trim(),
+          'Content-Type'  : 'application/x-www-form-urlencoded'
+        },
+        timeout,
+      });
 
-  if (response.data && response.data.status === false) {
-    const reason = response.data.reason || response.data.detail || 'Fonnte: gagal kirim';
-    throw new Error(reason);
+      if (response.data && response.data.status === false) {
+        const reason = response.data.reason || response.data.detail || 'Fonnte: gagal kirim';
+        throw new Error(reason);
+      }
+
+      if (attempt > 1) {
+        console.log(`[FONNTE] Send succeeded on attempt ${attempt}/${maxRetries}`);
+      }
+      return response.data;
+
+    } catch (err) {
+      lastError = err;
+
+      // Only retry on network-level errors — not on Fonnte API rejections
+      const isRetryable = RETRYABLE.has(err.code) ||
+        (err.code === 'ECONNABORTED' && /timeout/i.test(err.message));
+      if (!isRetryable || attempt >= maxRetries) break;
+
+      const delay = retryDelay * attempt;  // linear back-off: 3s, 6s, 9s …
+      console.warn(`[FONNTE] Send attempt ${attempt}/${maxRetries} failed (${err.code || err.message}). Retry in ${delay}ms…`);
+      await new Promise(r => setTimeout(r, delay));
+    }
   }
 
-  return response.data;
+  // Enhance the error message so the terminal log shows retry count
+  if (lastError && maxRetries > 1) {
+    const code = lastError.code || '';
+    lastError.message = `${lastError.message} (after ${maxRetries} attempts — check FONNTE_RETRY_COUNT / FONNTE_TIMEOUT_MS in .env)`;
+    if (code) lastError.code = code;  // preserve code for upstream checks
+  }
+  throw lastError;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════

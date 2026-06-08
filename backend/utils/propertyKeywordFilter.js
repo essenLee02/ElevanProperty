@@ -156,6 +156,10 @@ const PROPERTY_TYPES_STRICT_BOUNDARY = new Set([
   'villa', 'hotel', 'motel', 'kios',
   // English — semua kata pendek wajib word-boundary
   'house', 'home', 'room', 'lot', 'land', 'store',
+  // Prevent false match inside file paths / technical text
+  // e.g. "Elevan_Property\skills\" → 'elevan_property' contains 'property' as substring,
+  // but '_' is \w so \bproperty\b does NOT match "elevan_property". ✅
+  'property', 'properti',
 ]);
 
 /**
@@ -374,15 +378,28 @@ function isPropertyContextContinuation(message, history = []) {
   if (lower.length > 70) return false;
 
   // ── Cek apakah pesan memperkenalkan topik NON-PROPERTY yang jelas ───────
-  const CLEAR_NON_PROPERTY = [
-    /\b(makanan|minuman|kuliner|restoran|cafe|kafe|masak|resep|menu)\b/,
-    /\b(kendaraan|mobil|motor|sepeda|tiket|travel|wisata|hotel liburan|penginapan wisata)\b/,
-    /\b(elektronik|laptop|hp|handphone|gadget|komputer|printer)\b/,
-    /\b(pakaian|baju|sepatu|tas|fashion|belanja online)\b/,
-    /\b(obat|dokter|sakit|rumah sakit|klinik kesehatan|apotik)\b/,
-  ];
-  for (const pattern of CLEAR_NON_PROPERTY) {
-    if (pattern.test(lower)) return false;
+  //
+  // EXCEPTION — jika pesan mengandung kata penunjuk lokasi ("dekat", "near",
+  // "di jalan", "di sekitar", "samping"), JANGAN blokir — kata-kata seperti
+  // "cafe", "restoran", "pasar", "stasiun", "pabrik" bisa jadi jawaban valid
+  // untuk Q6 (patokan lokasi). Contoh:
+  //   "dekat cafe"          = dekat patokan cafe → valid Q6 answer
+  //   "dekat pasar besar"   = dekat pasar → valid Q6 answer
+  //   "di jalan Dukuh Kupang" = nama jalan → valid Q6 answer
+  const isLandmarkAnswer = /\b(dekat|deket|near|close\s+to|di\s+jalan|di\s+sekitar|samping|next\s+to|beside)\b/
+    .test(lower);
+
+  if (!isLandmarkAnswer) {
+    const CLEAR_NON_PROPERTY = [
+      /\b(makanan|minuman|kuliner|restoran|cafe|kafe|masak|resep|menu)\b/,
+      /\b(kendaraan|mobil|motor|sepeda|tiket|travel|wisata|hotel liburan|penginapan wisata)\b/,
+      /\b(elektronik|laptop|hp|handphone|gadget|komputer|printer)\b/,
+      /\b(pakaian|baju|sepatu|tas|fashion|belanja online)\b/,
+      /\b(obat|dokter|sakit|rumah sakit|klinik kesehatan|apotik)\b/,
+    ];
+    for (const pattern of CLEAR_NON_PROPERTY) {
+      if (pattern.test(lower)) return false;
+    }
   }
 
   // ── Periksa 5 pesan terakhir apakah ada konteks properti ─────────────────
@@ -405,6 +422,9 @@ function isPropertyContextContinuation(message, history = []) {
   if (/^\d+\s*(tahun|year|bulan|month)s?$/.test(lower.trim())) return true;
   // Harga dengan satuan — jawaban Q3 ("2-4 juta/seminggu", "5 jt per bulan")
   if (/\b\d[\d.,]*\s*(juta|ribu|miliar|rb|jt)\b/i.test(lower)) return true;
+  // Q2b answer fast-path: "Saya belum pernah lihat", "sudah lihat 3", "belum pernah survey"
+  // These are ALWAYS Q2b answers and must pass even before hasRecentPropertyQuestion check.
+  if (/\b(belum\s+pernah\s+lihat|pernah\s+lihat|sudah\s+lihat\s+\d|belum\s+lihat|sudah\s+survey|belum\s+ada\s+yang\s+cocok|belum\s+pernah\s+survey)\b/i.test(lower)) return true;
 
   // ── Periksa apakah pesan AI terakhir berisi pertanyaan tentang properti ──
   const lastAIMessages = recentHistory
@@ -472,6 +492,45 @@ function isPropertyContextContinuation(message, history = []) {
     /what.*looking\s+for/,
     /are\s+you\s+looking\s+to/,
     /do\s+you\s+have\s*(a\s*)?budget/,
+    // ── Q2b: Search history — "Sudah lihat berapa properti?" ─────────────────
+    /sudah\s+lihat\s+berapa/,
+    /apa\s+yang\s+membuat\s+belum\s+cocok/,
+    /yang\s+sudah\s+dilihat/,
+    /berapa\s+properti.*sudah/,
+    // ── Q5: Red flags ─────────────────────────────────────────────────────────
+    /pasti\s+tidak\s+cocok/,
+    /ada\s+yang.*tidak\s+cocok/,
+    /hadap\s+barat|gang\s+sempit|rumah\s+tua/,
+    /definitely\s+want\s+to\s+avoid/,
+    /anything.*avoid/,
+    // ── Q6: Anchor point / patokan lokasi ────────────────────────────────────
+    /patokan/,
+    /jadi\s+patokan/,
+    /ada\s+lokasi.*tertentu/,
+    /lokasi.*jadi\s+patokan/,
+    /dekat\s+sekolah|dekat\s+kantor|dekat\s+mall/,
+    /specific\s+landmark/,
+    /near\s+a\s+(school|office|mall|station)/,
+    // ── Q7: Alternative areas ─────────────────────────────────────────────────
+    /selain\s+\S.{0,30}area\s+sekitar/,
+    /area\s+sekitar\s+(yang|masih)/,
+    /area.*lain.*oke/,
+    /area.*lain.*pertimbangkan/,
+    /besides\s+\S.{0,30}(area|city)/,
+    /other\s+(area|city|location)/,
+    // ── Q9: Decision maker / viewing logistics ───────────────────────────────
+    /jadwalkan\s+viewing/,
+    /perlu\s+koordinasi/,
+    /koordinasi\s+dulu/,
+    /keluarga\s+lain/,
+    /schedule\s+(a\s+)?viewing/,
+    /check\s+with\s+(family|spouse|partner)/,
+    // ── Q12: Apartment tower / floor preference ──────────────────────────────
+    /tower\s+atau\s+lantai/,
+    /preferensi\s+tower/,
+    /lantai\s+(rendah|tinggi|tertentu|berapa)/,
+    /tower\s+or\s+floor/,
+    /floor\s+(prefer|choice)/,
   ];
 
   const hasRecentPropertyQuestion = lastAIMessages.some(item => {
@@ -543,6 +602,29 @@ function isPropertyContextContinuation(message, history = []) {
   // 10) Jawaban preferensi furnishing / spesifikasi lebih detail
   //     Contoh: "semi furnish dong", "yang ada ac sama wifi", "minimal ada kamar mandi"
   if (/\b(furnish|ac\s+penuh|wifi|internet|kamar\s+mandi|parkir|garasi|kolam|renang|taman|keamanan|cctv|penjaga)\b/i.test(lower))
+    return true;
+
+  // 11) Jawaban patokan lokasi Q6 — "dekat pasar", "dekat jalan Dukuh Kupang",
+  //     "dekat cafe", "dekat PT Jaya Putra", "near the train station", dll.
+  //     Customer bebas menyebut nama apapun sebagai patokan — yang penting ada
+  //     kata penunjuk jarak/lokasi di depannya.
+  if (/\b(dekat|deket|near|close\s+to|di\s+jalan|di\s+sekitar|samping|next\s+to|beside)\b/i.test(lower))
+    return true;
+
+  // 12) Jawaban fleksibel / tidak ada preferensi (valid untuk Q5/Q6/Q7/Q11)
+  //     "bebas saja", "terserah", "tidak ada preferensi", "tidak masalah", "flexible"
+  if (/\b(bebas|fleksibel|flexible|terserah|tidak\s+masalah|ga\s+masalah|tidak\s+ada\s+preferensi|no\s+preference|whatever)\b/i.test(lower))
+    return true;
+
+  // 13) Jawaban negatif singkat untuk Q5 (red flags) — "tidak ada", "ga ada", "ngga ada"
+  //     Perlu ada history property context (sudah dicek di atas)
+  if (/^(tidak|ga|gak|ngga|enggak|nggak|no)\s*(ada|masalah|preferensi)?$/i.test(lower.trim()))
+    return true;
+
+  // 14) Jawaban Q2b (riwayat pencarian) — "Saya belum pernah lihat", "sudah lihat 3",
+  //     "belum ada yang cocok", "sudah lihat tapi belum cocok"
+  //     (Also covered in fast-path above for robustness)
+  if (/\b(belum\s+pernah|pernah\s+lihat|sudah\s+lihat|belum\s+cocok|tidak\s+cocok|kurang\s+cocok|belum\s+ada\s+yang\s+cocok)\b/i.test(lower))
     return true;
 
   return false;

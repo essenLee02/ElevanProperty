@@ -25,29 +25,60 @@ async function sendWhatsAppMessage(phone, message) {
     throw new Error('Invalid WhatsApp target number. Please use numbers with optional +, -, or spaces.');
   }
 
+  const timeout    = parseInt(process.env.FONNTE_TIMEOUT_MS     || '30000', 10);
+  const maxRetries = parseInt(process.env.FONNTE_RETRY_COUNT    || '3',     10);
+  const retryDelay = parseInt(process.env.FONNTE_RETRY_DELAY_MS || '3000',  10);
+
+  // Network error codes that warrant a retry (ETIMEDOUT = server unreachable at TCP level)
+  const RETRYABLE = new Set(['ETIMEDOUT', 'ECONNREFUSED', 'ECONNRESET', 'ENOTFOUND', 'ENETUNREACH', 'ECONNABORTED']);
+
   const payload = new URLSearchParams();
-  payload.append('target', target);
-  payload.append('message', message);
+  payload.append('target',      target);
+  payload.append('message',     message);
   payload.append('countryCode', '0');
-  payload.append('typing', 'true');
+  payload.append('typing',      'true');
 
-  try {
-    const response = await axios.post('https://api.fonnte.com/send', payload, {
-      headers: {
-        Authorization: process.env.FONNTE_TOKEN,
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      timeout: 60000
-    });
+  let lastError;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await axios.post('https://api.fonnte.com/send', payload, {
+        headers: {
+          Authorization:  process.env.FONNTE_TOKEN,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        timeout,
+      });
 
-    if (response.data && response.data.status === false) {
-      throw new Error(response.data.reason || response.data.detail || 'Fonnte failed to send WhatsApp message.');
+      if (response.data && response.data.status === false) {
+        throw new Error(response.data.reason || response.data.detail || 'Fonnte failed to send WhatsApp message.');
+      }
+
+      if (attempt > 1) {
+        console.log(`[FONNTE SERVICE] Send succeeded on attempt ${attempt}/${maxRetries}`);
+      }
+      return { target, response: response.data };
+
+    } catch (error) {
+      lastError = error;
+
+      // Only retry on network-level errors — not on Fonnte API rejections (status:false)
+      const isRetryable = RETRYABLE.has(error.code) ||
+        (error.code === 'ECONNABORTED' && /timeout/i.test(error.message));
+      if (!isRetryable || attempt >= maxRetries) break;
+
+      const delay = retryDelay * attempt;  // linear back-off: 3s, 6s, 9s …
+      console.warn(`[FONNTE SERVICE] Send attempt ${attempt}/${maxRetries} failed (${error.code || error.message}). Retry in ${delay}ms…`);
+      await new Promise(r => setTimeout(r, delay));
     }
-
-    return { target, response: response.data };
-  } catch (error) {
-    throw normalizeFonnteError(error);
   }
+
+  // Enhance the error message so logs show retry count
+  if (lastError && maxRetries > 1) {
+    const code = lastError.code || '';
+    lastError.message = `${lastError.message} (after ${maxRetries} attempts)`;
+    if (code) lastError.code = code;
+  }
+  throw normalizeFonnteError(lastError);
 }
 
 function checkFonnteConfig() {

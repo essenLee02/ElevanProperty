@@ -38,13 +38,45 @@ function extractQualificationState(history = [], currentMessage = '') {
     apartmentPref   : null,   // Q12
   };
 
-  // ── Phase 1: Scan every customer message for content-detectable fields ────
   const MONTH_ID = 'januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember';
   const MONTH_EN = 'january|february|march|april|may|june|july|august|september|october|november|december';
   const MONTH_RE = new RegExp(`(\\d{1,2}\\s+)?(${MONTH_ID}|${MONTH_EN})(\\s+\\d{4})?`, 'i');
   const CITY_RE  = /\b(surabaya|malang|bali|denpasar|jakarta|bandung|yogyakarta|jogja|semarang|medan|makassar|sidoarjo|gresik|bekasi|tangerang|depok|bogor|solo|palembang|batam|balikpapan|samarinda|pontianak|manado|kupang|mataram|lombok|batu)\b/i;
 
-  for (const msg of ALL) {
+  // ── Phase 0: Find "active session start" ──────────────────────────────────
+  // If a summary brief was already sent in history, Q2–Q12 answers BEFORE
+  // the first customer message after that summary are stale (they belong to a
+  // previous search). Only scan messages from the active session onwards for
+  // Q2–Q12 to prevent polluting the current search with old answers.
+  //
+  // Example: customer answered Q4="bersama istri" for villa search → summary
+  // shown → customer now searches for apartment. Phase 1 must NOT carry over
+  // "bersama istri" (household) or "semi-furnished" (furnishing) from the
+  // old villa session into the new apartment search.
+  {
+    const SUMMARY_RE_P0 = /[✓✔]\s*Rencana\s*:/i;
+    const histForP0 = ALL.slice(0, -1);
+    const lastSumP0 = histForP0.reduce(
+      (idx, m, i) => QS_AI_ROLES.has(m.role) && SUMMARY_RE_P0.test(m.message || '') ? i : idx,
+      -1
+    );
+    let activeStart = 0;
+    if (lastSumP0 >= 0) {
+      for (let i = lastSumP0 + 1; i < histForP0.length; i++) {
+        if (QS_CUST_ROLES.has(histForP0[i].role)) { activeStart = i; break; }
+      }
+      // No customer message after summary → only the current message is active
+      if (activeStart === 0) activeStart = ALL.length - 1;
+    }
+    // Expose activeStart for Phase 1, 2 & 3B (via closure)
+    // eslint-disable-next-line no-var
+    var ACTIVE_ALL = ALL.slice(activeStart);
+  }
+
+  // ── Phase 1: Scan every customer message for content-detectable fields ────
+  // Uses ACTIVE_ALL (messages from active session start) to prevent stale
+  // Q2–Q12 data from before the last summary from polluting the current search.
+  for (const msg of ACTIVE_ALL) {
     if (!QS_CUST_ROLES.has(msg.role)) continue;
     const raw  = msg.message || '';
     const text = raw.toLowerCase().trim();
@@ -148,21 +180,21 @@ function extractQualificationState(history = [], currentMessage = '') {
 
   // ── Phase 2: Detect context-dependent Q6/Q7/Q9/Q10 from AI→Customer pairs ─
   // Only meaningful when the AI actually asked the question first.
-  // We find the NEXT customer message after each AI message — skipping consecutive
-  // AI messages (handles the double-send bug where 2 AI replies arrive before 1 customer reply).
-  for (let i = 0; i < ALL.length - 1; i++) {
-    const ai = ALL[i];
+  // Uses ACTIVE_ALL so old AI→Customer pairs from before the active session
+  // do not set Q6/Q7/Q9/Q10 from a previous search.
+  for (let i = 0; i < ACTIVE_ALL.length - 1; i++) {
+    const ai = ACTIVE_ALL[i];
     if (!QS_AI_ROLES.has(ai.role)) continue;
 
     // Find the next customer message (skip consecutive AI messages)
     let nextCustIdx = -1;
-    for (let j = i + 1; j < ALL.length; j++) {
-      if (QS_AI_ROLES.has(ALL[j].role)) continue;   // skip back-to-back AI msgs
-      if (QS_CUST_ROLES.has(ALL[j].role)) { nextCustIdx = j; break; }
+    for (let j = i + 1; j < ACTIVE_ALL.length; j++) {
+      if (QS_AI_ROLES.has(ACTIVE_ALL[j].role)) continue;   // skip back-to-back AI msgs
+      if (QS_CUST_ROLES.has(ACTIVE_ALL[j].role)) { nextCustIdx = j; break; }
       break;
     }
     if (nextCustIdx < 0) continue;
-    const cust = ALL[nextCustIdx];
+    const cust = ACTIVE_ALL[nextCustIdx];
 
     const aiText   = (ai.message   || '').toLowerCase();
     const custResp = (cust.message || '').trim();
@@ -190,6 +222,157 @@ function extractQualificationState(history = [], currentMessage = '') {
     // Q12 — apartment preference
     if (!state.apartmentPref && /tower atau lantai|preferensi tower|lantai berapa/.test(aiText)) {
       state.apartmentPref = custResp;
+    }
+    // Q2b — search history (highest-value question, fires early)
+    // Detect when AI asked search-history question and capture customer's answer.
+    // "Saya belum pernah lihat" / "sudah lihat 3" / "belum ada yang cocok" — all valid Q2b answers.
+    if (!state.searchHistory &&
+        /sudah\s+lihat\s+berapa|how\s+many\s+prop|apa\s+yang\s+membuat\s+belum\s+cocok|yang\s+sudah\s+dilihat|berapa\s+properti.*sudah/.test(aiText)) {
+      state.searchHistory = custResp.trim() || 'dijawab';
+    }
+  }
+
+  // ── Phase 3: Post-summary reset & type-change detection ─────────────────────
+
+  // ── 3A: Summary-already-shown detection ─────────────────────────────────────
+  // If the AI already sent a brief (contains "✓ Rencana:") AND there are NO
+  // customer messages AFTER that summary (i.e., the customer is replying TO the
+  // summary), treat the current message as the start of a brand-new search.
+  //
+  // If customer messages DO exist after the last summary (e.g., turns 16-25),
+  // the customer already answered Q1-Qn in the new session — don't wipe those.
+  {
+    const SUMMARY_SENT_RE = /[✓✔]\s*Rencana\s*:/i;
+    // Find the index of the LAST summary message in history (not counting current)
+    const histAll = ALL.slice(0, -1);
+    const lastSummaryIdx = histAll.reduce(
+      (idx, m, i) => QS_AI_ROLES.has(m.role) && SUMMARY_SENT_RE.test(m.message || '') ? i : idx,
+      -1
+    );
+    // Customer messages that arrived AFTER the last summary (excluding current message)
+    const custMsgsAfterSummary = lastSummaryIdx >= 0
+      ? histAll.slice(lastSummaryIdx + 1).filter(m => QS_CUST_ROLES.has(m.role))
+      : [];
+    // Only trigger reset if summary was found AND no new Q&A has started yet
+    const summaryWasShown = lastSummaryIdx >= 0 && custMsgsAfterSummary.length === 0;
+
+    if (summaryWasShown) {
+      state.summaryAlreadyShown  = true;
+      state.typeChangedFromHistory = false;
+
+      // Wipe everything — fresh slate for the new search
+      state.buildingType     = null;
+      state.transactionType  = null;
+      state.fallbackTypes    = [];
+      state.location         = null;
+      state.budget           = null;
+      state.household        = null;
+      state.redFlags         = null;
+      state.anchorPoint      = null;
+      state.alternativeAreas = null;
+      state.moveInDate       = null;
+      state.decisionMaker    = null;
+      state.leaseDuration    = null;
+      state.furnishing       = null;
+      state.apartmentPref    = null;
+
+      // Re-populate ONLY what the current message explicitly states
+      const cur = (currentMessage || '').toLowerCase().trim();
+      if      (/\bvill?a\b/.test(cur))                               state.buildingType = 'villa';
+      else if (/\bapartemen\b|\bapartment\b/.test(cur))              state.buildingType = 'apartment';
+      else if (/\brumah\b|\bhouse\b|\bkontrakan\b/.test(cur))       state.buildingType = 'house';
+      else if (/\bhotel\b|\bpenginapan\b/.test(cur))                state.buildingType = 'hotel';
+      else if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(cur)) state.buildingType = 'boarding_house';
+      else if (/\bruko\b|\brukan\b/.test(cur))                       state.buildingType = 'shophouse';
+      else if (/\bkantor\b/.test(cur))                               state.buildingType = 'office';
+      else if (/\bgudang\b/.test(cur))                               state.buildingType = 'warehouse';
+
+      if      (/\b(sewa|kontrak|ngontrak|rent)\b/.test(cur))         state.transactionType = 'rent';
+      else if (/\b(beli|buy|purchase)\b/.test(cur))                  state.transactionType = 'sale';
+
+      const cityMatch = (currentMessage || '').match(CITY_RE);
+      if (cityMatch) state.location = cityMatch[1];
+
+      return state;  // summary reset takes full priority — skip 3B
+    }
+  }
+
+  // ── 3B: Building-type-change detection (only runs when no summary was shown) ─
+  // RULES (per business logic):
+  //   • Building type changes (villa→rumah, villa→apartment) → reset Q2–Q12, show ⚠️
+  //   • TX-only change, SAME building type (beli gudang→sewa gudang) → just update
+  //     state.transactionType silently; qualification continues from where it left off.
+  //
+  // Uses ACTIVE_ALL so we only compare types WITHIN the active session —
+  // not between the current and a pre-summary session.
+  {
+    const histMsgs = ACTIVE_ALL.slice(0, -1).filter(m => QS_CUST_ROLES.has(m.role));
+
+    const histType = histMsgs.reduce((t, msg) => {
+      if (t) return t;
+      const w = (msg.message || '').toLowerCase();
+      if (/\bvill?a\b/.test(w))                               return 'villa';
+      if (/\bapartemen\b|\bapartment\b/.test(w))              return 'apartment';
+      if (/\brumah\b|\bhouse\b|\bkontrakan\b/.test(w))       return 'house';
+      if (/\bhotel\b|\bpenginapan\b/.test(w))                return 'hotel';
+      if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(w)) return 'boarding_house';
+      if (/\bruko\b|\brukan\b/.test(w))                      return 'shophouse';
+      if (/\bkantor\b/.test(w))                              return 'office';
+      if (/\bgudang\b/.test(w))                              return 'warehouse';
+      return null;
+    }, null);
+
+    const histTx = histMsgs.reduce((t, msg) => {
+      if (t) return t;
+      const w = (msg.message || '').toLowerCase();
+      if (/\b(sewa|kontrak|rent)\b/.test(w))  return 'rent';
+      if (/\b(beli|buy|purchase)\b/.test(w))  return 'sale';
+      return null;
+    }, null);
+
+    const cur = (currentMessage || '').toLowerCase().trim();
+    let curType = null;
+    if      (/\bvill?a\b/.test(cur))                               curType = 'villa';
+    else if (/\bapartemen\b|\bapartment\b/.test(cur))              curType = 'apartment';
+    else if (/\brumah\b|\bhouse\b|\bkontrakan\b/.test(cur))       curType = 'house';
+    else if (/\bhotel\b|\bpenginapan\b/.test(cur))                curType = 'hotel';
+    else if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(cur)) curType = 'boarding_house';
+    else if (/\bruko\b|\brukan\b/.test(cur))                       curType = 'shophouse';
+    else if (/\bkantor\b/.test(cur))                               curType = 'office';
+    else if (/\bgudang\b/.test(cur))                               curType = 'warehouse';
+
+    let curTx = null;
+    if      (/\b(sewa|kontrak|rent)\b/.test(cur))    curTx = 'rent';
+    else if (/\b(beli|buy|purchase)\b/.test(cur))    curTx = 'sale';
+
+    // Building type changed → full Q2–Q12 reset + ⚠️ banner
+    const buildingTypeChanged = Boolean(histType && curType && histType !== curType);
+
+    // TX-only change (same building type) → silent update, no reset
+    const txOnlyChanged = Boolean(!buildingTypeChanged && histTx && curTx && histTx !== curTx);
+
+    state.typeChangedFromHistory = buildingTypeChanged;
+
+    if (txOnlyChanged && curTx) {
+      // Quietly update the transaction type — Q2–Q12 answers remain valid
+      state.transactionType = curTx;
+    }
+
+    if (buildingTypeChanged) {
+      if (curType) state.buildingType    = curType;
+      if (curTx)   state.transactionType = curTx;
+      state.location         = null;
+      state.budget           = null;
+      state.household        = null;
+      state.redFlags         = null;
+      state.anchorPoint      = null;
+      state.alternativeAreas = null;
+      state.moveInDate       = null;
+      state.decisionMaker    = null;
+      state.leaseDuration    = null;
+      state.furnishing       = null;
+      state.apartmentPref    = null;
+      state.fallbackTypes    = [];
     }
   }
 
@@ -222,20 +405,43 @@ function buildQualificationStateBlock(state) {
     ? `✅ ${label}: ${val}`
     : `❓ ${label}: BELUM DIJAWAB`;
 
-  const fbNote = state.fallbackTypes.length
+  const fbNote = state.fallbackTypes && state.fallbackTypes.length
     ? ` (fallback: ${state.fallbackTypes.join(' / ')})`
     : '';
 
-  return [
+  const lines = [
     '╔══════════════════════════════════════════════════════════╗',
     '║  📋 QUALIFICATION STATE — STATUS JAWABAN CUSTOMER        ║',
     '║  ✅ = SUDAH DIJAWAB → JANGAN TANYA LAGI                  ║',
     '║  ❓ = BELUM DIJAWAB → TANYAKAN BERIKUTNYA (urutan Q↑)    ║',
     '╚══════════════════════════════════════════════════════════╝',
     '',
+  ];
+
+  // Summary-already-shown banner — customer is starting a brand-new search
+  if (state.summaryAlreadyShown) {
+    lines.push('⚠️  SUMMARY SUDAH DIKIRIM — Customer memulai pencarian baru.');
+    lines.push('   RESET PENUH ke Q1. Tanyakan dari awal: sewa/beli dan tipe propertinya.');
+    lines.push('   JANGAN tampilkan summary lagi sampai semua Q wajib terjawab ulang.');
+    lines.push('');
+  }
+
+  // Type-change banner — shown when customer switched building type (villa→rumah, etc.)
+  if (state.typeChangedFromHistory) {
+    lines.push('⚠️  TIPE PROPERTI BERUBAH — Customer beralih ke jenis properti baru.');
+    lines.push('   Q2-Q12 di-RESET. Akui perubahan singkat (1 kalimat), lanjut dari Q terkecil ❓.');
+    lines.push('');
+  }
+
+  lines.push(
     row('Tipe transaksi    [Q1]', state.transactionType),
     row('Tipe properti         ', state.buildingType ? state.buildingType + fbNote : null),
     row('Lokasi            [Q2]', state.location),
+    // Q2b is shown as ✅ when AI asked search-history question and customer answered;
+    // shown as ❓ otherwise (not yet asked). Q2b is the HIGHEST-VALUE question.
+    state.searchHistory
+      ? `✅ Riwayat pencarian [Q2b]: ${state.searchHistory}`
+      : `❓ Riwayat pencarian [Q2b]: BELUM DITANYAKAN`,
     row('Budget            [Q3]', state.budget),
     row('Penghuni          [Q4]', state.household),
     row('Red flags         [Q5]', state.redFlags),
@@ -251,7 +457,11 @@ function buildQualificationStateBlock(state) {
     '→ SATU pertanyaan per pesan. Jangan gabungkan dua pertanyaan.',
     '→ Q3 Budget: JANGAN tanya langsung — gunakan 2 harga kontras sebagai pilihan.',
     '→ Q8 Tanggal masuk WAJIB dijawab sebelum summary ditampilkan.',
-  ].join('\n');
+    '→ ⛔ Field ❓ di atas berarti BELUM dijawab di sesi ini — ABAIKAN nilai dari history lama.',
+    '→ ⛔ JANGAN tampilkan summary sampai Q3 (Budget) DAN Q8 (Tanggal) keduanya ✅ di atas.',
+  );
+
+  return lines.join('\n');
 }
 
 /* ─── Indonesian keyword list for server-side language detection ───────────── */
@@ -543,25 +753,27 @@ Show the structured brief ONLY when ALL of the following are answered:
 \`\`\`
 Baik, permintaan utama Anda sudah saya catat, sebagai berikut 📝 🔥
 
-✓ Rencana: *[sewa/beli]*
-✓ Tipe: *[building type]*
-✓ Lokasi: *[location]*
-✓ Budget: *[budget]* (terkonfirmasi nanti)
-✓ Masuk: *[move-in month]*
-✓ Keputusan bersama: *[solo/joint]*
-✓ Furnitur: *[furnished/semi/kosong]*
-✓ Area alternatif: *[areas]*
+✓ Rencana: *[nilai dari Q1 tx — HANYA jika ✅]*
+✓ Tipe: *[nilai dari building type — HANYA jika ✅]*
+✓ Lokasi: *[nilai dari Q2 — HANYA jika ✅]*
+✓ Budget: *[nilai dari Q3]* (terkonfirmasi nanti) — HANYA jika ✅
+✓ Masuk: *[nilai dari Q8]* — HANYA jika ✅
+✓ Keputusan bersama: *[nilai dari Q9]* — HANYA jika ✅
+✓ Furnitur: *[nilai dari Q11]* — HANYA jika ✅
+✓ Patokan: *[nilai dari Q6 — nilai PERSIS dari QUALIFICATION STATE]* — HANYA jika ✅
+✓ Area alternatif: *[nilai dari Q7]* — HANYA jika ✅
 
 Saya akan segera menghubungi Anda dengan rekomendasi properti yang paling sesuai! 🏠 Apabila ada pertanyaan lagi, silahkan hubungi saya kembali.
 Terima kasih sudah menghubungi saya. 🙏
 \`\`\`
 
-### Summary Mode Constraints
+### Summary Strict Rules
+- **HANYA sertakan field yang ✅ di QUALIFICATION STATE.** Jangan sertakan field yang ❓ — lewati saja.
+- **Gunakan nilai PERSIS yang tertera setelah ": " di baris ✅** — jangan tulis "Disebutkan", "Ada", "Iya", "Diketahui" atau frasa samar lainnya.
+- **JANGAN gunakan nilai dari raw conversation history** jika field tersebut ❓ di QUALIFICATION STATE — walaupun kata itu muncul di history (mungkin dari percakapan sebelumnya yang sudah selesai).
 - One question per message only.
 - Maximum 12 AI messages before showing brief (even if incomplete).
 - Never show catalog, Rumah123 listings, or property details in this mode.
-- Fields with "inferred" source = agent will reconfirm.
-- Fields with "UNKNOWN" = agent must ask.
 ` : '';
 
   return `${getProjectSkillInstruction(provider)}
@@ -574,7 +786,7 @@ Phone: ${session.normalizedPhone}
 Location: ${session.location || session.normalizedLocation || 'Not provided'}
 Source: ${session.source}
 
-Recent conversation history for context only. Use the customer profile identity (name, phone, and location) to continue the returning customer's context. Do not let old history override the latest customer message:
+Recent conversation history for context only. Use the customer profile identity (name, phone, and location) to continue the returning customer's context. Do not let old history override the latest customer message. ⚠️ PENTING: QUALIFICATION STATE di atas adalah satu-satunya sumber kebenaran — JANGAN gunakan nilai budget/tanggal/penghuni/furnitur dari history lama (sesi sebelumnya) untuk mengisi field yang masih ❓:
 ${formatConversationHistory(history)}
 
 Backend property catalog context for this latest WhatsApp message:
@@ -587,13 +799,21 @@ Task:
 ${summaryMode
     ? `Lihat QUALIFICATION STATE di atas (✅ = sudah dijawab, ❓ = belum dijawab).
 Kemudian:
-1. Jika pesan terbaru adalah jawaban singkat untuk pertanyaan sebelumnya → AKUI singkat (1 kalimat), lalu tanyakan pertanyaan ❓ BERIKUTNYA dengan nomor Q terkecil.
-2. Jika pesan terbaru mengandung informasi baru → catat, lalu tanyakan pertanyaan ❓ berikutnya.
-3. Jika semua pertanyaan wajib (Q1 tx, building type, Q2 lokasi, Q3 budget, Q4 penghuni, Q8 tanggal) sudah ✅ → tampilkan structured brief.
+0. ⛔ NON-PROPERTY MESSAGE — Jika pesan terbaru BUKAN tentang properti (misalnya: permintaan teknis, file, kode program, topik tidak relevan), balas HANYA dengan: "Maaf, saya hanya bisa membantu terkait pencarian properti. Ada yang bisa saya bantu untuk kebutuhan properti Anda? 🏠"
+1. ⚠️ JIKA ADA BANNER "SUMMARY SUDAH DIKIRIM" DI QUALIFICATION STATE: Customer memulai pencarian baru. Semua field ❓ di atas. Tanyakan Q1 untuk pencarian baru ini: "Untuk pencarian baru, mau sewa atau beli? Dan tipe propertinya apa?" — JANGAN tampilkan summary lagi sampai semua Q wajib terjawab ulang.
+2. ⚠️ JIKA ADA BANNER "TIPE PROPERTI BERUBAH" DI QUALIFICATION STATE: Akui perubahan singkat (1 kalimat, contoh: "Oke, kita alihkan ke rumah sewa ya 😊"), lalu tanyakan Q terkecil yang masih ❓. JANGAN gunakan jawaban Q2–Q12 dari tipe lama.
+3. Jika pesan terbaru adalah jawaban singkat untuk pertanyaan sebelumnya → AKUI singkat (1 kalimat), lalu tanyakan pertanyaan ❓ BERIKUTNYA dengan nomor Q terkecil.
+   — Khusus Q2b (Riwayat pencarian): Jawaban seperti "Saya belum pernah lihat", "belum pernah", "sudah lihat 3" adalah jawaban Q2b yang valid → AKUI ("Oke, belum ada referensi sebelumnya 👌") → lanjut ke Q3 (Budget).
+4. Jika pesan terbaru mengandung informasi baru → catat, lalu tanyakan pertanyaan ❓ berikutnya.
+5. Jika semua pertanyaan wajib (Q1 tx, building type, Q2 lokasi, Q3 budget, Q4 penghuni, Q8 tanggal) sudah ✅ DAN tidak ada banner ⚠️ → tampilkan structured brief.
 ⛔ JANGAN tampilkan listing properti dalam mode ini.
 ⛔ JANGAN tanya ulang pertanyaan yang sudah ✅ di QUALIFICATION STATE.
 ⛔ SATU pertanyaan per pesan — jangan gabungkan dua pertanyaan.
-⛔ Q3 Budget: JANGAN tanya langsung — gunakan 2 harga kontras sebagai pilihan reaksi.`
+⛔ Q3 Budget: JANGAN tanya langsung — gunakan 2 harga kontras sebagai pilihan reaksi.
+⛔ Pesan ambigu ("cari properti", "ada properti?") tanpa tipe/transaksi → tanyakan Q1: "Mau sewa atau beli? Dan tipe propertinya apa?"
+⛔ JANGAN tampilkan summary jika Q3 (Budget) atau Q8 (Tanggal masuk) masih ❓ di QUALIFICATION STATE — walaupun budget/tanggal muncul di raw conversation history dari sesi lama.
+⛔ JANGAN tampilkan summary jika ada banner ⚠️ di atas, atau jika ada field ❓ yang belum dijawab.
+⛔ Field ❓ di QUALIFICATION STATE = BELUM dijawab di sesi aktif ini. ABAIKAN semua nilai budget/tanggal/penghuni/furnitur dari percakapan sebelumnya (sesi lama) — itu bukan jawaban untuk sesi ini.`
     : 'Create the final WhatsApp reply using only the backend property catalog context above. If exact matches are available, recommend exact matches directly. If no exact match is available, say that no exact match is available and then present only the backend alternatives.'
   }`;
 }

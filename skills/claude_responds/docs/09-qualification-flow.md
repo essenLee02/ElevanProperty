@@ -45,6 +45,7 @@ In addition to the Pre-Qualification Gate, the backend computes a **QUALIFICATIO
 ✅ Tipe transaksi    [Q1]: rent
 ✅ Tipe properti         : villa (fallback: apartment)
 ✅ Lokasi            [Q2]: Surabaya
+✅ Riwayat pencarian [Q2b]: Sudah lihat 2, terlalu jauh dari pusat kota
 ✅ Budget            [Q3]: terjangkau/affordable
 ✅ Penghuni          [Q4]: 2 orang (bersama pasangan)
 ❓ Red flags         [Q5]: BELUM DIJAWAB
@@ -63,6 +64,13 @@ In addition to the Pre-Qualification Gate, the backend computes a **QUALIFICATIO
 - The Task instruction explicitly says: *"JANGAN tanya ulang pertanyaan yang sudah ✅"*
 
 **Fallback type detection:** When a customer says "kalau enggak ada villa... sewa apartemen saja", the `detectFallbackTypes()` function captures `fallbackTypes = ['apartment']` and this is surfaced in the Tipe properti row.
+
+**Active session boundary (Phase 0):**
+After a summary brief is sent, Q answers from *before* that summary are **stale** — they belong to the completed search. The backend's Phase 0 finds `activeSessionStart` (the first customer message after the last summary) and scans only `ACTIVE_ALL = history.slice(activeStart)` for Q1–Q12 content in Phase 1 (content scan), Phase 2 (AI→Customer pair matching), and Phase 3B (type-change detection).
+
+This prevents old session answers from polluting the current search's QUALIFICATION STATE.
+
+**Example:** Customer answered Q4 = "bersama istri" in a villa search → summary was sent → customer now searches for apartment. Phase 1 scans ACTIVE_ALL only (starting from the apartment search), so "bersama istri" is NOT picked up. Q4 correctly shows ❓ in the new search.
 
 ---
 
@@ -115,6 +123,46 @@ ID: Sudah lihat berapa properti di *[kota]*?
 EN: How many properties have you seen in *[city]*?
     What hasn't quite worked about the ones you've viewed?
 ```
+
+#### Q2b Answer Handling
+
+**All of these are valid Q2b answers — acknowledge and move to Q3:**
+
+| Customer answer | Meaning | AI action |
+|---|---|---|
+| "Saya belum pernah lihat" | No prior search | "Oke, belum ada referensi sebelumnya 👌" → ask Q3 |
+| "belum pernah" | No prior search | "Oke, belum ada referensi sebelumnya 👌" → ask Q3 |
+| "Sudah lihat 3, tapi terlalu jauh" | 3 viewed, red flag=jauh | Note red flag, → ask Q3 or Q5 if needed |
+| "Belum ada yang cocok, semuanya di gang sempit" | 0 suitable, red flag=gang sempit | Note red flag → ask Q3 |
+| "belum sempat survey" | No search yet | "Oke, belum ada referensi sebelumnya 👌" → ask Q3 |
+
+**⚠️ CRITICAL: After Q2b is answered (✅ di QUALIFICATION STATE), the NEXT question is Q3 (Budget).** Do NOT show a summary just because Q2b didn't provide additional context — Q3, Q8, and Q4 are still unanswered.
+
+**Server-side state:** When Q2b is answered, the QUALIFICATION STATE shows:
+```
+✅ Riwayat pencarian [Q2b]: Saya belum pernah lihat
+```
+The bot captures the customer's exact Q2b answer text in the state.
+
+**Server-side recognition (Fonnte gate — CRITICAL):** Before the AI is called, `fonnteChatController.js` runs a gate:
+```
+isPropertyQuery = hasPropertyKeyword(message)       // checks for property type/tx keywords
+isContinuation  = isPropertyContextContinuation(message, history)  // checks for short answer in context
+if (!isPropertyQuery && !isContinuation) → SKIP (message not saved to DB, AI not called)
+```
+
+Q2b answers like "Saya belum pernah lihat", "belum pernah", "sudah lihat 3" contain **no property keywords** (`hasPropertyKeyword` = false). They must pass via `isPropertyContextContinuation`. The keyword filter (`propertyKeywordFilter.js`) now recognises these with TWO layers:
+
+**Layer 1 — fast-path (before `hasRecentPropertyQuestion` check):**
+- `belum pernah lihat`, `belum lihat`, `pernah lihat`, `sudah lihat [N]`
+- `belum pernah survey`, `belum ada yang cocok`, `sudah survey`
+
+**Layer 2 — pattern 14 answers section (after `hasRecentPropertyQuestion` = true for Q2b):**
+- `belum pernah`, `sudah lihat`, `belum cocok`, `tidak cocok`, `kurang cocok`
+
+**If either layer matches → `isContinuation = true` → message saved to DB, AI called normally.**
+
+⚠️ If the server drops a Q2b answer silently (log: `Status: ⏭️ Tidak disimpan ke DB, AI skip`), check that the answer matches one of the patterns above. The fast-path covers the most common forms so most Q2b answers are caught before the `hasRecentPropertyQuestion` gate.
 
 ---
 
@@ -192,6 +240,16 @@ ID: Ada lokasi tertentu yang jadi patokan?
 EN: Is there a specific landmark you want to be near?
     For example: near a school, office, or mall?
 ```
+
+**Customer answer can be ANY landmark — accept all of these:**
+- `dekat pasar`, `dekat pasar besar`, `dekat Atom`
+- `dekat cafe`, `dekat Food Junction`, `dekat restoran X`
+- `di jalan Dukuh Kupang`, `di sekitar jalan Ahmad Yani`
+- `dekat stasiun`, `dekat terminal`, `dekat pelabuhan`, `dekat bandara`
+- `dekat pabrik`, `dekat PT Jaya Putra`, `dekat kantor X`
+- Any answer with a leading `dekat / deket / near / di jalan / di sekitar / samping`
+
+**Server-side note:** The keyword filter bypasses its CLEAR_NON_PROPERTY blocklist (which contains "cafe", "restoran", etc.) when the message starts with a landmark prefix (`dekat`, `near`, `di jalan`, etc.). This ensures "dekat cafe" is never blocked as off-topic.
 
 ---
 
@@ -284,6 +342,119 @@ A question is skipped if **any** of these is true:
 
 ---
 
+## Non-Property Message Guard (WhatsApp Mode)
+
+If the customer's latest message is **not about property** (e.g., a technical request, file generation, code, off-topic question), the AI must **not process it as a property query**. Reply with exactly:
+
+```
+Maaf, saya hanya bisa membantu terkait pencarian properti.
+Ada yang bisa saya bantu untuk kebutuhan properti Anda? 🏠
+```
+
+**Examples of non-property messages to skip:**
+- "Buatkan file text untuk summary, review, solusi..."
+- "Update skills pada claude_responds dan chat_gpt_responds..."
+- Any message containing file paths, code requests, or developer instructions
+
+**Why this matters:** Technical messages may contain words like "property" as part of file paths (e.g., `Elevan_Property\skills\`). The server-side keyword filter uses `\bproperty\b` word-boundary regex to catch this — `_property` does NOT match because `_` is a word character (`\w`) in JavaScript, so there is no word boundary between `_` and `p`.
+
+---
+
+## Property Type / Transaction Change Reset
+
+There are **two distinct scenarios** — the server handles them differently:
+
+---
+
+### Case A — Building Type Change *(villa→rumah, villa→apartment, etc.)*
+
+**Trigger:** Customer switches to a **different property type** (house, villa, apartment, hotel, kos, ruko, office, warehouse).
+
+**Server-side behavior (automatic):**
+```javascript
+state.typeChangedFromHistory = true
+// resets Q2–Q12: location, budget, household, redFlags, anchorPoint,
+//   alternativeAreas, moveInDate, decisionMaker, leaseDuration, furnishing, apartmentPref
+```
+
+`buildQualificationStateBlock()` injects a visible banner:
+```
+⚠️  TIPE PROPERTI BERUBAH — Customer beralih ke jenis properti baru.
+   Q2-Q12 di-RESET. Akui perubahan singkat (1 kalimat), lanjut dari Q terkecil ❓.
+```
+
+**AI response when this banner is present:**
+1. Acknowledge the change in **one sentence** — e.g., "Oke, kita alihkan ke rumah sewa ya 😊"
+2. Ask the **smallest-numbered ❓ question** for the new type (usually Q2 — location)
+3. Do NOT carry over old Q2–Q12 answers from the previous type
+
+**Example:**
+```
+[Previous] Customer: mau sewa villa di Surabaya
+[Previous] AI:       Budget villa sekitar 5–10 jt atau 15–25 jt?
+[Previous] Customer: yang 5-10 jt aja
+...
+[Now]      Customer: eh maaf, maksud saya mau sewa rumah bukan villa
+[Now]      AI:       Oke, kita alihkan ke rumah sewa ya 😊 Di kota atau area mana yang Anda inginkan?
+```
+
+---
+
+### Case B — TX-Only Change *(beli gudang → sewa gudang; same building type)*
+
+**Trigger:** Customer changes **only the transaction type** (beli ↔ sewa) while the **building type stays the same**.
+
+**Server-side behavior (automatic):**
+```javascript
+state.transactionType = curTx   // quietly updated to new tx
+// NO Q2–Q12 reset — location, household, budget, etc. remain valid
+// NO banner injected into the prompt
+```
+
+**AI response:** Continue the qualification flow from where it left off. Q2–Q12 answers are still valid — only the transaction type changed.
+
+**Example:**
+```
+[Previous] Customer: mau beli gudang di Malang
+[Previous] AI:       Budget gudang di Malang sekitar 500 jt atau 1–2 M?
+[Previous] Customer: yang 500 jt aja
+...
+[Now]      Customer: eh, saya mau sewa aja bukan beli
+[Now]      AI:       Siap, kita ubah ke gudang *sewa* ya 😊 Rencananya masuk bulan apa?
+           (continues from the next unanswered Q — location was already set)
+```
+
+---
+
+**History preservation (both cases):**
+- All previous messages remain in the database and session history
+- The reset is **logical only** — the AI reads full history for context but treats old type-specific answers as stale
+- History is preserved **as long as the cookie/session is active**
+
+---
+
+## After Summary Brief
+
+Once the structured brief has been sent, the QUALIFICATION STATE will include the banner:
+```
+⚠️  SUMMARY SUDAH DIKIRIM — Customer memulai pencarian baru.
+   RESET PENUH ke Q1. Tanyakan dari awal: sewa/beli dan tipe propertinya.
+   JANGAN tampilkan summary lagi sampai semua Q wajib terjawab ulang.
+```
+
+**Behavior by message type:**
+
+| Customer message type | AI response |
+|---|---|
+| New property intent ("Saya mau cari rumah di Malang") | Ask Q1 for the new search |
+| Ambiguous ("Mau cari properti") | Ask Q1: "Mau sewa atau beli? Dan tipe propertinya apa?" |
+| Non-property message | Apply Non-Property Message Guard → polite redirect only |
+| Confirmation/thanks | Acknowledge warmly, no new questions |
+
+**Critical rule:** When the SUMMARY SUDAH DIKIRIM banner is present, NEVER show another summary — even if the message contains property keywords. The qualification flow must restart from Q1 before a new summary can be shown.
+
+---
+
 ## Summary Brief (Mode OFF — after mandatory questions complete)
 
 Show when ALL of these are answered: Q1 (tx), building type, location, Q3 (budget), Q8 (date),
@@ -292,22 +463,38 @@ Q4 or Q9 (household/decision), Q7 (alternative areas).
 ```
 Baik, permintaan utama Anda sudah saya catat, sebagai berikut 📝 🔥
 
-✓ Rencana: *[sewa/beli]*
-✓ Tipe: *[building type]*
-✓ Lokasi: *[location]*
-✓ Budget: *[amount]* (terkonfirmasi nanti)
-✓ Masuk: *[move-in month]*
-✓ Keputusan bersama: *[solo / joint]*
-✓ Furnitur: *[preference]*
-✓ Area alternatif: *[areas]*
+✓ Rencana: *[nilai dari Q1 tx]* — HANYA jika ✅
+✓ Tipe: *[nilai dari building type]* — HANYA jika ✅
+✓ Lokasi: *[nilai dari Q2]* — HANYA jika ✅
+✓ Budget: *[nilai dari Q3]* (terkonfirmasi nanti) — HANYA jika ✅
+✓ Masuk: *[nilai dari Q8]* — HANYA jika ✅
+✓ Keputusan bersama: *[nilai dari Q9]* — HANYA jika ✅
+✓ Furnitur: *[nilai dari Q11]* — HANYA jika ✅
+✓ Patokan: *[nilai dari Q6 — nilai PERSIS dari QUALIFICATION STATE]* — HANYA jika ✅
+✓ Area alternatif: *[nilai dari Q7]* — HANYA jika ✅
 
 Saya akan segera menghubungi Anda dengan rekomendasi properti yang paling sesuai! 🏠 Apabila ada pertanyaan lagi, silahkan hubungi saya kembali.
 Terima kasih sudah menghubungi saya. 🙏
 ```
 
-- Fields marked "inferred" = agent will reconfirm.
-- Fields showing "UNKNOWN" = agent must ask during follow-up.
+**Summary Strict Rules:**
+- **HANYA sertakan field yang ✅ di QUALIFICATION STATE.** Jangan sertakan field yang ❓ — lewati saja.
+- **Gunakan nilai PERSIS yang tertera setelah ": " di baris ✅** — jangan tulis "Disebutkan", "Ada", "Iya", "Diketahui", atau frasa samar lainnya.
+- **⛔ JANGAN gunakan nilai dari raw conversation history** jika field tersebut ❓ di QUALIFICATION STATE — walaupun kata itu muncul di history. QUALIFICATION STATE dihitung khusus dari sesi aktif saat ini; nilai lama (dari sesi pencarian sebelumnya) sudah di-exclude secara server-side.
+- **⛔ JANGAN tampilkan summary jika Q3 (Budget) masih ❓** — walaupun budget muncul di old session history (misal "1.8 juta" dari sesi apartment sebelumnya). Itu bukan budget untuk sesi ini.
+- **⛔ JANGAN tampilkan summary jika Q8 (Tanggal masuk) masih ❓** — ini mandatory, tidak ada pengecualian.
+- **⛔ JANGAN tampilkan summary setelah Q2b dijawab jika Q3/Q8/Q4 masih ❓** — Q2b adalah pertanyaan awal; masih ada Q3→Q8→Q4 yang harus ditanyakan sebelum summary.
+- One question per message only.
 - Max 12 AI messages before showing brief, even if incomplete.
+
+**Wrong vs correct example (Q6 Patokan):**
+```
+❌ Wrong:  ✓ Patokan lokasi: Disebutkan
+✅ Correct: ✓ Patokan: *Dekat ATOM*   ← exact value from QUALIFICATION STATE row Q6
+
+❌ Wrong:  ✓ Keputusan bersama: Bersama istri  ← Q9 was never asked in this session
+✅ Correct: (omit this line entirely — Q9 is ❓)
+```
 
 ---
 
