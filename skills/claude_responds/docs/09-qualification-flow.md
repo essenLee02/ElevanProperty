@@ -1,171 +1,150 @@
-# 09 — Customer Qualification Flow (Q0–Q12)
+# 09 — Qualification Flow (Q1–Q12)
 
 ## Philosophy
 
-Before presenting a property list, qualify the customer's needs through targeted
-questions. This surfaces the information needed to give a genuinely useful recommendation,
-rather than an overwhelming catalog dump.
-
-The flow is **adaptive**: skip any question whose answer is already known from the
-conversation. Stop qualifying once enough is known and switch to listing mode.
+Guide discovery through **options, not interrogation**.
+Most customers arrive vague — they don't know their exact budget or bedroom count.
+Use indirect questions that reveal real needs from natural reactions.
 
 ---
 
-## Trigger: Qualification vs Listing
+## Pre-Qualification Gate (Server-Side)
 
-### Show listing immediately when ANY of these is true:
+The backend runs a gate **before** calling any AI provider.
+This gate checks 4 minimum fields from the accumulated conversation history:
 
-| Trigger | Example |
-|---------|---------|
-| Customer explicitly requests a list | "kasih daftarnya", "tampilkan", "rekomendasikan", "show me", "what do you have" |
-| All 3 key signals known (tx + type + location) | "saya mau sewa rumah di malang" → readiness = 3 |
-| AI has already asked 4+ qualification questions | Prevent customer frustration |
+```
+① buildingType    — the property type (house / villa / apartment / etc.)
+② transactionType — sewa (rent) | beli → sale
+③ location        — city or area
+④ budget          — numeric range OR affordability preference
+```
 
-### Continue qualifying when:
+**Gate behavior by mode:**
 
-- Readiness score < 3 (missing at least one of: transaction, type, or location)
-- Customer has not requested a list
-- AI has asked fewer than 4 questions
+| `RESPOND_CATALOG_RUN` | Gate behavior |
+|---|---|
+| `OFF` (Q1–Q12 mode) | Gate only intercepts if type+tx are **both** missing. Otherwise → AI handles via Q1–Q12 naturally (especially Q3 budget using contrasting prices). |
+| `ON` (catalog mode) | Gate intercepts whenever any of the 4 fields is missing. |
+
+**Budget is satisfied by:** `terjangkau`, `murah`, `affordable`, `yang paling murah` — do not keep asking for exact numbers after customer expresses affordability preference.
 
 ---
 
-## Readiness Score
+## Qualification State Injector (Server-Side, Q1–Q12 Mode)
 
-Each known signal adds 1 point:
+In addition to the Pre-Qualification Gate, the backend computes a **QUALIFICATION STATE** block from full conversation history (last 24 messages) and injects it into every AI prompt:
 
-| Signal | Score |
-|--------|-------|
-| transactionType (sewa / beli) | +1 |
-| buildingType (house / apartment / hotel / …) | +1 |
-| location (malang / surabaya / …) | +1 |
-| budget | +1 |
-| move-in date | +1 |
+```
+╔══════════════════════════════════════════╗
+║  📋 QUALIFICATION STATE                  ║
+║  ✅ = SUDAH DIJAWAB → JANGAN TANYA LAGI  ║
+║  ❓ = BELUM DIJAWAB → TANYAKAN BERIKUTNYA║
+╚══════════════════════════════════════════╝
 
-**Threshold: ≥ 3 → show listing.**
+✅ Tipe transaksi    [Q1]: rent
+✅ Tipe properti         : villa (fallback: apartment)
+✅ Lokasi            [Q2]: Surabaya
+✅ Budget            [Q3]: terjangkau/affordable
+✅ Penghuni          [Q4]: 2 orang (bersama pasangan)
+❓ Red flags         [Q5]: BELUM DIJAWAB
+✅ Patokan lokasi    [Q6]: Saya mau di Surabaya
+✅ Area alternatif   [Q7]: Saya mau Surabaya aja...
+✅ Tanggal masuk ⚠️WAJIB [Q8]: 25 Agustus
+❓ Keputusan         [Q9]: BELUM DIJAWAB
+❓ Durasi sewa      [Q10]: BELUM DIJAWAB
+✅ Furnitur         [Q11]: semi-furnished
+❓ Apt preference   [Q12]: BELUM DIJAWAB
+```
+
+**Why this prevents repeated questions:**
+- The AI is not required to guess from raw history — it reads the explicit ✅/❓ table
+- Even if the same question was asked and answered 10+ messages ago, the state block reflects it
+- The Task instruction explicitly says: *"JANGAN tanya ulang pertanyaan yang sudah ✅"*
+
+**Fallback type detection:** When a customer says "kalau enggak ada villa... sewa apartemen saja", the `detectFallbackTypes()` function captures `fallbackTypes = ['apartment']` and this is surfaced in the Tipe properti row.
 
 ---
 
 ## Question Sequence
 
-Questions fire in this order. Each fires only once and only if the answer is
-not already known from the conversation history.
+Fire questions **in order**, one per message.
+Skip any question whose answer is already present in history (any turn).
 
 ---
 
-### Q0/Q1 — Transaction Type + Property Type
+### Q1 — Transaction Type
 
-**Fires when:** Both transaction type AND property type are unknown.
+**Fires when:** Transaction type unknown.
 
 ```
-ID: Halo! 😊 Saya siap bantu carikan properti yang cocok untuk Anda.
-    Boleh saya tanya dulu — Anda sedang cari untuk *sewa* atau *beli*?
-    Dan tipe properti apa yang diinginkan?
+ID: Lagi cari untuk *sewa* atau *beli*? 🏠
+EN: Are you looking to *rent* or *buy*? 🏠
+```
+
+If property type is also unknown, combine:
+
+```
+ID: Halo! 😊 Mau *sewa* atau *beli*? Dan tipe properti apa yang Anda cari?
     Kami punya: *rumah, apartemen, villa, kos-kosan, ruko, kantor, gudang*, dan banyak lagi 🏡
-
-EN: Hello! 😊 I'm here to help you find the right property.
-    May I ask first — are you looking to *rent* or *buy*?
-    And what type of property do you have in mind?
-    We have: *house, apartment, villa, boarding house, shophouse, office, warehouse*, and more 🏡
-```
-
----
-
-### Q1 — Transaction Type only
-
-**Fires when:** Transaction type unknown, property type known.
-
-```
-ID: Untuk *[Tipe]* yang Anda cari — rencananya untuk *sewa* atau *beli*? 🏠
-EN: For the *[Type]* you're looking for — are you planning to *rent* or *buy*? 🏠
-```
-
----
-
-### Q0b — Property Type only
-
-**Fires when:** Property type unknown, transaction type known.
-
-```
-ID: Oke, mau *[sewa/beli]* properti. Tipe apa yang Anda cari? 🏡
-    Kami punya: *rumah, apartemen, villa, kos-kosan, ruko, kantor, gudang*, dan banyak pilihan lainnya.
-
-EN: Got it, looking to *[rent/buy]* a property. What type are you looking for? 🏡
-    We have: *house, apartment, villa, boarding house, shophouse, office, warehouse*, and many more.
 ```
 
 ---
 
 ### Q2 — Location
 
-**Fires when:** Location unknown.
+**Fires when:** Location unknown, transaction type known.
 
 ```
 ID: Oke, mau *[sewa/beli] [Tipe]*. 📍 Di kota atau area mana yang Anda pertimbangkan?
-EN: Got it, looking to *[rent/buy] a [Type]*. 📍 Which city or area are you considering?
+EN: Got it, *[rent/buy] a [Type]*. 📍 Which city or area are you considering?
 ```
 
 ---
 
 ### Q2b — Search History *(Highest-value question)*
 
-**Fires when:** Location known, this question not yet asked, AI asked ≤ 3 times.
+**Fires when:** Location established, not yet asked, AI has asked ≤ 3 questions.
 
-This is the single most valuable question — it surfaces red flags, decision
-maker signals, urgency level, and budget ceiling in one response.
+This single question extracts: red flags, budget ceiling, decision maker signals, anchor point, urgency.
 
 ```
-ID: Sudah lihat berapa properti di *[kota]*? Apa yang membuat belum cocok dari yang sudah dilihat?
-EN: How many properties have you seen in *[city]*? What hasn't quite worked about the ones you've viewed?
+ID: Sudah lihat berapa properti di *[kota]*?
+    Apa yang membuat belum cocok dari yang sudah dilihat?
+
+EN: How many properties have you seen in *[city]*?
+    What hasn't quite worked about the ones you've viewed?
 ```
 
 ---
 
-### Q3 — Budget *(NEVER ask directly — use two price anchors)*
+### Q3 — Budget *(NEVER ask directly)*
 
 **Fires when:** Budget unknown, location known.
 
-Show two contrasting options from the catalog. The customer's reaction
-reveals their real budget without ever asking a direct figure.
+Show **two contrasting price anchors** for the requested type + area.
+The customer's reaction reveals their real budget — no direct figure needed.
 
 ```
-ID: Di *[kota]* kami ada yang di kisaran *[LOW]* dan ada yang *[HIGH]*.
-    Kira-kira yang mana lebih sesuai dengan rencana Anda?
+ID: Di *[area]* kami ada *[Tipe]* yang di kisaran *[LOW]* dan ada juga yang *[HIGH]*.
+    Kira-kira yang mana lebih sesuai dengan rencana Bapak/Ibu?
 
-EN: In *[city]* we have options around *[LOW]* and others around *[HIGH]*.
+EN: In *[area]* we have *[Type]* options around *[LOW]* and others around *[HIGH]*.
     Which range feels closer to your plans?
 ```
 
-If no price anchors available:
+**If no price data available:**
+```
+ID: Untuk *[Tipe]* di *[area]* — apakah lebih prefer yang *terjangkau/ekonomis*
+    atau yang *menengah ke atas*? 💰
+```
 
-```
-ID: Di *[kota]* kami punya pilihan dengan berbagai kisaran harga.
-    Apakah Anda lebih prefer yang *terjangkau/ekonomis* atau yang *menengah ke atas*? 💰
-EN: In *[city]* we have options across different price ranges.
-    Do you prefer something more *affordable/economy* or *mid-to-premium range*? 💰
-```
+**Accepted affordability answers** (treat as budget=affordable, stop asking):
+`terjangkau`, `murah`, `yang paling murah`, `ekonomis`, `affordable`, `hemat`, `low budget`
 
 ---
 
-### Q8 — Move-in Date *(MANDATORY — never skipped)*
-
-**Fires when:** Move-in date not yet mentioned in any message.
-
-```
-ID: Rencananya masuk atau pindah bulan apa? 📅
-EN: What month are you planning to move in? 📅
-```
-
-**Special rule:** If this question was not asked during qualification (e.g., listing was
-triggered early), append it **inside** the listing response before the signature:
-
-```
-ID: Omong-omong, rencananya masuk atau pindah bulan apa? 📅
-EN: By the way, what month are you planning to move in? 📅
-```
-
----
-
-### Q4 — Household Composition *(infers bedroom count + decision maker)*
+### Q4 — Household Composition *(infers bedrooms + decision maker)*
 
 **Fires when:** Household info not mentioned.
 
@@ -177,38 +156,46 @@ EN: Who will be living there with you?
     That helps me find the right number of bedrooms 🛏️
 ```
 
-*Why this matters:* If spouse or parents are mentioned → joint decision.
-If alone → faster decision. Bedroom count inferred without asking directly.
+**Bedroom inference from answer:**
 
----
+| Answer | Inferred bedrooms | Decision maker |
+|---|---|---|
+| `sendiri`, `saya aja`, `alone` | 1 | Solo (fast decision) |
+| `sama istri/suami`, `berdua` | 1–2 | Couple (joint) |
+| `dengan anak`, `keluarga kecil` | 2–3 | Family (joint) |
+| `bersama orangtua`, `keluarga besar` | 3+ | Joint (slower) |
 
-### Q11 — Furnishing Preference *(rental only)*
-
-**Fires when:** Renting, furnishing preference not stated.
-
+Short answers are valid — **acknowledge then proceed**:
 ```
-ID: Untuk furnitur, lebih prefer yang sudah *furnished*, *semi-furnished*, atau *kosongan* saja? 🛋️
-EN: For furnishing, do you prefer *fully furnished*, *semi-furnished*, or *unfurnished*? 🛋️
-```
-
----
-
-### Q5 — Red Flags *(if not surfaced in Q2b)*
-
-**Fires when:** Red flags not captured, recommended as a late question.
-
-```
-ID: Ada yang pasti tidak cocok? Misalnya yang hadap barat, dekat jalan ramai,
-    gang sempit, atau rumah tua?
-EN: Is there anything you definitely want to avoid? Such as west-facing,
-    near a busy road, narrow alleys, or older buildings?
+Customer: saya tinggal sendiran aja
+AI:       Oke, berarti 1 kamar sudah cukup ya 😊 [→ ask Q3 or next unanswered Q]
 ```
 
 ---
 
-### Q7 — Alternative Areas *(unless already volunteered)*
+### Q5 — Red Flags *(only if not captured in Q2b)*
 
-**Fires when:** Customer has not mentioned alternative areas.
+```
+ID: Ada yang pasti tidak cocok? Misalnya yang hadap barat,
+    dekat jalan ramai, gang sempit, atau rumah tua?
+EN: Is there anything you definitely want to avoid?
+    Such as west-facing, near a busy road, narrow alleys, or older buildings?
+```
+
+---
+
+### Q6 — Anchor Point *(only if not captured in Q2b)*
+
+```
+ID: Ada lokasi tertentu yang jadi patokan?
+    Misalnya dekat sekolah anak, kantor, atau mall tertentu?
+EN: Is there a specific landmark you want to be near?
+    For example: near a school, office, or mall?
+```
+
+---
+
+### Q7 — Alternative Areas *(always ask unless already volunteered)*
 
 ```
 ID: Selain *[area yang disebutkan]*, area sekitar yang masih oke?
@@ -217,88 +204,131 @@ EN: Besides *[mentioned area]*, are there other nearby areas you'd consider?
 
 ---
 
-### Q9 — Decision Maker / Viewing Logistics *(indirect)*
-
-**Fires when:** Decision maker not established.
-
-Never ask "siapa yang memutuskan" directly. Use indirect phrasing:
+### Q8 — Move-in Date *(MANDATORY — never skip)*
 
 ```
-ID: Kalau nanti ada yang cocok, langsung bisa jadwalkan viewing atau
-    perlu koordinasi dulu sama keluarga lain?
-EN: If something looks good, can you schedule a viewing directly or
-    would you need to check with family first?
+ID: Rencananya masuk atau pindah bulan apa? 📅
+EN: What month are you planning to move in? 📅
 ```
 
-*Interpretation:* "Langsung bisa" → solo decision → higher urgency signal.
+If listing was triggered before Q8 was asked, **append inside the listing reply**:
+```
+ID: Omong-omong, rencananya masuk atau pindah bulan apa? 📅
+EN: By the way, what month are you planning to move in? 📅
+```
 
 ---
 
-### Q10 — Lease Duration *(sewa only, if duration not volunteered)*
+### Q9 — Decision Maker *(always indirect)*
 
-**Fires when:** Transaction = rent, duration not mentioned.
+```
+ID: Kalau nanti ada yang cocok, langsung bisa jadwalkan viewing
+    atau perlu koordinasi dulu sama keluarga lain?
+EN: If something looks good, can you schedule a viewing directly,
+    or would you need to check with family first?
+```
+
+"Langsung bisa" → solo decision, higher urgency.
+Never ask "siapa yang memutuskan" directly.
+
+---
+
+### Q10 — Lease Duration *(rent only, if not volunteered)*
 
 ```
 ID: Rencananya sewa untuk berapa lama?
 EN: How long are you planning to rent?
 ```
 
-#### Q10a — Payment Terms *(fires when lease ≥ 1 year)*
+#### Q10a — Payment Terms *(fires if lease ≥ 1 year)*
 
 ```
-ID: Untuk pembayaran, biasanya lebih cocok bayar di muka penuh
+ID: Untuk pembayaran, lebih cocok bayar di muka penuh
     atau ada yang bisa cicil?
-EN: For payment, do you prefer paying the full amount upfront
+EN: For payment, do you prefer paying the full amount upfront,
     or would installment options work better?
+```
+
+---
+
+### Q11 — Furnishing *(rent only, if not stated)*
+
+```
+ID: Untuk furnitur, lebih prefer yang sudah *furnished*,
+    *semi-furnished*, atau *kosongan* saja? 🛋️
+EN: For furnishing, do you prefer *fully furnished*,
+    *semi-furnished*, or *unfurnished*? 🛋️
 ```
 
 ---
 
 ### Q12 — Apartment-Specific *(type = apartment only)*
 
-**Fires when:** Property type is apartment.
-
 ```
-ID: Untuk apartemen, ada preferensi tower tertentu atau lantai berapa?
+ID: Untuk apartemen, ada preferensi tower atau lantai tertentu?
     (Lantai tinggi biasanya lebih tenang, lantai rendah lebih mudah akses)
-EN: For apartments, do you have a preference for a specific tower or floor?
-    (Higher floors tend to be quieter, lower floors are easier to access)
+EN: For apartments, do you have a floor or tower preference?
+    (Higher floors = quieter, lower floors = easier access)
 ```
 
 ---
 
-## Skip Conditions
+## Skip Logic
 
-A question is skipped if:
+A question is skipped if **any** of these is true:
 
-- Its answer is already present in customer messages (any turn)
-- The AI already asked it in a previous turn
-- Readiness score ≥ 3 (switch to listing mode)
-- Customer has explicitly requested a listing
+- Answer already present in any customer message (any turn)
+- AI already asked it in a prior turn
+- Customer explicitly requested a listing (`kasih daftarnya`, `tampilkan`, `show me`, etc.)
+- Readiness score ≥ 3 and mode=ON → switch to listing
 
 ---
 
-## Example Conversation
+## Summary Brief (Mode OFF — after mandatory questions complete)
+
+Show when ALL of these are answered: Q1 (tx), building type, location, Q3 (budget), Q8 (date),
+Q4 or Q9 (household/decision), Q7 (alternative areas).
 
 ```
-Customer  : Halo saya cari properti
-AI (Q0/Q1): Halo! 😊 Mau sewa atau beli? Dan tipe apa? Kami punya rumah, apartemen, villa...
-Customer  : mau sewa rumah
-AI (Q2)   : Oke, sewa rumah. Di kota atau area mana?
-Customer  : di surabaya
-AI        : [readiness = 3] → SHOW LISTING (houses in Surabaya)
-            + Q8 appended: "Omong-omong, rencananya masuk bulan apa? 📅"
+Baik, permintaan utama Anda sudah saya catat, sebagai berikut 📝 🔥
+
+✓ Rencana: *[sewa/beli]*
+✓ Tipe: *[building type]*
+✓ Lokasi: *[location]*
+✓ Budget: *[amount]* (terkonfirmasi nanti)
+✓ Masuk: *[move-in month]*
+✓ Keputusan bersama: *[solo / joint]*
+✓ Furnitur: *[preference]*
+✓ Area alternatif: *[areas]*
+
+Saya akan segera menghubungi Anda dengan rekomendasi properti yang paling sesuai! 🏠 Apabila ada pertanyaan lagi, silahkan hubungi saya kembali.
+Terima kasih sudah menghubungi saya. 🙏
 ```
 
-```
-Customer  : saya mau sewa rumah di malang, budget 2-5 juta
-AI        : [readiness = 4, wantsListing=false] → SHOW LISTING
-            (houses in Malang sorted cheapest first)
-            + Q8 appended
-```
+- Fields marked "inferred" = agent will reconfirm.
+- Fields showing "UNKNOWN" = agent must ask during follow-up.
+- Max 12 AI messages before showing brief, even if incomplete.
+
+---
+
+## Full Conversation Example
 
 ```
-Customer  : kasih rekomendasinya dong
-AI        : [wantsListingNow = true] → SHOW LISTING IMMEDIATELY
-            (regardless of readiness score)
+Customer: Siang. Saya mau sewa villa
+AI (Q2):  Baik! Mau sewa Villa. 📍 Di kota atau area mana yang Anda inginkan?
+
+Customer: di malang
+AI (Q8):  Rencananya masuk atau pindah bulan apa? 📅
+
+Customer: 24 juni 2026
+AI (Q4):  Nanti akan tinggal bersama siapa saja?
+          Biar saya bisa carikan yang pas jumlah kamarnya 🛏️
+
+Customer: saya tinggal sendiran aja
+AI (Q3):  Oke, berarti 1 kamar sudah cukup ya 😊
+          Di Malang kami ada Villa sekitar 3–5 juta/bulan dan ada yang 8–15 juta/bulan.
+          Kira-kira yang mana lebih sesuai?
+
+Customer: yang 3-5 juta aja
+AI:       [budget set → all 4 fields present → proceed to listing or next mode behavior]
 ```

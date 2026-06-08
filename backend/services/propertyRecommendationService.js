@@ -282,8 +282,9 @@ function detectFallbackTypes(message = '') {
   const text    = normalizeText(message);
   const results = [];
 
-  // Pattern 1: "kalau/jika tidak/ga ada [type]"
-  const fallbackRegex = /(?:kalau|jika|bila|kalo)\s+(?:tidak|gak|ga|ngga|ga ada|tidak ada)\s+(?:ada\s+)?([a-z\s]+?)(?:,|\.|;|$|\s+(?:kasih|berikan|saran|aja|saja|juga|ok|oke|bisa|boleh))/gi;
+  // Pattern 1: "kalau/jika tidak/enggak ada [type]..." — conditional fallback
+  // Covers: "kalau tidak ada villa", "kalau enggak ada hotel", "kalo ga ada rumah"
+  const fallbackRegex = /(?:kalau|jika|bila|kalo)\s+(?:tidak|gak|ga|ngga|enggak|kagak|ndak|ga ada|tidak ada|enggak ada)\s+(?:ada\s+)?([a-z\s]+?)(?:,|\.|;|$|\s+(?:kasih|berikan|saran|aja|saja|juga|ok|oke|bisa|boleh))/gi;
   let m;
   while ((m = fallbackRegex.exec(text)) !== null) {
     const t = detectBuildingType(m[1].trim());
@@ -294,6 +295,15 @@ function detectFallbackTypes(message = '') {
   const multiTypeRegex = /\b([a-z]+)\s+(?:atau|or|dan|and|\/)\s+([a-z]+)\b/gi;
   while ((m = multiTypeRegex.exec(text)) !== null) {
     const t = detectBuildingType(m[2].trim());
+    if (t) results.push(t);
+  }
+
+  // Pattern 3: "sewa/beli [type] saja/aja" — direct fallback statement
+  // Covers: "Saya sewa apartemen saja", "beli rumah aja"
+  // These indicate the customer's fallback when primary type is unavailable.
+  const directFallbackRegex = /\b(?:sewa|beli|kontrak)\s+([a-z]+)\s+(?:saja|aja)\b/gi;
+  while ((m = directFallbackRegex.exec(text)) !== null) {
+    const t = detectBuildingType(m[1].trim());
     if (t) results.push(t);
   }
 

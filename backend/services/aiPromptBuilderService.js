@@ -1,5 +1,259 @@
 const { loadProjectSkillPrompt } = require('./skillPromptService');
 
+/* ─── Qualification State Extractor ────────────────────────────────────────── */
+/* Scans full conversation history to build a per-question answered/unanswered  */
+/* state. This is injected into the AI prompt so the AI NEVER re-asks a         */
+/* question that already has a green checkmark.                                  */
+
+const QS_CUST_ROLES = new Set(['user', 'customer']);
+const QS_AI_ROLES   = new Set(['assistant', 'ai', 'bot']);
+
+/**
+ * Extract which Q1–Q12 fields have been answered from conversation history.
+ * Runs server-side so the AI gets an authoritative checklist — it does NOT
+ * have to guess from raw history text (which fails when history is truncated).
+ *
+ * @param {Array}  history        - Full conversation history [{role, message}]
+ * @param {string} currentMessage - Current customer message
+ * @returns {object} Qualification state
+ */
+function extractQualificationState(history = [], currentMessage = '') {
+  // Build chronological message array (history is already oldest-first from DB reverse)
+  const ALL = [...(history || []), { role: 'customer', message: currentMessage }];
+
+  const state = {
+    transactionType : null,   // Q1
+    buildingType    : null,   // from first message
+    fallbackTypes   : [],     // "kalau tidak ada X, Y saja"
+    location        : null,   // Q2
+    budget          : null,   // Q3
+    household       : null,   // Q4
+    redFlags        : null,   // Q5
+    anchorPoint     : null,   // Q6
+    alternativeAreas: null,   // Q7
+    moveInDate      : null,   // Q8 MANDATORY
+    decisionMaker   : null,   // Q9
+    leaseDuration   : null,   // Q10
+    furnishing      : null,   // Q11
+    apartmentPref   : null,   // Q12
+  };
+
+  // ── Phase 1: Scan every customer message for content-detectable fields ────
+  const MONTH_ID = 'januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember';
+  const MONTH_EN = 'january|february|march|april|may|june|july|august|september|october|november|december';
+  const MONTH_RE = new RegExp(`(\\d{1,2}\\s+)?(${MONTH_ID}|${MONTH_EN})(\\s+\\d{4})?`, 'i');
+  const CITY_RE  = /\b(surabaya|malang|bali|denpasar|jakarta|bandung|yogyakarta|jogja|semarang|medan|makassar|sidoarjo|gresik|bekasi|tangerang|depok|bogor|solo|palembang|batam|balikpapan|samarinda|pontianak|manado|kupang|mataram|lombok|batu)\b/i;
+
+  for (const msg of ALL) {
+    if (!QS_CUST_ROLES.has(msg.role)) continue;
+    const raw  = msg.message || '';
+    const text = raw.toLowerCase().trim();
+
+    // Q1 — Transaction type
+    if (!state.transactionType) {
+      if (/\b(sewa|kontrak|ngontrak|rent)\b/.test(text))        state.transactionType = 'rent';
+      else if (/\b(beli|buy|purchase)\b/.test(text))             state.transactionType = 'sale';
+    }
+
+    // Building type (primary)
+    if (!state.buildingType) {
+      if (/\bvill?a\b/.test(text))                               state.buildingType = 'villa';
+      else if (/\bapartemen\b|\bapartment\b/.test(text))         state.buildingType = 'apartment';
+      else if (/\brumah\b|\bhouse\b|\bkontrakan\b/.test(text))  state.buildingType = 'house';
+      else if (/\bhotel\b|\bpenginapan\b/.test(text))           state.buildingType = 'hotel';
+      else if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(text)) state.buildingType = 'boarding_house';
+      else if (/\bruko\b|\brukan\b/.test(text))                 state.buildingType = 'shophouse';
+      else if (/\bkantor\b/.test(text))                         state.buildingType = 'office';
+      else if (/\bgudang\b/.test(text))                         state.buildingType = 'warehouse';
+    }
+
+    // Fallback types — "kalau/jika tidak/enggak ada [type] ... [type] saja"
+    // Pattern A: conditional clause
+    const fallbackMatchA = text.match(
+      /(?:kalau|jika|kalo|bila)\s+(?:tidak|gak|ga|ngga|enggak|kagak|ndak)(?:\s+ada)?\s+(\w+)/
+    );
+    if (fallbackMatchA) {
+      // The fallback TYPE is usually what comes AFTER the condition, e.g. "sewa apartemen saja"
+      const afterMatch = text.match(/(?:sewa|beli|kontrak)\s+(\w+)\s+(?:saja|aja)/);
+      if (afterMatch) {
+        const fb = _typeKeyFromWord(afterMatch[1]);
+        if (fb && fb !== state.buildingType && !state.fallbackTypes.includes(fb)) {
+          state.fallbackTypes.push(fb);
+        }
+      }
+    }
+    // Pattern B: direct "sewa/beli [type] saja"
+    const directFb = text.match(/\b(?:sewa|beli|kontrak)\s+(\w+)\s+(?:saja|aja)\b/);
+    if (directFb) {
+      const fb = _typeKeyFromWord(directFb[1]);
+      if (fb && fb !== state.buildingType && !state.fallbackTypes.includes(fb)) {
+        state.fallbackTypes.push(fb);
+      }
+    }
+
+    // Q2 — Location (city)
+    if (!state.location) {
+      const cm = raw.match(CITY_RE);
+      if (cm) state.location = cm[1];
+    }
+
+    // Q3 — Budget
+    if (!state.budget) {
+      if (/\b(terjangkau|murah|affordable|ekonomis|hemat|low budget|yang paling murah)\b/.test(text)) {
+        state.budget = 'terjangkau/affordable';
+      } else {
+        const pm = text.match(/(\d[\d.,]*\s*(?:juta|jt|miliar|ribu|rb|k))/);
+        if (pm) state.budget = pm[1].trim();
+      }
+    }
+
+    // Q4 — Household
+    if (!state.household) {
+      if (/\bsendiri\b|\bsendiran\b|\bjust me\b|\balone\b/.test(text)) {
+        state.household = '1 orang (sendiri)';
+      } else if (/\bsama (istri|suami)\b|\bbersama (istri|suami)\b/.test(text)) {
+        state.household = '2 orang (bersama pasangan)';
+      } else if (/\bberdua\b/.test(text) && !/\bberdua (sama|dengan)\s*(sekolah|kantor|mall)/.test(text)) {
+        state.household = '2 orang (berdua)';
+      } else if (/\bkeluarga\b/.test(text) && !/\bkeluarga lain\b|\bkoordinasi.*keluarga\b/.test(text)) {
+        state.household = 'keluarga';
+      } else if (/\borangtua\b|\borang tua\b|\bparents\b/.test(text)) {
+        state.household = 'dengan orangtua';
+      }
+    }
+
+    // Q8 — Move-in date
+    if (!state.moveInDate) {
+      const dm = raw.match(MONTH_RE);
+      if (dm) {
+        state.moveInDate = dm[0].trim();
+      } else if (/\b(bulan depan|next month|minggu depan|segera|sekarang|asap)\b/.test(text)) {
+        state.moveInDate = text.includes('bulan depan') ? 'bulan depan' : 'segera/ASAP';
+      }
+    }
+
+    // Q11 — Furnishing
+    if (!state.furnishing) {
+      if (/\bfull.{0,5}furn|\bfully.{0,5}furn/.test(text)) {
+        state.furnishing = 'fully furnished';
+      } else if (/\bsemi.{0,10}furn/.test(text) || (/\bsemi\b/.test(text) && /\bfurn/.test(text))) {
+        state.furnishing = 'semi-furnished';
+      } else if (/\bkosongan\b|\bunfurnished\b/.test(text)) {
+        state.furnishing = 'unfurnished/kosongan';
+      } else if (/\bfurnished\b/.test(text) && !/semi/.test(text)) {
+        state.furnishing = 'furnished';
+      }
+    }
+  }
+
+  // ── Phase 2: Detect context-dependent Q6/Q7/Q9/Q10 from AI→Customer pairs ─
+  // Only meaningful when the AI actually asked the question first.
+  // We find the NEXT customer message after each AI message — skipping consecutive
+  // AI messages (handles the double-send bug where 2 AI replies arrive before 1 customer reply).
+  for (let i = 0; i < ALL.length - 1; i++) {
+    const ai = ALL[i];
+    if (!QS_AI_ROLES.has(ai.role)) continue;
+
+    // Find the next customer message (skip consecutive AI messages)
+    let nextCustIdx = -1;
+    for (let j = i + 1; j < ALL.length; j++) {
+      if (QS_AI_ROLES.has(ALL[j].role)) continue;   // skip back-to-back AI msgs
+      if (QS_CUST_ROLES.has(ALL[j].role)) { nextCustIdx = j; break; }
+      break;
+    }
+    if (nextCustIdx < 0) continue;
+    const cust = ALL[nextCustIdx];
+
+    const aiText   = (ai.message   || '').toLowerCase();
+    const custResp = (cust.message || '').trim();
+
+    // Q6 — anchor point
+    if (!state.anchorPoint && /patokan|dekat sekolah|dekat kantor|mall tertentu|anchor/.test(aiText)) {
+      state.anchorPoint = custResp;
+    }
+    // Q7 — alternative areas
+    if (!state.alternativeAreas && /selain .{2,40}area sekitar|area.{0,20}lain.{0,20}oke|besides.{2,40}area/.test(aiText)) {
+      state.alternativeAreas = custResp;
+    }
+    // Q9 — decision maker
+    if (!state.decisionMaker && /jadwalkan viewing|koordinasi dulu|keluarga lain/.test(aiText)) {
+      state.decisionMaker = custResp;
+    }
+    // Q10 — lease duration
+    if (!state.leaseDuration && /sewa untuk berapa lama|berapa lama.*sewa/.test(aiText)) {
+      state.leaseDuration = custResp;
+    }
+    // Q5 — red flags
+    if (!state.redFlags && /pasti tidak cocok|hadap barat|gang sempit|rumah tua/.test(aiText)) {
+      state.redFlags = custResp;
+    }
+    // Q12 — apartment preference
+    if (!state.apartmentPref && /tower atau lantai|preferensi tower|lantai berapa/.test(aiText)) {
+      state.apartmentPref = custResp;
+    }
+  }
+
+  return state;
+}
+
+/** Simple building type key lookup for state extractor */
+function _typeKeyFromWord(word = '') {
+  const w = word.toLowerCase().trim();
+  if (/vill?a/.test(w))                          return 'villa';
+  if (/apartemen|apartment/.test(w))             return 'apartment';
+  if (/rumah|house|kontrakan/.test(w))           return 'house';
+  if (/hotel|penginapan/.test(w))                return 'hotel';
+  if (/kos|kost|kosan|indekos/.test(w))          return 'boarding_house';
+  if (/ruko|rukan|shophouse/.test(w))            return 'shophouse';
+  if (/kantor|office/.test(w))                   return 'office';
+  if (/gudang|warehouse/.test(w))                return 'warehouse';
+  return null;
+}
+
+/**
+ * Format qualification state as a readable checklist block for AI injection.
+ * Green = answered (AI must NOT re-ask). Red = unanswered (AI should ask next).
+ *
+ * @param {object} state - From extractQualificationState()
+ * @returns {string}
+ */
+function buildQualificationStateBlock(state) {
+  const row = (label, val) => val
+    ? `✅ ${label}: ${val}`
+    : `❓ ${label}: BELUM DIJAWAB`;
+
+  const fbNote = state.fallbackTypes.length
+    ? ` (fallback: ${state.fallbackTypes.join(' / ')})`
+    : '';
+
+  return [
+    '╔══════════════════════════════════════════════════════════╗',
+    '║  📋 QUALIFICATION STATE — STATUS JAWABAN CUSTOMER        ║',
+    '║  ✅ = SUDAH DIJAWAB → JANGAN TANYA LAGI                  ║',
+    '║  ❓ = BELUM DIJAWAB → TANYAKAN BERIKUTNYA (urutan Q↑)    ║',
+    '╚══════════════════════════════════════════════════════════╝',
+    '',
+    row('Tipe transaksi    [Q1]', state.transactionType),
+    row('Tipe properti         ', state.buildingType ? state.buildingType + fbNote : null),
+    row('Lokasi            [Q2]', state.location),
+    row('Budget            [Q3]', state.budget),
+    row('Penghuni          [Q4]', state.household),
+    row('Red flags         [Q5]', state.redFlags),
+    row('Patokan lokasi    [Q6]', state.anchorPoint),
+    row('Area alternatif   [Q7]', state.alternativeAreas),
+    row('Tanggal masuk  ⚠️WAJIB [Q8]', state.moveInDate),
+    row('Keputusan         [Q9]', state.decisionMaker),
+    row('Durasi sewa      [Q10]', state.leaseDuration),
+    row('Furnitur         [Q11]', state.furnishing),
+    row('Apt preference   [Q12]', state.apartmentPref),
+    '',
+    '→ Tanyakan HANYA field ❓ di atas, mulai dari nomor Q terkecil.',
+    '→ SATU pertanyaan per pesan. Jangan gabungkan dua pertanyaan.',
+    '→ Q3 Budget: JANGAN tanya langsung — gunakan 2 harga kontras sebagai pilihan.',
+    '→ Q8 Tanggal masuk WAJIB dijawab sebelum summary ditampilkan.',
+  ].join('\n');
+}
+
 /* ─── Indonesian keyword list for server-side language detection ───────────── */
 const ID_DETECT_WORDS = [
   // Pronouns & modals
@@ -194,6 +448,13 @@ function buildWhatsappReplyPrompt(session, history, userMessage, propertyContext
   // ── Detect RESPOND_CATALOG_RUN mode ──────────────────────────────────────
   const summaryMode = String(process.env.RESPOND_CATALOG_RUN || 'OFF').toUpperCase() !== 'ON';
 
+  // ── Build server-side qualification state (prevents repeated questions) ──
+  // This is computed from full history BEFORE calling the AI. The AI receives
+  // an authoritative ✅/❓ checklist so it never re-asks an answered question,
+  // even if raw history is long and early answers are hard to spot.
+  const qualState      = summaryMode ? extractQualificationState(history, userMessage) : null;
+  const qualStateBlock = qualState   ? buildQualificationStateBlock(qualState)          : '';
+
   // ── Summary mode: inject full Q1–Q12 qualification instructions ──────────
   const summaryModeInstructions = summaryMode ? `
 
@@ -206,24 +467,41 @@ You are currently in QUALIFICATION MODE. This means:
 3. ✅ Only after ALL mandatory questions are answered → show the structured brief below.
 4. ✅ Never skip Q8 (move-in date) — it is MANDATORY.
 
+### Context Continuation Rules (CRITICAL — Read First)
+
+Short customer answers are CONTINUATIONS of the previous question — not new topics.
+NEVER re-ask a question that was already answered. Read the full history before deciding which question to ask next.
+
+Examples of continuation answers and what to do next:
+- Q4 was asked ("Nanti tinggal bersama siapa saja?") → customer says "saya tinggal sendiran aja", "sama istri aja", "berdua sama anak" → **acknowledge + ask next unanswered question**
+- Q8 was asked ("Rencananya masuk bulan apa?") → customer says "Juni 2026", "bulan depan", "24 juni" → **acknowledge + ask next unanswered question**
+- Q1 was asked ("Sewa atau beli?") → customer says "sewa", "beli aja" → **acknowledge + ask next unanswered question**
+- Q3: customer says "yang terjangkau aja" / "murah aja" → **budget = affordable, proceed to next question**
+
+Rule: After receiving a short answer, always ACKNOWLEDGE first, then ask ONE next question.
+Example acknowledgment for Q4: "Oke, berarti 1 kamar cukup ya 😊" or "Siap, nanti saya carikan yang cocok untuk 1 orang." Then ask the next unanswered Q.
+
 ### Discovery Conversation Rules (from PRD)
 
 Most customers don't know exactly what they want. Guide discovery through OPTIONS, not interrogation.
 
-**Q1 — Transaction type** (skip if already known)
+**Q1 — Transaction type** (skip if already known from history)
 "Lagi cari untuk sewa atau beli?"
 
 **Q2 — Search history** (after location is established — HIGHEST VALUE QUESTION)
 "Sudah lihat berapa properti di area itu? Apa yang membuat belum cocok dari yang sudah dilihat?"
 → Extracts: red flags, budget ceiling, decision maker signals, anchor point, urgency.
 
-**Q3 — Budget** (NEVER ask directly — show two contrasting options)
-"Di [area] kami ada yang di kisaran [LOW] dan ada yang [HIGH]. Kira-kira yang mana lebih sesuai?"
-→ Customer's reaction reveals real budget. Do NOT ask "berapa budget Anda?"
+**Q3 — Budget** (NEVER ask directly — always show two contrasting price options)
+"Di [area] kami ada Villa yang di kisaran [LOW range] dan ada juga yang [HIGH range]. Kira-kira yang mana lebih sesuai dengan rencana Bapak/Ibu?"
+→ Customer's reaction reveals real budget. NEVER ask "berapa budget Anda?" or "kisaran harga berapa?"
+→ Use realistic price ranges for the specific property type + location + transaction.
+→ If customer says "yang terjangkau", "murah aja", "affordable" → budget = terjangkau, PROCEED to next Q.
 
 **Q4 — Household composition** (NEVER ask bedrooms directly)
 "Nanti akan tinggal bersama siapa saja? Biar saya bisa carikan yang pas jumlah kamarnya."
 → Infers bedrooms + decision maker signal.
+→ Short answers like "sendiri", "sama istri", "berdua", "saya aja" = valid Q4 answer → PROCEED.
 
 **Q5 — Red flags** (only if not captured in Q2)
 "Ada yang pasti tidak cocok? Misalnya yang hadap barat, dekat jalan ramai, gang sempit, atau rumah tua?"
@@ -263,20 +541,19 @@ Show the structured brief ONLY when ALL of the following are answered:
 
 **Brief format:**
 \`\`\`
-Baik, semua sudah saya catat! 📝
+Baik, permintaan utama Anda sudah saya catat, sebagai berikut 📝 🔥
 
 ✓ Rencana: *[sewa/beli]*
 ✓ Tipe: *[building type]*
 ✓ Lokasi: *[location]*
-✓ Budget: *[budget]* (stated/inferred)
+✓ Budget: *[budget]* (terkonfirmasi nanti)
 ✓ Masuk: *[move-in month]*
 ✓ Keputusan bersama: *[solo/joint]*
 ✓ Furnitur: *[furnished/semi/kosong]*
 ✓ Area alternatif: *[areas]*
 
-[Agent name] akan segera menghubungi Anda dengan rekomendasi terbaik! 🏠
-
-Terima kasih sudah menghubungi kami. 🙏
+Saya akan segera menghubungi Anda dengan rekomendasi properti yang paling sesuai! 🏠 Apabila ada pertanyaan lagi, silahkan hubungi saya kembali.
+Terima kasih sudah menghubungi saya. 🙏
 \`\`\`
 
 ### Summary Mode Constraints
@@ -290,6 +567,7 @@ Terima kasih sudah menghubungi kami. 🙏
   return `${getProjectSkillInstruction(provider)}
 ${forcedLangInstruction}
 ${summaryModeInstructions}
+${qualStateBlock ? `\n${qualStateBlock}\n` : ''}
 Customer profile:
 Name: ${session.name}
 Phone: ${session.normalizedPhone}
@@ -307,7 +585,15 @@ ${userMessage}
 
 Task:
 ${summaryMode
-    ? 'Ask the next qualification question from Q1–Q12 based on what has already been answered in history. If all mandatory questions are answered, show the structured brief. NEVER show property listings.'
+    ? `Lihat QUALIFICATION STATE di atas (✅ = sudah dijawab, ❓ = belum dijawab).
+Kemudian:
+1. Jika pesan terbaru adalah jawaban singkat untuk pertanyaan sebelumnya → AKUI singkat (1 kalimat), lalu tanyakan pertanyaan ❓ BERIKUTNYA dengan nomor Q terkecil.
+2. Jika pesan terbaru mengandung informasi baru → catat, lalu tanyakan pertanyaan ❓ berikutnya.
+3. Jika semua pertanyaan wajib (Q1 tx, building type, Q2 lokasi, Q3 budget, Q4 penghuni, Q8 tanggal) sudah ✅ → tampilkan structured brief.
+⛔ JANGAN tampilkan listing properti dalam mode ini.
+⛔ JANGAN tanya ulang pertanyaan yang sudah ✅ di QUALIFICATION STATE.
+⛔ SATU pertanyaan per pesan — jangan gabungkan dua pertanyaan.
+⛔ Q3 Budget: JANGAN tanya langsung — gunakan 2 harga kontras sebagai pilihan reaksi.`
     : 'Create the final WhatsApp reply using only the backend property catalog context above. If exact matches are available, recommend exact matches directly. If no exact match is available, say that no exact match is available and then present only the backend alternatives.'
   }`;
 }
@@ -335,5 +621,7 @@ module.exports = {
   detectLanguage,
   buildWhatsappReplyPrompt,
   buildIntentDetectionPrompt,
-  buildPreferenceExtractionPrompt
+  buildPreferenceExtractionPrompt,
+  extractQualificationState,
+  buildQualificationStateBlock,
 };

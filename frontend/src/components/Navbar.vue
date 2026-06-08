@@ -1,373 +1,240 @@
 <template>
-  <section class="navbar-area navbar-nine sticky">
+  <header class="navbar-elevan" :class="{ scrolled: isScrolled }">
     <div class="container">
-      <div class="row">
-        <div class="col-lg-12">
-          <nav class="navbar navbar-expand-lg">
-            <router-link class="navbar-brand" to="/">
-              <img src="/assets/images/logo.svg" alt="Logo" />
-            </router-link>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNine"
-              aria-controls="navbarNine" aria-expanded="false" aria-label="Toggle navigation">
-              <span class="toggler-icon"></span>
-              <span class="toggler-icon"></span>
-              <span class="toggler-icon"></span>
+
+      <!-- Brand -->
+      <router-link class="navbar-brand-elevan" to="/" @click="closeDropdown">
+        <div class="brand-logo-mark">E</div>
+        <span class="brand-name">Elevan <span>Property</span></span>
+      </router-link>
+
+      <!-- Desktop Nav — Guest -->
+      <nav class="navbar-links d-none d-lg-flex" v-if="!currentUser">
+        <router-link class="nav-link-elevan" active-class="active" to="/">Home</router-link>
+        <router-link class="nav-link-elevan" active-class="active" to="/about">About</router-link>
+        <router-link class="nav-link-elevan" active-class="active" to="/contact">Contact</router-link>
+        <router-link class="nav-link-elevan" active-class="active" to="/rumah123">Rumah123</router-link>
+      </nav>
+
+      <!-- Desktop Nav — Authenticated -->
+      <nav class="navbar-links d-none d-lg-flex" v-else>
+        <router-link class="nav-link-elevan" active-class="active" to="/rumah123">Rumah123</router-link>
+        <router-link class="nav-link-elevan" active-class="active" to="/facility">Fasilitas</router-link>
+      </nav>
+
+      <!-- Actions -->
+      <div class="navbar-actions">
+
+        <!-- Guest: Login / Register -->
+        <template v-if="!currentUser">
+          <router-link to="/login" class="btn btn-outline-white btn-sm d-none d-md-inline-flex">
+            Masuk
+          </router-link>
+          <router-link to="/register" class="btn btn-gold btn-sm">
+            Daftar
+          </router-link>
+        </template>
+
+        <!-- Authenticated: User chip + Settings -->
+        <template v-else>
+          <div class="navbar-user-chip d-none d-md-flex">
+            <div class="user-avatar-mini">{{ userInitial }}</div>
+            <span>{{ currentUser.name }}</span>
+          </div>
+
+          <!-- Settings Dropdown -->
+          <div class="nav-dropdown" ref="dropdownRef">
+            <button
+              class="btn btn-outline-white btn-sm"
+              @click="toggleDropdown"
+              :aria-expanded="showDropdown"
+              aria-label="Menu pengaturan"
+            >
+              <i class="fa-solid fa-gear"></i>
             </button>
 
-            <div class="collapse navbar-collapse sub-menu-bar" id="navbarNine">
-              <!-- Menu untuk user yang BELUM login -->
-              <template v-if="!currentUser">
-                <ul class="navbar-nav me-auto">
-                  <li class="nav-item"><router-link class="page-scroll" active-class="active" to="/">Home</router-link></li>
-                  <li class="nav-item"><router-link class="page-scroll" active-class="active" to="/about">About Us</router-link></li>
-                  <li class="nav-item"><router-link class="page-scroll" active-class="active" to="/contact">Contact</router-link></li>
-                  <li class="nav-item"><router-link class="page-scroll" active-class="active" to="/rumah123">Rumah 123</router-link></li>
-                </ul>
+            <div v-if="showDropdown" class="nav-dropdown-menu" role="menu">
+              <div class="dropdown-header-menu">
+                <span>Pengaturan</span>
+              </div>
 
-                <ul class="navbar-nav ms-auto auth-nav">
-                  <li class="nav-item">
-                    <router-link class="auth-link-login" to="/login">Login</router-link>
-                  </li>
-                  <li class="nav-item">
-                    <router-link class="auth-link-register" to="/register">Register</router-link>
-                  </li>
-                </ul>
-              </template>
+              <router-link
+                to="/profile"
+                class="dropdown-item-elevan"
+                @click="closeDropdown"
+                role="menuitem"
+              >
+                <i class="fa-regular fa-circle-user item-icon"></i>
+                <span>Profil Saya</span>
+              </router-link>
 
-              <!-- Menu untuk user yang SUDAH login -->
-              <template v-else>
-                <ul class="navbar-nav me-auto">
-                  <li class="nav-item"><router-link class="page-scroll" active-class="active" to="/rumah123">Rumah 123</router-link></li>
-                  <li class="nav-item"><router-link class="page-scroll" active-class="active" to="/facility">Master Fasilitas</router-link></li>
-                </ul>
+              <router-link
+                to="/facility"
+                class="dropdown-item-elevan"
+                @click="closeDropdown"
+                role="menuitem"
+              >
+                <i class="fa-solid fa-tags item-icon"></i>
+                <span>Master Fasilitas</span>
+              </router-link>
 
-                <ul class="navbar-nav ms-auto auth-nav">
-                  <li class="nav-item">
-                    <span class="navbar-user">{{ currentUser.name }}</span>
-                  </li>
+              <div class="dropdown-divider-item"></div>
 
-                  <!-- Settings Dropdown -->
-                  <li class="nav-item dropdown-container">
-                    <button class="settings-btn" @click="toggleSettingsMenu" title="Pengaturan">
-                      ⚙️
-                    </button>
-
-                    <div v-if="showSettingsMenu" class="settings-dropdown">
-                      <div class="dropdown-header">
-                        <span class="dropdown-title">Pengaturan</span>
-                      </div>
-
-                      <router-link
-                        to="/profile"
-                        class="dropdown-menu-item profile-item"
-                        @click="showSettingsMenu = false"
-                      >
-                        <span class="item-icon">👤</span>
-                        <span class="item-text">Profil Saya</span>
-                      </router-link>
-
-                      <router-link
-                        to="/facility"
-                        class="dropdown-menu-item profile-item"
-                        @click="showSettingsMenu = false"
-                      >
-                        <span class="item-icon">🏷️</span>
-                        <span class="item-text">Master Fasilitas</span>
-                      </router-link>
-
-                      <div class="dropdown-divider"></div>
-
-                      <button
-                        class="dropdown-menu-item logout-item"
-                        @click="handleLogout"
-                      >
-                        <span class="item-icon">🚪</span>
-                        <span class="item-text">Logout</span>
-                      </button>
-                    </div>
-                  </li>
-                </ul>
-              </template>
+              <button
+                class="dropdown-item-elevan danger"
+                @click="handleLogout"
+                role="menuitem"
+              >
+                <i class="fa-solid fa-right-from-bracket item-icon"></i>
+                <span>Keluar</span>
+              </button>
             </div>
-          </nav>
-        </div>
+          </div>
+        </template>
+
+        <!-- Mobile Hamburger -->
+        <button
+          class="btn btn-outline-white btn-sm d-lg-none"
+          @click="toggleMobileMenu"
+          :aria-expanded="showMobileMenu"
+          aria-label="Toggle navigation"
+        >
+          <i :class="showMobileMenu ? 'fa-solid fa-xmark' : 'fa-solid fa-bars'"></i>
+        </button>
       </div>
     </div>
-  </section>
+
+    <!-- Mobile Menu -->
+    <div v-if="showMobileMenu" class="mobile-menu">
+      <div class="container">
+        <template v-if="!currentUser">
+          <router-link class="mobile-nav-link" to="/"        @click="closeMobileMenu">Home</router-link>
+          <router-link class="mobile-nav-link" to="/about"   @click="closeMobileMenu">About</router-link>
+          <router-link class="mobile-nav-link" to="/contact" @click="closeMobileMenu">Contact</router-link>
+          <router-link class="mobile-nav-link" to="/rumah123"@click="closeMobileMenu">Rumah123</router-link>
+          <div class="mobile-nav-divider"></div>
+          <router-link class="mobile-nav-link" to="/login"   @click="closeMobileMenu">Masuk</router-link>
+          <router-link class="mobile-nav-link accent" to="/register" @click="closeMobileMenu">Daftar</router-link>
+        </template>
+        <template v-else>
+          <div class="mobile-nav-user">
+            <div class="user-avatar-mini">{{ userInitial }}</div>
+            <div>
+              <div style="font-weight:600;color:#fff;font-size:.9rem;">{{ currentUser.name }}</div>
+              <div style="font-size:.75rem;color:rgba(255,255,255,.55);">Agent</div>
+            </div>
+          </div>
+          <router-link class="mobile-nav-link" to="/rumah123" @click="closeMobileMenu">Rumah123</router-link>
+          <router-link class="mobile-nav-link" to="/facility" @click="closeMobileMenu">Master Fasilitas</router-link>
+          <router-link class="mobile-nav-link" to="/profile"  @click="closeMobileMenu">Profil Saya</router-link>
+          <div class="mobile-nav-divider"></div>
+          <button class="mobile-nav-link danger" @click="handleLogout">Keluar</button>
+        </template>
+      </div>
+    </div>
+  </header>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { getCachedUser, logoutUser } from '../services/authApi';
 import { toast } from 'vue3-toastify';
 
-const router = useRouter();
-const currentUser = ref(null);
-const showSettingsMenu = ref(false);
+/* ── State ─────────────────────────────────────────────── */
+const router        = useRouter();
+const currentUser   = ref(null);
+const showDropdown  = ref(false);
+const showMobileMenu= ref(false);
+const isScrolled    = ref(false);
+const dropdownRef   = ref(null);
 
-const refreshCurrentUser = () => {
-  currentUser.value = getCachedUser();
-};
+/* ── Computed ──────────────────────────────────────────── */
+/** First letter of user's name for avatar */
+const userInitial = computed(() => {
+  const name = currentUser.value?.name || '';
+  return name.charAt(0).toUpperCase();
+});
 
-const toggleSettingsMenu = () => {
-  showSettingsMenu.value = !showSettingsMenu.value;
-};
+/* ── Methods ───────────────────────────────────────────── */
+const refreshCurrentUser = () => { currentUser.value = getCachedUser(); };
 
-const closeSettingsMenu = (event) => {
-  // Tutup menu jika klik di luar dropdown
-  const dropdown = document.querySelector('.dropdown-container');
-  if (dropdown && !dropdown.contains(event.target)) {
-    showSettingsMenu.value = false;
+const toggleDropdown  = () => { showDropdown.value  = !showDropdown.value; };
+const closeDropdown   = () => { showDropdown.value  = false; };
+const toggleMobileMenu= () => { showMobileMenu.value= !showMobileMenu.value; };
+const closeMobileMenu = () => { showMobileMenu.value= false; };
+
+/** Close settings dropdown when clicking outside */
+const handleOutsideClick = (e) => {
+  if (dropdownRef.value && !dropdownRef.value.contains(e.target)) {
+    closeDropdown();
   }
 };
 
+/** Track scroll position to apply shadow */
+const handleScroll = () => { isScrolled.value = window.scrollY > 20; };
+
 const handleLogout = async () => {
-  showSettingsMenu.value = false;
+  closeDropdown();
+  closeMobileMenu();
   await logoutUser();
   currentUser.value = null;
-  toast.info('Anda telah logout');
+  toast.info('Anda telah keluar');
   router.push('/login');
 };
 
+/* ── Lifecycle ─────────────────────────────────────────── */
 onMounted(() => {
   refreshCurrentUser();
-  // Refresh user info ketika storage berubah (mis. tab lain)
-  window.addEventListener('storage', refreshCurrentUser);
-  // Close menu ketika klik di luar
-  document.addEventListener('click', closeSettingsMenu);
+  window.addEventListener('storage',    refreshCurrentUser);
+  document.addEventListener('click',    handleOutsideClick);
+  window.addEventListener('scroll',     handleScroll, { passive: true });
 });
 
 onUnmounted(() => {
-  document.removeEventListener('click', closeSettingsMenu);
+  window.removeEventListener('storage', refreshCurrentUser);
+  document.removeEventListener('click', handleOutsideClick);
+  window.removeEventListener('scroll',  handleScroll);
 });
 
-// Refresh setiap kali route berubah (login/logout)
 router.afterEach(() => {
   refreshCurrentUser();
-  showSettingsMenu.value = false;
+  closeDropdown();
+  closeMobileMenu();
 });
 </script>
 
 <style scoped>
-.auth-nav {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  margin-left: auto;
+/* Mobile Menu */
+.mobile-menu {
+  border-top: 1px solid rgba(255,255,255,.08);
+  background: rgba(22,33,60,.98);
+  backdrop-filter: blur(12px);
+  padding: 12px 0 20px;
+  animation: slideDown 0.18s ease;
 }
-
-.auth-link-login {
-  padding: 8px 18px;
-  border-radius: 6px;
-  font-weight: 600;
-  text-decoration: none;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.2s;
-  border: 1.5px solid #667eea;
-  color: #667eea;
-  background: transparent;
-}
-
-.auth-link-login:hover {
-  background: #667eea;
-  color: white;
-}
-
-.auth-link-register {
-  padding: 8px 18px;
-  border-radius: 6px;
-  font-weight: 600;
-  text-decoration: none;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.2s;
-  border: none;
-  background: linear-gradient(135deg, #667eea, #764ba2);
-  color: white;
-}
-
-.auth-link-register:hover {
-  opacity: 0.92;
-}
-
-.navbar-user {
-  color: white;
-  font-weight: 500;
-  font-size: 14px;
-  margin-right: 12px;
-}
-
-/* Settings Dropdown */
-.dropdown-container {
-  position: relative;
-}
-
-.settings-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
-  font-weight: 600;
-  font-size: 18px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  border: none;
-  background: rgba(255, 255, 255, 0.15);
-  color: white;
-  backdrop-filter: blur(10px);
-}
-
-.settings-btn:hover {
-  background: rgba(255, 255, 255, 0.25);
-  transform: scale(1.05);
-}
-
-.settings-btn:active {
-  transform: scale(0.98);
-}
-
-.settings-dropdown {
-  position: absolute;
-  top: calc(100% + 12px);
-  right: 0;
-  background: white;
-  border: 1px solid #e8e8f0;
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
-  min-width: 220px;
-  z-index: 2000;
-  overflow: visible;
-  animation: slideDown 0.2s ease;
-}
-
 @keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(-10px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
-
-.dropdown-header {
-  padding: 12px 16px;
-  background: linear-gradient(135deg, #f5f7fa 0%, #f0f0f8 100%);
-  border-bottom: 1px solid #e8e8f0;
+.mobile-nav-user {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 0; margin-bottom: 8px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
 }
-
-.dropdown-title {
-  display: block;
-  font-weight: 600;
-  color: #2d3748;
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.dropdown-menu-item {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  padding: 12px 16px;
-  text-align: left;
-  color: #1a202c;
+.mobile-nav-link {
+  display: block; width: 100%;
+  padding: 11px 4px;
+  font-size: 0.9rem; font-weight: 500;
+  color: rgba(255,255,255,.8);
   text-decoration: none;
-  font-size: 14px;
-  font-weight: 500;
-  border: none;
-  background: none;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  gap: 12px;
+  border: none; background: none; cursor: pointer;
+  text-align: left;
+  border-bottom: 1px solid rgba(255,255,255,.05);
+  transition: color 0.18s;
 }
-
-.dropdown-menu-item:hover {
-  background-color: #f7fafc;
-  padding-left: 20px;
-}
-
-.item-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  width: 24px;
-  height: 24px;
-}
-
-.item-text {
-  flex: 1;
-  color: #1a202c;
-}
-
-.profile-item {
-  color: #1a202c;
-}
-
-.profile-item:hover {
-  color: #667eea;
-  background-color: #f0f4ff;
-}
-
-.dropdown-divider {
-  height: 1px;
-  background-color: #e8e8f0;
-  margin: 0;
-}
-
-.logout-item {
-  color: #1a202c;
-  font-weight: 600;
-}
-
-.logout-item:hover {
-  background-color: #fff5f5;
-  color: #e53e3e;
-  padding-left: 20px;
-}
-
-@media (max-width: 768px) {
-  .dropdown-container {
-    position: relative;
-  }
-
-  .settings-btn {
-    width: 44px;
-    height: 44px;
-    font-size: 20px;
-    padding: 0;
-  }
-
-  .settings-dropdown {
-    position: fixed;
-    top: auto;
-    right: 12px;
-    left: auto;
-    bottom: auto;
-    max-width: calc(100vw - 24px);
-    min-width: 200px;
-    z-index: 2000;
-  }
-
-  .dropdown-menu-item {
-    padding: 14px 16px;
-    font-size: 15px;
-  }
-
-  .dropdown-menu-item:hover {
-    padding-left: 20px;
-  }
-
-  .item-icon {
-    font-size: 20px;
-    width: 28px;
-    height: 28px;
-  }
-}
+.mobile-nav-link:hover, .mobile-nav-link.router-link-active { color: #fff; }
+.mobile-nav-link.accent { color: var(--gold); }
+.mobile-nav-link.danger { color: #fc8181; }
+.mobile-nav-divider { height: 1px; background: rgba(255,255,255,.08); margin: 8px 0; }
 </style>

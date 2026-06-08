@@ -1,100 +1,295 @@
 <template>
   <div>
-    <section id="hero-area" class="header-area header-eight">
+
+    <!-- ── Hero Section ───────────────────────────────── -->
+    <section class="hero-elevan">
+      <div class="hero-bg"></div>
       <div class="container">
-        <div class="row align-items-center">
-          <div class="col-lg-6 col-md-12 col-12">
-            <div class="header-content">
-              <h1>{{ home.heroTitle }}</h1>
-              <p>{{ home.heroSubtitle }}</p>
-              <div class="button">
-                <router-link to="/about" class="btn primary-btn">View Portfolio</router-link>
-                <router-link to="/contact" class="btn primary-btn-outline ms-2">Contact Us</router-link>
-              </div>
-            </div>
+        <div class="hero-content">
+          <div class="hero-label">
+            <i class="fa-solid fa-star" style="font-size:.6rem;"></i>
+            Platform Properti Premium Indonesia
           </div>
-          <div class="col-lg-6 col-md-12 col-12">
-            <div class="header-image">
-              <img src="/assets/images/header/hero-image.jpg" alt="Real estate hero" />
+
+          <h1 class="hero-title">
+            Temukan Properti<br>
+            <em>Impian Anda</em>
+          </h1>
+
+          <p class="hero-subtitle">
+            {{ home.heroSubtitle }}
+          </p>
+
+          <div class="hero-actions">
+            <router-link to="/rumah123" class="btn btn-gold btn-lg">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              Cari Properti
+            </router-link>
+            <router-link to="/contact" class="btn btn-outline-white btn-lg">
+              Hubungi Kami
+            </router-link>
+          </div>
+
+          <div class="hero-stats">
+            <div class="hero-stat-item">
+              <div class="hero-stat-value">7.9<span>K+</span></div>
+              <div class="hero-stat-label">Listing Properti</div>
+            </div>
+            <div class="hero-stat-item">
+              <div class="hero-stat-value">36<span>+</span></div>
+              <div class="hero-stat-label">Provinsi</div>
+            </div>
+            <div class="hero-stat-item">
+              <div class="hero-stat-value">5<span>★</span></div>
+              <div class="hero-stat-label">Agent Tersertifikasi</div>
+            </div>
+            <div class="hero-stat-item">
+              <div class="hero-stat-value">AI<span>24/7</span></div>
+              <div class="hero-stat-label">Asisten Properti</div>
             </div>
           </div>
         </div>
       </div>
     </section>
 
-    <section class="about-area about-five">
+    <!-- ── About / Story Section ──────────────────────── -->
+    <section class="section-pad" style="background: var(--white);">
       <div class="container">
-        <div class="row align-items-center">
-          <div class="col-lg-6 col-12">
-            <div class="about-image-five">
-              <img src="/assets/images/about/about-img1.jpg" alt="about" />
+        <div class="row align-items-center g-5">
+
+          <div class="col-lg-5">
+            <div class="about-image-wrapper">
+              <img
+                src="/assets/images/about/about-img1.jpg"
+                alt="Elevan Property — Our Story"
+                class="about-main-img"
+                loading="lazy"
+              />
+              <div class="about-badge">
+                <i class="fa-solid fa-shield-halved"></i>
+                <span>Terpercaya sejak 2024</span>
+              </div>
             </div>
           </div>
-          <div class="col-lg-6 col-12">
-            <div class="about-five-content">
-              <h6 class="small-title text-lg">OUR STORY</h6>
-              <h2 class="main-title fw-bold">Smart property assistance for better decisions</h2>
-              <div class="about-five-tab">
-                <nav>
-                  <div class="nav nav-tabs" id="nav-tab" role="tablist">
-                    <button class="nav-link active" id="nav-story-tab" data-bs-toggle="tab" data-bs-target="#nav-story" type="button" role="tab">Story</button>
-                    <button class="nav-link" id="nav-vision-tab" data-bs-toggle="tab" data-bs-target="#nav-vision" type="button" role="tab">Vision</button>
-                    <button class="nav-link" id="nav-mission-tab" data-bs-toggle="tab" data-bs-target="#nav-mission" type="button" role="tab">Mission</button>
-                  </div>
-                </nav>
-                <div class="tab-content" id="nav-tabContent">
-                  <div class="tab-pane fade show active" id="nav-story" role="tabpanel"><p>{{ home.story }}</p></div>
-                  <div class="tab-pane fade" id="nav-vision" role="tabpanel"><p>{{ home.vision }}</p></div>
-                  <div class="tab-pane fade" id="nav-mission" role="tabpanel"><p>{{ home.mission }}</p></div>
+
+          <div class="col-lg-7">
+            <div class="about-content">
+              <div class="section-label">Tentang Kami</div>
+              <h2 class="section-title">
+                Asisten properti cerdas untuk<br>
+                <span>keputusan terbaik Anda</span>
+              </h2>
+              <p>{{ home.story }}</p>
+
+              <!-- Story / Vision / Mission tabs -->
+              <div class="about-tabs">
+                <div class="tab-nav">
+                  <button
+                    v-for="tab in tabs"
+                    :key="tab.key"
+                    class="tab-btn"
+                    :class="{ active: activeTab === tab.key }"
+                    @click="activeTab = tab.key"
+                  >{{ tab.label }}</button>
+                </div>
+                <div class="tab-body">
+                  <p>{{ home[activeTab] }}</p>
                 </div>
               </div>
             </div>
           </div>
+
         </div>
       </div>
     </section>
 
-    <section class="services-area services-eight">
-      <div class="section-title-five">
-        <div class="container">
-          <div class="row"><div class="col-12"><div class="content"><h6>Benefits</h6><h2 class="fw-bold">Why Customers Use ElevanLabs</h2></div></div></div>
-        </div>
-      </div>
+    <!-- ── Benefits / Features Section ───────────────── -->
+    <section class="section-pad" style="background: var(--cream);">
       <div class="container">
-        <div class="row">
-          <div v-for="benefit in home.benefits" :key="benefit" class="col-lg-4 col-md-6 mb-3">
-            <div class="single-services h-100">
-              <div class="service-icon"><i class="lni lni-checkmark-circle"></i></div>
-              <div class="service-content"><h4>{{ benefit }}</h4><p>Designed to make the property search and follow-up process faster and more reliable.</p></div>
+        <div class="text-center mb-5">
+          <div class="section-label" style="justify-content:center;margin-bottom:var(--space-3);">
+            Keunggulan
+          </div>
+          <h2 class="section-title mb-2">
+            Mengapa Memilih <span>Elevan Property</span>?
+          </h2>
+          <p style="max-width:520px;margin:0 auto;font-size:.95rem;">
+            Kami menggabungkan teknologi AI terkini dengan keahlian properti untuk memberikan pengalaman terbaik.
+          </p>
+        </div>
+
+        <div class="row g-4">
+          <div
+            v-for="(benefit, index) in benefitCards"
+            :key="index"
+            class="col-lg-3 col-md-6"
+          >
+            <div class="feature-card h-100">
+              <div class="feature-icon-wrap">
+                <i :class="benefit.icon"></i>
+              </div>
+              <h5 class="feature-title">{{ benefit.title }}</h5>
+              <p class="feature-desc">{{ benefit.desc }}</p>
             </div>
           </div>
         </div>
       </div>
     </section>
+
+    <!-- ── CTA Section ────────────────────────────────── -->
+    <section class="cta-section">
+      <div class="container">
+        <div class="cta-card">
+          <div class="cta-content">
+            <div class="section-label">Mulai Sekarang</div>
+            <h2 class="section-title" style="color:var(--white);margin-bottom:12px;">
+              Siap Temukan Properti Ideal?
+            </h2>
+            <p style="color:rgba(255,255,255,.7);margin-bottom:var(--space-5);">
+              Gunakan AI chatbot kami 24/7 untuk mencari, membandingkan, dan menemukan properti yang sesuai.
+            </p>
+            <div class="hero-actions">
+              <router-link to="/rumah123" class="btn btn-gold btn-lg">
+                <i class="fa-solid fa-house-chimney"></i>
+                Lihat Listing
+              </router-link>
+              <router-link to="/contact" class="btn btn-outline-white btn-lg">
+                Tanya Agent
+              </router-link>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
   </div>
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import api from '../services/api';
 
+/* ── Static benefit cards (icon + fallback content) ─── */
+const benefitCards = [
+  {
+    icon : 'fa-solid fa-robot',
+    title: 'AI 24/7',
+    desc : 'Asisten AI siap membantu kapan saja melalui WhatsApp maupun website.'
+  },
+  {
+    icon : 'fa-solid fa-database',
+    title: 'Data Lengkap',
+    desc : '7.900+ listing dari 36 provinsi, diperbarui secara berkala dari Rumah123.'
+  },
+  {
+    icon : 'fa-solid fa-user-tie',
+    title: 'Agent Terlatih',
+    desc : '5 agent profesional siap membantu proses sewa maupun pembelian properti.'
+  },
+  {
+    icon : 'fa-solid fa-shield-halved',
+    title: 'Terpercaya',
+    desc : 'Proses transparan, data akurat, dan komunikasi yang cepat & responsif.'
+  }
+];
+
+const tabs = [
+  { key: 'vision',  label: 'Visi'   },
+  { key: 'mission', label: 'Misi'   },
+  { key: 'story',   label: 'Cerita' },
+];
+
+/* ── State ─────────────────────────────────────────────── */
+const activeTab = ref('vision');
+
 const fallbackHome = {
-  heroTitle: 'Find the Right Property with Smart Assistance',
-  heroSubtitle: 'ElevanLabs helps customers buy, sell, and rent houses, villas, hotels, apartments, and boarding houses with a more transparent and guided process.',
-  vision: 'To become a trusted and customer-focused property platform that makes property search, rental, buying, and selling easier for everyone.',
-  mission: 'To connect customers with suitable property options through reliable portfolio data, professional assistance, and AI-powered conversations.',
-  story: 'ElevanLabs was built from the common difficulty of finding reliable property information, comparing options, and communicating with agents quickly.',
-  benefits: ['Clear property information', 'Faster customer response', 'Assisted property discovery', 'AI-powered customer service']
+  heroTitle   : 'Temukan Properti Impian Anda',
+  heroSubtitle: 'ElevanLabs membantu Anda membeli, menjual, dan menyewa rumah, villa, hotel, apartemen, dan kos dengan proses yang lebih transparan dan terarah.',
+  vision  : 'Menjadi platform properti terpercaya yang mempermudah proses pencarian, sewa, beli, dan jual properti bagi semua orang.',
+  mission : 'Menghubungkan pelanggan dengan pilihan properti yang tepat melalui data portofolio yang andal, bantuan profesional, dan percakapan bertenaga AI.',
+  story   : 'ElevanLabs lahir dari kesulitan umum dalam menemukan informasi properti yang andal, membandingkan pilihan, dan berkomunikasi dengan agen secara efisien.',
 };
 
 const home = ref(fallbackHome);
 
+/* ── Lifecycle ─────────────────────────────────────────── */
 onMounted(async () => {
   try {
-    const response = await api.get('/home');
-    home.value = response.data?.data || fallbackHome;
-  } catch (error) {
+    const res = await api.get('/home');
+    home.value = res.data?.data || fallbackHome;
+  } catch {
     home.value = fallbackHome;
   }
 });
 </script>
+
+<style scoped>
+/* ── About image wrapper ─────────────────────────── */
+.about-image-wrapper {
+  position: relative;
+  border-radius: var(--radius-xl);
+  overflow: visible;
+}
+.about-main-img {
+  width: 100%;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  object-fit: cover;
+  aspect-ratio: 4/5;
+}
+.about-badge {
+  position: absolute;
+  bottom: -16px; right: -16px;
+  background: var(--gradient-gold);
+  color: var(--navy);
+  padding: 14px 20px;
+  border-radius: var(--radius-lg);
+  display: flex; align-items: center; gap: 8px;
+  font-size: 0.82rem; font-weight: 700;
+  box-shadow: var(--shadow-gold);
+  white-space: nowrap;
+}
+@media (max-width: 767px) {
+  .about-badge { bottom: -10px; right: 10px; }
+}
+
+/* ── About tabs ─────────────────────────────────── */
+.about-tabs { margin-top: var(--space-5); }
+.tab-nav {
+  display: flex; gap: 4px;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: var(--space-4);
+}
+.tab-btn {
+  padding: 9px 18px;
+  font-size: 0.875rem; font-weight: 600;
+  color: var(--text-secondary);
+  background: none; border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.tab-btn:hover { color: var(--navy); }
+.tab-btn.active { color: var(--navy); border-bottom-color: var(--gold); }
+.tab-body p { font-size: 0.9rem; line-height: 1.75; color: var(--text-secondary); margin: 0; }
+
+/* ── CTA section ─────────────────────────────────── */
+.cta-section {
+  padding: var(--space-9) 0;
+  background: var(--navy);
+  position: relative;
+  overflow: hidden;
+}
+.cta-section::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: url('/assets/images/header/hero-image.jpg') center/cover no-repeat;
+  opacity: .12;
+}
+.cta-card {
+  position: relative; z-index: 1;
+  max-width: 680px;
+}
+.cta-card .section-label { color: var(--gold); }
+</style>

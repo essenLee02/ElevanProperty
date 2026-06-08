@@ -110,8 +110,54 @@ async function saveMessage(session, role, message, metadata = {}) {
 }
 
 /* ════════════════════════════════════════════════════════════════════
-   TERMINAL LOGGING
+   TERMINAL LOGGING — SECURITY UTILITIES
 ════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Sanitasi string sebelum ditulis ke terminal.
+ *
+ * SECURITY: Mencegah tiga kelas serangan melalui pesan customer:
+ *   1. Log injection  — customer mengirim "\n[FONNTE] FAKE_ENTRY" untuk memalsukan log
+ *   2. ANSI injection — karakter escape \x1b[...m yang memanipulasi warna/cursor terminal
+ *   3. Carriage-return injection — \r yang menyebabkan overwrite baris di terminal
+ *
+ * @param {string} str    - String yang akan di-log
+ * @param {number} maxLen - Panjang maksimum (default 400)
+ * @returns {string}      - String aman untuk console.log()
+ */
+function sanitizeLog(str, maxLen = 400) {
+  return String(str || '')
+    .replace(/\x1B\[[0-9;]*[mGKHFABCDJsulnhr]/g, '')  // strip ANSI escape codes
+    .replace(/[\r\n\t]/g, ' ')                          // flatten newlines (prevent log injection)
+    .replace(/\x00/g, '')                               // strip null bytes
+    .substring(0, maxLen);
+}
+
+/**
+ * Sensor nomor telepon untuk log terminal.
+ * Hanya menampilkan 4 digit terakhir untuk melindungi privasi customer.
+ *
+ * @param {string} phone - Nomor telepon raw
+ * @returns {string}     - Contoh: "628***7154"
+ */
+function maskPhone(phone) {
+  const s = String(phone || '');
+  if (s.length <= 4) return '****';
+  return s.substring(0, 3) + '***' + s.slice(-4);
+}
+
+/**
+ * Sensor nama customer — tampilkan nama depan + inisial saja.
+ *
+ * @param {string} name
+ * @returns {string} - Contoh: "Agnes M."
+ */
+function maskName(name) {
+  const s = sanitizeLog(String(name || 'Customer'), 50).trim();
+  const parts = s.split(/\s+/);
+  if (parts.length === 1) return s;
+  return `${parts[0]} ${parts[1].charAt(0).toUpperCase()}.`;
+}
 
 /**
  * Log terminal lengkap setelah pesan properti dibalas AI.
@@ -140,22 +186,33 @@ function logTerminalSummary({
 
   const D = '═'.repeat(80);
 
+  // Sanitize semua user-controlled values sebelum di-log
+  const safeAgentName   = sanitizeLog(agent.name || 'N/A', 80);
+  const safeAgentPhone  = maskPhone(agent.phone);
+  const safeCustomer    = `${maskPhone(customerPhone)} (${maskName(customerName)})`;
+  const safeMessage     = sanitizeLog(message, 300);
+  const safeCtx         = sanitizeLog(ctxSource, 60);
+  const safeProvider    = sanitizeLog(aiProvider, 40);
+  // aiReply dibolehkan multi-line (isi AI) tapi tetap strip ANSI/null
+  const safeReply       = String(aiReply || '').replace(/\x1B\[[0-9;]*[mGKHFABCDJsulnhr]/g, '').replace(/\x00/g, '');
+  const safeSendStatus  = sanitizeLog(sendStatus, 60);
+
   console.log('');
   console.log(D);
-  console.log(`${tag} ⬇  PESAN PROPERTI MASUK & DIBALAS`);
+  console.log(`${sanitizeLog(tag, 20)} ⬇  PESAN PROPERTI MASUK & DIBALAS`);
   console.log(D);
-  console.log(`Agent    : ${agent.name} (${agent.phone || 'N/A'})`);
-  console.log(`Customer : ${customerPhone} (${customerName})`);
+  console.log(`Agent    : ${safeAgentName} (${safeAgentPhone})`);
+  console.log(`Customer : ${safeCustomer}`);
   console.log(`Time     : ${ts}`);
-  console.log(`Message  : ${message}`);
-  console.log(`Context  : ${ctxSource}`);
-  console.log(`AI       : ${aiProvider}`);
+  console.log(`Message  : ${safeMessage}`);
+  console.log(`Context  : ${safeCtx}`);
+  console.log(`AI       : ${safeProvider}`);
   console.log(D);
   console.log('RESPONSE:');
   console.log(D);
-  console.log(aiReply);
+  console.log(safeReply);
   console.log(D);
-  console.log(`Send Status: ${sendStatus}`);
+  console.log(`Send Status: ${safeSendStatus}`);
   console.log(D);
   console.log('');
 }
@@ -175,16 +232,19 @@ function logTerminalSummary({
 function logTerminalSkip({ platform, tag, agent, customerPhone, customerName, ts, message }) {
   if (!isTerminalActive(platform)) return;
 
-  const D = '─'.repeat(62);
+  const D         = '─'.repeat(62);
+  const safeTag   = sanitizeLog(tag, 20);
+  const safeName  = sanitizeLog(agent.name || 'N/A', 60);
+  const safeMsg   = sanitizeLog(message, 120);
 
   console.log('');
   console.log(D);
-  console.log(`${tag} ⬇  PESAN MASUK (bukan query properti — tidak dibalas)`);
-  console.log(`${tag}    Agent    : ${agent.name} (${agent.phone || 'N/A'})`);
-  console.log(`${tag}    Customer : ${customerPhone} (${customerName})`);
-  console.log(`${tag}    Time     : ${ts}`);
-  console.log(`${tag}    Message  : ${message.substring(0, 100)}`);
-  console.log(`${tag}    Status   : 📥 Disimpan ke DB, AI skip`);
+  console.log(`${safeTag} ⬇  PESAN MASUK (bukan query properti — tidak dibalas)`);
+  console.log(`${safeTag}    Agent    : ${safeName} (${maskPhone(agent.phone)})`);
+  console.log(`${safeTag}    Customer : ${maskPhone(customerPhone)} (${maskName(customerName)})`);
+  console.log(`${safeTag}    Time     : ${ts}`);
+  console.log(`${safeTag}    Message  : ${safeMsg}`);
+  console.log(`${safeTag}    Status   : 📥 Disimpan ke DB, AI skip`);
   console.log(D);
   console.log('');
 }
@@ -196,4 +256,7 @@ module.exports = {
   saveMessage,
   logTerminalSummary,
   logTerminalSkip,
+  sanitizeLog,
+  maskPhone,
+  maskName,
 };

@@ -42,6 +42,9 @@ class LanguageDetector {
     // Bulan dalam bahasa Indonesia
     'januari', 'februari', 'maret', 'april', 'mei', 'juni',
     'juli', 'agustus', 'september', 'oktober', 'november', 'desember',
+    // Household composition & family (Q4 answers) — NEW
+    'sendiri', 'sendiran', 'sendirian', 'tinggal', 'bersama', 'istri', 'suami',
+    'anak', 'orangtua', 'orang tua', 'keluarga', 'ayah', 'ibu',
   ];
 
   /** Keywords for clearly off-topic subjects (non-property domains) */
@@ -60,6 +63,9 @@ class LanguageDetector {
     'office', 'kantor', 'warehouse', 'gudang', 'sewa', 'rent', 'rental',
     'beli', 'buy', 'purchase', 'jual', 'sale', 'sell', 'kontrak', 'kontrakan',
     'tanah', 'land', 'investasi',
+    // Household composition (Q4 property-related qualifier)
+    'kamar', 'bedroom', 'furnished', 'furnish', 'fasilitas', 'facilities',
+    'tinggal', 'sendiri', 'keluarga', 'family', 'masuk', 'pindah', 'move',
   ];
 
   /**

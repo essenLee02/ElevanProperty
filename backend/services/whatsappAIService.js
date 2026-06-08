@@ -141,6 +141,27 @@ function buildQualifyReply(filters, message, agentName, contextSource, history =
   // Semua 4 info sudah ada → proceed to AI
   if (type && tx && loc && bud) return null;
 
+  // ── RESPOND_CATALOG_RUN=OFF (Q1–Q12 Summary Mode) ─────────────────────────
+  //
+  // Dalam summary mode, AI sudah mendapat instruksi penuh Q1–Q12 di system prompt.
+  // Kunci: Q3 (budget) harus ditanya AI menggunakan dua pilihan harga kontras
+  //   "Di [area] kami ada yang kisaran [LOW] dan ada yang [HIGH]…"
+  //   BUKAN ditanya langsung oleh qual gate ("Kisaran harga berapa?").
+  //
+  // Rule: Jika setidaknya satu info properti (type, tx, atau location) sudah diketahui,
+  // kembalikan null → biarkan AI menangani sisa pertanyaan via Q1–Q12.
+  //
+  // Hanya gunakan qual gate di summary mode untuk pesan pertama (zero context),
+  // supaya AI tidak menerima terlalu sedikit context saat start.
+  //
+  // Di catalog mode (ON): qual gate selalu dijalankan penuh — AI butuh 4 info
+  // sebelum bisa menampilkan listing.
+  const summaryMode = String(process.env.RESPOND_CATALOG_RUN || 'OFF').toUpperCase() !== 'ON';
+  if (summaryMode && (type || tx || loc)) {
+    // Property context sudah ada → AI handle Q1–Q12 naturally (termasuk Q3 budget)
+    return null;
+  }
+
   const id  = isIndonesian(message, history);
   const sig = agentSignature(agentName, id);
 
@@ -262,7 +283,7 @@ async function generateWhatsAppAIReply(params) {
   // ── Step 2: Get conversation history ───────────────────────────────────────
   let history = [];
   try {
-    history = await getConversationHistory(session.id, 10);
+    history = await getConversationHistory(session.id, 24);
   } catch (err) {
     console.warn('[WhatsAppAI] History fetch failed:', err.message);
   }
@@ -280,16 +301,18 @@ async function generateWhatsAppAIReply(params) {
   const qualResponse = buildQualifyReply(filters, message, agentName, contextSource, history);
 
   if (qualResponse) {
+    const summaryMode = String(process.env.RESPOND_CATALOG_RUN || 'OFF').toUpperCase() !== 'ON';
     console.log('[WhatsAppAI] 🛑 Qualification gate triggered — asking for missing info:', {
-      hasType : !!filters.buildingType,
-      hasTx   : !!filters.transactionType,
-      hasLoc  : !!filters.location,
+      mode     : summaryMode ? 'Q1-Q12 (summary)' : 'catalog (ON)',
+      hasType  : !!filters.buildingType,
+      hasTx    : !!filters.transactionType,
+      hasLoc   : !!filters.location,
       hasBudget: !!filters.budget,
     });
     return qualResponse;
   }
 
-  console.log('[WhatsAppAI] ✅ Qualification passed — proceeding to AI:', {
+  console.log('[WhatsAppAI] ✅ Proceeding to AI:', {
     type    : filters.buildingType,
     tx      : filters.transactionType,
     location: filters.location,

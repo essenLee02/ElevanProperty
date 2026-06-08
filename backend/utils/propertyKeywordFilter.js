@@ -441,6 +441,11 @@ function isPropertyContextContinuation(message, history = []) {
     /sewa\s+untuk\s+berapa/,
     /berapa\s+lama/,
     /tinggal\s+bersama/,
+    /bersama\s+(siapa|siapa\s+saja)/,
+    /tinggal\s+dengan/,
+    /akan\s+tinggal/,
+    /living\s+with/,
+    /live\s+with/,
     // ── English equivalents (AI may respond in English) ───────────────────────
     /rent\s+or\s+buy/,
     /buy\s+or\s+rent/,
@@ -524,6 +529,20 @@ function isPropertyContextContinuation(message, history = []) {
 
   // 8) Durasi sewa singkat (jawaban Q10)
   if (/\b(\d+\s*(tahun|year|bulan|month)s?)\b/i.test(lower))
+    return true;
+
+  // 9) Jawaban komposisi keluarga / rumah tangga (Q4 — "tinggal bersama siapa?")
+  //    Contoh: "saya tinggal sendiri", "sama istri aja", "ada 4 orang", "dengan anak-anak"
+  if (/\b(sendiri|sendiran|sendirian|aja|aj|saja|sama\s+\w+|dengan\s+\w+|bersama|keluarga|orang\s+tua|istri|suami|anak|ayah|ibu|orangtua)\b/i.test(lower))
+    return true;
+  if (/^(iya|ya|setuju|baik|ok|boleh)[\s,]*\d+\s*(orang|person|orang\s+saja|orang\s+aja)$/i.test(lower))
+    return true;  // "iya 4 orang", "ok 3 orang"
+  if (/\b(just\s+me|just\s+us|me\s+alone|family|husband|wife|children|kids|parents|siblings)\b/i.test(lower))
+    return true;  // English variants
+
+  // 10) Jawaban preferensi furnishing / spesifikasi lebih detail
+  //     Contoh: "semi furnish dong", "yang ada ac sama wifi", "minimal ada kamar mandi"
+  if (/\b(furnish|ac\s+penuh|wifi|internet|kamar\s+mandi|parkir|garasi|kolam|renang|taman|keamanan|cctv|penjaga)\b/i.test(lower))
     return true;
 
   return false;

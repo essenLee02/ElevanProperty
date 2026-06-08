@@ -28,6 +28,36 @@ const { hasPropertyKeyword,
         isPropertyContextContinuation } = require('../utils/propertyKeywordFilter');
 const { generateWhatsAppAIReply }       = require('../services/whatsappAIService');
 const { getConversationHistory }        = require('../services/sessionService');
+const { sanitizeLog, maskPhone, maskName } = require('../utils/whatsappUtils');
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   BAGIAN 0 — MESSAGE-ID DEDUP CACHE
+   Prevents double-processing when Fonnte retries a webhook delivery.
+   In-memory Map keyed by messageId → epoch ms. TTL = 10 minutes.
+   Only applies when a stable ID is present (body.inboxid / key / id).
+   Falls back gracefully when no stable ID exists (fonnte_<timestamp> prefix).
+══════════════════════════════════════════════════════════════════════════════ */
+
+const _seenMessageIds = new Map();
+const DEDUP_TTL_MS    = 10 * 60 * 1000; // 10 minutes — covers any Fonnte retry window
+
+function _isAlreadyProcessed(messageId) {
+  if (!messageId || String(messageId).startsWith('fonnte_')) return false;
+  const ts = _seenMessageIds.get(messageId);
+  if (!ts) return false;
+  if (Date.now() - ts > DEDUP_TTL_MS) { _seenMessageIds.delete(messageId); return false; }
+  return true;
+}
+
+function _markProcessed(messageId) {
+  if (!messageId || String(messageId).startsWith('fonnte_')) return;
+  _seenMessageIds.set(messageId, Date.now());
+  // Prune expired entries when the cache grows large
+  if (_seenMessageIds.size > 1000) {
+    const cutoff = Date.now() - DEDUP_TTL_MS;
+    for (const [id, ts] of _seenMessageIds) { if (ts < cutoff) _seenMessageIds.delete(id); }
+  }
+}
 
 /* ══════════════════════════════════════════════════════════════════════════════
    BAGIAN 1 — UTILITY FUNCTIONS
@@ -188,6 +218,14 @@ async function processIncomingMessage(body, agent) {
   // ── Skip media/non-teks ─────────────────────────────────────────────
   if (!message) return;
 
+  // ── Dedup guard (idempotent against Fonnte webhook retries) ─────────
+  // Only blocks customer messages; AI replies are written directly and have no messageId.
+  if (_isAlreadyProcessed(messageId)) {
+    console.log(`[FONNTE DEDUP] ⚠️  Pesan sudah diproses, skip: ${messageId}`);
+    return;
+  }
+  _markProcessed(messageId);
+
   // ── Find/create session ─────────────────────────────────────────────
   const normSender = normalizePhone(sender);
   const source     = `fonnte_${agent.name.toLowerCase().replace(/\s+/g, '_')}`;
@@ -206,15 +244,6 @@ async function processIncomingMessage(body, agent) {
     });
   }
 
-  // ── Simpan pesan customer (selalu, terlepas dari keyword) ───────────
-  await ChatMessage.create({
-    chatSessionId : session.id,
-    role          : 'customer',
-    message,
-    channel       : 'whatsapp',
-    metadata      : JSON.stringify({ agentName: agent.name, messageId, platform: 'fonnte' })
-  });
-
   // ── Cek apakah pesan properti / lanjutan percakapan properti ──────────
   //
   // Dua kondisi yang memicu AI reply:
@@ -223,8 +252,8 @@ async function processIncomingMessage(body, agent) {
   //      Contoh: AI tanya "sewa atau beli?" → customer jawab "saya beli"
   //              "saya beli" tidak mengandung property type, tapi ini jelas lanjutan
   //
-  // History diperlukan untuk context check, fetch di sini (bukan di service)
-  // agar kita bisa memutuskan sebelum memanggil AI.
+  // Pengecekan dilakukan SEBELUM menyimpan ke DB —
+  // pesan non-properti tidak disimpan sama sekali, hanya tampil di terminal.
   const isPropertyQuery = hasPropertyKeyword(message);
 
   let isContinuation = false;
@@ -240,19 +269,29 @@ async function processIncomingMessage(body, agent) {
   if (!isPropertyQuery && !isContinuation) {
     if (isTerminalActive('FONNTE')) {
       const D = '─'.repeat(62);
+      // Sanitize semua nilai dari customer sebelum di-log (prevent log injection)
       console.log('');
       console.log(D);
       console.log(`[FONNTE] ⬇  PESAN MASUK (bukan query properti — tidak dibalas)`);
-      console.log(`[FONNTE]    Agent    : ${agent.name} (${agent.phone})`);
-      console.log(`[FONNTE]    Customer : ${sender} (${name})`);
+      console.log(`[FONNTE]    Agent    : ${sanitizeLog(agent.name, 60)} (${maskPhone(agent.phone)})`);
+      console.log(`[FONNTE]    Customer : ${maskPhone(sender)} (${maskName(name)})`);
       console.log(`[FONNTE]    Time     : ${ts}`);
-      console.log(`[FONNTE]    Message  : ${message.substring(0, 100)}`);
-      console.log(`[FONNTE]    Status   : 📥 Disimpan ke DB, AI skip (bukan query properti)`);
+      console.log(`[FONNTE]    Message  : ${sanitizeLog(message, 120)}`);
+      console.log(`[FONNTE]    Status   : ⏭️  Tidak disimpan ke DB, AI skip (bukan query properti)`);
       console.log(D);
       console.log('');
     }
-    return; // Tidak kirim balasan
+    return; // Tidak kirim balasan, tidak simpan ke DB
   }
+
+  // ── Simpan pesan customer ke DB (hanya untuk query properti / lanjutan) ─
+  await ChatMessage.create({
+    chatSessionId : session.id,
+    role          : 'customer',
+    message,
+    channel       : 'whatsapp',
+    metadata      : JSON.stringify({ agentName: agent.name, messageId, platform: 'fonnte' })
+  });
 
   // ── Generate AI reply (dengan property context injection) ────────────
   // ✅ NEW: Menggunakan whatsappAIService untuk konsistensi dengan chatbot
@@ -308,25 +347,27 @@ async function processIncomingMessage(body, agent) {
   // ── LOG RINGKASAN TERMINAL (FULL RESPONSE) ──────────────────────────
   if (isTerminalActive('FONNTE')) {
     const D          = '═'.repeat(80);
-    const sendStatus = fonnteSent
-      ? `✅ Terkirim`
-      : `❌ Gagal: ${fonnteError}`;
+    const sendStatus = fonnteSent ? `✅ Terkirim` : `❌ Gagal: ${sanitizeLog(fonnteError, 80)}`;
+
+    // Sanitize semua nilai dari customer sebelum di-log (prevent log/ANSI injection)
+    const safeReply  = String(aiResult.reply || '')
+      .replace(/\x1B\[[0-9;]*[mGKHFABCDJsulnhr]/g, '')
+      .replace(/\x00/g, '');
 
     console.log('');
     console.log(D);
     console.log(`[FONNTE] ⬇  PESAN PROPERTI MASUK & DIBALAS`);
     console.log(D);
-    console.log(`Agent    : ${agent.name} (${agent.phone})`);
-    console.log(`Customer : ${sender} (${name})`);
+    console.log(`Agent    : ${sanitizeLog(agent.name, 60)} (${maskPhone(agent.phone)})`);
+    console.log(`Customer : ${maskPhone(sender)} (${maskName(name)})`);
     console.log(`Time     : ${ts}`);
-    console.log(`Message  : ${message}`);
-    console.log(`Context  : ${ctxSource}`);
-    console.log(`AI       : ${aiResult.provider}`);
+    console.log(`Message  : ${sanitizeLog(message, 300)}`);
+    console.log(`Context  : ${sanitizeLog(ctxSource, 60)}`);
+    console.log(`AI       : ${sanitizeLog(aiResult.provider, 40)}`);
     console.log(D);
     console.log('RESPONSE:');
     console.log(D);
-    // Tampilkan full reply (bisa multi-line)
-    console.log(aiResult.reply);
+    console.log(safeReply);  // multi-line AI reply diperbolehkan, ANSI & null stripped
     console.log(D);
     console.log(`Send Status: ${sendStatus}`);
     console.log(D);
