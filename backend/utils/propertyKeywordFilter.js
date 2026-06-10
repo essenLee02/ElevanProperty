@@ -100,6 +100,9 @@ const ACTION_WORDS = [
   'tanya', 'nanya',
   'rekomendasi', 'rekomen',
   'listing', 'unit', 'stok', 'stock',
+  // Perubahan / koreksi pencarian — "ganti villa", "ubah ke rumah", "ralat apartemen"
+  // Hanya valid BERSAMA tipe properti (tidak bisa standalone)
+  'ganti', 'ubah', 'ralat', 'cancel', 'batal', 'edit',
 
   // ── English (bilingual support) ───────────────────────────────────────────
   // Transactions
@@ -374,22 +377,24 @@ function isPropertyContextContinuation(message, history = []) {
 
   const lower = message.toLowerCase().trim();
 
-  // Pesan terlalu panjang → kemungkinan topik baru, bukan jawaban singkat
-  if (lower.length > 70) return false;
+  // ── Deteksi konten properti sebelum cek panjang ───────────────────────────
+  // Jawaban Q2b ("Sudah lihat berapa properti?") dan Q5/Q6 bisa panjang dan
+  // berisi fasilitas / landmark. Contoh valid yang harus LOLOS:
+  //   "saya ingin ada fasilitas gym dan kolam renangnya, lalu dekat dengan PTC"
+  //   "hadap timur, tidak mau dekat jalan tol, ada taman bermain untuk anak"
+  const hasPropertyFacility = /\b(fasilitas|gym|fitness|kolam\s*renang|kolam|renang|parkir|garasi|taman|playground|keamanan|cctv|ac|wifi|internet|lift|elevator|rooftop|balkon|balcony|view|pemandangan|clubhouse|sport|olahraga)\b/i.test(lower);
+  const isLandmarkAnswer    = /\b(dekat|deket|near|close\s+to|di\s+jalan|di\s+sekitar|samping|next\s+to|beside|sebelah)\b/i.test(lower);
+  const hasPropertyContent  = hasPropertyFacility || isLandmarkAnswer;
+
+  // Pesan pendek (≤ 70 karakter) → proses normal
+  // Pesan medium (71–200) dengan konten properti → masih bisa jawaban Q2b/Q5/Q6
+  // Pesan sangat panjang (> 200) → selalu topik baru, bukan continuation
+  if (!hasPropertyContent && lower.length > 70) return false;
+  if (lower.length > 200) return false;
 
   // ── Cek apakah pesan memperkenalkan topik NON-PROPERTY yang jelas ───────
-  //
-  // EXCEPTION — jika pesan mengandung kata penunjuk lokasi ("dekat", "near",
-  // "di jalan", "di sekitar", "samping"), JANGAN blokir — kata-kata seperti
-  // "cafe", "restoran", "pasar", "stasiun", "pabrik" bisa jadi jawaban valid
-  // untuk Q6 (patokan lokasi). Contoh:
-  //   "dekat cafe"          = dekat patokan cafe → valid Q6 answer
-  //   "dekat pasar besar"   = dekat pasar → valid Q6 answer
-  //   "di jalan Dukuh Kupang" = nama jalan → valid Q6 answer
-  const isLandmarkAnswer = /\b(dekat|deket|near|close\s+to|di\s+jalan|di\s+sekitar|samping|next\s+to|beside)\b/
-    .test(lower);
-
-  if (!isLandmarkAnswer) {
+  // Skip jika sudah terdeteksi sebagai landmark/facility answer
+  if (!isLandmarkAnswer && !hasPropertyFacility) {
     const CLEAR_NON_PROPERTY = [
       /\b(makanan|minuman|kuliner|restoran|cafe|kafe|masak|resep|menu)\b/,
       /\b(kendaraan|mobil|motor|sepeda|tiket|travel|wisata|hotel liburan|penginapan wisata)\b/,
@@ -616,9 +621,12 @@ function isPropertyContextContinuation(message, history = []) {
   if (/\b(bebas|fleksibel|flexible|terserah|tidak\s+masalah|ga\s+masalah|tidak\s+ada\s+preferensi|no\s+preference|whatever)\b/i.test(lower))
     return true;
 
-  // 13) Jawaban negatif singkat untuk Q5 (red flags) — "tidak ada", "ga ada", "ngga ada"
+  // 13) Jawaban negatif singkat — "tidak ada", "ga mau", "nggak mau", "tidak perlu", dll.
   //     Perlu ada history property context (sudah dicek di atas)
-  if (/^(tidak|ga|gak|ngga|enggak|nggak|no)\s*(ada|masalah|preferensi)?$/i.test(lower.trim()))
+  if (/^(tidak|ga|gak|ngga|enggak|nggak|no)\s*(ada|masalah|preferensi|mau|perlu|usah|ingin|bisa|boleh|apa|tahu)?$/i.test(lower.trim()))
+    return true;
+  // Negasi pendek ≤ 30 chars — mencakup "tidak mau deh", "ga mau ke sana", dll.
+  if (lower.length <= 30 && /^(tidak|ga|gak|ngga|enggak|nggak)\b/.test(lower.trim()))
     return true;
 
   // 14) Jawaban Q2b (riwayat pencarian) — "Saya belum pernah lihat", "sudah lihat 3",

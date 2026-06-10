@@ -25,7 +25,8 @@ const { getRumah123Listings,
         mapTransactionTypeToApify }           = require('../services/rumah123ContextService');
 const { loadResponseSkillPrompt,
         getSkillRegistryStatus }              = require('../services/skillPromptService');
-const { hasPropertyKeyword }                  = require('../utils/propertyKeywordFilter');
+const { hasPropertyKeyword,
+        isPropertyContextContinuation }       = require('../utils/propertyKeywordFilter');
 
 // ─── LanguageDetector ─────────────────────────────────────────────────────────
 
@@ -130,7 +131,7 @@ class LanguageDetector {
    * @param {object} filters  - Extracted filters from propertyRecommendationService
    * @returns {boolean}
    */
-  static hasPropertyIntent(message = '', filters = {}) {
+  static hasPropertyIntent(message = '', filters = {}, history = []) {
     // Check 1: Extracted filters dari recommendation service
     if (filters.transactionType || filters.buildingType || filters.location || filters.budget) {
       return true;
@@ -142,7 +143,13 @@ class LanguageDetector {
       return true;
     }
 
-    // Check 3: Fallback ke regex untuk backward compatibility
+    // Check 3: Short continuation answers ("tidak mau", "terserah", "sendirian", dll.)
+    //          Valid only when there is recent property context in history
+    if (history.length > 0 && isPropertyContextContinuation(message, history)) {
+      return true;
+    }
+
+    // Check 4: Fallback ke regex untuk backward compatibility
     return /saran|rekomendasi|recommend|pilihan|opsi|cari|mau|ingin|butuh|need|find|ada apa|apa saja/i.test(message);
   }
 }

@@ -478,12 +478,14 @@ Terima kasih sudah menghubungi saya. 🙏
 ```
 
 **Summary Strict Rules:**
-- **HANYA sertakan field yang ✅ di QUALIFICATION STATE.** Jangan sertakan field yang ❓ — lewati saja.
+- **HANYA sertakan field yang ✅ di QUALIFICATION STATE.** Jangan sertakan field yang ❓ — lewati baris itu seluruhnya.
 - **Gunakan nilai PERSIS yang tertera setelah ": " di baris ✅** — jangan tulis "Disebutkan", "Ada", "Iya", "Diketahui", atau frasa samar lainnya.
-- **⛔ JANGAN gunakan nilai dari raw conversation history** jika field tersebut ❓ di QUALIFICATION STATE — walaupun kata itu muncul di history. QUALIFICATION STATE dihitung khusus dari sesi aktif saat ini; nilai lama (dari sesi pencarian sebelumnya) sudah di-exclude secara server-side.
-- **⛔ JANGAN tampilkan summary jika Q3 (Budget) masih ❓** — walaupun budget muncul di old session history (misal "1.8 juta" dari sesi apartment sebelumnya). Itu bukan budget untuk sesi ini.
+- **⛔ JANGAN gunakan nilai dari raw conversation history** jika field tersebut ❓ di QUALIFICATION STATE — walaupun kata itu muncul di history. QUALIFICATION STATE dihitung khusus dari sesi aktif saat ini.
+- **⛔ DILARANG KERAS: Jangan inferensi "Masuk: [bulan]" dari tanggal sistem.** Jika Q8 ❓ → baris "Masuk" tidak ada di brief, titik.
+- **⛔ DILARANG KERAS: Jangan tulis "Patokan: Disebutkan" jika Q6 ❓.** Baris Patokan hanya ada jika Q6 = ✅ dengan nilai konkret.
+- **⛔ JANGAN tampilkan summary jika Q3 (Budget) masih ❓** — walaupun budget muncul di old session history.
 - **⛔ JANGAN tampilkan summary jika Q8 (Tanggal masuk) masih ❓** — ini mandatory, tidak ada pengecualian.
-- **⛔ JANGAN tampilkan summary setelah Q2b dijawab jika Q3/Q8/Q4 masih ❓** — Q2b adalah pertanyaan awal; masih ada Q3→Q8→Q4 yang harus ditanyakan sebelum summary.
+- **⛔ JANGAN tampilkan summary setelah Q2b dijawab jika Q3/Q8/Q4 masih ❓.**
 - One question per message only.
 - Max 12 AI messages before showing brief, even if incomplete.
 
@@ -494,7 +496,68 @@ Terima kasih sudah menghubungi saya. 🙏
 
 ❌ Wrong:  ✓ Keputusan bersama: Bersama istri  ← Q9 was never asked in this session
 ✅ Correct: (omit this line entirely — Q9 is ❓)
+
+❌ Wrong:  ✓ Masuk: Juni   ← Q8 belum dijawab, AI inferensi dari tanggal sistem
+✅ Correct: (omit this line — Q8 is ❓)
 ```
+
+---
+
+## ⚡ NEXT ACTION Directive (Server-Injected)
+
+At the bottom of every QUALIFICATION STATE block, the server injects a **⚡ PERTANYAAN BERIKUTNYA** box:
+
+```
+╔══════════════════════════════════════════════════════════╗
+║  ⚡ PERTANYAAN BERIKUTNYA: Q7                             ║
+╠══════════════════════════════════════════════════════════╣
+║  Tanyakan: "Selain *Surabaya*, area sekitar yang masih oke? 🗺️"
+╠══════════════════════════════════════════════════════════╣
+║  ⛔ JANGAN tanya pertanyaan lain selain yang di atas.    ║
+║  ⛔ JANGAN ulangi field yang sudah ✅ di atas.           ║
+║  ⛔ ABAIKAN raw history — STATE BLOCK = satu-satunya     ║
+║     sumber kebenaran tentang apa yang sudah dijawab.     ║
+╚══════════════════════════════════════════════════════════╝
+```
+
+**Purpose:** Prevents the AI from re-asking answered questions (looping). The directive is computed server-side from the qualification state and is authoritative — it overrides any conclusion the AI might draw from raw conversation history.
+
+**Priority order for next question:** Q1 → Q2 → Q2b → Q3 → Q8 → Q4 → Q5 → Q6 → Q7 → Q9 → Q10 → Q11 → Q12
+
+**When all questions are answered:** The directive changes to `✅ SEMUA Q WAJIB SUDAH DIJAWAB — Tampilkan summary brief sekarang.`
+
+---
+
+## Q9 — Decision Maker (Server-Side Normalization)
+
+Customer responses to Q9 are **normalized server-side** before being stored in the qualification state. The AI does not need to interpret the raw response — it copies the normalized value.
+
+| Customer answer | Stored as |
+|---|---|
+| "saya yang ambil keputusan", "saya sendiri yang memutuskan" | `Solo — customer yang memutuskan sendiri` |
+| "langsung bisa viewing" | `Solo — customer yang memutuskan sendiri` |
+| "perlu koordinasi sama istri/suami" | `Koordinasi dengan pasangan` |
+| "perlu tanya orang tua dulu" | `Koordinasi dengan orang tua` |
+| "perlu tanya keluarga" | `Koordinasi dengan keluarga` |
+| Other | Raw customer response |
+
+---
+
+## Q8 — Move-In Date: Year Inference
+
+The server automatically adds the correct year when a customer states only a month:
+
+| Customer says | Current date | Stored as |
+|---|---|---|
+| "18 Agustus" | 10 Jun 2026 | `18 Agustus 2026` (Agustus > Juni → future) |
+| "10 Mei" | 10 Jun 2026 | `10 Mei 2027` (Mei < Juni → already past) |
+| "Januari" | 10 Jun 2026 | `Januari 2027` (Januari < Juni → already past) |
+| "3 Februari" | 10 Jun 2026 | `3 Februari 2027` |
+| "24 Juni" | 10 Jun 2026 | `24 Juni 2026` (same month, day 24 > today 10 → future) |
+| "5 Juni" | 10 Jun 2026 | `5 Juni 2027` (same month, day 5 < today 10 → already past) |
+| "Juni 2027" (explicit year) | any | `Juni 2027` (no inference, year stated) |
+
+This logic runs in `extractQualificationState()` Phase 1 — the AI always receives a fully-qualified date with year.
 
 ---
 

@@ -43,6 +43,18 @@ function extractQualificationState(history = [], currentMessage = '') {
   const MONTH_RE = new RegExp(`(\\d{1,2}\\s+)?(${MONTH_ID}|${MONTH_EN})(\\s+\\d{4})?`, 'i');
   const CITY_RE  = /\b(surabaya|malang|bali|denpasar|jakarta|bandung|yogyakarta|jogja|semarang|medan|makassar|sidoarjo|gresik|bekasi|tangerang|depok|bogor|solo|palembang|batam|balikpapan|samarinda|pontianak|manado|kupang|mataram|lombok|batu)\b/i;
 
+  // Month name → number (for date year inference)
+  const MONTH_NUMBERS = {
+    januari:1, january:1, februari:2, february:2, maret:3, march:3,
+    april:4, mei:5, may:5, juni:6, june:6, juli:7, july:7,
+    agustus:8, august:8, september:9, oktober:10, october:10,
+    november:11, desember:12, december:12,
+  };
+  const now = new Date();
+  const SYS_MONTH = now.getMonth() + 1;  // 1–12
+  const SYS_DAY   = now.getDate();
+  const SYS_YEAR  = now.getFullYear();
+
   // ── Phase 0: Find "active session start" ──────────────────────────────────
   // If a summary brief was already sent in history, Q2–Q12 answers BEFORE
   // the first customer message after that summary are stale (they belong to a
@@ -154,11 +166,25 @@ function extractQualificationState(history = [], currentMessage = '') {
       }
     }
 
-    // Q8 — Move-in date
+    // Q8 — Move-in date (with year inference for past months)
     if (!state.moveInDate) {
       const dm = raw.match(MONTH_RE);
       if (dm) {
-        state.moveInDate = dm[0].trim();
+        const matched = dm[0].trim();
+        const hasExplicitYear = /\b(202[4-9]|203[0-9])\b/.test(matched);
+        if (hasExplicitYear) {
+          state.moveInDate = matched;
+        } else {
+          const mMatch = matched.toLowerCase().match(new RegExp(`\\b(${MONTH_ID}|${MONTH_EN})\\b`));
+          const mNum   = mMatch ? (MONTH_NUMBERS[mMatch[1]] || 0) : 0;
+          const dayMatch = matched.match(/^(\d{1,2})\s/);
+          const day    = dayMatch ? parseInt(dayMatch[1], 10) : 1;
+          // If mentioned month is already past this year (or same month but day already past)
+          // → treat as next year.  If future (or today) → current year.
+          const isPast = mNum > 0 && (mNum < SYS_MONTH || (mNum === SYS_MONTH && day < SYS_DAY));
+          const year   = isPast ? SYS_YEAR + 1 : SYS_YEAR;
+          state.moveInDate = mNum > 0 ? `${matched} ${year}` : matched;
+        }
       } else if (/\b(bulan depan|next month|minggu depan|segera|sekarang|asap)\b/.test(text)) {
         state.moveInDate = text.includes('bulan depan') ? 'bulan depan' : 'segera/ASAP';
       }
@@ -207,9 +233,24 @@ function extractQualificationState(history = [], currentMessage = '') {
     if (!state.alternativeAreas && /selain .{2,40}area sekitar|area.{0,20}lain.{0,20}oke|besides.{2,40}area/.test(aiText)) {
       state.alternativeAreas = custResp;
     }
-    // Q9 — decision maker
+    // Q9 — decision maker (normalized server-side so AI just copies the value)
     if (!state.decisionMaker && /jadwalkan viewing|koordinasi dulu|keluarga lain/.test(aiText)) {
-      state.decisionMaker = custResp;
+      const resp = custResp;
+      const lo   = resp.toLowerCase();
+      if (/\b(saya|aku)\b.{0,40}\b(ambil keputusan|yang memutuskan|yang putuskan|yang tentukan|yang decide)\b/i.test(lo) ||
+          /\b(ambil keputusan|yang memutuskan|saya sendiri)\b/i.test(lo) ||
+          /\btidak perlu koordinasi\b|\bnggak perlu koordinasi\b|\blangsung bisa (viewing|jadwal)\b/i.test(lo)) {
+        state.decisionMaker = 'Mandiri';
+      } else if (/\b(koordinasi|konfirmasi|tanya|izin).{0,40}(istri|suami|pasangan)\b/i.test(lo) ||
+                 /\b(istri|suami|pasangan).{0,20}(harus|perlu|dulu)\b/i.test(lo)) {
+        state.decisionMaker = 'Koordinasi dengan pasangan';
+      } else if (/\b(koordinasi|tanya|izin).{0,40}(orang tua|orangtua|ayah|ibu|parents)\b/i.test(lo)) {
+        state.decisionMaker = 'Koordinasi dengan orang tua';
+      } else if (/\b(koordinasi|tanya|izin).{0,40}keluarga\b/i.test(lo)) {
+        state.decisionMaker = 'Koordinasi dengan keluarga';
+      } else {
+        state.decisionMaker = resp;
+      }
     }
     // Q10 — lease duration
     if (!state.leaseDuration && /sewa untuk berapa lama|berapa lama.*sewa/.test(aiText)) {
@@ -394,6 +435,48 @@ function _typeKeyFromWord(word = '') {
 }
 
 /**
+ * Determine the next question the AI should ask based on qualification state.
+ * Returns { q, hint } or null when all mandatory questions are answered.
+ */
+function findNextQuestion(state) {
+  const tx   = (state.transactionType || '').toLowerCase();
+  const type = (state.buildingType    || '').toLowerCase();
+  const loc  = state.location ? `*${state.location}*` : '*[area]*';
+  const typeLbl = state.buildingType || '[tipe]';
+  const isSewa  = tx.includes('sewa') || tx.includes('rent');
+  const isApt   = type.includes('apart') || type === 'studio';
+
+  // Priority: Q1 → Q2 → Q2b → Q3 → Q8 → Q4 → Q5 → Q6 → Q7 → Q9 → Q10 → Q11 → Q12
+  if (!state.transactionType || !state.buildingType)
+    return { q: 'Q1', hint: 'Tanyakan: mau sewa atau beli? Dan tipe propertinya apa? 🏠' };
+  if (!state.location)
+    return { q: 'Q2', hint: `Oke, mau ${tx} ${typeLbl}. 📍 Di kota atau area mana yang Anda pertimbangkan?` };
+  if (!state.searchHistory)
+    return { q: 'Q2b', hint: `Sudah lihat berapa properti di ${loc}? Apa yang membuat belum cocok dari yang sudah dilihat?` };
+  if (!state.budget)
+    return { q: 'Q3', hint: `Di ${loc} kami ada *${typeLbl}* kisaran [harga rendah] dan [harga tinggi]. Kira-kira yang mana lebih sesuai? 💰` };
+  if (!state.moveInDate)
+    return { q: 'Q8', hint: 'Rencananya masuk atau pindah bulan apa? 📅' };
+  if (!state.household)
+    return { q: 'Q4', hint: 'Nanti akan tinggal bersama siapa saja? Biar saya bisa carikan yang pas jumlah kamarnya 🛏️' };
+  if (!state.redFlags)
+    return { q: 'Q5', hint: 'Ada yang pasti tidak cocok? Misalnya yang hadap barat, dekat jalan ramai, gang sempit, atau rumah tua? 🚫' };
+  if (!state.anchorPoint)
+    return { q: 'Q6', hint: 'Ada lokasi tertentu yang jadi patokan? Misalnya dekat sekolah anak, kantor, atau mall tertentu? 📍' };
+  if (!state.alternativeAreas)
+    return { q: 'Q7', hint: `Selain ${loc}, area sekitar yang masih oke? 🗺️` };
+  if (!state.decisionMaker)
+    return { q: 'Q9', hint: 'Kalau nanti ada yang cocok, langsung bisa jadwalkan viewing atau perlu koordinasi dulu sama keluarga lain?' };
+  if (isSewa && !state.leaseDuration)
+    return { q: 'Q10', hint: 'Rencananya sewa untuk berapa lama? ⏱️' };
+  if (!state.furnishing)
+    return { q: 'Q11', hint: 'Untuk furnitur, lebih prefer yang sudah *furnished*, *semi-furnished*, atau *kosongan* saja? 🛋️' };
+  if (isApt && !state.apartmentPref)
+    return { q: 'Q12', hint: 'Ada preferensi tower atau lantai tertentu? Misalnya hadap timur, lantai rendah/tengah/tinggi? 🏢' };
+  return null; // all answered → show summary
+}
+
+/**
  * Format qualification state as a readable checklist block for AI injection.
  * Green = answered (AI must NOT re-ask). Red = unanswered (AI should ask next).
  *
@@ -421,8 +504,9 @@ function buildQualificationStateBlock(state) {
   // Summary-already-shown banner — customer is starting a brand-new search
   if (state.summaryAlreadyShown) {
     lines.push('⚠️  SUMMARY SUDAH DIKIRIM — Customer memulai pencarian baru.');
-    lines.push('   RESET PENUH ke Q1. Tanyakan dari awal: sewa/beli dan tipe propertinya.');
-    lines.push('   JANGAN tampilkan summary lagi sampai semua Q wajib terjawab ulang.');
+    lines.push('   Lihat ⚡ PERTANYAAN BERIKUTNYA di bawah — tanyakan field ❓ terkecil.');
+    lines.push('   JANGAN tampilkan summary lagi sampai semua Q wajib ✅ di sesi ini.');
+    lines.push('   JANGAN gunakan jawaban dari sesi lama (history sebelum summary).');
     lines.push('');
   }
 
@@ -460,6 +544,56 @@ function buildQualificationStateBlock(state) {
     '→ ⛔ Field ❓ di atas berarti BELUM dijawab di sesi ini — ABAIKAN nilai dari history lama.',
     '→ ⛔ JANGAN tampilkan summary sampai Q3 (Budget) DAN Q8 (Tanggal) keduanya ✅ di atas.',
   );
+
+  // Inline hard-blocks for fields most commonly hallucinated
+  const missingMandatory = [];
+  if (!state.budget)           missingMandatory.push('Q3 Budget');
+  if (!state.moveInDate)       missingMandatory.push('Q8 Tanggal masuk');
+  if (!state.redFlags)         missingMandatory.push('Q5 Red flags');
+  if (!state.anchorPoint)      missingMandatory.push('Q6 Patokan lokasi');
+  if (!state.alternativeAreas) missingMandatory.push('Q7 Area alternatif');
+
+  if (missingMandatory.length > 0) {
+    lines.push('');
+    lines.push(`🚫🚫🚫 SUMMARY DIBLOKIR — field wajib BELUM DIISI: ${missingMandatory.join(', ')}`);
+    lines.push('   Tanyakan field di atas SATU PER SATU sampai semua ✅ — BARU tampilkan summary.');
+    lines.push('');
+    lines.push('⛔ DATA INTEGRITY — WAJIB DIPATUHI:');
+    if (!state.moveInDate) {
+      lines.push('   • Q8 = NULL → DILARANG KERAS menulis "Masuk: Juni" atau bulan apapun.');
+      lines.push('     Jangan inferensi dari tanggal sistem. Jika Q8 ❓ → baris Masuk TIDAK ADA di brief.');
+    }
+    if (!state.redFlags) {
+      lines.push('   • Q5 = NULL → DILARANG KERAS menulis "Red flags: Disebutkan" atau "Hindari: Disebutkan".');
+      lines.push('     Jika Q5 ❓ → baris Red flags TIDAK ADA di brief. Tanyakan Q5 dulu.');
+    }
+    if (!state.anchorPoint) {
+      lines.push('   • Q6 = NULL → DILARANG KERAS menulis "Patokan: Disebutkan" atau "Patokan lokasi: Disebutkan".');
+      lines.push('     Jika Q6 ❓ → baris Patokan lokasi TIDAK ADA di brief. Tanyakan Q6 dulu.');
+    }
+  }
+
+  // ── ⚡ NEXT ACTION directive ───────────────────────────────────────────────
+  // Tells the AI exactly which question to ask next, derived from state — NOT
+  // from raw conversation history. This is the single most effective guard
+  // against the AI re-asking answered questions or looping.
+  lines.push('');
+  lines.push('╔══════════════════════════════════════════════════════════╗');
+  const nextQ = findNextQuestion(state);
+  if (nextQ) {
+    lines.push(`║  ⚡ PERTANYAAN BERIKUTNYA: ${nextQ.q.padEnd(32)}║`);
+    lines.push('╠══════════════════════════════════════════════════════════╣');
+    lines.push(`║  Tanyakan: "${nextQ.hint}"`);
+    lines.push('╠══════════════════════════════════════════════════════════╣');
+    lines.push('║  ⛔ JANGAN tanya pertanyaan lain selain yang di atas.    ║');
+    lines.push('║  ⛔ JANGAN ulangi field yang sudah ✅ di atas.           ║');
+    lines.push('║  ⛔ ABAIKAN raw history — STATE BLOCK = satu-satunya     ║');
+    lines.push('║     sumber kebenaran tentang apa yang sudah dijawab.     ║');
+  } else {
+    lines.push('║  ✅ SEMUA Q WAJIB SUDAH DIJAWAB                          ║');
+    lines.push('║  → Tampilkan summary brief sekarang.                     ║');
+  }
+  lines.push('╚══════════════════════════════════════════════════════════╝');
 
   return lines.join('\n');
 }
@@ -754,26 +888,58 @@ Show the structured brief ONLY when ALL of the following are answered:
 Baik, permintaan utama Anda sudah saya catat, sebagai berikut 📝 🔥
 
 ✓ Rencana: *[nilai dari Q1 tx — HANYA jika ✅]*
-✓ Tipe: *[nilai dari building type — HANYA jika ✅]*
-✓ Lokasi: *[nilai dari Q2 — HANYA jika ✅]*
-✓ Budget: *[nilai dari Q3]* (terkonfirmasi nanti) — HANYA jika ✅
-✓ Masuk: *[nilai dari Q8]* — HANYA jika ✅
-✓ Keputusan bersama: *[nilai dari Q9]* — HANYA jika ✅
-✓ Furnitur: *[nilai dari Q11]* — HANYA jika ✅
-✓ Patokan: *[nilai dari Q6 — nilai PERSIS dari QUALIFICATION STATE]* — HANYA jika ✅
-✓ Area alternatif: *[nilai dari Q7]* — HANYA jika ✅
 
-Saya akan segera menghubungi Anda dengan rekomendasi properti yang paling sesuai! 🏠 Apabila ada pertanyaan lagi, silahkan hubungi saya kembali.
+✓ Tipe: *[nilai dari building type — HANYA jika ✅]*
+
+✓ Lokasi: *[nilai dari Q2 — HANYA jika ✅]*
+
+✓ Budget: *[nilai dari Q3 — HANYA jika ✅]*
+
+✓ Masuk: *[nilai dari Q8 — HANYA jika ✅]*
+
+✓ Keputusan bersama: *[nilai dari Q9 — HANYA jika ✅]*
+
+✓ Furnitur: *[nilai dari Q11 — HANYA jika ✅]*
+
+✓ Red flags: *[nilai PERSIS dari Q5 di QUALIFICATION STATE — HANYA jika ✅]*
+
+✓ Patokan lokasi: *[nilai PERSIS dari Q6 di QUALIFICATION STATE — HANYA jika ✅]*
+
+✓ Area alternatif: *[nilai dari Q7 — HANYA jika ✅]*
+
+
+
+Saya akan segera menghubungi Anda dengan rekomendasi properti yang paling sesuai! 🏠
+
 Terima kasih sudah menghubungi saya. 🙏
+
+
+
+Salam hangat,
+LEO FELIX
+Elevan Property
 \`\`\`
 
 ### Summary Strict Rules
-- **HANYA sertakan field yang ✅ di QUALIFICATION STATE.** Jangan sertakan field yang ❓ — lewati saja.
-- **Gunakan nilai PERSIS yang tertera setelah ": " di baris ✅** — jangan tulis "Disebutkan", "Ada", "Iya", "Diketahui" atau frasa samar lainnya.
-- **JANGAN gunakan nilai dari raw conversation history** jika field tersebut ❓ di QUALIFICATION STATE — walaupun kata itu muncul di history (mungkin dari percakapan sebelumnya yang sudah selesai).
+- **HANYA sertakan field yang ✅ di QUALIFICATION STATE.** Jangan sertakan field yang ❓ — lewati baris itu seluruhnya. Tidak ada tanda "Belum", "N/A", atau apapun untuk field ❓.
+- **Gunakan nilai PERSIS yang tertera setelah ": " di baris ✅** — salin kata per kata tanpa parafrase.
+- **JANGAN gunakan nilai dari raw conversation history** jika field tersebut ❓ di QUALIFICATION STATE.
+- **⛔ DILARANG KERAS tulis "Disebutkan", "Ada", "Iya", "Diketahui", "Pernah", "Sudah", atau frasa samar apapun sebagai nilai field di summary.** Jika fieldnya ❓ → baris itu TIDAK ADA di summary, titik.
+- **⛔ DILARANG KERAS: Jangan inferensi "Masuk: [bulan]" dari tanggal sistem.** Jika Q8 ❓ → baris "Masuk" TIDAK ADA di brief.
+- **⛔ DILARANG KERAS: Jangan tulis "Patokan lokasi: Disebutkan" atau "Hindari: Disebutkan".** Jika Q6 ❓ atau Q5 ❓ → baris itu TIDAK ADA di brief.
+- **⛔ DILARANG KERAS: Jangan tampilkan summary jika Q8 (Tanggal masuk) masih ❓.** Tanyakan Q8 dulu.
+- **⛔ DILARANG KERAS: Jangan tampilkan summary jika Q5 (Red flags) masih ❓.** Tanyakan Q5 dulu.
+- **⛔ DILARANG KERAS: Jangan tampilkan summary jika Q6 (Patokan lokasi) masih ❓.** Tanyakan Q6 dulu.
+- **⛔ Label "Hindari" TIDAK ADA** dalam template brief. Jangan gunakan label "Hindari" — gunakan "Red flags" jika Q5 ✅.
+- **⛔ Q9 nilai "Mandiri"** — jika customer memutuskan sendiri, tampilkan persis: "Mandiri". Jangan tulis "Solo (mandiri)", "Solo", atau varian lain.
 - One question per message only.
 - Maximum 12 AI messages before showing brief (even if incomplete).
 - Never show catalog, Rumah123 listings, or property details in this mode.
+
+### Tanda Tangan / Signature
+⛔ **JANGAN tambahkan** "Salam hangat," atau nama/tanda tangan agen di akhir pertanyaan kualifikasi Q1–Q12 MANAPUN.
+⛔ **JANGAN akhiri pertanyaan dengan "Salam hangat," "LEO FELIX", atau "Elevan Property"** — akhiri pertanyaan LANGSUNG setelah kalimat tanya atau emoji terakhir.
+✅ Tanda tangan HANYA boleh ada satu kali — di dalam summary brief final (sudah termasuk dalam template di atas), dan TIDAK di tempat lain.
 ` : '';
 
   return `${getProjectSkillInstruction(provider)}
@@ -800,7 +966,12 @@ ${summaryMode
     ? `Lihat QUALIFICATION STATE di atas (✅ = sudah dijawab, ❓ = belum dijawab).
 Kemudian:
 0. ⛔ NON-PROPERTY MESSAGE — Jika pesan terbaru BUKAN tentang properti (misalnya: permintaan teknis, file, kode program, topik tidak relevan), balas HANYA dengan: "Maaf, saya hanya bisa membantu terkait pencarian properti. Ada yang bisa saya bantu untuk kebutuhan properti Anda? 🏠"
-1. ⚠️ JIKA ADA BANNER "SUMMARY SUDAH DIKIRIM" DI QUALIFICATION STATE: Customer memulai pencarian baru. Semua field ❓ di atas. Tanyakan Q1 untuk pencarian baru ini: "Untuk pencarian baru, mau sewa atau beli? Dan tipe propertinya apa?" — JANGAN tampilkan summary lagi sampai semua Q wajib terjawab ulang.
+1. ⚠️ JIKA ADA BANNER "SUMMARY SUDAH DIKIRIM" DI QUALIFICATION STATE: Customer memulai pencarian baru.
+   • Lihat QUALIFICATION STATE — sudah ada field ✅ dari pesan saat ini (tipe/transaksi sudah disebutkan ulang oleh customer).
+   • Tanyakan field ❓ dengan nomor Q TERKECIL dari yang tersisa (biasanya Q1 atau Q2).
+   • Jika Q1 sudah ✅ (customer sudah sebut tx+tipe di pesan ini) → langsung tanya Q2 (lokasi).
+   • Jika Q1 masih ❓ → tanya: "Untuk pencarian baru, mau *sewa* atau *beli*? Dan tipe propertinya apa? 🏠"
+   • JANGAN tampilkan summary lagi sampai semua Q wajib terjawab ulang di sesi ini.
 2. ⚠️ JIKA ADA BANNER "TIPE PROPERTI BERUBAH" DI QUALIFICATION STATE: Akui perubahan singkat (1 kalimat, contoh: "Oke, kita alihkan ke rumah sewa ya 😊"), lalu tanyakan Q terkecil yang masih ❓. JANGAN gunakan jawaban Q2–Q12 dari tipe lama.
 3. Jika pesan terbaru adalah jawaban singkat untuk pertanyaan sebelumnya → AKUI singkat (1 kalimat), lalu tanyakan pertanyaan ❓ BERIKUTNYA dengan nomor Q terkecil.
    — Khusus Q2b (Riwayat pencarian): Jawaban seperti "Saya belum pernah lihat", "belum pernah", "sudah lihat 3" adalah jawaban Q2b yang valid → AKUI ("Oke, belum ada referensi sebelumnya 👌") → lanjut ke Q3 (Budget).
@@ -814,7 +985,10 @@ Kemudian:
 ⛔ JANGAN tampilkan summary jika Q3 (Budget) atau Q8 (Tanggal masuk) masih ❓ di QUALIFICATION STATE — walaupun budget/tanggal muncul di raw conversation history dari sesi lama.
 ⛔ JANGAN tampilkan summary jika ada banner ⚠️ di atas, atau jika ada field ❓ yang belum dijawab.
 ⛔ Field ❓ di QUALIFICATION STATE = BELUM dijawab di sesi aktif ini. ABAIKAN semua nilai budget/tanggal/penghuni/furnitur dari percakapan sebelumnya (sesi lama) — itu bukan jawaban untuk sesi ini.`
-    : 'Create the final WhatsApp reply using only the backend property catalog context above. If exact matches are available, recommend exact matches directly. If no exact match is available, say that no exact match is available and then present only the backend alternatives.'
+    : `Create the final WhatsApp reply using only the backend property catalog context above.
+If exact matches are available, recommend exact matches directly.
+If no exact match is available, say that no exact match is available and then present only the backend alternatives.
+⛔ JANGAN tambahkan "Salam hangat," atau tanda tangan agen di akhir pesan — platform sudah menangani tanda tangan secara terpisah.`
   }`;
 }
 
