@@ -117,7 +117,7 @@ ID: Maaf, saat ini belum ada *[Tipe]* yang tersedia di *[Lokasi]*
     Apakah Anda ingin mencoba lokasi atau range harga yang berbeda?
 
 EN: Sorry, there is currently no *[Type]* available in *[Location]*
-    in our catalog or Rumah123.
+    in my catalog or Rumah123.
     Would you like to try a different location or price range?
 ```
 

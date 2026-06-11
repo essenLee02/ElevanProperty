@@ -40,7 +40,8 @@ function extractQualificationState(history = [], currentMessage = '') {
 
   const MONTH_ID = 'januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember';
   const MONTH_EN = 'january|february|march|april|may|june|july|august|september|october|november|december';
-  const MONTH_RE = new RegExp(`(\\d{1,2}\\s+)?(${MONTH_ID}|${MONTH_EN})(\\s+\\d{4})?`, 'i');
+  // \\b word boundaries prevent brand names like "indomaret" from matching "maret"
+  const MONTH_RE = new RegExp(`(\\d{1,2}\\s+)?\\b(${MONTH_ID}|${MONTH_EN})\\b(\\s+\\d{4})?`, 'i');
   const CITY_RE  = /\b(surabaya|malang|bali|denpasar|jakarta|bandung|yogyakarta|jogja|semarang|medan|makassar|sidoarjo|gresik|bekasi|tangerang|depok|bogor|solo|palembang|batam|balikpapan|samarinda|pontianak|manado|kupang|mataram|lombok|batu)\b/i;
 
   // Month name → number (for date year inference)
@@ -230,14 +231,26 @@ function extractQualificationState(history = [], currentMessage = '') {
       state.anchorPoint = custResp;
     }
     // Q7 — alternative areas
-    if (!state.alternativeAreas && /selain .{2,40}area sekitar|area.{0,20}lain.{0,20}oke|besides.{2,40}area/.test(aiText)) {
+    // Q7 detection: matches both old ("area sekitar yang masih oke") and
+    // new ("pilihan lokasi lainnya") Q7 wording variations.
+    if (!state.alternativeAreas && /selain\s+(lokasi\s+)?.{2,40}(area\s+sekitar|pilihan\s+lokasi)|area.{0,20}lain.{0,20}oke|besides.{2,40}(area|location)/i.test(aiText)) {
       state.alternativeAreas = custResp;
     }
     // Q9 — decision maker (normalized server-side so AI just copies the value)
     if (!state.decisionMaker && /jadwalkan viewing|koordinasi dulu|keluarga lain/.test(aiText)) {
       const resp = custResp;
       const lo   = resp.toLowerCase();
-      if (/\b(saya|aku)\b.{0,40}\b(ambil keputusan|yang memutuskan|yang putuskan|yang tentukan|yang decide)\b/i.test(lo) ||
+
+      // Guard: if the customer's answer looks like a move-in date (month name,
+      // "tahun depan", year number, "bulan depan") do NOT store it as a decision
+      // maker — the customer likely answered the wrong question or the bot mis-
+      // classified their move-in date answer as a Q9 trigger.
+      const MONTH_ID_RE = /\b(januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)\b/i;
+      const MONTH_EN_RE = /\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/i;
+      const DATE_ANSWER_RE = /\b(tahun\s+depan|bulan\s+depan|next\s+year|next\s+month|20\d{2})\b/i;
+      if (MONTH_ID_RE.test(lo) || MONTH_EN_RE.test(lo) || DATE_ANSWER_RE.test(lo)) {
+        // Looks like a date answer — skip Q9 capture, do not pollute decisionMaker
+      } else if (/\b(saya|aku)\b.{0,40}\b(ambil keputusan|yang memutuskan|yang putuskan|yang tentukan|yang decide)\b/i.test(lo) ||
           /\b(ambil keputusan|yang memutuskan|saya sendiri)\b/i.test(lo) ||
           /\btidak perlu koordinasi\b|\bnggak perlu koordinasi\b|\blangsung bisa (viewing|jadwal)\b/i.test(lo)) {
         state.decisionMaker = 'Mandiri';
@@ -248,6 +261,9 @@ function extractQualificationState(history = [], currentMessage = '') {
         state.decisionMaker = 'Koordinasi dengan orang tua';
       } else if (/\b(koordinasi|tanya|izin).{0,40}keluarga\b/i.test(lo)) {
         state.decisionMaker = 'Koordinasi dengan keluarga';
+      } else if (/\b(sendiri|sendirian|seorang diri|solo)\b/i.test(lo)) {
+        // Customer explicitly said "sendiri" in response to Q9 — normalize to "Sendirian"
+        state.decisionMaker = 'Sendirian';
       } else {
         state.decisionMaker = resp;
       }
@@ -270,6 +286,15 @@ function extractQualificationState(history = [], currentMessage = '') {
     if (!state.searchHistory &&
         /sudah\s+lihat\s+berapa|how\s+many\s+prop|apa\s+yang\s+membuat\s+belum\s+cocok|yang\s+sudah\s+dilihat|berapa\s+properti.*sudah/.test(aiText)) {
       state.searchHistory = custResp.trim() || 'dijawab';
+
+      // Customer often volunteers anchor info inside their Q2b answer, e.g.:
+      // "Belum, tapi saya cari yang dekat dengan cafe, indomaret dan jalan Demak."
+      // Capture it now so the brief doesn't need to fall back to the regex extractor
+      // (which joins all messages and can pick up wrong "dekat" fragments).
+      if (!state.anchorPoint && /\b(dekat|deket|near)\b/i.test(custResp)) {
+        const am = custResp.match(/\b(?:dekat|deket|near)\s+(?:dengan\s+)?[^\n.!?]{4,120}/i);
+        if (am) state.anchorPoint = am[0].trim();
+      }
     }
   }
 
@@ -454,7 +479,7 @@ function findNextQuestion(state) {
   if (!state.searchHistory)
     return { q: 'Q2b', hint: `Sudah lihat berapa properti di ${loc}? Apa yang membuat belum cocok dari yang sudah dilihat?` };
   if (!state.budget)
-    return { q: 'Q3', hint: `Di ${loc} kami ada *${typeLbl}* kisaran [harga rendah] dan [harga tinggi]. Kira-kira yang mana lebih sesuai? 💰` };
+    return { q: 'Q3', hint: `Di ${loc} ada *${typeLbl}* kisaran [harga rendah] dan [harga tinggi]. Kira-kira yang mana lebih sesuai? 💰` };
   if (!state.moveInDate)
     return { q: 'Q8', hint: 'Rencananya masuk atau pindah bulan apa? 📅' };
   if (!state.household)
@@ -837,7 +862,7 @@ Most customers don't know exactly what they want. Guide discovery through OPTION
 → Extracts: red flags, budget ceiling, decision maker signals, anchor point, urgency.
 
 **Q3 — Budget** (NEVER ask directly — always show two contrasting price options)
-"Di [area] kami ada Villa yang di kisaran [LOW range] dan ada juga yang [HIGH range]. Kira-kira yang mana lebih sesuai dengan rencana Bapak/Ibu?"
+"Di [area] ada Villa yang di kisaran [LOW range] dan ada juga yang [HIGH range]. Kira-kira yang mana lebih sesuai dengan rencana Bapak/Ibu?"
 → Customer's reaction reveals real budget. NEVER ask "berapa budget Anda?" or "kisaran harga berapa?"
 → Use realistic price ranges for the specific property type + location + transaction.
 → If customer says "yang terjangkau", "murah aja", "affordable" → budget = terjangkau, PROCEED to next Q.

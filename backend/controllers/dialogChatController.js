@@ -371,7 +371,7 @@ async function processIncomingMessage(msg, contacts, agent) {
   } catch (err) {
     const appName = process.env.APP_NAME || 'Elevan Property';
     aiResult = {
-      reply         : `Halo ${senderName}, terima kasih menghubungi ${agent.name} dari ${appName}. Kami akan segera membantu mencari properti untuk Anda. 🏠`,
+      reply         : `Halo ${senderName}, terima kasih menghubungi ${agent.name} dari ${appName}. Saya akan segera membantu mencari properti untuk Anda. 🏠`,
       provider      : 'fallback',
       contextSource : 'none'
     };

@@ -343,7 +343,7 @@ async function processIncomingMessage(body, agent) {
   } catch (err) {
     const appName = process.env.APP_NAME || 'Elevan Property';
     aiResult = {
-      reply    : `Halo ${name}, terima kasih menghubungi ${agent.name} dari ${appName}. Kami akan segera membantu mencari properti yang sesuai kebutuhan Anda. 🏠`,
+      reply    : `Halo ${name}, terima kasih menghubungi ${agent.name} dari ${appName}. Saya akan segera membantu mencari properti yang sesuai kebutuhan Anda. 🏠`,
       provider : 'fallback',
       contextSource: 'none'
     };

@@ -254,7 +254,7 @@ async function processWatiMessage(payload, agent) {
   } catch (err) {
     const appName = process.env.APP_NAME || 'Elevan Property';
     aiResult = {
-      reply         : `Halo ${customerName}, terima kasih menghubungi ${agent.name} dari ${appName}. Kami akan segera membantu mencari properti untuk Anda. 🏠`,
+      reply         : `Halo ${customerName}, terima kasih menghubungi ${agent.name} dari ${appName}. Saya akan segera membantu mencari properti untuk Anda. 🏠`,
       provider      : 'fallback',
       contextSource : 'none'
     };

@@ -123,7 +123,7 @@ Do not repeat the source label for every item.
 If both catalog and Rumah123 data are shown in the same response:
 
 - Section 1: Rumah123 live listings (labeled "Data Terkini dari Rumah123")
-- Section 2: Catalog listings (labeled "Pilihan Lain dari Katalog Kami")
+- Section 2: Catalog listings (labeled "Pilihan Lain dari Katalog Saya")
 
 ## No Rumah123 Data Rule
 

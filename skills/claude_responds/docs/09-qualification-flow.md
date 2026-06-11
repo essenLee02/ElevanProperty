@@ -94,7 +94,7 @@ If property type is also unknown, combine:
 
 ```
 ID: Halo! 😊 Mau *sewa* atau *beli*? Dan tipe properti apa yang Anda cari?
-    Kami punya: *rumah, apartemen, villa, kos-kosan, ruko, kantor, gudang*, dan banyak lagi 🏡
+    Saya punya: *rumah, apartemen, villa, kos-kosan, ruko, kantor, gudang*, dan banyak lagi 🏡
 ```
 
 ---
@@ -174,10 +174,10 @@ Show **two contrasting price anchors** for the requested type + area.
 The customer's reaction reveals their real budget — no direct figure needed.
 
 ```
-ID: Di *[area]* kami ada *[Tipe]* yang di kisaran *[LOW]* dan ada juga yang *[HIGH]*.
+ID: Di *[area]* ada *[Tipe]* yang di kisaran *[LOW]* dan ada juga yang *[HIGH]*.
     Kira-kira yang mana lebih sesuai dengan rencana Bapak/Ibu?
 
-EN: In *[area]* we have *[Type]* options around *[LOW]* and others around *[HIGH]*.
+EN: In *[area]* I have *[Type]* options around *[LOW]* and others around *[HIGH]*.
     Which range feels closer to your plans?
 ```
 
@@ -230,6 +230,11 @@ EN: Is there anything you definitely want to avoid?
     Such as west-facing, near a busy road, narrow alleys, or older buildings?
 ```
 
+**Q5 Summary display rule:**
+Include `✓ Hindari:` only when a **specific, concrete** red flag was stated (e.g., `Tidak mau hadap barat`, `Tidak mau bising/ramai`).
+
+**FORBIDDEN:** `✓ Hindari: *Disebutkan*` — this placeholder is never shown. If no specific red flag pattern matches the customer's answer, the `Hindari` line is **omitted entirely** from the summary brief. "Tidak ada" or vague non-answers → omit the line.
+
 ---
 
 ### Q6 — Anchor Point *(only if not captured in Q2b)*
@@ -241,13 +246,32 @@ EN: Is there a specific landmark you want to be near?
     For example: near a school, office, or mall?
 ```
 
+**IMPORTANT — "Deket kantor" is a location anchor, NOT a building type:**
+When a customer answers Q6 with `"deket kantor dan mall"`, `"dekat kantor saya"`, or any landmark description containing "kantor":
+- ✅ Record as anchor point: `Deket kantor dan mall`
+- ❌ NEVER change building type to `Kantor / Office`
+- ❌ NEVER re-ask Q1 for office type
+
+The server-side building-type detector now strips "dekat/deket/near X" phrases before checking property types. "kantor" only triggers office type when it appears as a standalone word (e.g., "saya mau sewa kantor"), not after a location anchor prefix.
+
 **Customer answer can be ANY landmark — accept all of these:**
 - `dekat pasar`, `dekat pasar besar`, `dekat Atom`
 - `dekat cafe`, `dekat Food Junction`, `dekat restoran X`
+- `deket indomaret, cafe dan ubaya` ← comma-separated list, **copy in full**
 - `di jalan Dukuh Kupang`, `di sekitar jalan Ahmad Yani`
 - `dekat stasiun`, `dekat terminal`, `dekat pelabuhan`, `dekat bandara`
 - `dekat pabrik`, `dekat PT Jaya Putra`, `dekat kantor X`
 - Any answer with a leading `dekat / deket / near / di jalan / di sekitar / samping`
+
+**Q6 Summary display rule:**
+Copy the **full anchor phrase** from the Q6 state block — do NOT truncate at commas.
+
+| Customer says | Summary must show |
+|---|---|
+| `"deket indomaret, cafe dan ubaya"` | `✓ Patokan lokasi: *Deket indomaret, cafe dan ubaya*` |
+| `"dekat kampus ubaya"` | `✓ Patokan lokasi: *Dekat kampus ubaya*` |
+
+**FORBIDDEN:** `✓ Patokan lokasi: *deket indomaret,*` — the comma-truncated partial text.
 
 **Server-side note:** The keyword filter bypasses its CLEAR_NON_PROPERTY blocklist (which contains "cafe", "restoran", etc.) when the message starts with a landmark prefix (`dekat`, `near`, `di jalan`, etc.). This ensures "dekat cafe" is never blocked as off-topic.
 
@@ -256,7 +280,7 @@ EN: Is there a specific landmark you want to be near?
 ### Q7 — Alternative Areas *(always ask unless already volunteered)*
 
 ```
-ID: Selain *[area yang disebutkan]*, area sekitar yang masih oke?
+ID: Selain lokasi *[area yang disebutkan]*, apakah Anda mau pilihan lokasi lainnya?
 EN: Besides *[mentioned area]*, are there other nearby areas you'd consider?
 ```
 
@@ -275,6 +299,17 @@ ID: Omong-omong, rencananya masuk atau pindah bulan apa? 📅
 EN: By the way, what month are you planning to move in? 📅
 ```
 
+**Q8 Summary display rule:**
+In the summary brief, copy the **exact full date string** from the Q8 qualification state block.
+
+| Customer says | State block shows | Summary must show |
+|---|---|---|
+| `"7 juli 2026"` | `7 juli 2026` | `✓ Masuk: *7 Juli 2026*` |
+| `"Juli 2026"` | `Juli 2026` | `✓ Masuk: *Juli 2026*` |
+| `"bulan depan"` | `bulan depan` | `✓ Masuk: *Bulan depan*` |
+
+**FORBIDDEN:** Abbreviating to just the month name (e.g. `Maret`) when the customer specified a full date.
+
 ---
 
 ### Q9 — Decision Maker *(always indirect)*
@@ -289,6 +324,17 @@ EN: If something looks good, can you schedule a viewing directly,
 "Langsung bisa" → solo decision, higher urgency.
 Never ask "siapa yang memutuskan" directly.
 
+**Q9 Summary labels (normalized by server — AI copies the value from state block):**
+
+| Customer answer | State block value | Summary shows |
+|---|---|---|
+| `"sendiri"`, `"solo"`, `"seorang diri"` | `Sendirian` | `✓ Keputusan bersama: *Sendirian*` |
+| `"langsung bisa"`, `"bisa langsung"` | `Mandiri` | `✓ Keputusan bersama: *Mandiri*` |
+| `"koordinasi sama istri/suami"` | `Koordinasi dengan pasangan` | `✓ Keputusan bersama: *Koordinasi dengan pasangan*` |
+| `"tanya orang tua dulu"` | `Koordinasi dengan orang tua` | `✓ Keputusan bersama: *Koordinasi dengan orang tua*` |
+
+**FORBIDDEN:** Using invented labels like `Solo (mandiri)` — use the exact normalized label from the state block.
+
 ---
 
 ### Q10 — Lease Duration *(rent only, if not volunteered)*
@@ -297,6 +343,14 @@ Never ask "siapa yang memutuskan" directly.
 ID: Rencananya sewa untuk berapa lama?
 EN: How long are you planning to rent?
 ```
+
+**Q10 Summary display rule:**
+Only include `✓ Durasi sewa:` in the summary brief if the customer explicitly stated a specific duration (e.g., `1 tahun`, `6 bulan`, `2 tahun`).
+
+**FORBIDDEN:** Writing `✓ Durasi sewa: *Disebutkan*` or any vague placeholder when no specific duration was given. If Q10 was not answered with a specific value, omit the line entirely.
+
+**Short duration answers are always property continuation:**
+A message like `"1 tahun"` or `"6 bulan"` as the entire customer message is **always** treated as a property continuation (answer to Q10), even if it appears shortly after the Q10 question was asked. The server-side keyword filter has an early fast-path rule that passes these through before checking conversation history — this prevents race conditions where the AI's question isn't yet persisted to the database.
 
 #### Q10a — Payment Terms *(fires if lease ≥ 1 year)*
 
@@ -317,6 +371,15 @@ ID: Untuk furnitur, lebih prefer yang sudah *furnished*,
 EN: For furnishing, do you prefer *fully furnished*,
     *semi-furnished*, or *unfurnished*? 🛋️
 ```
+
+**CRITICAL — "Kosongan" is a furnishing answer, NOT a building type change:**
+
+When a customer answers Q11 with `"kosongan saja"`, `"tidak pakai furnish"`, or any unfurnished preference:
+- ✅ Record it as: furnishing = `Kosongan` / `Unfurnished`
+- ❌ NEVER change the building type to `Kos / Boarding House`
+- ❌ NEVER re-ask "rencananya sewa atau beli?" for kos-kosan
+
+The word "kosongan" (unfurnished) contains "kos" as a substring, but the server-side building-type detector now uses **word-boundary regex** (`\bkos\b`) to prevent this false positive. If you see the building type flip to kos after Q11, it is a bug — the customer is still searching for the original property type.
 
 ---
 
@@ -511,7 +574,7 @@ At the bottom of every QUALIFICATION STATE block, the server injects a **⚡ PER
 ╔══════════════════════════════════════════════════════════╗
 ║  ⚡ PERTANYAAN BERIKUTNYA: Q7                             ║
 ╠══════════════════════════════════════════════════════════╣
-║  Tanyakan: "Selain *Surabaya*, area sekitar yang masih oke? 🗺️"
+║  Tanyakan: "Selain lokasi *Surabaya*, apakah Anda mau pilihan lokasi lainnya? 🗺️"
 ╠══════════════════════════════════════════════════════════╣
 ║  ⛔ JANGAN tanya pertanyaan lain selain yang di atas.    ║
 ║  ⛔ JANGAN ulangi field yang sudah ✅ di atas.           ║
@@ -559,6 +622,21 @@ The server automatically adds the correct year when a customer states only a mon
 
 This logic runs in `extractQualificationState()` Phase 1 — the AI always receives a fully-qualified date with year.
 
+**Word-boundary protection (brand name false positive):**
+The month regex uses `\b` word boundaries so brand/place names that contain month substrings do NOT trigger Q8.
+
+| Customer says | Result |
+|---|---|
+| "dekat indomaret" | ✅ NOT treated as move-in "maret" — word boundary blocks it |
+| "maret tahun depan" | ✅ Captured as move-in date (standalone month word) |
+
+If a customer mentions "indomaret", "Carefour", "Hypermart" etc., Q8 is still asked normally.
+
+**Q9 date-answer guard:**
+If the customer answers Q9 (decision maker / viewing logistics) with a date phrase like `"mei tahun depan"`, `"Juli 2026"`, or `"bulan depan"`, the server detects this and does NOT store it as the decision maker. Instead, Q8 is set from that answer and Q9 remains unanswered.
+
+This prevents summaries showing: `✓ Keputusan bersama: *mei tahun depan*`
+
 ---
 
 ## Full Conversation Example
@@ -576,7 +654,7 @@ AI (Q4):  Nanti akan tinggal bersama siapa saja?
 
 Customer: saya tinggal sendiran aja
 AI (Q3):  Oke, berarti 1 kamar sudah cukup ya 😊
-          Di Malang kami ada Villa sekitar 3–5 juta/bulan dan ada yang 8–15 juta/bulan.
+          Di Malang ada Villa sekitar 3–5 juta/bulan dan ada yang 8–15 juta/bulan.
           Kira-kira yang mana lebih sesuai?
 
 Customer: yang 3-5 juta aja

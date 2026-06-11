@@ -409,6 +409,20 @@ function isPropertyContextContinuation(message, history = []) {
 
   // ── Periksa 5 pesan terakhir apakah ada konteks properti ─────────────────
   const recentHistory   = history.slice(-6);
+
+  // ── PRIORITY fast paths — sebelum cek hasPropertyCtx ─────────────────────
+  // Pola ini sangat spesifik sebagai jawaban Q10 (durasi sewa), sehingga aman
+  // dilewatkan bahkan jika AI message belum tersimpan ke DB (race condition).
+  // Syarat: sudah ada minimal 2 pesan sebelumnya (percakapan sudah dimulai).
+  //
+  // Contoh kasus: customer jawab "1 tahun" untuk Q10 "Rencananya sewa berapa lama?"
+  // tapi pesan AI belum tersimpan → hasPropertyCtx = false → tanpa fix ini,
+  // "1 tahun" difilter sebagai "bukan query properti".
+  if (recentHistory.length >= 2) {
+    // Durasi sewa singkat — jawaban Q10 ("1 tahun", "6 bulan", "2 bulan", "3 months")
+    if (/^\d+\s*(tahun|year|bulan|month)s?$/.test(lower.trim())) return true;
+  }
+
   const hasPropertyCtx  = recentHistory.some(item => hasPropertyKeyword(item.message || ''));
   if (!hasPropertyCtx) return false;
 
@@ -423,7 +437,7 @@ function isPropertyContextContinuation(message, history = []) {
   if (/\b(202[4-9]|203[0-9])\b/.test(lower)) return true;
   // Jawaban tipe transaksi murni (satu kata / frasa pendek)
   if (/^(sewa|beli|jual|beli\s+aja|mau\s+sewa|mau\s+beli|untuk\s+sewa|untuk\s+beli|rent|buy|purchase)$/.test(lower.trim())) return true;
-  // Durasi sewa singkat — jawaban Q10 ("1 tahun", "6 bulan")
+  // Durasi sewa singkat — juga cek di sini (setelah hasPropertyCtx) untuk kelengkapan
   if (/^\d+\s*(tahun|year|bulan|month)s?$/.test(lower.trim())) return true;
   // Harga dengan satuan — jawaban Q3 ("2-4 juta/seminggu", "5 jt per bulan")
   if (/\b\d[\d.,]*\s*(juta|ribu|miliar|rb|jt)\b/i.test(lower)) return true;

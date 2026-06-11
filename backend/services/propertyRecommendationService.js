@@ -117,9 +117,35 @@ function escapeRegExp(value = '') {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/**
+ * Strip "dekat/deket/near X" fragments so location anchors don't trigger
+ * building-type detection. e.g. "deket kantor dan mall" → "dan mall"
+ * → prevents false-positive office/warehouse type detection.
+ */
+function stripNearPhrases(text) {
+  return text.replace(/\b(dekat|deket|near|di\s+dekat|di\s+sekitar|sekitar|samping|sebelah)\s+\S+/gi, '');
+}
+
+/**
+ * Word-bounded keyword match.
+ * Multi-word keywords (contain space) → simple substring (already unambiguous).
+ * Single-word keywords → require word boundary so "kosongan" ≠ "kos",
+ * "indomaret" ≠ "maret", etc.
+ */
+function matchesWordBounded(text, word) {
+  if (word.includes(' ')) return text.includes(word);
+  return new RegExp(`\\b${escapeRegExp(word)}\\b`).test(text);
+}
+
+function includesAnyWordBounded(text, words = []) {
+  return words.some((word) => matchesWordBounded(text, word));
+}
+
 function detectBuildingType(message = '') {
   const text = normalizeText(message);
-  return Object.entries(PROPERTY_TYPES).find(([, keywords]) => includesAny(text, keywords))?.[0] || '';
+  // Strip "dekat X" phrases so location anchors don't pollute type detection
+  const textForType = stripNearPhrases(text);
+  return Object.entries(PROPERTY_TYPES).find(([, keywords]) => includesAnyWordBounded(textForType, keywords))?.[0] || '';
 }
 
 function detectTransactionType(message = '') {
@@ -166,56 +192,168 @@ function parseNumberToken(token = '') {
   return Math.round(number);
 }
 
+// ─── Smart budget range parsing ─────────────────────────────────────────────
+// Input formats supported:
+//   Full IDR dot notation : 5.000.000 / 412.567.000 / 569.210.000 (dots = thousands sep)
+//   Suffix units          : K/k, rb/ribu, jt/juta, m/miliar/milyar, t/triliun + EN aliases
+//   Mixed                 : 569.210.000 - 5m / 678 jt - 900m / 5.000.000 - 412.567.000
+// Output format: full Indonesian dot notation → "Rp 5.000.000 - Rp 412.567.000"
+//
+// Unit inference rules (when one side of a range has no suffix unit):
+//   Only-right-has-unit (X - Yunit): loRaw <= hiRaw → same unit; loRaw > hiRaw → step down
+//   Only-left-has-unit  (Xunit - Y): hiRaw >= loRaw → same unit; hiRaw < loRaw → step up
+//   fullIDR + bare OR bare + fullIDR → ambiguous (ask customer)
+//   Neither side has unit             → ambiguous (ask customer)
+
+const _BUDGET_UNIT_MULT = {
+  k: 1e3, rb: 1e3, ribu: 1e3, thousand: 1e3,
+  jt: 1e6, juta: 1e6, million: 1e6,
+  m: 1e9, miliar: 1e9, milyar: 1e9, billion: 1e9,
+  t: 1e12, triliun: 1e12, trilion: 1e12, trillion: 1e12,
+};
+const _BUDGET_LEVELS = [1e3, 1e6, 1e9, 1e12];
+
+function _budgetResolveMult(unitStr) {
+  return unitStr ? (_BUDGET_UNIT_MULT[unitStr.toLowerCase()] || null) : null;
+}
+function _budgetStepUp(mult) {
+  const i = _BUDGET_LEVELS.indexOf(mult);
+  return i >= 0 && i < _BUDGET_LEVELS.length - 1 ? _BUDGET_LEVELS[i + 1] : null;
+}
+function _budgetStepDown(mult) {
+  const i = _BUDGET_LEVELS.indexOf(mult);
+  return i > 0 ? _BUDGET_LEVELS[i - 1] : null;
+}
+
+// Full IDR dot notation: 5.000.000, 412.567.000 (Indonesian thousands separator)
+// Requires digit(s) followed by one or more groups of exactly ".NNN"
+const _FULL_IDR_RE = /^\d{1,3}(?:\.\d{3})+$/;
+
+// Parse a raw decimal coefficient ("1.3", "2,6", "900") — NOT full IDR
+function _parseRawNum(s) {
+  if (!s) return null;
+  const n = Number(String(s).replace(',', '.'));
+  return Number.isFinite(n) ? n : null;
+}
+
+// Tokenize one budget token.
+//   Full IDR (5.000.000)  → { raw: 5000000, mult: 1,   isFullIDR: true  }
+//   With unit (2.6juta)   → { raw: 2.6,     mult: 1e6, isFullIDR: false }
+//   Bare (900)            → { raw: 900,      mult: null, isFullIDR: false }
+const _BUDGET_TOKEN_RE = /^(\d+(?:[.,]\d+)?)\s*(k|rb|ribu|jt|juta|m|miliar|milyar|t|triliun|trilion|thousand|million|billion|trillion)?$/i;
+function _tokenizeBudget(str) {
+  const s = (str || '').trim();
+  if (!s) return null;
+  // Full IDR check MUST come before generic decimal to avoid "5.000" → 5.0
+  if (_FULL_IDR_RE.test(s)) {
+    const raw = parseInt(s.replace(/\./g, ''), 10);
+    return Number.isFinite(raw) ? { raw, mult: 1, isFullIDR: true } : null;
+  }
+  const m = s.match(_BUDGET_TOKEN_RE);
+  if (!m) return null;
+  const raw = _parseRawNum(m[1]);
+  if (raw === null) return null;
+  return { raw, mult: _budgetResolveMult(m[2]), isFullIDR: false };
+}
+
+// Format resolved IDR value as full Indonesian dot notation: "Rp 5.000.000"
+function _formatRpFull(n) {
+  if (!n || !Number.isFinite(n)) return null;
+  return `Rp ${Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
+}
+
+// Regex building blocks
+const _FULL_IDR_PAT = '\\d{1,3}(?:\\.\\d{3})+';
+const _BU = 'k|rb|ribu|jt|juta|m|miliar|milyar|t|triliun|trilion|thousand|million|billion|trillion';
+const _DEC_UNIT_PAT = `\\d+(?:[.,]\\d+)?\\s*(?:${_BU})?`;
+const _RANGE_TOKEN = `(?:${_FULL_IDR_PAT}|${_DEC_UNIT_PAT})`;
+const _BUDGET_RANGE_RE = new RegExp(
+  `(${_RANGE_TOKEN})\\s*(?:-|sampai|sd|s\\/d|to|hingga)\\s*(${_RANGE_TOKEN})`,
+  'i'
+);
+
 function detectBudget(message = '') {
   const text = normalizeText(message);
-  const unitMatch = text.match(/(juta|jt|miliar|ribu|rb|million|billion)/i);
-  const unit = unitMatch ? unitMatch[1] : '';
-  const period = /tahun|year|annual|per tahun|\/tahun/.test(text)
-    ? 'year'
-    : /bulan|month|monthly|per bulan|\/bulan/.test(text)
-      ? 'month'
-      : /malam|night|daily|hari|harian|\/malam/.test(text)
-        ? 'night'
-        : '';
 
-  const rangeMatch = text.match(/([0-9]+(?:[.,][0-9]+)?\s*(?:juta|jt|miliar|ribu|rb|million|billion)?)\s*(?:-|sampai|sd|s\/d|to|hingga)\s*([0-9]+(?:[.,][0-9]+)?\s*(?:juta|jt|miliar|ribu|rb|million|billion)?)/i);
+  const period = /tahun|year|annual|per tahun|\/tahun/.test(text) ? 'year'
+    : /bulan|month|monthly|per bulan|\/bulan/.test(text) ? 'month'
+    : /malam|night|daily|hari|harian|\/malam/.test(text) ? 'night'
+    : '';
+
+  // ── Range match ──────────────────────────────────────────────────────────
+  const rangeMatch = text.match(_BUDGET_RANGE_RE);
   if (rangeMatch) {
-    const min = parseNumberToken(`${rangeMatch[1]} ${unit}`);
-    const max = parseNumberToken(`${rangeMatch[2]} ${unit}`);
-    return {
-      text: rangeMatch[0].trim(),
-      min: Math.min(min || 0, max || 0) || null,
-      max: Math.max(min || 0, max || 0) || null,
-      period
-    };
+    const lo = _tokenizeBudget(rangeMatch[1]);
+    const hi = _tokenizeBudget(rangeMatch[2]);
+    if (lo && hi) {
+      const loResolved = lo.mult !== null;
+      const hiResolved = hi.mult !== null;
+      let minVal, maxVal;
+
+      if (!loResolved && !hiResolved) {
+        // Neither side has unit → ask for clarification
+        return { ambiguous: true, rawMin: lo.raw, rawMax: hi.raw, period, text: rangeMatch[0].trim() };
+      } else if (loResolved && hiResolved) {
+        // Both resolved — use as-is
+        minVal = Math.round(lo.raw * lo.mult);
+        maxVal = Math.round(hi.raw * hi.mult);
+      } else if (!loResolved && hiResolved) {
+        // Only right side resolved
+        if (hi.isFullIDR) {
+          return { ambiguous: true, rawMin: lo.raw, rawMax: hi.raw, period, text: rangeMatch[0].trim() };
+        }
+        const loMult = lo.raw <= hi.raw ? hi.mult : (_budgetStepDown(hi.mult) || hi.mult);
+        minVal = Math.round(lo.raw * loMult);
+        maxVal = Math.round(hi.raw * hi.mult);
+      } else {
+        // Only left side resolved
+        if (lo.isFullIDR) {
+          return { ambiguous: true, rawMin: lo.raw, rawMax: hi.raw, period, text: rangeMatch[0].trim() };
+        }
+        const hiMult = hi.raw >= lo.raw ? lo.mult : (_budgetStepUp(lo.mult) || lo.mult);
+        minVal = Math.round(lo.raw * lo.mult);
+        maxVal = Math.round(hi.raw * hiMult);
+      }
+
+      const [minFinal, maxFinal] = [Math.min(minVal, maxVal), Math.max(minVal, maxVal)];
+      return {
+        text   : `${_formatRpFull(minFinal)} - ${_formatRpFull(maxFinal)}`,
+        min    : minFinal,
+        max    : maxFinal,
+        period,
+      };
+    }
   }
 
-  // Case A: explicit budget prefix (budget/harga/rp/etc.) — monetary unit is optional
-  // e.g. "budget 5", "harga 2 juta", "rp 500"
+  // ── Single value: explicit budget prefix ─────────────────────────────────
+  const _STOK = `(?:${_FULL_IDR_PAT}|\\d+(?:[.,]\\d+)?\\s*(?:${_BU})?)`;
   const prefixedMatch = text.match(
-    /(?:budget|badget|harga|rp|idr|range|sekitar|maksimal|max)\s*[:=]?\s*(rp\s*)?([0-9]+(?:[.,][0-9]+)?(?:\s*(?:juta|jt|miliar|ribu|rb|million|billion))?)/i
+    new RegExp(`(?:budget|badget|harga|rp|idr|range|sekitar|maksimal|max)\\s*[:=]?\\s*(?:rp\\s*)?(${_STOK})`, 'i')
   );
   if (prefixedMatch) {
-    const value = parseNumberToken(`${prefixedMatch[2]} ${unit}`);
-    return { text: prefixedMatch[0].trim(), min: null, max: value, period };
+    const tok = _tokenizeBudget(prefixedMatch[1]);
+    if (tok && tok.mult) {
+      const value = Math.round(tok.raw * tok.mult);
+      return { text: _formatRpFull(value), min: null, max: value, period };
+    }
   }
 
-  // Case B: no prefix — monetary unit REQUIRED to avoid matching bare dates/counts
-  // e.g. "2 juta/bulan" ✅   "1 Agustus" ❌   "25" ❌   "1 tahun" ❌
-  const unitRequiredMatch = text.match(
-    /(rp\s*)?([0-9]+(?:[.,][0-9]+)?\s*(?:juta|jt|miliar|ribu|rb|million|billion))/i
+  // ── Single value: monetary unit required (prevents matching bare dates/counts) ──
+  const unitReqMatch = text.match(
+    new RegExp(`(?:rp\\s*)?(${_FULL_IDR_PAT}|\\d+(?:[.,]\\d+)?\\s*(?:${_BU}))`, 'i')
   );
-  if (unitRequiredMatch) {
-    const value = parseNumberToken(`${unitRequiredMatch[2]} ${unit}`);
-    return { text: unitRequiredMatch[0].trim(), min: null, max: value, period };
+  if (unitReqMatch) {
+    const tok = _tokenizeBudget(unitReqMatch[1]);
+    if (tok && tok.mult) {
+      const value = Math.round(tok.raw * tok.mult);
+      return { text: _formatRpFull(value), min: null, max: value, period };
+    }
   }
 
-  // Deteksi preferensi harga tanpa angka (terjangkau / murah / affordable).
-  // Ini dianggap sebagai budget "affordable" — qualification gate menerimanya
-  // dan properti akan diurutkan dari termurah.
+  // ── Affordable preference (no number) ────────────────────────────────────
   const affordableWords = [
     'terjangkau', 'murah', 'termurah', 'hemat', 'ekonomis', 'low budget',
-    'affordable', 'cheap', 'cheapest', 'economy', 'low cost', 'low price'
+    'affordable', 'cheap', 'cheapest', 'economy', 'low cost', 'low price',
   ];
   if (affordableWords.some(w => text.includes(w))) {
     return { text: 'affordable', min: null, max: null, period: '', preference: 'affordable' };

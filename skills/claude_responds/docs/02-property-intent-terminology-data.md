@@ -144,17 +144,101 @@ Fallback types are only used **after** the primary type has no results.
 
 ## Budget Parsing
 
-Supported budget formats:
+The server parses budget ranges and outputs full Indonesian dot notation (e.g. `Rp 5.000.000`).
+The dot (`.`) is the **thousands separator** in Indonesian numbers — not a decimal point.
+
+### Input units supported
+
+| Input notation | Meaning | Multiplier |
+|---|---|---|
+| `K`, `k`, `rb`, `ribu` | ribuan | × 1.000 |
+| `jt`, `juta` | jutaan | × 1.000.000 |
+| `m`, `miliar`, `milyar` | miliaran | × 1.000.000.000 |
+| `t`, `triliun` | triliun | × 1.000.000.000.000 |
+| `5.000.000` (dots = thousands sep) | exact IDR | as-is |
+
+### Range parsing — all supported cases
+
+| Customer input | Parsed output |
+|---|---|
+| `1-2 jt` | Rp 1.000.000 - Rp 2.000.000 |
+| `3jt-5jt` | Rp 3.000.000 - Rp 5.000.000 |
+| `2.6juta-5jt` | Rp 2.600.000 - Rp 5.000.000 |
+| `1.3-6juta` | Rp 1.300.000 - Rp 6.000.000 |
+| `500K-1juta` | Rp 500.000 - Rp 1.000.000 |
+| `700-4 juta` | Rp 700.000 - Rp 4.000.000 |
+| `900 K-12 jt` | Rp 900.000 - Rp 12.000.000 |
+| `135K-800K` | Rp 135.000 - Rp 800.000 |
+| `430 K - 900` | Rp 430.000 - Rp 900.000 |
+| `670-1m` | Rp 670.000.000 - Rp 1.000.000.000 |
+| `40-300 juta` | Rp 40.000.000 - Rp 300.000.000 |
+| `80 - 2 miliar` | Rp 80.000.000 - Rp 2.000.000.000 |
+| `400juta-35` | Rp 400.000.000 - Rp 35.000.000.000 |
+| `578K-67` | Rp 578.000 - Rp 67.000.000 |
+| `5.000.000-412.567.000` | Rp 5.000.000 - Rp 412.567.000 |
+| `569.210.000 - 5m` | Rp 569.210.000 - Rp 5.000.000.000 |
+| `678 jt - 900m` | Rp 678.000.000 - Rp 900.000.000.000 |
+| `300m - 3t` | Rp 300.000.000.000 - Rp 3.000.000.000.000 |
+| `879 miliar - 4 t` | Rp 879.000.000.000 - Rp 4.000.000.000.000 |
+| `430 m - 2triliun` | Rp 430.000.000.000 - Rp 2.000.000.000.000 |
+| `500-700` | **AMBIGUOUS** → ask for unit |
+
+### Unit inference rules (when one side has no explicit unit)
+
+**Only right side has unit (X - Yunit):**
+- X_raw ≤ Y_raw → X uses same unit as Y
+- X_raw > Y_raw → X uses one step DOWN: juta→ribu, miliar→juta, triliun→miliar
+
+**Only left side has unit (Xunit - Y):**
+- Y_raw ≥ X_raw → Y uses same unit as X
+- Y_raw < X_raw → Y uses one step UP: ribu→juta, juta→miliar, miliar→triliun
+
+**Full IDR + bare number or bare + full IDR** → AMBIGUOUS (ask customer)
+**Neither side has unit (e.g. `500-700`)** → AMBIGUOUS (ask customer):
+> "Untuk harga *500-700* — maksudnya dalam *ribu*, *juta*, *miliar*, atau *triliun*?"
+
+### IDR denomination reference
+
+| Denomination | Indonesian | Amount | Example |
+|---|---|---|---|
+| Ribuan | thousand | 1.000 | Rp 500.000 |
+| Ratusan ribu | hundred thousand | 100.000 | Rp 800.000 |
+| Jutaan | million | 1.000.000 | Rp 5.000.000 |
+| Ratusan juta | hundred million | 100.000.000 | Rp 400.000.000 |
+| Miliar | billion | 1.000.000.000 | Rp 2.000.000.000 |
+| Ratusan miliar | hundred billion | 100.000.000.000 | Rp 300.000.000.000 |
+| Triliun | trillion | 1.000.000.000.000 | Rp 3.000.000.000.000 |
+| Ratusan triliun | hundred trillion | 100.000.000.000.000 | Rp 200.000.000.000.000 |
+
+### Single-value formats
 
 ```
-"Rp 5.000.000/bulan"       → value: 5000000, period: month
-"budget 2 miliar"           → value: 2000000000, no period
-"harga 500 jt - 1 M"       → min: 500000000, max: 1000000000
-"500 juta sampai 1 miliar"  → range
-"di bawah 3 juta per tahun" → max: 3000000, period: year
+"budget 5 juta"        → Rp 5.000.000
+"harga 2 miliar"       → Rp 2.000.000.000
+"Rp 500 ribu"          → Rp 500.000
+"Rp 5.000.000"         → Rp 5.000.000 (full IDR input)
+"terjangkau / murah"   → preference: affordable (sort cheapest first)
 ```
 
-Period terms: bulan/month, tahun/year, malam/night, harian/daily.
+### Period terms
+
+bulan / month / per bulan → `period: month`
+tahun / year / per tahun  → `period: year`
+malam / night / harian    → `period: night`
+
+### How to echo budget back to customer
+
+Always use the server-resolved full dot notation — never abbreviate:
+```
+❌ "budget 400 juta sampai 35 miliar"
+✅ "budget Rp 400.000.000 - Rp 35.000.000.000"
+
+❌ "harga sekitar 578 ribu sampai 67 juta"
+✅ "harga Rp 578.000 - Rp 67.000.000"
+
+❌ "kisaran 2.6 juta sampai 5 juta"
+✅ "kisaran Rp 2.600.000 - Rp 5.000.000"
+```
 
 ---
 

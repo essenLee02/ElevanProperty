@@ -30,7 +30,7 @@ short suitability note when useful
 ## Exact Match Template — Indonesian
 
 ```text
-Baik, berikut pilihan **{buildingType} di {location}** yang tersedia dari katalog kami:
+Baik, berikut pilihan **{buildingType} di {location}** yang tersedia dari katalog saya:
 
 1. **{propertyName}**
    Lokasi: {location}
@@ -45,7 +45,7 @@ Mau saya bantu pilihkan yang paling sesuai budget Anda?
 ## Exact Match Template — English
 
 ```text
-Sure, here are available **{buildingType} options in {location}** from our catalog:
+Sure, here are available **{buildingType} options in {location}** from my catalog:
 
 1. **{propertyName}**
    Location: {location}
@@ -62,7 +62,7 @@ Would you like me to help choose the most suitable option?
 Use only when there is truly no matching catalog item:
 
 ```text
-Maaf, saat ini belum ada properti yang sesuai dengan kriteria tersebut di katalog kami. Apakah Anda ingin saya cek alternatif lokasi, tipe properti, atau range harga lain?
+Maaf, saat ini belum ada properti yang sesuai dengan kriteria tersebut di katalog saya. Apakah Anda ingin saya cek alternatif lokasi, tipe properti, atau range harga lain?
 ```
 
 ## Clarification Template

@@ -50,7 +50,7 @@ After asking "Nanti akan tinggal bersama siapa saja?", any of these is a **valid
 ```
 Customer: saya tinggal sendiran aja
 AI:       Oke, berarti 1 kamar sudah cukup ya 😊
-          Untuk budget — di [area] kami ada [Tipe] sekitar [LOW] dan yang [HIGH].
+          Untuk budget — di [area] ada [Tipe] sekitar [LOW] dan yang [HIGH].
           Kira-kira yang mana lebih sesuai?
 ```
 

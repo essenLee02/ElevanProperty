@@ -403,7 +403,7 @@ async function generateWhatsAppAIReply(params) {
     const name  = session?.name || 'Pelanggan';
     const agent = agentName    || process.env.APP_NAME || 'Elevan Property';
     return {
-      reply: `Halo *${name}*! 👋\n\nTerima kasih telah menghubungi kami. Tim *${agent}* akan segera membalas pesan Anda dengan informasi properti yang sesuai.\n\nMohon tunggu sebentar 🙏`,
+      reply: `Halo *${name}*! 👋\n\nTerima kasih telah menghubungi saya. *${agent}* akan segera membalas pesan Anda dengan informasi properti yang sesuai.\n\nMohon tunggu sebentar 🙏`,
       provider      : 'fallback_generic',
       contextSource : 'none',
     };

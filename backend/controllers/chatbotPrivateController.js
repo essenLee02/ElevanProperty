@@ -27,25 +27,64 @@ const { loadResponseSkillPrompt,
         getSkillRegistryStatus }              = require('../services/skillPromptService');
 const { hasPropertyKeyword,
         isPropertyContextContinuation }       = require('../utils/propertyKeywordFilter');
+const { extractQualificationState }           = require('../services/aiPromptBuilderService');
 
 // ─── LanguageDetector ─────────────────────────────────────────────────────────
 
 class LanguageDetector {
-  /** Keywords that indicate an Indonesian-language message */
+  // ── Indonesian keyword bank ──────────────────────────────────────────────
+  // Grouped for readability; all checked via text.includes() after normalize().
   static #INDONESIAN_WORDS = [
-    'saya', 'mau', 'ingin', 'cari', 'sewa', 'beli', 'jual', 'rumah', 'villa',
-    'vila', 'apartemen', 'hotel', 'kos', 'kost', 'ruko', 'kantor', 'gudang',
-    'harga', 'berapa', 'di ', 'ada', 'tolong', 'rekomendasi', 'saran',
-    'fasilitas', 'budget', 'badget', 'tanah', 'properti',
-    // Satuan mata uang & waktu Indonesia (penting untuk "2-4 juta/seminggu", "Juni 2026")
-    'juta', 'ribu', 'miliar', 'terjangkau', 'murah', 'ekonomis', 'hemat',
-    'seminggu', 'sebulan', 'setahun', 'bulan', 'minggu', 'tahun',
-    // Bulan dalam bahasa Indonesia
+    // Core pronouns & intent
+    'saya', 'aku', 'kamu', 'anda', 'mau', 'ingin', 'cari', 'tolong', 'mohon',
+    'silakan', 'boleh', 'bisa', 'tidak', 'belum', 'sudah', 'pernah', 'ada',
+    // Property types (ID)
+    'rumah', 'vila', 'apartemen', 'kos', 'kost', 'kosan', 'indekos', 'ruko',
+    'kantor', 'gudang', 'tanah', 'kavling', 'kaveling', 'lahan', 'properti',
+    // Transaction verbs (ID)
+    'sewa', 'beli', 'jual', 'sewakan', 'menyewa', 'membeli', 'kontrakan',
+    'kontrak', 'ngontrak', 'numpang',
+    // Price & budget (ID)
+    'harga', 'berapa', 'budget', 'badget', 'anggaran', 'biaya', 'bayar',
+    'juta', 'ribu', 'miliar', 'rp', 'rupiah', 'dp', 'cicilan', 'kpr',
+    'terjangkau', 'murah', 'ekonomis', 'hemat', 'mahal', 'mewah', 'premium',
+    // Time / date (ID)
+    'seminggu', 'sebulan', 'setahun', 'bulan', 'minggu', 'tahun', 'hari',
+    'besok', 'lusa', 'segera', 'secepatnya', 'kapan', 'pindah', 'masuk',
+    // Month names (ID)
     'januari', 'februari', 'maret', 'april', 'mei', 'juni',
     'juli', 'agustus', 'september', 'oktober', 'november', 'desember',
-    // Household composition & family (Q4 answers) — NEW
+    // Location & place (ID)
+    'di ', 'dekat', 'deket', 'sekitar', 'wilayah', 'area', 'daerah',
+    'jalan', 'gang', 'perumahan', 'komplek', 'kawasan',
+    // Facilities (ID)
+    'fasilitas', 'kamar', 'dapur', 'parkir', 'garasi', 'kolam', 'taman',
+    'furnished', 'furnish', 'kosongan', 'perabot',
+    // Household composition / Q4 answers (ID)
     'sendiri', 'sendiran', 'sendirian', 'tinggal', 'bersama', 'istri', 'suami',
-    'anak', 'orangtua', 'orang tua', 'keluarga', 'ayah', 'ibu',
+    'anak', 'orangtua', 'orang tua', 'keluarga', 'ayah', 'ibu', 'berdua',
+    'bertiga', 'berempat', 'pasangan',
+    // Qualifier words (ID)
+    'rekomendasi', 'saran', 'pilihan', 'cek', 'lihat', 'tunjukkan', 'bantu',
+    'cocok', 'sesuai', 'bagus', 'bagaimana', 'gimana', 'gimana',
+    // Common informal conjunctions / fillers (confirms Indonesian)
+    'aja', 'nih', 'dong', 'sih', 'deh', 'lah', 'yuk', 'yah', 'udah', 'udah',
+    'kayak', 'kayaknya', 'kira-kira', 'kira kira', 'emang', 'memang',
+  ];
+
+  // ── US English indicator patterns ────────────────────────────────────────
+  // Used to distinguish clearly English messages and lock language = 'en'.
+  static #US_ENGLISH_PATTERNS = [
+    /\bi\s+(want|need|am\s+looking|would\s+like|am\s+searching|am\s+interested)\b/i,
+    /\b(i'm|i've|i'd|i'll|i'm|we're|we've|we'd)\b/i,
+    /\b(can\s+you|could\s+you|please|kindly|looking\s+for|show\s+me)\b/i,
+    /\b(how\s+much|what'?s\s+the\s+price|do\s+you\s+have|any\s+available)\b/i,
+    /\b(bedroom|bathroom|living\s+room|studio|lease|monthly|yearly|per\s+month)\b/i,
+    /\b(affordable|budget-friendly|spacious|furnished|unfurnished|move[\s-]in)\b/i,
+    /\b(neighborhood|nearby|within\s+\d|close\s+to|walking\s+distance)\b/i,
+    /\b(price\s+range|square\s+feet|sq\.?\s*ft|sqm|square\s+meter)\b/i,
+    /\b(east\s+java|west\s+java|central\s+java|bali|jakarta|surabaya)\b.*\b(house|villa|apt|apartment)\b/i,
+    /\b(rent|buy|purchase|sell|sale)\b.{0,30}\b(house|villa|apartment|property)\b/i,
   ];
 
   /** Keywords for clearly off-topic subjects (non-property domains) */
@@ -78,27 +117,45 @@ class LanguageDetector {
 
   /**
    * Detect the reply language from the user's latest message.
-   * Falls back to recent customer history when the current message is ambiguous
-   * (e.g. "2-4 juta/seminggu", "Juni 2026").
-   * Returns 'id' for Indonesian, 'en' otherwise.
+   *
+   * Strategy:
+   *  1. If the message contains clear Indonesian keywords → 'id'
+   *  2. If the message matches clear US/British English patterns → 'en'
+   *  3. Ambiguous short answer (number, date, yes/no) → fall back to
+   *     the last 4 customer messages in history
+   *  4. Default → 'en'
+   *
+   * The return value drives template strings (Q1-Q12 questions, summary brief).
+   * The AI provider receives the full language instruction in the system prompt
+   * and handles 30+ language responses natively.
    *
    * @param {string}  message
-   * @param {Array}   history - Optional conversation history [{role, message}]
+   * @param {Array}   history - conversation history [{role, message}]
    * @returns {'id'|'en'}
    */
   static detect(message = '', history = []) {
     const text = this.#normalize(message);
+
+    // 1. Indonesian signals — check substring keywords
     if (this.#INDONESIAN_WORDS.some(word => text.includes(word))) return 'id';
 
-    // Fallback: check last 4 customer messages in history
+    // 2. Clear US/British English signals — regex patterns
+    if (this.#US_ENGLISH_PATTERNS.some(re => re.test(text))) return 'en';
+
+    // 3. Ambiguous — fall back to history (last 4 customer messages)
     if (Array.isArray(history) && history.length > 0) {
-      const recentCustomer = history
+      const recent = history
         .filter(h => h.role === 'user' || h.role === 'customer')
         .slice(-4)
         .map(h => this.#normalize(h.message || ''));
-      if (recentCustomer.some(msg => this.#INDONESIAN_WORDS.some(w => msg.includes(w)))) return 'id';
+
+      // Indonesian found in history → stay Indonesian
+      if (recent.some(msg => this.#INDONESIAN_WORDS.some(w => msg.includes(w)))) return 'id';
+      // English pattern found in history → stay English
+      if (recent.some(msg => this.#US_ENGLISH_PATTERNS.some(re => re.test(msg)))) return 'en';
     }
 
+    // 4. Default to English (LLM will still handle other languages via system prompt)
     return 'en';
   }
 
@@ -378,8 +435,8 @@ class ResponseBuilder {
    */
   clarification() {
     return this.#lang === 'id'
-      ? 'Boleh saya pastikan, Anda mencari properti untuk **sewa**, **beli**, atau **jual**? Silakan sebutkan juga lokasi dan budget agar saya bisa mencarikan pilihan terbaik dari Rumah123 dan katalog kami.'
-      : 'May I confirm whether you are looking to **rent**, **buy**, or **sell** a property? You can also mention the location and budget so I can find the best options from Rumah123 and our catalog.';
+      ? 'Boleh saya pastikan, Anda mencari properti untuk **sewa**, **beli**, atau **jual**? Silakan sebutkan juga lokasi dan budget agar saya bisa mencarikan pilihan terbaik dari Rumah123 dan katalog saya.'
+      : 'May I confirm whether you are looking to **rent**, **buy**, or **sell** a property? You can also mention the location and budget so I can find the best options from Rumah123 and my catalog.';
   }
 
   /**
@@ -410,8 +467,8 @@ class ResponseBuilder {
 
     if (hasCat) {
       lines.push(hasR123
-        ? (isId ? '\n---\n**Pilihan Lain dari Katalog Kami:**\n' : '\n---\n**More Options from Our Catalog:**\n')
-        : (isId ? `Berikut pilihan **${summary}** dari katalog properti kami:\n` : `Here are matching **${summary}** options from our catalog:\n`)
+        ? (isId ? '\n---\n**Pilihan Lain dari Katalog Saya:**\n' : '\n---\n**More Options from My Catalog:**\n')
+        : (isId ? `Berikut pilihan **${summary}** dari katalog properti saya:\n` : `Here are matching **${summary}** options from my catalog:\n`)
       );
       lines.push(PropertyFormatter.catalogList(catalogMatches, this.#lang, 6));
     }
@@ -533,11 +590,11 @@ class ResponseBuilder {
     // Show catalog alternatives (filtered by location)
     if (hasAlt) {
       if (hasR123) {
-        lines.push(isId ? '\n---\n**Alternatif dari Katalog Kami:**\n' : '\n---\n**Alternatives from Our Catalog:**\n');
+        lines.push(isId ? '\n---\n**Alternatif dari Katalog Saya:**\n' : '\n---\n**Alternatives from My Catalog:**\n');
       } else {
         lines.push(isId
-          ? `Namun berikut pilihan alternatif dari katalog kami untuk **${summary}**:\n`
-          : `Here are some alternative options from our catalog for **${summary}**:\n`
+          ? `Namun berikut pilihan alternatif dari katalog saya untuk **${summary}**:\n`
+          : `Here are some alternative options from my catalog for **${summary}**:\n`
         );
       }
       lines.push(PropertyFormatter.catalogList(filteredAlt, this.#lang, 6));
@@ -589,8 +646,8 @@ class ResponseBuilderWhatsApp {
 
   clarification() {
     return this.#lang === 'id'
-      ? 'Boleh saya pastikan, Anda mencari properti untuk *sewa*, *beli*, atau *jual*? Silakan sebutkan juga lokasi dan budget agar saya bisa mencarikan pilihan terbaik dari Rumah123 dan katalog kami.'
-      : 'May I confirm whether you are looking to *rent*, *buy*, or *sell* a property? You can also mention the location and budget so I can find the best options from Rumah123 and our catalog.';
+      ? 'Boleh saya pastikan, Anda mencari properti untuk *sewa*, *beli*, atau *jual*? Silakan sebutkan juga lokasi dan budget agar saya bisa mencarikan pilihan terbaik dari Rumah123 dan katalog saya.'
+      : 'May I confirm whether you are looking to *rent*, *buy*, or *sell* a property? You can also mention the location and budget so I can find the best options from Rumah123 and my catalog.';
   }
 
   /**
@@ -694,8 +751,8 @@ class ResponseBuilderWhatsApp {
   #addFooter() {
     const isId = this.#lang === 'id';
     return isId
-      ? `\n\nKami siap membantu Anda menemukan rumah, villa, apartemen, atau properti lainnya yang cocok untuk Anda.\nApakah ada yang ingin Anda tanyakan lebih lanjut?\n\n\nSalam hangat,\n*${this.#agentName}*\n*Elevan Property*`
-      : `\n\nWe are ready to help you find a house, villa, apartment, or other property that suits you.\nWould you like to know more details?\n\n\nWarm regards,\n*${this.#agentName}*\n*Elevan Property*`;
+      ? `\n\nSaya siap membantu Anda menemukan rumah, villa, apartemen, atau properti lainnya yang cocok untuk Anda.\nApakah ada yang ingin Anda tanyakan lebih lanjut?\n\n\nSalam hangat,\n*${this.#agentName}*\n*Elevan Property*`
+      : `\n\nI am ready to help you find a house, villa, apartment, or other property that suits you.\nWould you like to know more details?\n\n\nWarm regards,\n*${this.#agentName}*\n*Elevan Property*`;
   }
 
   exactMatch({ rumah123Listings = [], catalogMatches = [], filters = {} }) {
@@ -716,8 +773,8 @@ class ResponseBuilderWhatsApp {
 
     if (hasCat && !hasR123) {
       lines.push(isId
-        ? `Berikut pilihan *${summary}* dari katalog properti kami:\n`
-        : `Here are matching *${summary}* options from our catalog:\n`
+        ? `Berikut pilihan *${summary}* dari katalog properti saya:\n`
+        : `Here are matching *${summary}* options from my catalog:\n`
       );
       lines.push(this.#catalogListWhatsApp(catalogMatches, this.#lang, 6));
     }
@@ -807,8 +864,8 @@ class ResponseBuilderWhatsApp {
 
         } else {
           contextMsg = isId
-            ? `Berikut pilihan *${summary}* yang tersedia dari katalog kami:\n`
-            : `Here are available *${summary}* options from our catalog:\n`;
+            ? `Berikut pilihan *${summary}* yang tersedia dari katalog saya:\n`
+            : `Here are available *${summary}* options from my catalog:\n`;
         }
 
         lines.push(contextMsg);
@@ -829,11 +886,9 @@ class ResponseBuilderWhatsApp {
    * @returns {string}
    */
   qualificationQuestion(question) {
-    const isId = this.#lang === 'id';
-    const signature = isId
-      ? `\n\nSalam hangat,\n*${this.#agentName}*\n*Elevan Property*`
-      : `\n\nWarm regards,\n*${this.#agentName}*\n*Elevan Property*`;
-    return question + signature;
+    // Signature (Salam hangat / Warm regards) appears ONLY in the final summary (agentBrief).
+    // Qualification questions Q1–Q12 must NOT include the agent signature.
+    return question;
   }
 
   /**
@@ -900,8 +955,8 @@ class ResponseBuilderWhatsApp {
       : `Got it, I've noted everything! 📝 ${priorityBadge}`;
 
     const summary = isId
-      ? `${header}\n\n${bulletBlock}\n\n*${this.#agentName}* akan segera menghubungi Anda dengan rekomendasi properti yang paling sesuai! 🏠\n\nTerima kasih sudah menghubungi kami. 🙏`
-      : `${header}\n\n${bulletBlock}\n\n*${this.#agentName}* will reach out soon with the best matching properties! 🏠\n\nThank you for reaching out. 🙏`;
+      ? `${header}\n\n${bulletBlock}\n\nSaya akan segera menghubungi Anda dengan rekomendasi properti yang paling sesuai! 🏠\nTerima kasih sudah menghubungi saya. 🙏`
+      : `${header}\n\n${bulletBlock}\n\nI will reach out to you with the best property recommendations soon! 🏠\nThank you for contacting me. 🙏`;
 
     const signature = isId
       ? `\n\nSalam hangat,\n*${this.#agentName}*\n*Elevan Property*`
@@ -1093,7 +1148,8 @@ class ConversationQualifier {
       transactionType : filters.transactionType || '',   // 'rent'|'sale'|''
       buildingType    : filters.buildingType    || '',   // 'house'|'apartment'|...
       location        : filters.location        || '',   // 'malang'|'surabaya'|...
-      budget          : filters.budget          || null, // { min, max, text } | null
+      budget          : filters.budget?.ambiguous ? null : (filters.budget || null), // { min, max, text } | null
+      budgetAmbiguous : filters.budget?.ambiguous ? filters.budget : null, // { rawMin, rawMax } needs unit clarification
 
       /* ── Derived from customer messages ── */
       hasFurnishing: this.#has(custText, [
@@ -1101,16 +1157,14 @@ class ConversationQualifier {
         'kosongan', 'full furnish', 'sudah ada furnitur', 'mau yang kosong',
         'perabot', 'furniture', 'furnish',
       ]),
-      hasMoveInDate: this.#has(custText, [
-        'januari', 'februari', 'maret', 'april', 'mei', 'juni',
-        'juli', 'agustus', 'september', 'oktober', 'november', 'desember',
-        'january', 'february', 'march', 'may', 'june', 'july', 'august',
-        'october', 'november', 'december',
-        'bulan ini', 'bulan depan', 'next month', 'this month',
-        'segera', 'soon', 'asap', 'secepatnya', 'besok', 'minggu ini',
-        'this week', 'next week', 'langsung masuk', 'immediate',
-        'sudah mau', 'ingin segera', 'ready to move',
-      ]),
+      // Use word-boundary regex for month names so brand names like "indomaret"
+      // don't falsely trigger hasMoveInDate (indomaret.includes("maret") = true).
+      hasMoveInDate: (() => {
+        const MONTH_ID_WB = /\b(januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)\b/i;
+        const MONTH_EN_WB = /\b(january|february|march|may|june|july|august|october|november|december)\b/i;
+        const OTHER_DATE  = /\b(bulan ini|bulan depan|next month|this month|segera|soon|asap|secepatnya|besok|minggu ini|this week|next week|langsung masuk|immediate|sudah mau|ingin segera|ready to move)\b/i;
+        return MONTH_ID_WB.test(custText) || MONTH_EN_WB.test(custText) || OTHER_DATE.test(custText);
+      })(),
       hasHouseholdInfo: this.#has(custText, [
         'keluarga', 'suami', 'istri', 'anak', 'orang tua',
         'sendiri', 'pasangan', 'berdua', 'bertiga', 'berempat',
@@ -1228,7 +1282,7 @@ class ConversationQualifier {
       aiAskedPropType   : this.#has(aiText, ['tipe properti', 'property type', 'jenis properti', 'rumah, apartemen']),
       aiAskedLocation   : this.#has(aiText, ['daerah', 'kota mana', 'which area', 'which city', 'lokasi mana']),
       aiAskedSearchHist : this.#has(aiText, ['sudah lihat berapa', 'how many properties', 'belum cocok', 'sudah survey']),
-      aiAskedBudget     : this.#has(aiText, ['kisaran', 'anggaran', 'budget', 'harga yang', 'price range']),
+      aiAskedBudget     : this.#has(aiText, ['kisaran', 'anggaran', 'budget', 'harga yang', 'price range', 'ribu, juta', 'thousand, million', 'maksudnya dalam']),
       aiAskedMoveIn     : this.#has(aiText, ['masuk bulan', 'pindah bulan', 'rencananya masuk', 'move in', 'moving']),
       aiAskedHousehold  : this.#has(aiText, ['tinggal bersama', 'akan tinggal', 'living with', 'who will be']),
       aiAskedFurnish    : this.#has(aiText, ['furnished', 'furnitur', 'furnishing', 'semi-furnished']),
@@ -1339,15 +1393,15 @@ class ConversationQualifier {
       }
       // Type/tx not stated yet → ask Q0/Q1
       return isId
-        ? `Baik! 😊 Untuk pencarian baru, mau *sewa* atau *beli*? Dan tipe properti apa yang dicari?\n\nKami punya: *rumah, apartemen, villa, kos-kosan, ruko, kantor, gudang*, dan banyak lagi 🏡`
-        : `Sure! 😊 For your new search — looking to *rent* or *buy*? And what type of property?\n\nWe have: *house, apartment, villa, boarding house, shophouse, office, warehouse*, and more 🏡`;
+        ? `Baik! 😊 Untuk pencarian baru, mau *sewa* atau *beli*? Dan tipe properti apa yang dicari?\n\nSaya punya: *rumah, apartemen, villa, kos-kosan, ruko, kantor, gudang*, dan banyak lagi 🏡`
+        : `Sure! 😊 For your new search — looking to *rent* or *buy*? And what type of property?\n\nI have: *house, apartment, villa, boarding house, shophouse, office, warehouse*, and more 🏡`;
     }
 
     /* ── Q0/Q1 combined: both transaction type AND property type unknown ── */
     if (!tx && !type) {
       return isId
-        ? `Halo! 😊 Saya siap bantu carikan properti yang cocok untuk Anda.\n\nBoleh saya tanya dulu — Anda sedang cari untuk *sewa* atau *beli*? Dan tipe properti apa yang diinginkan?\n\nKami punya: *rumah, apartemen, villa, kos-kosan, ruko, kantor, gudang*, dan banyak lagi 🏡`
-        : `Hello! 😊 I'm here to help you find the right property.\n\nMay I ask first — are you looking to *rent* or *buy*? And what type of property do you have in mind?\n\nWe have: *house, apartment, villa, boarding house, shophouse, office, warehouse*, and more 🏡`;
+        ? `Halo! 😊 Saya siap bantu carikan properti yang cocok untuk Anda.\n\nBoleh saya tanya dulu — Anda sedang cari untuk *sewa* atau *beli*? Dan tipe properti apa yang diinginkan?\n\nSaya punya: *rumah, apartemen, villa, kos-kosan, ruko, kantor, gudang*, dan banyak lagi 🏡`
+        : `Hello! 😊 I'm here to help you find the right property.\n\nMay I ask first — are you looking to *rent* or *buy*? And what type of property do you have in mind?\n\nI have: *house, apartment, villa, boarding house, shophouse, office, warehouse*, and more 🏡`;
     }
 
     /* ── Q1: transaction type missing (property type known) ── */
@@ -1360,8 +1414,8 @@ class ConversationQualifier {
     /* ── Q0b: property type missing (transaction type known) ── */
     if (!type && !profile.aiAskedPropType) {
       return isId
-        ? `Oke, mau *${txLabel}* properti. Tipe apa yang Anda cari? 🏡\n\nKami punya: *rumah, apartemen, villa, kos-kosan, ruko, kantor, gudang*, dan banyak pilihan lainnya.`
-        : `Got it, looking to *${txLabel}* a property. What type are you looking for? 🏡\n\nWe have: *house, apartment, villa, boarding house, shophouse, office, warehouse*, and many more.`;
+        ? `Oke, mau *${txLabel}* properti. Tipe apa yang Anda cari? 🏡\n\nSaya punya: *rumah, apartemen, villa, kos-kosan, ruko, kantor, gudang*, dan banyak pilihan lainnya.`
+        : `Got it, looking to *${txLabel}* a property. What type are you looking for? 🏡\n\nI have: *house, apartment, villa, boarding house, shophouse, office, warehouse*, and many more.`;
     }
 
     /* ── Location: not yet established ── */
@@ -1382,16 +1436,24 @@ class ConversationQualifier {
         : `How many properties have you seen in *${loc}*? What hasn't quite worked about the ones you've viewed?`;
     }
 
+    /* ── Q3-pre: ambiguous budget — no unit given, ask to clarify ── */
+    if (profile.budgetAmbiguous && !profile.aiAskedBudget) {
+      const { rawMin, rawMax } = profile.budgetAmbiguous;
+      return isId
+        ? `Untuk harga *${rawMin}-${rawMax}* — maksudnya dalam *ribu*, *juta*, *miliar*, atau *triliun*? 💰\n(Contoh: "${rawMin}-${rawMax} juta")`
+        : `When you say *${rawMin}-${rawMax}* — do you mean *thousand*, *million*, or *billion*? 💰\n(Example: "${rawMin}-${rawMax} million")`;
+    }
+
     /* ── Q3: budget via two price anchors (NEVER a direct ask) ── */
     if (!profile.budget && !profile.aiAskedBudget && loc) {
       if (priceAnchors) {
         return isId
-          ? `Di *${loc}* kami ada yang di kisaran *${priceAnchors.low}* dan ada yang *${priceAnchors.high}*. Kira-kira yang mana lebih sesuai dengan rencana Anda?`
-          : `In *${loc}* we have options around *${priceAnchors.low}* and others around *${priceAnchors.high}*. Which range feels closer to your plans?`;
+          ? `Di *${loc}* ada yang di kisaran *${priceAnchors.low}* dan ada yang *${priceAnchors.high}*. Kira-kira yang mana lebih sesuai dengan rencana Anda?`
+          : `In *${loc}* I have options around *${priceAnchors.low}* and others around *${priceAnchors.high}*. Which range feels closer to your plans?`;
       }
       return isId
-        ? `Di *${loc}* kami punya pilihan dengan berbagai kisaran harga. Apakah Anda lebih prefer yang *terjangkau/ekonomis* atau yang *menengah ke atas*? 💰`
-        : `In *${loc}* we have options across different price ranges. Do you prefer something more *affordable/economy* or *mid-to-premium range*? 💰`;
+        ? `Di *${loc}* saya punya pilihan dengan berbagai kisaran harga. Apakah Anda lebih prefer yang *terjangkau/ekonomis* atau yang *menengah ke atas*? 💰`
+        : `In *${loc}* I have options across different price ranges. Do you prefer something more *affordable/economy* or *mid-to-premium range*? 💰`;
     }
 
     /* ── Q8: move-in date (MANDATORY — never skipped) ── */
@@ -1440,7 +1502,7 @@ class ConversationQualifier {
       /* ── Q7: Alternative areas (always unless already volunteered) ── */
       if (!profile.hasAlternativeArea && !profile.aiAskedAltArea && loc) {
         return isId
-          ? `Selain *${loc}*, area sekitar yang masih oke? 🗺️`
+          ? `Selain lokasi *${loc}*, apakah Anda mau pilihan lokasi lainnya? 🗺️`
           : `Besides *${loc}*, are there nearby neighborhoods you'd consider? 🗺️`;
       }
 
@@ -1448,7 +1510,7 @@ class ConversationQualifier {
       if (!profile.hasDecisionMaker && !profile.aiAskedDecisionMaker && profile.hasMoveInDate) {
         return isId
           ? `Kalau nanti ada yang cocok, langsung bisa jadwalkan viewing atau perlu koordinasi dulu sama keluarga lain? 📅`
-          : `When we find a match, can you schedule a viewing on the spot, or would you need to coordinate with family first? 📅`;
+          : `If I find a match, can you schedule a viewing on the spot, or would you need to coordinate with family first? 📅`;
       }
 
       /* ── Q10: Lease duration (sewa only, duration not volunteered) ── */
@@ -1498,6 +1560,12 @@ class ConversationQualifier {
    * @returns {object} Agent brief
    */
   static buildAgentBrief(profile, filters = {}, history = [], userMessage = '') {
+    // ── Use extractQualificationState for authoritative field values ──────────
+    // Applies Phase 0 (active-session scoping) + Phase 2 (AI→Customer pair matching).
+    // This prevents stale data from old sessions from polluting move-in dates,
+    // anchor points, decision-maker labels, and lease durations.
+    const qualState = extractQualificationState(history, userMessage);
+
     const custText = this.#customerText(history, userMessage);
 
     // Helper: detect if a field was stated (explicit keywords) or inferred
@@ -1526,20 +1594,23 @@ class ConversationQualifier {
 
       // ─ Extended fields ─
       moveInDate: {
-        value : profile.hasMoveInDate
-          ? this.#extractMoveInDate(custText)
-          : 'UNKNOWN',
-        source: profile.hasMoveInDate ? 'stated' : 'UNKNOWN',
+        // Prefer qualState.moveInDate (Phase 0+Phase 1 scoped, full date string e.g. "7 juli 2026")
+        // over regex extraction which may pick up stale month names from old sessions.
+        value : qualState.moveInDate
+          ? this.#capitalizeDate(qualState.moveInDate)
+          : (profile.hasMoveInDate ? this.#extractMoveInDate(custText) : 'UNKNOWN'),
+        source: (qualState.moveInDate || profile.hasMoveInDate) ? 'stated' : 'UNKNOWN',
       },
       decisionMaker: {
-        // Gate by profile flags — if neither hasDecisionMaker nor hasHouseholdInfo
-        // is true (e.g. Q9/Q4 never asked in active session), return 'UNKNOWN'
-        // so the field is suppressed in the summary. Without this gate the
-        // extractor would scan full custText and find stale "sama istri" etc.
-        value : (profile.hasDecisionMaker || profile.hasHouseholdInfo)
-          ? this.#extractDecisionMaker(custText, profile)
-          : 'UNKNOWN',
-        source: (profile.hasDecisionMaker || profile.hasHouseholdInfo) ? 'stated' : 'UNKNOWN',
+        // Prefer qualState.decisionMaker (Phase 2 normalized: "Sendirian", "Mandiri",
+        // "Koordinasi dengan pasangan", etc.) over extraction from full custText.
+        // Gate fallback by profile flags to prevent stale Q4 data from old sessions.
+        value : qualState.decisionMaker
+          ? qualState.decisionMaker
+          : ((profile.hasDecisionMaker || profile.hasHouseholdInfo)
+              ? this.#extractDecisionMaker(custText, profile)
+              : 'UNKNOWN'),
+        source: (qualState.decisionMaker || profile.hasDecisionMaker || profile.hasHouseholdInfo) ? 'stated' : 'UNKNOWN',
       },
       household: {
         value : profile.hasHouseholdInfo
@@ -1554,10 +1625,14 @@ class ConversationQualifier {
         source: profile.hasFurnishing ? 'stated' : 'inferred',
       },
       leaseDuration: {
+        // Prefer qualState.leaseDuration (exact customer response to Q10).
+        // Null when transaction type is not rent (suppresses the line in summary).
         value : filters.transactionType === 'rent'
-          ? (profile.hasLeaseDuration ? this.#extractLeaseDuration(custText) : 'UNKNOWN')
+          ? (qualState.leaseDuration
+              ? qualState.leaseDuration
+              : (profile.hasLeaseDuration ? this.#extractLeaseDuration(custText) : 'UNKNOWN'))
           : null,
-        source: profile.hasLeaseDuration ? 'stated' : 'UNKNOWN',
+        source: (qualState.leaseDuration || profile.hasLeaseDuration) ? 'stated' : 'UNKNOWN',
       },
       alternativeAreas: {
         value : profile.hasAlternativeArea
@@ -1572,10 +1647,13 @@ class ConversationQualifier {
         source: profile.hasRedFlags ? 'stated' : 'UNKNOWN',
       },
       anchorPoint: {
-        value : profile.hasAnchorPoint
-          ? this.#extractAnchorPoint(custText)
-          : 'UNKNOWN',
-        source: profile.hasAnchorPoint ? 'stated' : 'UNKNOWN',
+        // Prefer qualState.anchorPoint (Phase 2 — exact full customer reply to Q6,
+        // e.g. "deket indomaret, cafe dan ubaya"). This avoids truncation at commas
+        // that the regex extractor suffers from on joined customer text.
+        value : qualState.anchorPoint
+          ? this.#capitalizeFirst(qualState.anchorPoint)
+          : (profile.hasAnchorPoint ? this.#extractAnchorPoint(custText) : 'UNKNOWN'),
+        source: (qualState.anchorPoint || profile.hasAnchorPoint) ? 'stated' : 'UNKNOWN',
       },
 
       // ─ Meta ─
@@ -1590,19 +1668,26 @@ class ConversationQualifier {
   /* ─── Private: brief field extractors ──────────────────────────────────── */
 
   static #extractMoveInDate(custText) {
-    const months = ['januari','februari','maret','april','mei','juni','juli','agustus','september','oktober','november','desember',
-                    'january','february','march','april','may','june','july','august','september','october','november','december'];
-    for (const m of months) {
-      if (custText.includes(m)) return m.charAt(0).toUpperCase() + m.slice(1);
+    // Prefer full date expression: "7 Juli 2026", "Juli 2026", or just "Juli"
+    // Uses regex to capture day+month+year instead of first-match month scan,
+    // which could pick up stale month names from earlier messages.
+    const MONTH_ID = 'januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember';
+    const MONTH_EN = 'january|february|march|april|may|june|july|august|september|october|november|december';
+    // \\b word boundaries prevent "indomaret" from matching "maret", etc.
+    const DATE_RE  = new RegExp(`(\\d{1,2}\\s+)?\\b(${MONTH_ID}|${MONTH_EN})\\b(\\s+\\d{4})?`, 'i');
+    const dm = custText.match(DATE_RE);
+    if (dm) {
+      // Capitalize the month name: "7 juli 2026" → "7 Juli 2026"
+      return this.#capitalizeDate(dm[0].trim());
     }
     if (/bulan depan|next month/.test(custText)) return 'Bulan depan';
     if (/bulan ini|this month/.test(custText))   return 'Bulan ini';
     if (/secepatnya|asap|segera/.test(custText)) return 'Secepatnya (urgent)';
-    return 'Sudah disebutkan';
+    return 'UNKNOWN';
   }
 
   static #extractDecisionMaker(custText, profile) {
-    if (/sendiri|alone|solo/.test(custText))              return 'Solo (mandiri)';
+    if (/sendiri|alone|solo/.test(custText))              return 'Sendirian';
     if (/sama suami|bersama suami|with husband/.test(custText)) return 'Bersama suami';
     if (/sama istri|bersama istri|with wife/.test(custText))    return 'Bersama istri';
     if (/sama pasangan|with partner/.test(custText))      return 'Bersama pasangan';
@@ -1637,7 +1722,9 @@ class ConversationQualifier {
     if (m) return `${m[1]} tahun`;
     if (/setahun|satu tahun|1 year/.test(custText)) return '1 tahun';
     if (/6 bulan|enam bulan|6 months/.test(custText)) return '6 bulan';
-    return 'Disebutkan';
+    // Return 'UNKNOWN' (not 'Disebutkan') so the summary line is suppressed
+    // when no specific duration was stated by the customer.
+    return 'UNKNOWN';
   }
 
   static #extractAlternativeAreas(custText) {
@@ -1657,11 +1744,13 @@ class ConversationQualifier {
     if (/gang sempit|narrow/.test(custText))         flags.push('Tidak mau gang sempit');
     if (/banjir|flood/.test(custText))               flags.push('Tidak mau banjir');
     if (/tua|old building/.test(custText))           flags.push('Tidak mau bangunan tua');
-    return flags.length ? flags.join(', ') : 'Disebutkan';
+    // Return 'UNKNOWN' (not 'Disebutkan') so the brief suppresses the "Hindari"
+    // line when no specific red flag pattern is matched from the customer text.
+    return flags.length ? flags.join(', ') : 'UNKNOWN';
   }
 
   static #extractAnchorPoint(custText) {
-    // Specific named landmarks
+    // Specific named landmarks — short normalized form
     if (/dekat sekolah|near school/.test(custText))  return 'Dekat sekolah';
     if (/dekat kantor|near office/.test(custText))   return 'Dekat kantor';
     if (/dekat mall|near mall/.test(custText))       return 'Dekat mall';
@@ -1674,13 +1763,37 @@ class ConversationQualifier {
     if (/dekat pelabuhan|near port/.test(custText))  return 'Dekat pelabuhan';
     if (/dekat bandara|near airport/.test(custText)) return 'Dekat bandara';
     if (/dekat pabrik|near factory/.test(custText))  return 'Dekat pabrik';
-    // Generic "dekat/near/di jalan [place name]" — capture actual text
-    // e.g. "dekat ATOM", "di jalan Dukuh Kupang", "near Food Junction"
+    // Generic: capture the FULL "dekat X, Y dan Z" chain up to sentence boundary.
+    // Stop at [.!?\n] so multi-landmark answers like
+    // "dekat dengan cafe, indomaret dan dekat dengan jalan Demak" are captured whole.
+    // Previously stopped at commas — that truncated to "dekat dengan cafe," only.
     const m = custText.match(
-      /\b(?:dekat|deket|near|di\s+jalan|di\s+sekitar)\s+([A-Za-z0-9\s]{2,30}?)(?:\s*[,.\n]|$)/i
+      /\b(?:dekat|deket|near|di\s+jalan|di\s+sekitar)\s+[^\n.!?]{4,150}/i
     );
     if (m) return m[0].trim();
-    return 'Disebutkan';
+    // Suppress "Patokan lokasi" line in brief when nothing specific is extractable
+    return 'UNKNOWN';
+  }
+
+  /** Capitalize the first letter of a string (used for anchor points, raw responses). */
+  static #capitalizeFirst(str = '') {
+    if (!str) return str;
+    const s = str.trim();
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+
+  /**
+   * Capitalize the month name in a date string.
+   * "7 juli 2026" → "7 Juli 2026"
+   * "juli 2026"   → "Juli 2026"
+   * "juli"        → "Juli"
+   */
+  static #capitalizeDate(dateStr = '') {
+    if (!dateStr) return dateStr;
+    // Match optional day prefix, then month name, then optional year
+    return dateStr.trim().replace(/^(\d{1,2}\s+)?(\w+)/, (_, day, month) =>
+      (day || '') + month.charAt(0).toUpperCase() + month.slice(1)
+    );
   }
 
   static #calcBriefScore(profile, filters) {
@@ -2179,9 +2292,9 @@ class ChatbotPrivateService {
     let followUp;
     if (isId) {
       if (isRent)      followUp = `Boleh saya tanyakan, kira-kira *kapan* Bapak/Ibu berencana untuk pindah, dan apakah ada preferensi lokasi atau fasilitas tertentu yang menjadi prioritas?`;
-      else if (isBuy)  followUp = `Agar kami bisa memberikan pilihan terbaik, boleh saya tahu *kisaran anggaran* yang Bapak/Ibu siapkan, dan apakah ada preferensi lokasi atau tipe properti tertentu?`;
-      else if (isSell) followUp = `Untuk membantu proses pemasaran properti Bapak/Ibu, boleh kami ketahui *lokasi dan tipe properti* yang ingin dijualkan, beserta harga yang diharapkan?`;
-      else             followUp = `Agar kami dapat memberikan informasi yang paling sesuai, boleh saya tahu lebih lanjut mengenai *kebutuhan atau preferensi properti* Bapak/Ibu?`;
+      else if (isBuy)  followUp = `Agar saya bisa memberikan pilihan terbaik, boleh saya tahu *kisaran anggaran* yang Bapak/Ibu siapkan, dan apakah ada preferensi lokasi atau tipe properti tertentu?`;
+      else if (isSell) followUp = `Untuk membantu proses pemasaran properti Bapak/Ibu, boleh saya ketahui *lokasi dan tipe properti* yang ingin dijualkan, beserta harga yang diharapkan?`;
+      else             followUp = `Agar saya dapat memberikan informasi yang paling sesuai, boleh saya tahu lebih lanjut mengenai *kebutuhan atau preferensi properti* Bapak/Ibu?`;
     } else {
       if (isRent)      followUp = `To help us find the perfect match for you, may I ask *when you're planning to move in*, and do you have any specific location or facility preferences?`;
       else if (isBuy)  followUp = `To tailor our recommendations, could you share your *approximate budget* and any preferred location or property type?`;
@@ -2210,18 +2323,18 @@ class ChatbotPrivateService {
     if (isId) {
       const greeting   = `Halo *${firstName}*, terima kasih telah menghubungi *Elevan Property*! 🏡`;
       const ack        = subject
-        ? `Kami sudah menerima pesan Anda mengenai *"${subject}"* dan dengan senang hati akan membantu Anda menemukan ${propType} yang paling sesuai dengan kebutuhan Anda.`
-        : `Kami sudah menerima pesan Anda dan dengan senang hati akan membantu Anda menemukan ${propType} yang paling sesuai dengan kebutuhan Anda.`;
-      const value      = `Tim konsultan properti kami siap mendampingi Bapak/Ibu mulai dari pencarian hingga proses penyelesaian transaksi dengan nyaman dan profesional.`;
-      const signOff    = `Silakan lanjutkan percakapan ini kapan saja — kami siap membantu!\n\nSalam hangat,\n*Elvan*\n*Elevan Property* 🌟`;
+        ? `Saya sudah menerima pesan Anda mengenai *"${subject}"* dan dengan senang hati akan membantu Anda menemukan ${propType} yang paling sesuai dengan kebutuhan Anda.`
+        : `Saya sudah menerima pesan Anda dan dengan senang hati akan membantu Anda menemukan ${propType} yang paling sesuai dengan kebutuhan Anda.`;
+      const value      = `Saya siap mendampingi Bapak/Ibu mulai dari pencarian hingga proses penyelesaian transaksi dengan nyaman dan profesional.`;
+      const signOff    = `Silakan lanjutkan percakapan ini kapan saja — saya siap membantu!\n\nSalam hangat,\n*Elvan*\n*Elevan Property* 🌟`;
       reply = [greeting, ack, value, followUp, signOff].join('\n\n');
     } else {
       const greeting   = `Hello *${firstName}*, thank you for reaching out to *Elevan Property*! 🏡`;
       const ack        = subject
-        ? `We've received your inquiry regarding *"${subject}"* and we'd be delighted to help you find the perfect ${propType} that fits your needs.`
-        : `We've received your message and we'd be delighted to help you find the right ${propType} for your needs.`;
-      const value      = `Our dedicated property consultants are here to guide you every step of the way — from property search to a smooth, stress-free transaction.`;
-      const signOff    = `Feel free to continue this conversation anytime — we're always here to help!\n\nWarm regards,\n*Elvan*\n*Elevan Property* 🌟`;
+        ? `I've received your inquiry regarding *"${subject}"* and I'd be delighted to help you find the perfect ${propType} that fits your needs.`
+        : `I've received your message and I'd be delighted to help you find the right ${propType} for your needs.`;
+      const value      = `I am here to guide you every step of the way — from property search to a smooth, stress-free transaction.`;
+      const signOff    = `Feel free to continue this conversation anytime — I'm always here to help!\n\nWarm regards,\n*Elvan*\n*Elevan Property* 🌟`;
       reply = [greeting, ack, value, followUp, signOff].join('\n\n');
     }
 
@@ -2415,11 +2528,11 @@ module.exports.generatePrivateWhatsappReply = (payload) => {
                       String(message || '').toLowerCase().includes('cari');
 
   if (isIndonesian) {
-    const reply = `Halo ${name}, terima kasih telah menghubungi kami! 🏠
+    const reply = `Halo ${name}, terima kasih telah menghubungi saya! 🏠
 
-Pesan Anda sudah kami terima. ${agentName} dari ${appName} akan segera membalas dengan informasi properti yang sesuai dengan kebutuhan Anda.
+Pesan Anda sudah saya terima. ${agentName} dari ${appName} akan segera membalas dengan informasi properti yang sesuai dengan kebutuhan Anda.
 
-Kami siap membantu Anda menemukan rumah, villa, apartemen, atau properti lainnya yang sempurna.
+Saya siap membantu Anda menemukan rumah, villa, apartemen, atau properti lainnya yang sempurna.
 
 Salam hangat,
 *${agentName}*
@@ -2429,9 +2542,9 @@ Salam hangat,
   } else {
     const reply = `Hello ${name}, thank you for reaching out! 🏠
 
-We've received your message. ${agentName} from ${appName} will get back to you shortly with property information tailored to your needs.
+I've received your message. ${agentName} from ${appName} will get back to you shortly with property information tailored to your needs.
 
-We're here to help you find the perfect house, villa, apartment, or property.
+I'm here to help you find the perfect house, villa, apartment, or property.
 
 Warm regards,
 *${agentName}*
