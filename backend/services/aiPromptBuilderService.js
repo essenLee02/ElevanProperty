@@ -205,9 +205,23 @@ function extractQualificationState(history = [], currentMessage = '') {
     }
 
     // Q2 — Location (city)
+    // Guard: strip "kisaran [price]" first — "kisaran" means "range/approximately" in
+    // Indonesian and must NEVER be treated as the city Kisaran (North Sumatra).
+    // e.g. "harganya kisaran 3-6juta/minggu" → remove "kisaran 3-6juta/minggu" before CITY_RE.
     if (!state.location) {
-      const cm = raw.match(CITY_RE);
+      const rawForCity = raw.replace(/\bkisaran\s+[\d.,][\d.,]*\s*(?:juta|ribu|miliar|rb|jt)?[^\s]*/gi, '');
+      const cm = rawForCity.match(CITY_RE);
       if (cm) state.location = cm[1];
+    }
+
+    // Q2b — Direct Phase-1 capture for explicit "belum/sudah lihat" answers.
+    // This runs independently of Phase-2 AI→customer pair detection so Q2b is
+    // captured even if the pair-based scan misses the turn (e.g. duplicate message
+    // in ALL, race condition, or AI phrased the Q2b question differently).
+    if (!state.searchHistory) {
+      if (/\b(belum\s+pernah\s+lihat|sudah\s+lihat\s+\d|belum\s+lihat|sudah\s+survey|belum\s+pernah\s+survey|belum\s+ada\s+yang\s+cocok)\b/i.test(text)) {
+        state.searchHistory = raw.trim() || 'dijawab';
+      }
     }
 
     // Q3 — Budget
@@ -219,7 +233,16 @@ function extractQualificationState(history = [], currentMessage = '') {
     if (!state.budget) {
       const b = detectBudget(raw);
       if (b && !b.ambiguous) {
-        state.budget = b.preference === 'affordable' ? 'terjangkau/affordable' : b.text;
+        if (b.preference === 'affordable') {
+          state.budget = 'terjangkau/affordable';
+        } else {
+          const periodSuffix = b.period === 'year'  ? '/tahun'
+            : b.period === 'month' ? '/bulan'
+            : b.period === 'night' ? '/malam'
+            : b.period === 'week'  ? '/minggu'
+            : '';
+          state.budget = b.text + periodSuffix;
+        }
       }
     }
 
@@ -619,6 +642,14 @@ function buildQualificationStateBlock(state) {
     lines.push('   Q2-Q12 di-RESET. Akui perubahan singkat (1 kalimat), lanjut dari Q terkecil ❓.');
     lines.push('');
   }
+
+  // ⚠️ Disambiguation note — injected before the checklist so the AI reads it first
+  lines.push('⚠️  KAMUS BAHASA INDONESIA (jangan salah tafsir):');
+  lines.push('   • "kisaran [harga]" = ekspresi budget ("sekitar/range") — BUKAN nama kota.');
+  lines.push('     Contoh: "kisaran 3-6juta/minggu" → Budget, bukan lokasi Kisaran.');
+  lines.push('   • Lokasi customer HANYA dari field ✅ Lokasi [Q2] di bawah — ABAIKAN');
+  lines.push('     kata "kisaran" dalam pesan customer sebagai referensi lokasi.');
+  lines.push('');
 
   lines.push(
     row('Tipe transaksi    [Q1]', state.transactionType),
@@ -1075,7 +1106,7 @@ Kemudian:
    • Jika Q1 sudah ✅ (customer sudah sebut tx+tipe di pesan ini) → langsung tanya Q2 (lokasi).
    • Jika Q1 masih ❓ → tanya: "Untuk pencarian baru, mau *sewa* atau *beli*? Dan tipe propertinya apa? 🏠"
    • JANGAN tampilkan summary lagi sampai semua Q wajib terjawab ulang di sesi ini.
-2. ⚠️ JIKA ADA BANNER "TIPE PROPERTI BERUBAH" DI QUALIFICATION STATE: Akui perubahan singkat (1 kalimat, contoh: "Oke, kita alihkan ke rumah sewa ya 😊"), lalu tanyakan Q terkecil yang masih ❓. JANGAN gunakan jawaban Q2–Q12 dari tipe lama.
+2. ⚠️ JIKA ADA BANNER "TIPE PROPERTI BERUBAH" DI QUALIFICATION STATE: Akui perubahan singkat (1 kalimat, contoh: "Oke, saya alihkan ke rumah sewa ya 😊"), lalu tanyakan Q terkecil yang masih ❓. JANGAN gunakan jawaban Q2–Q12 dari tipe lama.
 3. Jika pesan terbaru adalah jawaban singkat untuk pertanyaan sebelumnya → AKUI singkat (1 kalimat), lalu tanyakan pertanyaan ❓ BERIKUTNYA dengan nomor Q terkecil.
    — Khusus Q2b (Riwayat pencarian): Jawaban seperti "Saya belum pernah lihat", "belum pernah", "sudah lihat 3" adalah jawaban Q2b yang valid → AKUI ("Oke, belum ada referensi sebelumnya 👌") → lanjut ke Q3 (Budget).
 4. Jika pesan terbaru mengandung informasi baru → catat, lalu tanyakan pertanyaan ❓ berikutnya.

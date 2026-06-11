@@ -68,7 +68,7 @@ Missing: type           → "Sedang cari properti jenis apa? (Rumah, Apartemen, 
 Missing: tx             → "Sedang cari untuk disewa atau dibeli?"
 Missing: type + tx      → "Sedang cari properti jenis apa? Untuk disewa atau dibeli?"
 Missing: loc            → "Di kota atau area mana yang Anda inginkan?"
-Missing: bud (sewa)     → "Di [lokasi] kami ada di kisaran [X] dan [Y]. Mana yang lebih sesuai?"
+Missing: bud (sewa)     → "Di [lokasi] saya punya di kisaran [X] dan [Y]. Mana yang lebih sesuai?"
 Missing: bud (beli)     → same, with purchase price ranges
 All 4 present           → return null (proceed to AI)
 ```

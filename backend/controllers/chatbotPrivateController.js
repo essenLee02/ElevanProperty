@@ -41,6 +41,7 @@ class LanguageDetector {
     // Property types (ID)
     'rumah', 'vila', 'apartemen', 'kos', 'kost', 'kosan', 'indekos', 'ruko',
     'kantor', 'gudang', 'tanah', 'kavling', 'kaveling', 'lahan', 'properti',
+    'mansion', 'kondotel', 'toko', 'warung', 'spbu', 'pabrik', 'klinik',
     // Transaction verbs (ID)
     'sewa', 'beli', 'jual', 'sewakan', 'menyewa', 'membeli', 'kontrakan',
     'kontrak', 'ngontrak', 'numpang',
@@ -103,6 +104,9 @@ class LanguageDetector {
     'office', 'kantor', 'warehouse', 'gudang', 'sewa', 'rent', 'rental',
     'beli', 'buy', 'purchase', 'jual', 'sale', 'sell', 'kontrak', 'kontrakan',
     'tanah', 'land', 'investasi',
+    // Extended property types
+    'mansion', 'kondotel', 'condotel', 'toko', 'store', 'retail',
+    'kavling', 'lahan', 'pabrik', 'klinik', 'spbu',
     // Household composition (Q4 property-related qualifier)
     'kamar', 'bedroom', 'furnished', 'furnish', 'fasilitas', 'facilities',
     'tinggal', 'sendiri', 'keluarga', 'family', 'masuk', 'pindah', 'move',
@@ -265,6 +269,9 @@ class PropertyFormatter {
       shophouse:      lang === 'id' ? 'Ruko / Shophouse'    : 'Shophouse',
       office:         lang === 'id' ? 'Kantor'              : 'Office',
       warehouse:      lang === 'id' ? 'Gudang'              : 'Warehouse',
+      store:          lang === 'id' ? 'Toko'                : 'Store',
+      mansion:        lang === 'id' ? 'Mansion / Rumah Mewah': 'Mansion',
+      kondotel:       lang === 'id' ? 'Kondotel'            : 'Condotel',
       others:         lang === 'id' ? 'Properti Lainnya'    : 'Other Property',
     };
     return MAP[type] || type || (lang === 'id' ? 'Properti' : 'Property');
@@ -566,7 +573,7 @@ class ResponseBuilder {
         : '';
       return isId
         ? `Maaf, saat ini belum ada properti yang sesuai dengan **${summary}**${locationNote} di katalog maupun Rumah123. Apakah Anda ingin mencoba lokasi, tipe properti, atau range harga lain?`
-        : `Sorry, there is currently no property matching **${summary}**${locationNote} in our catalog or Rumah123. Would you like to try another location, property type, or price range?`;
+        : `Sorry, there is currently no property matching **${summary}**${locationNote} in my catalog or Rumah123. Would you like to try another location, property type, or price range?`;
     }
 
     const lines = [];
@@ -822,7 +829,7 @@ class ResponseBuilderWhatsApp {
 
       return (isId
         ? `Maaf, saat ini belum ada${typeNote} yang tersedia${locNote} di katalog maupun Rumah123.\n\nApakah Anda ingin mencoba lokasi atau range harga yang berbeda?`
-        : `Sorry, there is currently no${typeNote} available${locNote} in our catalog or Rumah123.\n\nWould you like to try a different location or price range?`
+        : `Sorry, there is currently no${typeNote} available${locNote} in my catalog or Rumah123.\n\nWould you like to try a different location or price range?`
       ) + this.#addFooter();
     }
 
@@ -841,7 +848,7 @@ class ResponseBuilderWhatsApp {
     // ── Catalog alternatives ────────────────────────────────────────────────
     if (hasAlt) {
       if (hasR123) {
-        lines.push(isId ? '\n---\n*Pilihan Lain dari Katalog:*\n' : '\n---\n*More from Our Catalog:*\n');
+        lines.push(isId ? '\n---\n*Pilihan Lain dari Katalog:*\n' : '\n---\n*More from My Catalog:*\n');
       } else {
         // Konteks berbeda tergantung alasan mengapa ini alternatif
         let contextMsg;
@@ -1063,14 +1070,18 @@ class ConversationQualifier {
     // Word-boundary type / tx detectors (used by both boundaries below).
     const _typeOfP0 = (txt) => {
       const w = (txt || '').toLowerCase();
-      if (/\bvill?a\b/.test(w))                               return 'villa';
-      if (/\bapartemen\b|\bapartment\b/.test(w))              return 'apartment';
-      if (/\brumah\b|\bhouse\b|\bkontrakan\b/.test(w))       return 'house';
-      if (/\bhotel\b|\bpenginapan\b/.test(w))                return 'hotel';
-      if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(w)) return 'boarding_house';
-      if (/\bruko\b|\brukan\b/.test(w))                      return 'shophouse';
-      if (/\bkantor\b/.test(w))                              return 'office';
-      if (/\bgudang\b/.test(w))                              return 'warehouse';
+      if (/\bvill?a\b/.test(w))                                              return 'villa';
+      if (/\bapartemen\b|\bapartment\b/.test(w))                             return 'apartment';
+      if (/\bmansion\b|\brumah mewah\b/.test(w))                            return 'mansion';
+      if (/\brumah\b|\bhouse\b|\bkontrakan\b/.test(w))                      return 'house';
+      if (/\bhotel\b|\bpenginapan\b/.test(w))                               return 'hotel';
+      if (/\bkondotel\b|\bcondo\b/.test(w))                                 return 'kondotel';
+      if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(w))                return 'boarding_house';
+      if (/\bruko\b|\brukan\b/.test(w))                                     return 'shophouse';
+      if (/\bkantor\b/.test(w))                                             return 'office';
+      if (/\bgudang\b/.test(w))                                             return 'warehouse';
+      if (/\btoko\b|\bwarung\b|\bretail\b/.test(w))                        return 'store';
+      if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(w))  return 'others';
       return null;
     };
     const _txOfP0 = (txt) => {
@@ -1160,25 +1171,33 @@ class ConversationQualifier {
     const histCustMsgs = activeHistory.filter(m => m.role === 'user' || m.role === 'customer');
     const histCustJoined = histCustMsgs.map(m => (m.message || '').toLowerCase()).join(' ');
     let histBuildingType = null;
-    if      (/\bvill?a\b/.test(histCustJoined))                               histBuildingType = 'villa';
-    else if (/\bapartemen\b|\bapartment\b/.test(histCustJoined))              histBuildingType = 'apartment';
-    else if (/\brumah\b|\bhouse\b|\bkontrakan\b/.test(histCustJoined))       histBuildingType = 'house';
-    else if (/\bhotel\b|\bpenginapan\b/.test(histCustJoined))                histBuildingType = 'hotel';
-    else if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(histCustJoined)) histBuildingType = 'boarding_house';
-    else if (/\bruko\b|\brukan\b/.test(histCustJoined))                       histBuildingType = 'shophouse';
-    else if (/\bkantor\b/.test(histCustJoined))                               histBuildingType = 'office';
-    else if (/\bgudang\b/.test(histCustJoined))                               histBuildingType = 'warehouse';
+    if      (/\bvill?a\b/.test(histCustJoined))                                             histBuildingType = 'villa';
+    else if (/\bapartemen\b|\bapartment\b/.test(histCustJoined))                            histBuildingType = 'apartment';
+    else if (/\bmansion\b|\brumah mewah\b/.test(histCustJoined))                           histBuildingType = 'mansion';
+    else if (/\brumah\b|\bhouse\b|\bkontrakan\b/.test(histCustJoined))                     histBuildingType = 'house';
+    else if (/\bhotel\b|\bpenginapan\b/.test(histCustJoined))                              histBuildingType = 'hotel';
+    else if (/\bkondotel\b|\bcondo\b/.test(histCustJoined))                                histBuildingType = 'kondotel';
+    else if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(histCustJoined))               histBuildingType = 'boarding_house';
+    else if (/\bruko\b|\brukan\b/.test(histCustJoined))                                    histBuildingType = 'shophouse';
+    else if (/\bkantor\b/.test(histCustJoined))                                            histBuildingType = 'office';
+    else if (/\bgudang\b/.test(histCustJoined))                                            histBuildingType = 'warehouse';
+    else if (/\btoko\b|\bwarung\b|\bretail\b/.test(histCustJoined))                       histBuildingType = 'store';
+    else if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(histCustJoined)) histBuildingType = 'others';
 
     const curMsgLower = (userMessage || '').toLowerCase();
     let curBuildingType = null;
-    if      (/\bvill?a\b/.test(curMsgLower))                               curBuildingType = 'villa';
-    else if (/\bapartemen\b|\bapartment\b/.test(curMsgLower))              curBuildingType = 'apartment';
-    else if (/\brumah\b|\bhouse\b|\bkontrakan\b/.test(curMsgLower))       curBuildingType = 'house';
-    else if (/\bhotel\b|\bpenginapan\b/.test(curMsgLower))                curBuildingType = 'hotel';
-    else if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(curMsgLower)) curBuildingType = 'boarding_house';
-    else if (/\bruko\b|\brukan\b/.test(curMsgLower))                       curBuildingType = 'shophouse';
-    else if (/\bkantor\b/.test(curMsgLower))                               curBuildingType = 'office';
-    else if (/\bgudang\b/.test(curMsgLower))                               curBuildingType = 'warehouse';
+    if      (/\bvill?a\b/.test(curMsgLower))                                             curBuildingType = 'villa';
+    else if (/\bapartemen\b|\bapartment\b/.test(curMsgLower))                            curBuildingType = 'apartment';
+    else if (/\bmansion\b|\brumah mewah\b/.test(curMsgLower))                           curBuildingType = 'mansion';
+    else if (/\brumah\b|\bhouse\b|\bkontrakan\b/.test(curMsgLower))                     curBuildingType = 'house';
+    else if (/\bhotel\b|\bpenginapan\b/.test(curMsgLower))                              curBuildingType = 'hotel';
+    else if (/\bkondotel\b|\bcondo\b/.test(curMsgLower))                                curBuildingType = 'kondotel';
+    else if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(curMsgLower))               curBuildingType = 'boarding_house';
+    else if (/\bruko\b|\brukan\b/.test(curMsgLower))                                    curBuildingType = 'shophouse';
+    else if (/\bkantor\b/.test(curMsgLower))                                            curBuildingType = 'office';
+    else if (/\bgudang\b/.test(curMsgLower))                                            curBuildingType = 'warehouse';
+    else if (/\btoko\b|\bwarung\b|\bretail\b/.test(curMsgLower))                       curBuildingType = 'store';
+    else if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(curMsgLower)) curBuildingType = 'others';
 
     let histTx = null;
     if      (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|rent|rental|lease)\b/.test(histCustJoined)) histTx = 'rent';
@@ -1331,6 +1350,86 @@ class ConversationQualifier {
         'hadap mana', 'facing direction',
       ]),
 
+      /* ── Q14: Hotel / Kondotel booking slots ── */
+      hasCheckInDate: this.#has(custText, [
+        'check-in', 'checkin', 'check in', 'tanggal masuk', 'tgl masuk',
+        'tanggal check',
+      ]) || /\b\d{1,2}\s*(januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)\b/i.test(custText),
+      aiAskedCheckIn: this.#has(aiText, ['check-in tanggal', 'tanggal check-in', 'rencananya check-in']),
+
+      hasCheckOutDate: this.#has(custText, [
+        'check-out', 'checkout', 'check out', 'tanggal keluar', 'malam', 'nights',
+      ]),
+      aiAskedCheckOut: this.#has(aiText, ['check-out tanggal', 'berapa malam', 'check-out']),
+
+      hasRoomType: this.#has(custText, [
+        'standard', 'deluxe', 'suite', 'family room', 'tipe kamar', 'room type',
+        'studio', '1 kamar', '2 kamar', 'superior',
+      ]),
+      aiAskedRoomType: this.#has(aiText, ['tipe kamar', 'room type', 'studio', 'suite', 'tipe unit']),
+
+      hasBreakfastPref: this.#has(custText, [
+        'breakfast', 'sarapan', 'tanpa breakfast', 'include makan', 'include sarapan',
+        'room only', 'dengan makan',
+      ]),
+      aiAskedBreakfast: this.#has(aiText, ['breakfast', 'sarapan']),
+
+      /* ── Q14: Villa specific ── */
+      hasPrivatePool: this.#has(custText, [
+        'private pool', 'kolam pribadi', 'kolam sendiri', 'pool pribadi',
+        'shared pool', 'kolam bersama',
+      ]),
+      aiAskedPrivatePool: this.#has(aiText, ['private pool', 'kolam pribadi']),
+
+      hasRentalPeriod: this.#has(custText, [
+        'per malam', 'per minggu', 'per bulan', 'semalam', 'seminggu',
+        'bulanan', 'mingguan', 'harian',
+      ]),
+      aiAskedRentalPeriod: this.#has(aiText, ['per malam', 'per minggu', 'per bulan', 'sewa villa']),
+
+      /* ── Q14: Kos specific ── */
+      hasKosType: this.#has(custText, [
+        'putra', 'putri', 'campur', 'kos putra', 'kos putri', 'kos campur',
+        'cowok', 'cewek', 'laki', 'perempuan', 'mixed',
+      ]),
+      aiAskedKosType: this.#has(aiText, ['putra', 'putri', 'campur', 'kos type']),
+
+      hasBathroomType: this.#has(custText, [
+        'kamar mandi dalam', 'kamar mandi luar', 'en-suite', 'shared bathroom',
+        'bathroom dalam', 'bathroom luar', 'km dalam', 'km luar',
+      ]),
+      aiAskedBathroomType: this.#has(aiText, ['kamar mandi dalam', 'kamar mandi luar', 'bathroom type']),
+
+      /* ── Q14: Commercial (Ruko/Kantor/Gudang/Toko) ── */
+      hasBusinessType: this.#has(custText, [
+        'restoran', 'restaurant', 'cafe', 'retail', 'fashion', 'butik', 'toko',
+        'kantor', 'startup', 'pabrik', 'gudang', 'logistik', 'distribusi',
+        'klinik', 'apotek', 'minimarket', 'f&b', 'food', 'beauty', 'salon',
+        'bisnis', 'usaha', 'bisnis apa', 'jenis usaha',
+      ]),
+      aiAskedBusinessType: this.#has(aiText, ['bisnis apa', 'jenis usaha', 'usaha apa', 'business type']),
+
+      hasHeadcount: this.#has(custText, [
+        'karyawan', 'pegawai', 'orang', 'staff', 'headcount', 'tim', 'team',
+        'kapasitas', '10 orang', '20 orang', '50 orang',
+      ]) && (filters.buildingType === 'office'),
+      aiAskedHeadcount: this.#has(aiText, ['berapa orang', 'headcount', 'kapasitas karyawan']),
+
+      /* ── Q14: Kondotel beli (investasi) ── */
+      hasRoiExpectation: this.#has(custText, [
+        'roi', 'return', 'investasi', 'yield', 'keuntungan', 'persen', '%',
+        'balik modal',
+      ]),
+      aiAskedRoi: this.#has(aiText, ['roi', 'return', 'target roi', 'ekspektasi']),
+
+      /* ── Q14: Properti Lainnya ── */
+      hasPropertyPurpose: this.#has(custText, [
+        'parkir', 'event', 'glamping', 'pertanian', 'sawah', 'kebun',
+        'spbu', 'pabrik', 'klinik', 'sekolah', 'olahraga', 'lapangan',
+        'tujuan', 'peruntukan', 'kegunaan',
+      ]),
+      aiAskedPropertyPurpose: this.#has(aiText, ['tujuan', 'peruntukan', 'bisnis apa', 'digunakan untuk']),
+
       /* ── AI conversation state (what AI already asked) ── */
       aiCount,
       aiAskedTxType     : this.#has(aiText, ['sewa atau beli', 'rent or buy', 'beli atau sewa', 'buy or rent']),
@@ -1365,6 +1464,13 @@ class ConversationQualifier {
         'aiAskedRedFlags', 'aiAskedAnchorPoint', 'aiAskedAltArea',
         'aiAskedDecisionMaker', 'aiAskedLeaseDuration', 'aiAskedPaymentTerms',
         'aiAskedApartmentPrefs',
+        // Q14 type-specific slots
+        'hasCheckInDate', 'hasCheckOutDate', 'hasRoomType', 'hasBreakfastPref',
+        'hasPrivatePool', 'hasRentalPeriod', 'hasKosType', 'hasBathroomType',
+        'hasBusinessType', 'hasHeadcount', 'hasRoiExpectation', 'hasPropertyPurpose',
+        'aiAskedCheckIn', 'aiAskedCheckOut', 'aiAskedRoomType', 'aiAskedBreakfast',
+        'aiAskedPrivatePool', 'aiAskedRentalPeriod', 'aiAskedKosType', 'aiAskedBathroomType',
+        'aiAskedBusinessType', 'aiAskedHeadcount', 'aiAskedRoi', 'aiAskedPropertyPurpose',
       ];
       resetFields.forEach(f => { profile[f] = false; });
       // Keep only what the CURRENT message explicitly says
@@ -1386,6 +1492,13 @@ class ConversationQualifier {
         'aiAskedFurnish', 'aiAskedRedFlags', 'aiAskedAnchorPoint', 'aiAskedAltArea',
         'aiAskedDecisionMaker', 'aiAskedLeaseDuration', 'aiAskedPaymentTerms',
         'aiAskedApartmentPrefs',
+        // Q14 type-specific slots
+        'hasCheckInDate', 'hasCheckOutDate', 'hasRoomType', 'hasBreakfastPref',
+        'hasPrivatePool', 'hasRentalPeriod', 'hasKosType', 'hasBathroomType',
+        'hasBusinessType', 'hasHeadcount', 'hasRoiExpectation', 'hasPropertyPurpose',
+        'aiAskedCheckIn', 'aiAskedCheckOut', 'aiAskedRoomType', 'aiAskedBreakfast',
+        'aiAskedPrivatePool', 'aiAskedRentalPeriod', 'aiAskedKosType', 'aiAskedBathroomType',
+        'aiAskedBusinessType', 'aiAskedHeadcount', 'aiAskedRoi', 'aiAskedPropertyPurpose',
       ];
       resetFields.forEach(f => { profile[f] = false; });
       profile.budget             = null;
@@ -1398,6 +1511,80 @@ class ConversationQualifier {
     }
 
     return profile;
+  }
+
+  /* ─── Public: budget anchor table per property type ────────────────────── */
+
+  /**
+   * Returns { low, high } price anchor strings for the two-option Q3 budget question.
+   * These anchors expose a price range contrast so the customer reveals their budget
+   * without being asked directly ("budget berapa?" is forbidden).
+   *
+   * @param {string} buildingType   - 'house'|'apartment'|'hotel'|'villa'|...
+   * @param {string} transactionType- 'rent'|'sale'
+   * @param {'id'|'en'} lang
+   * @returns {{ low: string, high: string } | null}
+   */
+  static getBudgetAnchors(buildingType = '', transactionType = '', lang = 'id') {
+    const isId  = lang === 'id';
+    const tx    = (transactionType || '').toLowerCase();
+    const type  = (buildingType    || '').toLowerCase();
+
+    const TABLE = {
+      house: {
+        rent: { low: isId ? '2–5 juta/bln' : '2–5M/month', high: isId ? '10–25 juta/bln' : '10–25M/month' },
+        sale: { low: isId ? '300–800 juta' : '300–800M',    high: isId ? '1–5 miliar'     : '1–5B'         },
+      },
+      apartment: {
+        rent: { low: isId ? '2–5 juta/bln'   : '2–5M/month', high: isId ? '8–20 juta/bln' : '8–20M/month' },
+        sale: { low: isId ? '300–700 juta'   : '300–700M',   high: isId ? '1–3 miliar'     : '1–3B'        },
+      },
+      hotel: {
+        rent: { low: isId ? '400–800 ribu/malam' : '400–800K/night', high: isId ? '2–6 juta/malam'  : '2–6M/night' },
+        sale: null,
+      },
+      villa: {
+        rent: { low: isId ? '1–3 juta/malam' : '1–3M/night',  high: isId ? '5–15 juta/malam' : '5–15M/night' },
+        sale: { low: isId ? '1–3 miliar'     : '1–3B',         high: isId ? '5–20 miliar'     : '5–20B'       },
+      },
+      boarding_house: {
+        rent: { low: isId ? '500rb–1,5 juta/bln' : '500K–1.5M/month', high: isId ? '2–5 juta/bln' : '2–5M/month' },
+        sale: null,
+      },
+      shophouse: {
+        rent: { low: isId ? '15–40 juta/bln' : '15–40M/month', high: isId ? '60–150 juta/bln' : '60–150M/month' },
+        sale: { low: isId ? '1–3 miliar'     : '1–3B',          high: isId ? '5–20 miliar'     : '5–20B'         },
+      },
+      office: {
+        rent: { low: isId ? '50–100 rb/m²/bln' : '50–100K/m²/month', high: isId ? '150–300 rb/m²/bln' : '150–300K/m²/month' },
+        sale: { low: isId ? '2–5 miliar' : '2–5B', high: isId ? '10–30 miliar' : '10–30B' },
+      },
+      warehouse: {
+        rent: { low: isId ? '20–50 juta/bln' : '20–50M/month', high: isId ? '80–200 juta/bln' : '80–200M/month' },
+        sale: { low: isId ? '1–3 miliar'     : '1–3B',          high: isId ? '5–15 miliar'     : '5–15B'         },
+      },
+      store: {
+        rent: { low: isId ? '10–30 juta/bln' : '10–30M/month', high: isId ? '50–150 juta/bln' : '50–150M/month' },
+        sale: { low: isId ? '500 juta–2 M'  : '500M–2B',       high: isId ? '5–15 miliar'     : '5–15B'         },
+      },
+      mansion: {
+        rent: { low: isId ? '5–15 juta/bln'  : '5–15M/month', high: isId ? '30–100 juta/bln'  : '30–100M/month' },
+        sale: { low: isId ? '5–15 miliar'    : '5–15B',         high: isId ? '30–100 miliar'   : '30–100B'       },
+      },
+      kondotel: {
+        rent: { low: isId ? '500rb–1,5 juta/malam' : '500K–1.5M/night', high: isId ? '3–8 juta/malam'  : '3–8M/night' },
+        sale: { low: isId ? '500–900 juta'          : '500M–900M',       high: isId ? '1,5–4 miliar'    : '1.5–4B'     },
+      },
+      others: {
+        rent: { low: isId ? '10–30 juta/bln' : '10–30M/month', high: isId ? '50–200 juta/bln' : '50–200M/month' },
+        sale: { low: isId ? '500 juta–3 M'  : '500M–3B',       high: isId ? '5–25 miliar'     : '5–25B'         },
+      },
+    };
+
+    const txKey = (tx === 'rent') ? 'rent' : (tx === 'sale' || tx === 'purchase') ? 'sale' : null;
+    const row = TABLE[type];
+    if (!row || !txKey) return null;
+    return row[txKey] || null;
   }
 
   /* ─── Public: readiness score ───────────────────────────────────────────── */
@@ -1510,10 +1697,12 @@ class ConversationQualifier {
 
     /* ── Q3: budget via two price anchors (NEVER a direct ask) ── */
     if (!profile.budget && !profile.aiAskedBudget && loc) {
-      if (priceAnchors) {
+      // Use passed-in anchors first, then fall back to built-in type-specific table
+      const anchors = priceAnchors || ConversationQualifier.getBudgetAnchors(type, tx, lang);
+      if (anchors) {
         return isId
-          ? `Di *${loc}* ada yang di kisaran *${priceAnchors.low}* dan ada yang *${priceAnchors.high}*. Kira-kira yang mana lebih sesuai dengan rencana Anda?`
-          : `In *${loc}* I have options around *${priceAnchors.low}* and others around *${priceAnchors.high}*. Which range feels closer to your plans?`;
+          ? `Di *${loc}* ada *${type ? PropertyFormatter.humanBuildingType(type, 'id') : 'properti'}* yang di kisaran *${anchors.low}* dan ada juga yang *${anchors.high}*. Kira-kira yang mana lebih sesuai dengan rencana Anda? 💰`
+          : `In *${loc}* I have *${type ? PropertyFormatter.humanBuildingType(type, 'en') : 'property'}* options around *${anchors.low}* and others around *${anchors.high}*. Which range feels closer to your plans? 💰`;
       }
       return isId
         ? `Di *${loc}* saya punya pilihan dengan berbagai kisaran harga. Apakah Anda lebih prefer yang *terjangkau/ekonomis* atau yang *menengah ke atas*? 💰`
@@ -1601,6 +1790,78 @@ class ConversationQualifier {
         return isId
           ? `Untuk apartemen, ada preferensi tower atau lantai tertentu? Misalnya hadap timur, lantai rendah/tengah/tinggi? 🏢`
           : `For the apartment, any tower or floor preference? Like east-facing, low/mid/high floor? 🏢`;
+      }
+
+      /* ── Q14: Type-specific slots (one slot per message, skip if already answered) ── */
+
+      // Hotel / Kondotel booking: dates + room type + breakfast
+      if ((type === 'hotel' || (type === 'kondotel' && tx === 'rent'))) {
+        if (!profile.hasCheckInDate && !profile.aiAskedCheckIn)
+          return isId ? `Rencananya check-in tanggal berapa? 📅` : `What is your planned check-in date? 📅`;
+        if (!profile.hasCheckOutDate && !profile.aiAskedCheckOut)
+          return isId ? `Check-out tanggal berapa? (atau berapa malam?) 🌙` : `Check-out date? (or how many nights?) 🌙`;
+        if (!profile.hasRoomType && !profile.aiAskedRoomType)
+          return isId ? `Tipe kamar yang diinginkan? *Standard*, *Deluxe*, *Suite*, atau *Family room*? 🛏️` : `Preferred room type? *Standard*, *Deluxe*, *Suite*, or *Family room*? 🛏️`;
+        if (!profile.hasBreakfastPref && !profile.aiAskedBreakfast)
+          return isId ? `Termasuk *breakfast* ya? Atau tanpa breakfast juga oke? ☕` : `Do you want *breakfast included*, or room only is fine? ☕`;
+      }
+
+      // Villa sewa: rental period + private pool
+      if (type === 'villa' && tx === 'rent') {
+        if (!profile.hasRentalPeriod && !profile.aiAskedRentalPeriod)
+          return isId ? `Sewa villa-nya per *malam*, per *minggu*, atau per *bulan*? ⏱️` : `Renting the villa per *night*, per *week*, or per *month*? ⏱️`;
+        if (!profile.hasPrivatePool && !profile.aiAskedPrivatePool)
+          return isId ? `Perlu villa dengan *private pool*? Atau shared pool juga oke? 🏊` : `Do you need a villa with a *private pool*, or is a shared pool okay? 🏊`;
+        if (!profile.hasCheckInDate && !profile.aiAskedCheckIn && profile.hasRentalPeriod)
+          return isId ? `Tanggal check-in? 📅` : `Check-in date? 📅`;
+      }
+
+      // Villa beli: private pool mandatory check
+      if (type === 'villa' && tx === 'sale') {
+        if (!profile.hasPrivatePool && !profile.aiAskedPrivatePool)
+          return isId ? `Untuk villa, wajib ada *private pool*? Ini biasanya jadi standar villa premium. 🏊` : `For the villa, is a *private pool* a must? It's usually a standard for premium villas. 🏊`;
+      }
+
+      // Kos: type + bathroom
+      if (type === 'boarding_house') {
+        if (!profile.hasKosType && !profile.aiAskedKosType)
+          return isId ? `Kos yang dicari untuk *putra*, *putri*, atau *campur*? 🏠` : `Looking for *male-only*, *female-only*, or *mixed* boarding house? 🏠`;
+        if (!profile.hasBathroomType && !profile.aiAskedBathroomType)
+          return isId ? `Kamar mandi *dalam* (en-suite) atau *luar* (shared) oke? 🚿` : `*Private bathroom* (en-suite) or *shared bathroom* is okay? 🚿`;
+      }
+
+      // Ruko / Shophouse: business type + floors
+      if (type === 'shophouse') {
+        if (!profile.hasBusinessType && !profile.aiAskedBusinessType)
+          return isId ? `Bisnis apa yang akan dijalankan di sana? 🏪` : `What kind of business will be run there? 🏪`;
+      }
+
+      // Kantor / Office: headcount + building grade
+      if (type === 'office') {
+        if (!profile.hasHeadcount && !profile.aiAskedHeadcount)
+          return isId ? `Berapa orang yang akan bekerja di kantor ini? (untuk tentukan luas & grade gedung) 👥` : `How many people will work in this office? (to determine size & building grade) 👥`;
+        if (!profile.hasBusinessType && !profile.aiAskedBusinessType)
+          return isId ? `Preferensi gedung *Grade A* (premium), *Grade B* (mid), atau *Grade C* (ekonomis)? 🏢` : `Preference: *Grade A* (premium), *Grade B* (mid), or *Grade C* (economy) building? 🏢`;
+      }
+
+      // Mansion: private pool check
+      if (type === 'mansion') {
+        if (!profile.hasPrivatePool && !profile.aiAskedPrivatePool)
+          return isId ? `Untuk mansion, wajib ada *private pool*? Ini hampir selalu jadi standar mansion premium. 🏊` : `Is a *private pool* mandatory for the mansion? It's nearly always standard for premium properties. 🏊`;
+      }
+
+      // Kondotel beli: ROI expectation
+      if (type === 'kondotel' && tx === 'sale') {
+        if (!profile.hasRoiExpectation && !profile.aiAskedRoi)
+          return isId ? `Target ROI per tahun berapa? (misalnya 7%, 10%, atau lebih?) 📈` : `What's your target annual ROI? (e.g. 7%, 10%, or higher?) 📈`;
+        if (!profile.hasRoomType && !profile.aiAskedRoomType)
+          return isId ? `Tipe unit yang paling laku disewakan? *Studio* atau *1 kamar* biasanya ROI terbaik. 🛏️` : `Which unit type rents best? *Studio* or *1-bedroom* usually gives the best ROI. 🛏️`;
+      }
+
+      // Properti Lainnya: purpose first
+      if (type === 'others') {
+        if (!profile.hasPropertyPurpose && !profile.aiAskedPropertyPurpose)
+          return isId ? `Properti ini rencananya untuk tujuan apa? (parkir, event, pertanian, pabrik, klinik, dll) 🏗️` : `What is the planned purpose of this property? (parking, events, farming, factory, clinic, etc.) 🏗️`;
       }
     }
     /* ── End summary-only questions ── */
@@ -2594,7 +2855,7 @@ module.exports.generatePrivateWhatsappReply = (payload) => {
   if (isIndonesian) {
     const reply = `Halo ${name}, terima kasih telah menghubungi saya! 🏠
 
-Pesan Anda sudah saya terima. ${agentName} dari ${appName} akan segera membalas dengan informasi properti yang sesuai dengan kebutuhan Anda.
+Pesan Anda sudah saya terima. Saya akan segera membalas dengan informasi properti yang sesuai dengan kebutuhan Anda.
 
 Saya siap membantu Anda menemukan rumah, villa, apartemen, atau properti lainnya yang sempurna.
 
@@ -2606,7 +2867,7 @@ Salam hangat,
   } else {
     const reply = `Hello ${name}, thank you for reaching out! 🏠
 
-I've received your message. ${agentName} from ${appName} will get back to you shortly with property information tailored to your needs.
+I've received your message. I will get back to you shortly with property information tailored to your needs.
 
 I'm here to help you find the perfect house, villa, apartment, or property.
 

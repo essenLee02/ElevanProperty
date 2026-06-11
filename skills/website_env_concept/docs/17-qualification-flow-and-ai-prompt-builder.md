@@ -121,7 +121,7 @@ QUALIFICATION STATE (server-extracted — trust this):
 ─ Q12 — Apartemen: N/A (bukan apartemen)
 
 ⚡ PERTANYAAN BERIKUTNYA: Q3 — Kisaran budget? 💰
-   Hint: Di Surabaya kami ada yang di kisaran 3-5 juta
+   Hint: Di Surabaya saya punya yang di kisaran 3-5 juta
          dan ada yang 8-15 juta/bulan. Mana yang lebih sesuai?
 ══════════════════════════════════════════════════════
 ```

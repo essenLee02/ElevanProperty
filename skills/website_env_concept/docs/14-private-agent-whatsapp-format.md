@@ -84,7 +84,7 @@ Customer mengirim: `"saya butuh sewa hotel Vasa di Surabaya"`
 ⚠️ Maaf, belum ada listing yang tersedia di *Surabaya* dari Rumah123
 untuk *Sewa Hotel Surabaya*.
 
-Namun berikut pilihan alternatif dari katalog kami untuk *Sewa Hotel Surabaya*:
+Namun berikut pilihan alternatif dari katalog saya untuk *Sewa Hotel Surabaya*:
 
 1. *Surabaya Residential Area Boarding House Rent*
    ![Surabaya Residential Area Boarding House Rent](/assets/image_data/properties/boarding_house.png)
@@ -104,7 +104,7 @@ Namun berikut pilihan alternatif dari katalog kami untuk *Sewa Hotel Surabaya*:
 
 [... hingga 6 properti total ...]
 
-Kami siap membantu Anda menemukan rumah, villa, apartemen, atau properti
+Saya siap membantu Anda menemukan rumah, villa, apartemen, atau properti
 lainnya yang cocok untuk Anda.
 Apakah ada yang ingin Anda tanyakan lebih lanjut?
 
@@ -149,7 +149,7 @@ Ditambahkan di akhir setiap response:
 
 ```javascript
 // Bahasa Indonesia
-`\n\nKami siap membantu Anda menemukan rumah, villa, apartemen, atau properti ` +
+`\n\nSaya siap membantu Anda menemukan rumah, villa, apartemen, atau properti ` +
 `lainnya yang cocok untuk Anda.\nApakah ada yang ingin Anda tanyakan lebih lanjut?` +
 `\n\n\nSalam hangat,\n*${agentName}*\n*Elevan Property*`
 
@@ -180,7 +180,7 @@ Salam hangat, *LEO FELIX* ...
 ⚠️ Maaf, belum ada listing yang tersedia di *[kota]* dari Rumah123
 untuk *[summary]*.
 
-Namun berikut pilihan alternatif dari katalog kami untuk *[summary]*:
+Namun berikut pilihan alternatif dari katalog saya untuk *[summary]*:
 
 1. *Nama Properti*
    ...

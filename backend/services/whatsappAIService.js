@@ -145,7 +145,7 @@ function buildQualifyReply(filters, message, agentName, contextSource, history =
   //
   // Dalam summary mode, AI sudah mendapat instruksi penuh Q1–Q12 di system prompt.
   // Kunci: Q3 (budget) harus ditanya AI menggunakan dua pilihan harga kontras
-  //   "Di [area] kami ada yang kisaran [LOW] dan ada yang [HIGH]…"
+  //   "Di [area] saya punya yang kisaran [LOW] dan ada yang [HIGH]…"
   //   BUKAN ditanya langsung oleh qual gate ("Kisaran harga berapa?").
   //
   // Rule: Jika setidaknya satu info properti (type, tx, atau location) sudah diketahui,
@@ -403,7 +403,7 @@ async function generateWhatsAppAIReply(params) {
     const name  = session?.name || 'Pelanggan';
     const agent = agentName    || process.env.APP_NAME || 'Elevan Property';
     return {
-      reply: `Halo *${name}*! 👋\n\nTerima kasih telah menghubungi saya. *${agent}* akan segera membalas pesan Anda dengan informasi properti yang sesuai.\n\nMohon tunggu sebentar 🙏`,
+      reply: `Halo *${name}*! 👋\n\nTerima kasih telah menghubungi saya. Saya akan segera membalas pesan Anda dengan informasi properti yang sesuai.\n\nMohon tunggu sebentar 🙏`,
       provider      : 'fallback_generic',
       contextSource : 'none',
     };

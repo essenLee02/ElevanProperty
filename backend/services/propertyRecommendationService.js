@@ -6,20 +6,40 @@ const fs = require('fs');
 //   'house' keyword matches "warehouse" (substring!)
 //   'shop' keyword matches "shophouse" prefix
 // Solusi: letakkan 'warehouse' dan 'shophouse' SEBELUM 'house'.
+// URUTAN PENTING (lihat catatan di atas). Penambahan tipe 12-kategori:
+//   - kondotel SEBELUM hotel & apartment ("condo hotel" ⊃ "hotel"; kondotel = apartemen+hotel)
+//   - mansion  SEBELUM house ("rumah mewah" ⊃ "rumah")
+//   - store    terpisah dari shophouse ('toko' dipindah ke store; ruko = bangunan, toko = unit retail)
 const PROPERTY_TYPES = {
-  hotel         : ['hotel', 'hotels', 'penginapan'],
+  kondotel      : ['kondotel', 'condotel', 'condo hotel', 'kondo hotel', 'condo'], // ← SEBELUM hotel/apartment
+  hotel         : ['hotel', 'hotels', 'penginapan', 'motel'],
   villa         : ['villa', 'vila'],
   apartment     : ['apartemen', 'apartment', 'apart'],
-  boarding_house: ['kos', 'kost', 'boarding house', 'boarding_house', 'indekos'],
+  boarding_house: ['kos', 'kost', 'kosan', 'boarding house', 'boarding_house', 'indekos'],
+  mansion       : ['mansion', 'rumah mewah'],        // ← SEBELUM house (rumah mewah ⊃ "rumah")
   warehouse     : ['gudang', 'warehouse'],           // ← SEBELUM house (warehouse ⊃ "house")
-  shophouse     : ['ruko', 'shophouse', 'toko'],     // ← SEBELUM house (shophouse ⊃ "house")
+  shophouse     : ['ruko', 'shophouse', 'rukan'],    // ← SEBELUM house (shophouse ⊃ "house")
+  store         : ['toko', 'store', 'retail', 'kios'],
   office        : ['kantor', 'office'],
-  house         : ['rumah', 'house', 'home', 'kontrakan', 'residential'], // ← SETELAH warehouse/shophouse
-  others        : ['lainnya', 'others', 'other']
+  house         : ['rumah', 'house', 'home', 'kontrakan', 'residential'], // ← SETELAH warehouse/shophouse/mansion
+  others        : ['lainnya', 'others', 'other', 'tanah', 'kavling', 'kaveling', 'lahan', 'spbu', 'pabrik']
+};
+
+// Tipe percakapan baru (mansion/kondotel/store) belum tentu ada di katalog JSON
+// yang hanya berisi 8 tipe dasar. Saat pencarian katalog, petakan ke tipe dasar
+// terdekat sebagai fallbackType otomatis agar listing tetap muncul:
+//   mansion  → house     (rumah mewah dicari di antara rumah)
+//   kondotel → apartment (unit kondotel mirip apartemen)
+//   store    → shophouse (unit toko dicari di antara ruko/shophouse)
+const CATALOG_TYPE_ALIAS = {
+  mansion : 'house',
+  kondotel: 'apartment',
+  store   : 'shophouse'
 };
 
 const TRANSACTION_TYPES = {
-  rent: ['sewa', 'rent', 'rental', 'kontrak', 'menginap', 'harian', 'bulanan', 'tahunan', 'per tahun', 'per bulan'],
+  // Termasuk alias booking untuk hotel/villa/kondotel (master flow Q2: booking = sewa).
+  rent: ['sewa', 'rent', 'rental', 'kontrak', 'menginap', 'nginap', 'booking', 'book', 'reservasi', 'harian', 'bulanan', 'tahunan', 'per tahun', 'per bulan', 'per malam', 'per minggu'],
   // 'beli' / 'buy' = purchase intent = sale transaction. Digabung ke 'sale' supaya
   // konsisten dengan nilai di katalog properti dan txWord di whatsappAIService.
   sale: ['jual', 'sale', 'sell', 'dijual', 'beli', 'buy', 'purchase', 'membeli']
@@ -278,6 +298,7 @@ function detectBudget(message = '') {
   const period = /tahun|year|annual|per tahun|\/tahun/.test(text) ? 'year'
     : /bulan|month|monthly|per bulan|\/bulan/.test(text) ? 'month'
     : /malam|night|daily|hari|harian|\/malam/.test(text) ? 'night'
+    : /minggu|week|weekly|per minggu|\/minggu|seminggu/.test(text) ? 'week'
     : '';
 
   // ── Range match ──────────────────────────────────────────────────────────
@@ -490,7 +511,7 @@ function extractPropertyFilters(message = '', history = []) {
     current.buildingType !== accumulated.buildingType
   );
 
-  return {
+  const merged = {
     buildingType:   current.buildingType    || accumulated.buildingType    || '',
     transactionType:current.transactionType || (typeChangedToNew ? '' : accumulated.transactionType) || '',
     location:       current.location        || accumulated.location        || '',
@@ -498,6 +519,16 @@ function extractPropertyFilters(message = '', history = []) {
     facilities:     current.facilities?.length ? current.facilities : accumulated.facilities || [],
     fallbackTypes:  current.fallbackTypes   || accumulated.fallbackTypes   || []
   };
+
+  // Auto-alias tipe percakapan baru ke tipe dasar katalog. Tipe percakapan
+  // (mansion/kondotel/store) tetap dipakai untuk Q14 + budget anchor di
+  // controller, sedangkan alias-nya memastikan pencarian katalog tetap berisi.
+  const catalogAlias = CATALOG_TYPE_ALIAS[merged.buildingType];
+  if (catalogAlias && !merged.fallbackTypes.includes(catalogAlias)) {
+    merged.fallbackTypes = [...merged.fallbackTypes, catalogAlias];
+  }
+
+  return merged;
 }
 
 /**
@@ -802,6 +833,9 @@ function humanBuildingType(type = '') {
     apartment: 'apartemen',
     boarding_house: 'kos / boarding house',
     shophouse: 'ruko / shophouse',
+    store: 'toko',
+    mansion: 'mansion / rumah mewah',
+    kondotel: 'kondotel',
     office: 'kantor / office',
     warehouse: 'gudang / warehouse',
     others: 'properti lainnya'

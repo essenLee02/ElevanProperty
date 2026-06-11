@@ -500,7 +500,7 @@ state.typeChangedFromHistory = true
 
 ### AI response when this banner is present
 
-1. Acknowledge the change in **one short sentence** — e.g., "Oke, kita alihkan ke hotel ya 😊"
+1. Acknowledge the change in **one short sentence** — e.g., "Oke, saya alihkan ke hotel ya 😊"
 2. Ask the **smallest-numbered ❓ question** (follow ⚡ PERTANYAAN BERIKUTNYA — usually Q1 or Q2)
 3. **NEVER** carry over old Q2–Q12 answers (location, date, furnishing, decision, lease duration) from the previous type/transaction
 4. **NEVER** show a summary on the turn the change happens — there is nothing yet to summarize for the new search
@@ -517,7 +517,7 @@ state.typeChangedFromHistory = true
 [Previous] Customer: 26 Juni 2026
 ...
 [Now]      Customer: Mau cari penyewaan hotel
-[Now]      AI:       Oke, kita alihkan ke hotel ya 😊 Di kota atau area mana yang Anda inginkan? 📍
+[Now]      AI:       Oke, saya alihkan ke hotel ya 😊 Di kota atau area mana yang Anda inginkan? 📍
 ```
 ❌ **WRONG (the bug):** jumping to "Rencananya sewa untuk berapa lama?" and then producing a summary with `Lokasi: Surabaya`, `Masuk: 26 Juni 2026`, `Furnitur: Full furnished` — all leaked from the abandoned villa search. None of that was asked for the hotel.
 
@@ -529,7 +529,7 @@ state.typeChangedFromHistory = true
 [Previous] Customer: yang 500 jt aja
 ...
 [Now]      Customer: eh, saya mau sewa aja bukan beli
-[Now]      AI:       Siap, kita ubah ke gudang *sewa* ya 😊 Di kota atau area mana yang Anda inginkan? 📍
+[Now]      AI:       Siap, saya ubah ke gudang *sewa* ya 😊 Di kota atau area mana yang Anda inginkan? 📍
 ```
 Budget changes drastically between buying and renting, so the old `500 jt` budget is discarded and Q3 is re-asked with rent-appropriate ranges. Restart from Q1/Q2.
 
