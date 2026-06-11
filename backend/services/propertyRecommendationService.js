@@ -265,7 +265,7 @@ function _formatRpFull(n) {
 // Regex building blocks
 const _FULL_IDR_PAT = '\\d{1,3}(?:\\.\\d{3})+';
 const _BU = 'k|rb|ribu|jt|juta|m|miliar|milyar|t|triliun|trilion|thousand|million|billion|trillion';
-const _DEC_UNIT_PAT = `\\d+(?:[.,]\\d+)?\\s*(?:${_BU})?`;
+const _DEC_UNIT_PAT = `\\d+(?:[.,]\\d+)?\\s*(?:(?:${_BU})(?![a-z]))?`;
 const _RANGE_TOKEN = `(?:${_FULL_IDR_PAT}|${_DEC_UNIT_PAT})`;
 const _BUDGET_RANGE_RE = new RegExp(
   `(${_RANGE_TOKEN})\\s*(?:-|sampai|sd|s\\/d|to|hingga)\\s*(${_RANGE_TOKEN})`,
@@ -339,8 +339,10 @@ function detectBudget(message = '') {
   }
 
   // ── Single value: monetary unit required (prevents matching bare dates/counts) ──
+  // The (?![a-z]) after the unit stops "2 kali" → "2 k", "3 kamar" → "3 k",
+  // "10 menit" → "10 m" etc. from being mis-read as a currency amount.
   const unitReqMatch = text.match(
-    new RegExp(`(?:rp\\s*)?(${_FULL_IDR_PAT}|\\d+(?:[.,]\\d+)?\\s*(?:${_BU}))`, 'i')
+    new RegExp(`(?:rp\\s*)?(${_FULL_IDR_PAT}|\\d+(?:[.,]\\d+)?\\s*(?:${_BU})(?![a-z]))`, 'i')
   );
   if (unitReqMatch) {
     const tok = _tokenizeBudget(unitReqMatch[1]);

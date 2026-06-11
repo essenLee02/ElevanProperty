@@ -1,4 +1,5 @@
 const { loadProjectSkillPrompt } = require('./skillPromptService');
+const { detectBudget }           = require('./propertyRecommendationService');
 
 /* ─── Qualification State Extractor ────────────────────────────────────────── */
 /* Scans full conversation history to build a per-question answered/unanswered  */
@@ -57,30 +58,95 @@ function extractQualificationState(history = [], currentMessage = '') {
   const SYS_YEAR  = now.getFullYear();
 
   // ── Phase 0: Find "active session start" ──────────────────────────────────
-  // If a summary brief was already sent in history, Q2–Q12 answers BEFORE
-  // the first customer message after that summary are stale (they belong to a
-  // previous search). Only scan messages from the active session onwards for
-  // Q2–Q12 to prevent polluting the current search with old answers.
+  // The active session begins at the LATEST of two boundaries. Everything
+  // before that boundary is a stale/abandoned search and must NOT pollute the
+  // current qualification state.
   //
-  // Example: customer answered Q4="bersama istri" for villa search → summary
-  // shown → customer now searches for apartment. Phase 1 must NOT carry over
-  // "bersama istri" (household) or "semi-furnished" (furnishing) from the
-  // old villa session into the new apartment search.
+  //   Boundary A — Summary brief: if a brief was already sent, the first
+  //     customer message after it starts a fresh search.
+  //
+  //   Boundary B — Type/transaction change: if the customer switches building
+  //     type (villa→hotel) or flips transaction type (sewa→beli) WITHOUT a
+  //     summary in between, that message starts a fresh search. Business rule:
+  //     "perubahan tipe transaksi atau tipe properti → response kembali ke Q1".
+  //
+  // Why Boundary B is critical: a customer can abandon a half-finished search
+  // ("villa di Surabaya, masuk Juni…") and start over ("Mau cari hotel"). Since
+  // qualification state is recomputed from scratch every turn, the old answers
+  // (Surabaya, Juni, furnishing, …) would otherwise leak into the new hotel
+  // search — and a stale AI "berapa lama?" question would mis-pair with the new
+  // opening line as the lease duration. Trimming to the switch point fixes both.
   {
     const SUMMARY_RE_P0 = /[✓✔]\s*Rencana\s*:/i;
     const histForP0 = ALL.slice(0, -1);
+
+    // Word-boundary aware detectors (mirror Phase 1 / 3B precision).
+    const typeOfP0 = (txt) => {
+      const w = (txt || '').toLowerCase();
+      if (/\bvill?a\b/.test(w))                               return 'villa';
+      if (/\bapartemen\b|\bapartment\b/.test(w))              return 'apartment';
+      if (/\brumah\b|\bhouse\b|\bkontrakan\b/.test(w))       return 'house';
+      if (/\bhotel\b|\bpenginapan\b/.test(w))                return 'hotel';
+      if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(w)) return 'boarding_house';
+      if (/\bruko\b|\brukan\b/.test(w))                      return 'shophouse';
+      if (/\bkantor\b/.test(w))                              return 'office';
+      if (/\bgudang\b/.test(w))                              return 'warehouse';
+      return null;
+    };
+    const txOfP0 = (txt) => {
+      const w = (txt || '').toLowerCase();
+      if (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|rent|rental|lease)\b/.test(w)) return 'rent';
+      if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase)\b/.test(w))                     return 'sale';
+      return null;
+    };
+
+    // ── Boundary A: first customer message after the last summary brief ──────
     const lastSumP0 = histForP0.reduce(
       (idx, m, i) => QS_AI_ROLES.has(m.role) && SUMMARY_RE_P0.test(m.message || '') ? i : idx,
       -1
     );
-    let activeStart = 0;
+    let summaryStart = 0;
     if (lastSumP0 >= 0) {
+      summaryStart = -1;
       for (let i = lastSumP0 + 1; i < histForP0.length; i++) {
-        if (QS_CUST_ROLES.has(histForP0[i].role)) { activeStart = i; break; }
+        if (QS_CUST_ROLES.has(histForP0[i].role)) { summaryStart = i; break; }
       }
-      // No customer message after summary → only the current message is active
-      if (activeStart === 0) activeStart = ALL.length - 1;
+      if (summaryStart === -1) summaryStart = ALL.length - 1;  // none yet → only current
     }
+
+    // ── Boundary B: latest customer message that switches type or flips tx ───
+    // Scans ALL (incl. current message). A switch is only counted once a prior
+    // type/tx has been established — the first mention is the initial choice.
+    let switchStart   = 0;
+    let switchType    = null;   // previous type, for the change banner
+    {
+      let runType = null;
+      let runTx   = null;
+      for (let i = 0; i < ALL.length; i++) {
+        if (!QS_CUST_ROLES.has(ALL[i].role)) continue;
+        const t  = typeOfP0(ALL[i].message);
+        const tx = txOfP0(ALL[i].message);
+        const typeFlipped = t  && runType && t  !== runType;
+        const txFlipped   = tx && runTx   && tx !== runTx;
+        if (typeFlipped || txFlipped) {
+          switchStart = i;
+          switchType  = runType;   // remember what they switched away from
+        }
+        if (t)  runType = t;
+        if (tx) runTx   = tx;
+      }
+    }
+
+    const activeStart = Math.max(summaryStart, switchStart);
+
+    // If the active session began because of a type/tx switch (not a summary),
+    // flag it so the change banner is shown even though Phase 3B — which only
+    // looks WITHIN the now-trimmed segment — will no longer detect a change.
+    if (switchStart > 0 && switchStart >= summaryStart) {
+      state.typeChangedFromHistory = true;
+      state.previousType           = switchType;
+    }
+
     // Expose activeStart for Phase 1, 2 & 3B (via closure)
     // eslint-disable-next-line no-var
     var ACTIVE_ALL = ALL.slice(activeStart);
@@ -96,8 +162,10 @@ function extractQualificationState(history = [], currentMessage = '') {
 
     // Q1 — Transaction type
     if (!state.transactionType) {
-      if (/\b(sewa|kontrak|ngontrak|rent)\b/.test(text))        state.transactionType = 'rent';
-      else if (/\b(beli|buy|purchase)\b/.test(text))             state.transactionType = 'sale';
+      if (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|rent|rental|lease)\b/.test(text))
+        state.transactionType = 'rent';
+      else if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase)\b/.test(text))
+        state.transactionType = 'sale';
     }
 
     // Building type (primary)
@@ -143,12 +211,15 @@ function extractQualificationState(history = [], currentMessage = '') {
     }
 
     // Q3 — Budget
+    // Reuse the robust detector so the QUALIFICATION STATE matches the gate:
+    //   • parses ranges in full ("2-4jt" → Rp 2.000.000 - Rp 4.000.000)
+    //   • rejects counts ("2 kali" is NOT 2 ribu, "3 kamar" is NOT budget)
+    //   • maps affordability words → terjangkau/affordable
+    // Ambiguous ranges (no unit on either side) are left ❓ so Q3 is re-asked.
     if (!state.budget) {
-      if (/\b(terjangkau|murah|affordable|ekonomis|hemat|low budget|yang paling murah)\b/.test(text)) {
-        state.budget = 'terjangkau/affordable';
-      } else {
-        const pm = text.match(/(\d[\d.,]*\s*(?:juta|jt|miliar|ribu|rb|k))/);
-        if (pm) state.budget = pm[1].trim();
+      const b = detectBudget(raw);
+      if (b && !b.ambiguous) {
+        state.budget = b.preference === 'affordable' ? 'terjangkau/affordable' : b.text;
       }
     }
 
@@ -269,8 +340,13 @@ function extractQualificationState(history = [], currentMessage = '') {
       }
     }
     // Q10 — lease duration
-    if (!state.leaseDuration && /sewa untuk berapa lama|berapa lama.*sewa/.test(aiText)) {
-      state.leaseDuration = custResp;
+    // Skip if customer answers with a date instead of a duration (e.g. "26 Juni 2026" → misunderstood question)
+    if (!state.leaseDuration && /sewa\s+(?:untuk\s+)?berapa lama|berapa lama.*sewa|durasi\s+sewa/.test(aiText)) {
+      const looksLikeDate = new RegExp(`\\b\\d{1,2}\\s+(?:${MONTH_ID}|${MONTH_EN})\\b`, 'i').test(custResp);
+      if (!looksLikeDate) {
+        state.leaseDuration = custResp;
+      }
+      // If it looks like a date: leave leaseDuration null so Q10 gets re-asked with clearer hint
     }
     // Q5 — red flags
     if (!state.redFlags && /pasti tidak cocok|hadap barat|gang sempit|rumah tua/.test(aiText)) {
@@ -353,8 +429,8 @@ function extractQualificationState(history = [], currentMessage = '') {
       else if (/\bkantor\b/.test(cur))                               state.buildingType = 'office';
       else if (/\bgudang\b/.test(cur))                               state.buildingType = 'warehouse';
 
-      if      (/\b(sewa|kontrak|ngontrak|rent)\b/.test(cur))         state.transactionType = 'rent';
-      else if (/\b(beli|buy|purchase)\b/.test(cur))                  state.transactionType = 'sale';
+      if      (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|rent|rental|lease)\b/.test(cur)) state.transactionType = 'rent';
+      else if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase)\b/.test(cur))                    state.transactionType = 'sale';
 
       const cityMatch = (currentMessage || '').match(CITY_RE);
       if (cityMatch) state.location = cityMatch[1];
@@ -391,8 +467,8 @@ function extractQualificationState(history = [], currentMessage = '') {
     const histTx = histMsgs.reduce((t, msg) => {
       if (t) return t;
       const w = (msg.message || '').toLowerCase();
-      if (/\b(sewa|kontrak|rent)\b/.test(w))  return 'rent';
-      if (/\b(beli|buy|purchase)\b/.test(w))  return 'sale';
+      if (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|rent|rental|lease)\b/.test(w))  return 'rent';
+      if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase)\b/.test(w))                      return 'sale';
       return null;
     }, null);
 
@@ -408,8 +484,8 @@ function extractQualificationState(history = [], currentMessage = '') {
     else if (/\bgudang\b/.test(cur))                               curType = 'warehouse';
 
     let curTx = null;
-    if      (/\b(sewa|kontrak|rent)\b/.test(cur))    curTx = 'rent';
-    else if (/\b(beli|buy|purchase)\b/.test(cur))    curTx = 'sale';
+    if      (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|rent|rental|lease)\b/.test(cur)) curTx = 'rent';
+    else if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase)\b/.test(cur))                     curTx = 'sale';
 
     // Building type changed → full Q2–Q12 reset + ⚠️ banner
     const buildingTypeChanged = Boolean(histType && curType && histType !== curType);
@@ -417,7 +493,9 @@ function extractQualificationState(history = [], currentMessage = '') {
     // TX-only change (same building type) → silent update, no reset
     const txOnlyChanged = Boolean(!buildingTypeChanged && histTx && curTx && histTx !== curTx);
 
-    state.typeChangedFromHistory = buildingTypeChanged;
+    // Don't clobber a change already flagged by Phase 0 (which detects switches
+    // that happened on an earlier turn and are no longer inside ACTIVE_ALL).
+    state.typeChangedFromHistory = state.typeChangedFromHistory || buildingTypeChanged;
 
     if (txOnlyChanged && curTx) {
       // Quietly update the transaction type — Q2–Q12 answers remain valid
@@ -493,7 +571,7 @@ function findNextQuestion(state) {
   if (!state.decisionMaker)
     return { q: 'Q9', hint: 'Kalau nanti ada yang cocok, langsung bisa jadwalkan viewing atau perlu koordinasi dulu sama keluarga lain?' };
   if (isSewa && !state.leaseDuration)
-    return { q: 'Q10', hint: 'Rencananya sewa untuk berapa lama? ⏱️' };
+    return { q: 'Q10', hint: 'Rencananya sewa untuk berapa lama? ⏱️ (durasi, bukan tanggal — contoh: 6 bulan, 1 tahun)' };
   if (!state.furnishing)
     return { q: 'Q11', hint: 'Untuk furnitur, lebih prefer yang sudah *furnished*, *semi-furnished*, atau *kosongan* saja? 🛋️' };
   if (isApt && !state.apartmentPref)
@@ -1001,7 +1079,7 @@ Kemudian:
 3. Jika pesan terbaru adalah jawaban singkat untuk pertanyaan sebelumnya → AKUI singkat (1 kalimat), lalu tanyakan pertanyaan ❓ BERIKUTNYA dengan nomor Q terkecil.
    — Khusus Q2b (Riwayat pencarian): Jawaban seperti "Saya belum pernah lihat", "belum pernah", "sudah lihat 3" adalah jawaban Q2b yang valid → AKUI ("Oke, belum ada referensi sebelumnya 👌") → lanjut ke Q3 (Budget).
 4. Jika pesan terbaru mengandung informasi baru → catat, lalu tanyakan pertanyaan ❓ berikutnya.
-5. Jika semua pertanyaan wajib (Q1 tx, building type, Q2 lokasi, Q3 budget, Q4 penghuni, Q8 tanggal) sudah ✅ DAN tidak ada banner ⚠️ → tampilkan structured brief.
+5. Jika semua pertanyaan wajib (Q1 tx, building type, Q2 lokasi, Q3 budget, Q4 penghuni, Q5 red flags, Q6 patokan lokasi, Q7 area alternatif, Q8 tanggal) sudah ✅ DAN tidak ada banner ⚠️ → tampilkan structured brief.
 ⛔ JANGAN tampilkan listing properti dalam mode ini.
 ⛔ JANGAN tanya ulang pertanyaan yang sudah ✅ di QUALIFICATION STATE.
 ⛔ SATU pertanyaan per pesan — jangan gabungkan dua pertanyaan.

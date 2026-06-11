@@ -1059,25 +1059,77 @@ class ConversationQualifier {
     //   - With this, custText only has active session messages → flags are
     //     correctly false for questions never asked in the current session.
     const SUMMARY_RE_P0 = /[✓✔]\s*Rencana\s*:/i;
+
+    // Word-boundary type / tx detectors (used by both boundaries below).
+    const _typeOfP0 = (txt) => {
+      const w = (txt || '').toLowerCase();
+      if (/\bvill?a\b/.test(w))                               return 'villa';
+      if (/\bapartemen\b|\bapartment\b/.test(w))              return 'apartment';
+      if (/\brumah\b|\bhouse\b|\bkontrakan\b/.test(w))       return 'house';
+      if (/\bhotel\b|\bpenginapan\b/.test(w))                return 'hotel';
+      if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(w)) return 'boarding_house';
+      if (/\bruko\b|\brukan\b/.test(w))                      return 'shophouse';
+      if (/\bkantor\b/.test(w))                              return 'office';
+      if (/\bgudang\b/.test(w))                              return 'warehouse';
+      return null;
+    };
+    const _txOfP0 = (txt) => {
+      const w = (txt || '').toLowerCase();
+      if (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|rent|rental|lease)\b/.test(w)) return 'rent';
+      if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase)\b/.test(w))                     return 'sale';
+      return null;
+    };
+
+    // ── Boundary A: first customer message after the last summary brief ──────
     const lastSumIdxP0 = history.reduce(
       (idx, m, i) =>
         (m.role === 'assistant' || m.role === 'ai') && SUMMARY_RE_P0.test(m.message || '')
           ? i : idx,
       -1
     );
-    let activeSessionStart = 0;
+    let summaryStart = 0;
     if (lastSumIdxP0 >= 0) {
+      summaryStart = history.length;   // no customer reply yet → only current msg active
       for (let i = lastSumIdxP0 + 1; i < history.length; i++) {
         if (history[i].role === 'user' || history[i].role === 'customer') {
-          activeSessionStart = i;
+          summaryStart = i;
           break;
         }
       }
-      // No customer message after summary yet → active session is only the
-      // current message (first message of new search)
-      if (activeSessionStart === 0) activeSessionStart = history.length;
     }
+
+    // ── Boundary B: latest message that switches building type or flips tx ───
+    // Handles the abandoned-search case: customer half-fills a villa search,
+    // then types "Mau cari hotel" with no summary in between. Everything before
+    // the switch is stale. The current userMessage is included as the final node.
+    let switchStart = 0;
+    {
+      const seq = [
+        ...history.map((m, i) => ({ i, role: m.role, message: m.message })),
+        { i: history.length, role: 'customer', message: userMessage },
+      ];
+      let runType = null;
+      let runTx   = null;
+      for (const m of seq) {
+        if (!(m.role === 'user' || m.role === 'customer')) continue;
+        const t  = _typeOfP0(m.message);
+        const tx = _txOfP0(m.message);
+        if ((t && runType && t !== runType) || (tx && runTx && tx !== runTx)) {
+          switchStart = m.i;
+        }
+        if (t)  runType = t;
+        if (tx) runTx   = tx;
+      }
+    }
+
+    const activeSessionStart = Math.max(summaryStart, switchStart);
     const activeHistory = history.slice(activeSessionStart);
+
+    // True when the active session began because of a type/tx switch (not a
+    // summary). Forces the Q2–Q12 reset below, since the now-trimmed segment can
+    // no longer see the pre-switch type. Business rule: any type OR transaction
+    // change → restart from Q1.
+    const switchBoundaryHit = switchStart > 0 && switchStart >= summaryStart;
 
     // custText / aiText / aiCount — scoped to ACTIVE session only
     const custText = this.#customerText(activeHistory, userMessage);
@@ -1129,15 +1181,18 @@ class ConversationQualifier {
     else if (/\bgudang\b/.test(curMsgLower))                               curBuildingType = 'warehouse';
 
     let histTx = null;
-    if      (/\b(sewa|kontrak|rent)\b/.test(histCustJoined)) histTx = 'rent';
-    else if (/\b(beli|buy|purchase)\b/.test(histCustJoined)) histTx = 'sale';
+    if      (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|rent|rental|lease)\b/.test(histCustJoined)) histTx = 'rent';
+    else if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase)\b/.test(histCustJoined))                     histTx = 'sale';
 
     let curTx = null;
-    if      (/\b(sewa|kontrak|ngontrak|rent)\b/.test(curMsgLower)) curTx = 'rent';
-    else if (/\b(beli|buy|purchase)\b/.test(curMsgLower))          curTx = 'sale';
+    if      (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|rent|rental|lease)\b/.test(curMsgLower)) curTx = 'rent';
+    else if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase)\b/.test(curMsgLower))                     curTx = 'sale';
 
+    // A switch detected at Phase 0 (across the now-trimmed segment) forces the
+    // full Q2–Q12 reset — covers both type changes and transaction flips.
     const buildingTypeChanged = Boolean(
-      histBuildingType && curBuildingType && histBuildingType !== curBuildingType
+      switchBoundaryHit ||
+      (histBuildingType && curBuildingType && histBuildingType !== curBuildingType)
     );
     const txOnlyChanged = Boolean(
       !buildingTypeChanged && histTx && curTx && histTx !== curTx
@@ -1288,6 +1343,15 @@ class ConversationQualifier {
       aiAskedFurnish    : this.#has(aiText, ['furnished', 'furnitur', 'furnishing', 'semi-furnished']),
     };
 
+    // `filters` are extracted across FULL history, so on a reset (summary or
+    // type/tx switch) filters.location may still hold the OLD search's city.
+    // Only trust it when it actually appears in the active session text —
+    // otherwise drop it so Q2 (location) is asked fresh for the new search.
+    const activeLocation =
+      (filters.location && custText.includes(String(filters.location).toLowerCase()))
+        ? filters.location
+        : '';
+
     // ── Post-processing: summary-already-shown → full reset ──────────────────
     // Customer is starting a new search. Wipe all Q answers so getNextQuestion
     // returns Q0/Q1 instead of a summary or mid-flow question.
@@ -1306,7 +1370,7 @@ class ConversationQualifier {
       // Keep only what the CURRENT message explicitly says
       profile.transactionType    = filters.transactionType || '';
       profile.buildingType       = filters.buildingType    || '';
-      profile.location           = filters.location        || '';
+      profile.location           = activeLocation;
       profile.budget             = null;
       profile.aiCount            = 0;
       profile.summaryAlreadyShown = true;
@@ -1325,7 +1389,7 @@ class ConversationQualifier {
       ];
       resetFields.forEach(f => { profile[f] = false; });
       profile.budget             = null;
-      profile.location           = filters.location        || '';
+      profile.location           = activeLocation;
       profile.buildingTypeChanged = true;
     }
     // ── Post-processing: tx-only change → quietly update transaction type ─────

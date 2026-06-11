@@ -29,6 +29,7 @@ const { hasPropertyKeyword,
         isPropertyContextContinuation }  = require('../utils/propertyKeywordFilter');
 const { generateWhatsAppAIReply }        = require('../services/whatsappAIService');
 const { getConversationHistory }         = require('../services/sessionService');
+const { isAlreadyProcessed, markProcessed } = require('../utils/messageDedup');
 const {
   normalizePhone,
   isValidPhone,
@@ -192,6 +193,13 @@ async function processWatiMessage(payload, agent) {
 
   // Skip media / pesan kosong
   if (!customerMessage) return;
+
+  // ── Dedup guard (idempotent against WATI webhook retries) ────────────────
+  if (isAlreadyProcessed(messageId)) {
+    console.log(`[WATI DEDUP] ⚠️  Pesan sudah diproses, skip: ${messageId}`);
+    return;
+  }
+  markProcessed(messageId);
 
   // ── Find / create session ────────────────────────────────────────────────
   const session = await findOrCreateSession({

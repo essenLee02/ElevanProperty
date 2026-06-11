@@ -66,11 +66,18 @@ In addition to the Pre-Qualification Gate, the backend computes a **QUALIFICATIO
 **Fallback type detection:** When a customer says "kalau enggak ada villa... sewa apartemen saja", the `detectFallbackTypes()` function captures `fallbackTypes = ['apartment']` and this is surfaced in the Tipe properti row.
 
 **Active session boundary (Phase 0):**
-After a summary brief is sent, Q answers from *before* that summary are **stale** — they belong to the completed search. The backend's Phase 0 finds `activeSessionStart` (the first customer message after the last summary) and scans only `ACTIVE_ALL = history.slice(activeStart)` for Q1–Q12 content in Phase 1 (content scan), Phase 2 (AI→Customer pair matching), and Phase 3B (type-change detection).
+The backend computes `activeSessionStart` as the **latest** of two boundaries, then scans only `ACTIVE_ALL = history.slice(activeStart)` for Q1–Q12 content in Phase 1 (content scan), Phase 2 (AI→Customer pair matching), and Phase 3B (type-change detection):
 
-This prevents old session answers from polluting the current search's QUALIFICATION STATE.
+1. **Summary boundary** — the first customer message after the last summary brief. Answers before a summary belong to the completed search and are stale.
+2. **Type/transaction switch boundary** — the customer message where they switch building type (villa→hotel) **or** flip transaction type (sewa→beli) **without a summary in between**. This is the abandoned-search case: a customer half-fills a villa search, then types "Mau cari hotel". Everything before that switch is stale.
 
-**Example:** Customer answered Q4 = "bersama istri" in a villa search → summary was sent → customer now searches for apartment. Phase 1 scans ACTIVE_ALL only (starting from the apartment search), so "bersama istri" is NOT picked up. Q4 correctly shows ❓ in the new search.
+This prevents old-session answers from polluting the current search's QUALIFICATION STATE.
+
+**Example A (summary):** Customer answered Q4 = "bersama istri" in a villa search → summary sent → now searches apartment. Phase 1 scans ACTIVE_ALL only, so "bersama istri" is NOT picked up. Q4 shows ❓ in the new search.
+
+**Example B (abandoned switch — THE critical fix):** Customer was filling a villa search (Surabaya, masuk 26 Juni, full furnished, …) but never got a summary, then types "Mau cari penyewaan hotel". Phase 0 sets `activeStart` to the hotel message. Surabaya / 26 Juni / furnishing are NOT carried over. The AI correctly asks Q2 (location) for the hotel search — it does **not** jump to Q10 or fabricate a summary from the abandoned villa data.
+
+⚠️ **Why this matters:** Without this boundary, a stale AI question ("Rencananya sewa berapa lama?") from the abandoned search mis-pairs with the new opening line, storing `leaseDuration = "Mau cari penyewaan hotel"`, and the leaked location/date/furnishing produce a bogus summary. The switch boundary eliminates both failures.
 
 ---
 
@@ -135,6 +142,24 @@ EN: How many properties have you seen in *[city]*?
 | "Sudah lihat 3, tapi terlalu jauh" | 3 viewed, red flag=jauh | Note red flag, → ask Q3 or Q5 if needed |
 | "Belum ada yang cocok, semuanya di gang sempit" | 0 suitable, red flag=gang sempit | Note red flag → ask Q3 |
 | "belum sempat survey" | No search yet | "Oke, belum ada referensi sebelumnya 👌" → ask Q3 |
+| "sudah 2 kali, saya mau cari yang ada fasilitas gym dan kolam renang" | 2 viewed + wants gym & pool | Q2b ✅ → note facility wish → ask Q3 |
+
+**⚠️ A compound answer covers BOTH sub-questions — never re-ask Q2b.**
+The Q2b question has two parts ("berapa properti" + "apa yang belum cocok"). One sentence often
+answers both at once. Parse it and move on:
+
+```
+Q2b: "Sudah lihat berapa properti di Surabaya? Apa yang membuat belum cocok dari yang sudah dilihat?"
+Customer: "sudah 2 kali, saya mau cari yang ada fasilitas gym dan kolam renang"
+→ Berapa kali  : 2 kali
+→ Belum cocok / keinginan : mau fasilitas gym & kolam renang
+AI: "Oke, sudah lihat 2 dan mau yang ada gym + kolam renang ya 👌" → ask Q3 (budget)
+```
+
+**⛔ FORBIDDEN:** repeating "Sudah lihat berapa properti…" after the customer already answered.
+The customer in the loop case had to re-format their answer as "1. … 2. …" because the bot kept
+re-asking — this must never happen. If the QUALIFICATION STATE shows `Riwayat pencarian [Q2b]: ✅`,
+Q2b is done; ask the next ❓ question.
 
 **⚠️ CRITICAL: After Q2b is answered (✅ di QUALIFICATION STATE), the NEXT question is Q3 (Budget).** Do NOT show a summary just because Q2b didn't provide additional context — Q3, Q8, and Q4 are still unanswered.
 
@@ -189,6 +214,29 @@ ID: Untuk *[Tipe]* di *[area]* — apakah lebih prefer yang *terjangkau/ekonomis
 
 **Accepted affordability answers** (treat as budget=affordable, stop asking):
 `terjangkau`, `murah`, `yang paling murah`, `ekonomis`, `affordable`, `hemat`, `low budget`
+
+**⚠️ A numeric range or amount is a COMPLETE budget answer — register it and move on.**
+When the customer replies with a price (any of these forms), Q3 is ✅ — do **NOT** re-ask
+the "terjangkau/ekonomis atau menengah ke atas?" fallback:
+
+| Customer says | Parsed budget |
+|---|---|
+| `2-4jt/bulan`, `2-4 juta per bulan`, `2 - 4 juta` | Rp 2.000.000 – Rp 4.000.000 / bulan |
+| `5 juta`, `sekitar 5jt`, `maksimal 5 juta` | Rp 5.000.000 |
+| `500-800 ribu` | Rp 500.000 – Rp 800.000 |
+| `1-2 miliar` | Rp 1.000.000.000 – Rp 2.000.000.000 |
+
+The server parses ranges in full (`detectBudget`) and the QUALIFICATION STATE shows the
+captured value next to `Budget [Q3]: …`. If you see a budget value there, Q3 is answered —
+acknowledge it briefly (`Oke, budget 2–4 juta/bulan ya 👍`) and ask the next ❓ question.
+
+**⛔ FORBIDDEN:** asking the affordability fallback after the customer already gave a number.
+The customer in the loop case explicitly complained: *"Saya sudah jawab 2 - 4 juta per bulan…
+Jangan diulangi harga ekonomis/terjangkau."* — never do this.
+
+**Note — counts are NOT budgets:** `sudah 2 kali` (2 viewings), `3 kamar`, `10 menit` must
+never be read as `2 ribu` / `3` / `10` budget. The server's word-boundary guard prevents this;
+the AI must likewise treat them as their real meaning (search count, bedrooms, distance).
 
 ---
 
@@ -340,9 +388,11 @@ Never ask "siapa yang memutuskan" directly.
 ### Q10 — Lease Duration *(rent only, if not volunteered)*
 
 ```
-ID: Rencananya sewa untuk berapa lama?
-EN: How long are you planning to rent?
+ID: Rencananya sewa untuk berapa lama? ⏱️ (durasi, bukan tanggal — contoh: 6 bulan, 1 tahun)
+EN: How long are you planning to rent? ⏱️ (a duration, not a date — e.g. 6 months, 1 year)
 ```
+
+**Duration vs date guard (server-side):** Q10 asks for a **duration** ("6 bulan", "1 tahun"), not a calendar date. If the customer answers with a date ("26 Juni 2026"), the server does **not** store it as the lease duration — Q10 stays ❓ and is re-asked with the clarified hint above. The AI must never put a date or an unrelated phrase in `Durasi sewa`.
 
 **Q10 Summary display rule:**
 Only include `✓ Durasi sewa:` in the summary brief if the customer explicitly stated a specific duration (e.g., `1 tahun`, `6 bulan`, `2 tahun`).
@@ -423,21 +473,23 @@ Ada yang bisa saya bantu untuk kebutuhan properti Anda? 🏠
 
 ---
 
-## Property Type / Transaction Change Reset
+## Property Type / Transaction Change → ALWAYS Reset to Q1
 
-There are **two distinct scenarios** — the server handles them differently:
+**RULE (mandatory):** Whenever the customer changes the **property type** (rumah, kos, ruko, apartemen, villa, toko, hotel, gudang, kantor, cafe/shop, or any other type) **OR** the **transaction type** (sewa ↔ beli), the conversation **restarts from Q1**. All Q2–Q12 answers from the previous search are stale and must be discarded — they describe a different property the customer is no longer asking about.
+
+This is the customer's explicit expectation: *"Jika ada perubahan tipe transaksi atau tipe properti, maka response selalu kembali ke Q1."*
 
 ---
 
-### Case A — Building Type Change *(villa→rumah, villa→apartment, etc.)*
+### Server-side behavior (automatic)
 
-**Trigger:** Customer switches to a **different property type** (house, villa, apartment, hotel, kos, ruko, office, warehouse).
+Phase 0 detects the switch and trims the active session to the switch message, so the QUALIFICATION STATE for the new search starts almost empty:
 
-**Server-side behavior (automatic):**
 ```javascript
 state.typeChangedFromHistory = true
-// resets Q2–Q12: location, budget, household, redFlags, anchorPoint,
-//   alternativeAreas, moveInDate, decisionMaker, leaseDuration, furnishing, apartmentPref
+// Only buildingType + transactionType carry into the new search (from the switch message).
+// Everything else is ❓: location, budget, household, redFlags, anchorPoint,
+//   alternativeAreas, moveInDate, decisionMaker, leaseDuration, furnishing, apartmentPref.
 ```
 
 `buildQualificationStateBlock()` injects a visible banner:
@@ -446,53 +498,47 @@ state.typeChangedFromHistory = true
    Q2-Q12 di-RESET. Akui perubahan singkat (1 kalimat), lanjut dari Q terkecil ❓.
 ```
 
-**AI response when this banner is present:**
-1. Acknowledge the change in **one sentence** — e.g., "Oke, kita alihkan ke rumah sewa ya 😊"
-2. Ask the **smallest-numbered ❓ question** for the new type (usually Q2 — location)
-3. Do NOT carry over old Q2–Q12 answers from the previous type
+### AI response when this banner is present
 
-**Example:**
+1. Acknowledge the change in **one short sentence** — e.g., "Oke, kita alihkan ke hotel ya 😊"
+2. Ask the **smallest-numbered ❓ question** (follow ⚡ PERTANYAAN BERIKUTNYA — usually Q1 or Q2)
+3. **NEVER** carry over old Q2–Q12 answers (location, date, furnishing, decision, lease duration) from the previous type/transaction
+4. **NEVER** show a summary on the turn the change happens — there is nothing yet to summarize for the new search
+
+---
+
+### Example A — Property type change (villa → hotel)
+
 ```
 [Previous] Customer: mau sewa villa di Surabaya
 [Previous] AI:       Budget villa sekitar 5–10 jt atau 15–25 jt?
 [Previous] Customer: yang 5-10 jt aja
+[Previous] AI:       Rencananya masuk bulan apa?
+[Previous] Customer: 26 Juni 2026
 ...
-[Now]      Customer: eh maaf, maksud saya mau sewa rumah bukan villa
-[Now]      AI:       Oke, kita alihkan ke rumah sewa ya 😊 Di kota atau area mana yang Anda inginkan?
+[Now]      Customer: Mau cari penyewaan hotel
+[Now]      AI:       Oke, kita alihkan ke hotel ya 😊 Di kota atau area mana yang Anda inginkan? 📍
 ```
+❌ **WRONG (the bug):** jumping to "Rencananya sewa untuk berapa lama?" and then producing a summary with `Lokasi: Surabaya`, `Masuk: 26 Juni 2026`, `Furnitur: Full furnished` — all leaked from the abandoned villa search. None of that was asked for the hotel.
 
----
+### Example B — Transaction type change (beli → sewa)
 
-### Case B — TX-Only Change *(beli gudang → sewa gudang; same building type)*
-
-**Trigger:** Customer changes **only the transaction type** (beli ↔ sewa) while the **building type stays the same**.
-
-**Server-side behavior (automatic):**
-```javascript
-state.transactionType = curTx   // quietly updated to new tx
-// NO Q2–Q12 reset — location, household, budget, etc. remain valid
-// NO banner injected into the prompt
-```
-
-**AI response:** Continue the qualification flow from where it left off. Q2–Q12 answers are still valid — only the transaction type changed.
-
-**Example:**
 ```
 [Previous] Customer: mau beli gudang di Malang
 [Previous] AI:       Budget gudang di Malang sekitar 500 jt atau 1–2 M?
 [Previous] Customer: yang 500 jt aja
 ...
 [Now]      Customer: eh, saya mau sewa aja bukan beli
-[Now]      AI:       Siap, kita ubah ke gudang *sewa* ya 😊 Rencananya masuk bulan apa?
-           (continues from the next unanswered Q — location was already set)
+[Now]      AI:       Siap, kita ubah ke gudang *sewa* ya 😊 Di kota atau area mana yang Anda inginkan? 📍
 ```
+Budget changes drastically between buying and renting, so the old `500 jt` budget is discarded and Q3 is re-asked with rent-appropriate ranges. Restart from Q1/Q2.
 
 ---
 
-**History preservation (both cases):**
+**History preservation (all cases):**
 - All previous messages remain in the database and session history
-- The reset is **logical only** — the AI reads full history for context but treats old type-specific answers as stale
-- History is preserved **as long as the cookie/session is active**
+- The reset is **logical only** — the AI may read full history for tone/context but treats every old type- or transaction-specific answer as stale
+- History is preserved **as long as the cookie/session is active**, so the customer can return to a prior search later if they explicitly ask
 
 ---
 
@@ -501,8 +547,9 @@ state.transactionType = curTx   // quietly updated to new tx
 Once the structured brief has been sent, the QUALIFICATION STATE will include the banner:
 ```
 ⚠️  SUMMARY SUDAH DIKIRIM — Customer memulai pencarian baru.
-   RESET PENUH ke Q1. Tanyakan dari awal: sewa/beli dan tipe propertinya.
-   JANGAN tampilkan summary lagi sampai semua Q wajib terjawab ulang.
+   Lihat ⚡ PERTANYAAN BERIKUTNYA di bawah — tanyakan field ❓ terkecil.
+   JANGAN tampilkan summary lagi sampai semua Q wajib ✅ di sesi ini.
+   JANGAN gunakan jawaban dari sesi lama (history sebelum summary).
 ```
 
 **Behavior by message type:**
@@ -544,6 +591,8 @@ Terima kasih sudah menghubungi saya. 🙏
 - **HANYA sertakan field yang ✅ di QUALIFICATION STATE.** Jangan sertakan field yang ❓ — lewati baris itu seluruhnya.
 - **Gunakan nilai PERSIS yang tertera setelah ": " di baris ✅** — jangan tulis "Disebutkan", "Ada", "Iya", "Diketahui", atau frasa samar lainnya.
 - **⛔ JANGAN gunakan nilai dari raw conversation history** jika field tersebut ❓ di QUALIFICATION STATE — walaupun kata itu muncul di history. QUALIFICATION STATE dihitung khusus dari sesi aktif saat ini.
+- **⛔ JANGAN gunakan jawaban dari pencarian lama** (tipe/transaksi yang sudah diganti). Jika customer baru saja beralih dari "villa di Surabaya" ke "hotel", lokasi/tanggal/furnitur villa TIDAK boleh muncul di summary hotel. Banner ⚠️ TIPE PROPERTI BERUBAH = jangan tampilkan summary, mulai dari Q terkecil ❓.
+- **⛔ JANGAN pernah mengarang jawaban.** Jika belum pernah menanyakan lokasi, durasi sewa, atau patokan lokasi pada sesi aktif ini, baris-baris itu TIDAK boleh ada di summary. Lebih baik bertanya daripada menebak.
 - **⛔ DILARANG KERAS: Jangan inferensi "Masuk: [bulan]" dari tanggal sistem.** Jika Q8 ❓ → baris "Masuk" tidak ada di brief, titik.
 - **⛔ DILARANG KERAS: Jangan tulis "Patokan: Disebutkan" jika Q6 ❓.** Baris Patokan hanya ada jika Q6 = ✅ dengan nilai konkret.
 - **⛔ JANGAN tampilkan summary jika Q3 (Budget) masih ❓** — walaupun budget muncul di old session history.
@@ -593,16 +642,20 @@ At the bottom of every QUALIFICATION STATE block, the server injects a **⚡ PER
 
 ## Q9 — Decision Maker (Server-Side Normalization)
 
-Customer responses to Q9 are **normalized server-side** before being stored in the qualification state. The AI does not need to interpret the raw response — it copies the normalized value.
+Customer responses to Q9 are **normalized server-side** before being stored in the qualification state. The AI does not need to interpret the raw response — it copies the normalized value exactly.
 
 | Customer answer | Stored as |
 |---|---|
-| "saya yang ambil keputusan", "saya sendiri yang memutuskan" | `Solo — customer yang memutuskan sendiri` |
-| "langsung bisa viewing" | `Solo — customer yang memutuskan sendiri` |
+| "saya yang ambil keputusan", "saya sendiri yang memutuskan", "langsung bisa viewing", "tidak perlu koordinasi" | `Mandiri` |
+| "sendiri", "sendirian", "seorang diri", "solo" | `Sendirian` |
 | "perlu koordinasi sama istri/suami" | `Koordinasi dengan pasangan` |
 | "perlu tanya orang tua dulu" | `Koordinasi dengan orang tua` |
 | "perlu tanya keluarga" | `Koordinasi dengan keluarga` |
 | Other | Raw customer response |
+
+Additionally, when Q4 household = "1 orang (sendiri)", Q9 is auto-set to `Mandiri` (a single person always decides alone — Q9 is not asked).
+
+**FORBIDDEN:** inventing labels like `Solo (mandiri)` or `Solo — customer yang memutuskan sendiri`. Copy the exact normalized value from the QUALIFICATION STATE row.
 
 ---
 

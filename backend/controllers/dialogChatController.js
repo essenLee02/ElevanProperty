@@ -56,6 +56,7 @@ const { hasPropertyKeyword,
         isPropertyContextContinuation }  = require('../utils/propertyKeywordFilter');
 const { generateWhatsAppAIReply }        = require('../services/whatsappAIService');
 const { getConversationHistory }         = require('../services/sessionService');
+const { isAlreadyProcessed, markProcessed } = require('../utils/messageDedup');
 const {
   normalizePhone,
   findOrCreateSession,
@@ -311,6 +312,13 @@ async function processIncomingMessage(msg, contacts, agent) {
     console.log(`[360DIALOG] Tipe pesan ${msgType} — skip AI reply`);
     return;
   }
+
+  // ── Dedup guard (idempotent against 360dialog webhook retries) ───────────
+  if (isAlreadyProcessed(messageId)) {
+    console.log(`[360DIALOG DEDUP] ⚠️  Pesan sudah diproses, skip: ${messageId}`);
+    return;
+  }
+  markProcessed(messageId);
 
   const ts = msgTimestamp
     ? new Date(Number(msgTimestamp) * 1000).toISOString()

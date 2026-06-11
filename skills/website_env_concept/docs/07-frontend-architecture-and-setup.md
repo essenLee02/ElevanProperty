@@ -3,80 +3,116 @@
 ## Stack
 - Vue 3 (Composition API)
 - Vite build tool
-- Port 5173 (dev)
+- Port 5173 (dev), proxied `/api` → `http://localhost:5005/api`
 
 ## Directory Structure
 
 ```
 frontend/src/
 ├── views/
-│   ├── HomeView.vue          ← Landing page, contains FloatingChatbot
-│   ├── AboutView.vue         ← About page (static)
-│   ├── ContactView.vue       ← Contact form with AI WhatsApp reply
-│   ├── Rumah123View.vue      ← Live property search (Apify)
-│   ├── LoginView.vue         ← Login form (auth layout)
-│   ├── RegisterView.vue      ← Register form (auth layout)
-│   └── ProfileView.vue       ← User profile (requires auth)
+│   ├── HomeView.vue          ← Landing page (public) — contains FloatingChatbot
+│   ├── AboutView.vue         ← About page (public)
+│   ├── ContactView.vue       ← Contact form with AI WhatsApp reply (public)
+│   ├── Rumah123View.vue      ← Live property search via Apify (public)
+│   ├── LoginView.vue         ← Login form (guests only)
+│   ├── RegisterView.vue      ← Register form (guests only)
+│   ├── ProfileView.vue       ← User profile (auth required)
+│   ├── FacilityListView.vue  ← Browse facility list (auth required)
+│   └── FacilityMasterView.vue ← Facility CRUD admin UI (auth required)
 ├── components/
-│   └── FloatingChatbot.vue   ← Main chatbot widget (~950 lines)
+│   ├── FloatingChatbot.vue   ← Chatbot widget (~950 lines, XSS-safe)
+│   ├── Navbar.vue
+│   ├── PortfolioCard.vue
+│   └── PropertyFilter.vue
 ├── services/
-│   ├── api.js                ← Axios instance with interceptors
-│   ├── authApi.js            ← Token memory management
-│   └── chatbotApi.js         ← Chatbot API calls
+│   ├── api.js               ← Axios instance (interceptors + token refresh)
+│   ├── authApi.js           ← In-memory token management
+│   ├── chatbotApi.js        ← POST /api/chatbot/message
+│   ├── contactApi.js        ← POST /api/contact
+│   ├── facilityApi.js       ← Facility CRUD (/api/facility/*)
+│   ├── profileApi.js        ← GET/PUT /api/profile/*
+│   ├── aboutApi.js          ← GET /api/about
+│   └── rumah123Api.js       ← GET /api/rumah123/search
 └── router/
-    └── index.js              ← Vue Router with auth guards
+    └── index.js             ← Vue Router with meta-based auth guards
 ```
 
-## Router Guards (frontend/src/router/index.js)
+## Router Guards (`frontend/src/router/index.js`)
 
 ```javascript
-// Route meta options:
 { meta: { requiresAuth: true } }   // → redirect to /login if not authenticated
-{ meta: { requiresGuest: true } }  // → redirect logged-in users away (login/register pages)
-// No meta = public (accessible by all, logged in or not)
+{ meta: { requiresGuest: true } }  // → redirect logged-in users away from login/register
+// No meta = public (all users)
 ```
 
-| Route | Meta | Access |
-|---|---|---|
-| / (Home) | none | public |
-| /about | none | public |
-| /contact | none | public |
-| /rumah123 | none | public |
-| /login | requiresGuest | guests only |
-| /register | requiresGuest | guests only |
-| /profile | requiresAuth | logged-in only |
+| Route | Path | Meta | Access |
+|---|---|---|---|
+| Home | / | none | public |
+| About | /about | none | public |
+| Contact | /contact | none | public |
+| Rumah123 | /rumah123 | none | public |
+| Login | /login | requiresGuest | guests only |
+| Register | /register | requiresGuest | guests only |
+| Profile | /profile | requiresAuth | logged-in only |
+| Facility List | /facility | requiresAuth | logged-in only |
+| Facility Master | /facility/master | requiresAuth | logged-in only |
 
-## Authentication in Frontend
+## Authentication
 
-### authApi.js
-- `getCachedToken()` — returns token from memory (falls back to localStorage for page reload)
-- `setCachedToken(token)` — stores in memory (runtime only, more XSS-safe than localStorage)
-- `clearCachedToken()` — removes token from memory
+### authApi.js — Token Management
+- `getCachedToken()` — in-memory first, localStorage fallback (for page reload)
+- `setCachedToken(token)` — stores in memory (more XSS-safe than pure localStorage)
+- `clearCachedToken()` — removes from memory
 
-### api.js (Axios instance)
-- `baseURL: /api` → proxied to `http://localhost:5005/api` by Vite
-- **Request interceptor**: adds `Authorization: Bearer <token>` header automatically
-- **Response interceptor**: on 401, calls `GET /api/auth/refresh`, retries original request with new token
+### api.js — Axios Instance
+- `baseURL: /api` → Vite proxy → `http://localhost:5005/api`
+- **Request interceptor**: injects `Authorization: Bearer <token>` automatically
+- **Response interceptor**: on 401 → calls `GET /api/auth/refresh` → retries original request with new token
 
 ## FloatingChatbot.vue
 
-See `11-module-chatbot.md` for full details.
+### Cookie-Based Profile
+- Reads profile from cookie `chatbot_profile` (set on first use)
+- Profile required before chatting: name, phone, location
+- Session ID stored in cookie with TTL from `/api/chatbot/config`
 
-Key files used:
-- Reads profile from cookie `chatbot_profile`
-- Reads session ID from cookie (TTL from `/api/chatbot/config`)
-- Loads property data from `frontend/public/json_data/indonesia_property_36_provinces_flat.json`
-- Posts to `POST /api/chatbot/message`
+### XSS Safety
+- `MessageFormatter.escapeHtml()` runs FIRST before any markdown transforms
+- Renders `![alt](url)` → `<img>` (http/https only)
+- Renders `[label](url)` → `<a>` (http/https only)
+
+### Property Data
+- Loads from `frontend/public/json_data/indonesia_property_36_provinces_flat.json`
+- Sends as `propertyContext` in POST /api/chatbot/message
+
+## Facility Module
+
+### FacilityListView.vue
+- Read-only list of active facilities
+- Calls `GET /api/facility/list` via `facilityApi.js`
+- Groups by category
+
+### FacilityMasterView.vue
+- CRUD admin UI for facility master data
+- Create: `POST /api/facility/insert`
+- Update: `PUT /api/facility/update/:facility_id`
+- Toggle status: `PATCH /api/facility/toggle-status/:facility_id`
+- Delete: `DELETE /api/facility/delete/:facility_id`
+- Category filter: `GET /api/facility/categories`
+
+### facilityApi.js
+All calls include `Authorization` header via `api.js` interceptor.
 
 ## Build / Deploy
 
 ```bash
 # Dev server (hot reload)
-npm run dev
+npm run dev        # starts on port 5173
 
 # Production build (outputs to frontend/dist/)
 npm run build
 ```
 
-Vite config proxies `/api` to `http://localhost:5005` in dev mode.
-For production, configure your web server (nginx/caddy) to proxy `/api` to the Node.js backend.
+For production, configure nginx/caddy to:
+- Serve `frontend/dist/` as static files
+- Proxy `/api/*` to `http://localhost:5005/api/*`

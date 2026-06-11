@@ -13,6 +13,8 @@
         <option value="office">Office</option>
         <option value="warehouse">Warehouse</option>
         <option value="store">Store</option>
+        <option value="condo">Condo</option>
+        <option value="mansion_house">Mansion House</option>
         <option value="others">Others</option>
       </select>
     </div>

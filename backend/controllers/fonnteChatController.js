@@ -33,31 +33,12 @@ const { sanitizeLog, maskPhone, maskName } = require('../utils/whatsappUtils');
 /* ══════════════════════════════════════════════════════════════════════════════
    BAGIAN 0 — MESSAGE-ID DEDUP CACHE
    Prevents double-processing when Fonnte retries a webhook delivery.
-   In-memory Map keyed by messageId → epoch ms. TTL = 10 minutes.
-   Only applies when a stable ID is present (body.inboxid / key / id).
-   Falls back gracefully when no stable ID exists (fonnte_<timestamp> prefix).
+   Shared with WATI & 360dialog via utils/messageDedup.js (stable IDs only;
+   synthetic fonnte_<timestamp> IDs are ignored automatically).
 ══════════════════════════════════════════════════════════════════════════════ */
 
-const _seenMessageIds = new Map();
-const DEDUP_TTL_MS    = 10 * 60 * 1000; // 10 minutes — covers any Fonnte retry window
-
-function _isAlreadyProcessed(messageId) {
-  if (!messageId || String(messageId).startsWith('fonnte_')) return false;
-  const ts = _seenMessageIds.get(messageId);
-  if (!ts) return false;
-  if (Date.now() - ts > DEDUP_TTL_MS) { _seenMessageIds.delete(messageId); return false; }
-  return true;
-}
-
-function _markProcessed(messageId) {
-  if (!messageId || String(messageId).startsWith('fonnte_')) return;
-  _seenMessageIds.set(messageId, Date.now());
-  // Prune expired entries when the cache grows large
-  if (_seenMessageIds.size > 1000) {
-    const cutoff = Date.now() - DEDUP_TTL_MS;
-    for (const [id, ts] of _seenMessageIds) { if (ts < cutoff) _seenMessageIds.delete(id); }
-  }
-}
+const { isAlreadyProcessed: _isAlreadyProcessed,
+        markProcessed:      _markProcessed } = require('../utils/messageDedup');
 
 /* ══════════════════════════════════════════════════════════════════════════════
    BAGIAN 1 — UTILITY FUNCTIONS

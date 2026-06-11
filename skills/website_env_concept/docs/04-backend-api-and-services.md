@@ -1,103 +1,239 @@
 # 04. Backend API & Services
 
-## Routes (backend/routes/index.js)
+## Routes (`backend/routes/index.js`)
 
-### Public Routes
-| Method | Path | Controller | Notes |
+### Rate Limiters
+| Limiter | Window | Max | Applied to |
 |---|---|---|---|
-| GET | /api/home | homeController.index | |
-| GET | /api/about | aboutController.index | |
-| POST | /api/contact | contactController.submitContact | rate limited: 5/15min |
-| GET | /api/chatbot/config | chatbotController.getConfig | cookie TTL config |
-| POST | /api/chatbot/message | chatbotController.sendMessage | main chatbot |
-| POST | /api/chatbot/private-message | chatbotPrivateController.sendPrivateMessage | direct private agent |
-| POST | /api/fonnte/webhook | fonnteWebhookController.handleWebhook | Fonnte AI webhook |
-| POST | /api/whatsapp/webhook | whatsappInboundController.handleInboundMessage | agent inbound |
-| POST | /api/auth/register | registerController.insertDataAgent | |
-| POST | /api/auth/login | loginController.loginUser | |
-| GET | /api/auth/refresh | refreshTokenController | reads HttpOnly cookie |
-| DELETE | /api/auth/logout | loginController.logoutUser | |
-| GET | /api/auth/me | loginController.getCurrentUser | |
-| POST | /api/log | logController.saveLog | frontend nav logs |
+| contactLimiter | 15 min | 5 | POST /contact |
+| webhookLimiter | 1 min | 120 | All webhook endpoints |
+| logLimiter | 1 min | 60 | POST /log |
 
-### Protected Routes (require verifyToken middleware)
+### Public Routes — No Auth Required
+| Method | Path | Controller |
+|---|---|---|
+| GET | /api/home | homeController.index |
+| GET | /api/about | aboutController.index |
+| POST | /api/contact | contactController.submitContact (rate limited) |
+| GET | /api/contact/google-sheets-status | contactController.googleSheetsStatus |
+| GET | /api/contact/ai-whatsapp-status | contactController.aiWhatsappStatus |
+| GET | /api/chatbot/config | chatbotController.getConfig |
+| GET | /api/chatbot/ai-provider-status | chatbotController.aiProviderStatus |
+| GET | /api/chatbot/skill-status | chatbotController.skillStatus |
+| GET | /api/chatbot/private-status | chatbotPrivateController.privateAgentStatus |
+| POST | /api/chatbot/private-message | chatbotPrivateController.sendPrivateMessage |
+| POST | /api/chatbot/message | chatbotController.sendMessage |
+
+### Auth Routes
+| Method | Path | Controller |
+|---|---|---|
+| POST | /api/auth/register | registerController.insertDataAgent |
+| GET | /api/auth/users-count | registerController.countUsers |
+| POST | /api/auth/login | loginController.loginUser |
+| GET | /api/auth/refresh | refreshTokenController.refreshTokenController |
+| DELETE | /api/auth/logout | loginController.logoutUser |
+| GET | /api/auth/me | loginController.getCurrentUser |
+| GET | /api/auth/protected-test | (test, requires verifyToken) |
+
+### Protected Routes — Require verifyToken
 | Method | Path | Controller |
 |---|---|---|
 | GET | /api/profile/me | profileController.getCurrentProfile |
 | PUT | /api/profile/update-agent | profileController.updateDataAgent |
 
-### Status / Debug Routes
-| Method | Path | Description |
+### Webhook Routes — Public, Rate Limited (120/min)
+| Method | Path | Controller |
 |---|---|---|
-| GET | /api/chatbot/ai-provider-status | ChatGPT/Claude config check |
-| GET | /api/chatbot/skill-status | skill files loaded check |
-| GET | /api/chatbot/private-status | private agent status |
-| GET | /api/contact/google-sheets-status | Google Sheets connection |
-| GET | /api/contact/ai-whatsapp-status | AI + Fonnte config |
-| GET | /api/whatsapp/messages | list inbound WA messages |
-| GET | /api/whatsapp/messages/:id | single message detail |
-| GET | /api/whatsapp/agents/status | 5 agents message counts |
-| GET | /api/rumah123/search | live Rumah123 search |
-| GET | /api/rumah123/cache-status | Apify cache status |
+| POST | /api/fonnte/webhook | fonnteWebhookController.handleWebhook (legacy) |
+| POST | /api/whatsapp/webhook | whatsappInboundController.handleInboundMessage (legacy log-only) |
+| GET | /api/whatsapp/messages | whatsappInboundController.getInboundMessages |
+| GET | /api/whatsapp/messages/:id | whatsappInboundController.getMessageDetail |
+| GET | /api/whatsapp/agents/status | whatsappInboundController.getAgentsStatus |
+| **POST** | **/api/fonnte-chat/webhook** | **fonnteChatController.handleInboundMessage (MAIN)** |
+| POST | /api/fonnte-chat/chaining | fonnteChatController.handleChainingWebhook |
+| POST | /api/fonnte-chat/webhook-raw | fonnteChatController.webhookRawCatcher |
+| POST | /api/wati/webhook | watiChatController.handleInboundMessage |
+| POST | /api/wati/webhook-raw | watiChatController.webhookRawCatcher |
+| POST | /api/dialog-chat/webhook | dialogChatController.handleInboundMessage |
+| POST | /api/dialog-chat/webhook-raw | dialogChatController.webhookRawCatcher |
+
+### WhatsApp Admin Routes — Require verifyToken
+| Method | Path | Controller |
+|---|---|---|
+| POST | /api/fonnte-chat/simulate | fonnteChatController.simulateInboundMessage |
+| GET | /api/fonnte-chat/debug-info | fonnteChatController.getDebugInfo |
+| GET | /api/fonnte-chat/agents | fonnteChatController.getAgentsWithFonnte |
+| GET | /api/fonnte-chat/agent-chats/:agentName | fonnteChatController.getAgentChats |
+| GET | /api/fonnte-chat/chat-history/:sessionId | fonnteChatController.getChatHistory |
+| GET | /api/fonnte-chat/status | fonnteChatController.getFonnteStatus |
+| GET | /api/fonnte-chat/poller-status | fonnteChatController.getPollerStatus |
+| POST | /api/fonnte-chat/poller-start | fonnteChatController.startPoller |
+| POST | /api/fonnte-chat/poller-stop | fonnteChatController.stopPoller |
+| GET | /api/fonnte-chat/check-fonnte-api | fonnteChatController.checkFonnteApi |
+| POST | /api/wati/simulate | watiChatController.simulateInboundMessage |
+| GET | /api/wati/debug-info | watiChatController.getDebugInfo |
+| GET | /api/wati/agents/list | watiChatController.getRegisteredAgents |
+| GET | /api/wati/agent-chats/:agentName | watiChatController.getAgentChats |
+| GET | /api/wati/chat-history/:sessionId | watiChatController.getChatHistory |
+| GET | /api/wati/status | watiChatController.getWatiStatus |
+| POST | /api/dialog-chat/setup-webhook | dialogChatController.setupWebhook |
+| POST | /api/dialog-chat/simulate | dialogChatController.simulateInboundMessage |
+| GET | /api/dialog-chat/debug-info | dialogChatController.getDebugInfo |
+| GET | /api/dialog-chat/status | dialogChatController.getDialogStatus |
+| GET | /api/dialog-chat/agents | dialogChatController.getAgentsWithDialog |
+| GET | /api/dialog-chat/agent-chats/:agentName | dialogChatController.getAgentChats |
+| GET | /api/dialog-chat/chat-history/:sessionId | dialogChatController.getChatHistory |
+
+### Utility Routes
+| Method | Path | Notes |
+|---|---|---|
+| POST | /api/log | logController.insertLog (rate limited 60/min) |
+| GET | /api/rumah123/status | rumah123Controller.status |
+| GET | /api/rumah123/search | rumah123Controller.search |
+| POST | /api/rumah123/search | rumah123Controller.searchPost |
+| GET | /api/rumah123/dataset/:datasetId | rumah123Controller.getDataset |
+| GET | /api/rumah123/cache-status | rumah123Controller.cacheStatus |
+| POST | /api/rumah123/warmup | verifyToken — rumah123Controller.triggerWarmup |
+| GET | /api/chatbot/debug/test-rumah123 | verifyToken — debug only |
+
+### Facility Master Data Routes — Require verifyToken
+| Method | Path | Controller |
+|---|---|---|
+| GET | /api/facility/list | facilityMasterController.showDataFacility |
+| GET | /api/facility/categories | facilityMasterController.getCategories |
+| GET | /api/facility/detail/:facility_id | facilityMasterController.getDetailFacility |
+| POST | /api/facility/insert | facilityMasterController.insertDataFacility |
+| PUT | /api/facility/update/:facility_id | facilityMasterController.updateDataFacility |
+| PATCH | /api/facility/toggle-status/:facility_id | facilityMasterController.toggleStatusFacility |
+| DELETE | /api/facility/delete/:facility_id | facilityMasterController.deleteFacility |
+
+---
 
 ## Controller Pattern (OOP — all controllers)
 
-All controllers follow class-based OOP pattern with static methods:
+All controllers use class-based OOP with static methods:
 
 ```javascript
 class SomeController {
-  static #privateHelper(...) { ... }   // private to class
-
-  static async someEndpoint(req, res) {
-    // handler logic
-  }
+  static #privateHelper(...) { ... }   // ES2022 private static
+  static async someEndpoint(req, res) { /* handler logic */ }
 }
 module.exports = SomeController;
+// Routes: router.get('/path', SomeController.someEndpoint)
 ```
 
-Routes access static methods directly: `chatbotController.sendMessage` resolves to `ChatbotController.sendMessage`.
+---
 
-## Key Services (backend/services/)
+## Services (`backend/services/`)
 
 ### aiProviderService.js
-- `executeAIProviderWithFallback(taskName, chatGPTFn, claudeFn)` — routes ChatGPT→Claude
-- `generateChatbotReplyWithProviderFallback(session, history, message, context)`
-- `generateContactReplyWithProviderFallback(contactPayload)`
-- `generateWhatsappReplyWithProviderFallback(session, history, message, context)`
-- `checkAIProviderConfig()` — returns config status for both providers
+- `executeAIProviderWithFallback(taskName, chatGPTFn, claudeFn)` — ChatGPT → Claude fallback
+- `generateChatbotReplyWithProviderFallback(session, history, message, context)` — website chatbot
+- `generateContactReplyWithProviderFallback(contactPayload)` — contact form
+- `generateWhatsappReplyWithProviderFallback(session, history, message, context)` — all WA platforms
+- `checkAIProviderConfig()` — returns status of both providers
+- Returns `{ reply, provider, primaryProvider, fallbackUsed, fallbackProvider, primaryError }`
+
+### whatsappAIService.js (NEW — unified for all 3 WA platforms)
+- `generateWhatsAppAIReply({ session, history, message, agentName, contextSource })` — main entry
+- `buildQualifyReply(filters, message, agentName, contextSource, history)` — pre-qualification gate
+- `isIndonesian(message, history)` — language detection with history fallback
+- `agentSignature(agentName, isId)` — builds agent signature block
+- Controlled by `RESPOND_CATALOG_RUN` env var:
+  - `OFF` (default): Q1–Q12 qualification mode (no AI provider called)
+  - `ON`: catalog listing mode (ChatGPT → Claude)
+
+### aiPromptBuilderService.js (CORE — WhatsApp prompt assembly)
+- `extractQualificationState(history, currentMessage)` — 4-phase Q1–Q12 extraction
+- `buildQualificationStateBlock(state)` — renders ✅/❓ checklist + DIBLOKIR banner
+- `findNextQuestion(state)` — returns `{q, hint}` for next unanswered Q in priority order
+- `buildWhatsappReplyPrompt(params)` — assembles full AI system prompt
+  - Includes: skill docs, forced language, Q1–Q12 state block, customer profile, history, property context
+- See `17-qualification-flow-and-ai-prompt-builder.md` for full detail.
 
 ### sessionService.js
-- `findOrCreateSession(name, phone, location, source)` — smart session (handles typos)
-- `getConversationHistory(sessionId, limit)` — last N messages
+- `findOrCreateSession(name, phone, location, source)` — smart dedup by normalizedPhone
+- `getConversationHistory(sessionId, limit=12)` — last N messages, chronological
 - `saveUserMessage(sessionId, message, source, metadata)`
 - `saveAssistantMessage(sessionId, reply, source, metadata)`
 
 ### fonnteService.js
-- `sendWhatsAppMessage(phone, message)` — POST to api.fonnte.com/send with FONNTE_TOKEN
+- `sendWhatsAppMessage(phone, message)` — POST to api.fonnte.com/send (uses global FONNTE_TOKEN)
 - `normalizeWhatsAppNumber(phone)` — normalize to 628... format
 - `checkFonnteConfig()` — validate token present
+- Note: `fonnteChatController` uses its own `sendViaFonnte(target, message, agentToken)` with per-agent tokens
 
 ### skillPromptService.js
-- Loads all .md files from `skills/chat_gpt_responds/` and `skills/claude_responds/`
-- `getSkillRegistryStatus()` — check skill folders exist + file count
+- Loads all `.md` files from `skills/chat_gpt_responds/` and `skills/claude_responds/`
+- `loadProjectSkillPrompt(provider)` — combines all skill docs, truncated to 36000 chars
+- `getSkillRegistryStatus()` — file count + folder existence
+- Hot-reload: reads files at runtime (no server restart needed after skill changes)
 
 ### propertyRecommendationService.js
-- `buildRecommendationContextForLLM(message, history)` — filter JSON catalog
+- `buildRecommendationContextForLLM(message, history)` — filter JSON catalog for website chatbot
+- `extractPropertyFilters(message, history)` — extract buildingType, transactionType, location, budget
 
 ### rumah123ContextService.js
-- `getRumah123Listings({ location, propertyType, listingType })` — live via Apify
+- `getRumah123Listings({ location, propertyType, listingType })` — live data via Apify
+- `formatRumah123ContextForLLM(listings)` — format listings for AI prompt
+- `mapBuildingTypeToApify(type)` — internal type → Apify filter string
+- `mapTransactionTypeToApify(type)` — internal type → Apify filter string
 - Cache warmup on start: Jakarta Selatan, Surabaya, Bandung, Bali
 
 ### googleSheetsService.js
-- `appendContactRow(contactData)` — append to sheet (non-blocking in contactController)
+- `appendContactRow(contactData)` — append contact submission to Google Sheet
 - `getGoogleSheetsStatus()` — test connection
-- Credentials: `backend/google-service-account.json`
+- Auth: `backend/google-service-account.json`
 
-## Utils (backend/utils/)
+---
 
-| File | Exports | Purpose |
+## Utils (`backend/utils/`)
+
+| File | Key Exports | Purpose |
 |---|---|---|
-| safeLog.js | `safeLog(action, details, level)` | structured JSON logging |
-| authLogger.js | `authLog.loginSuccess/loginFailed/registerSuccess/registerFailed/logoutSuccess/logoutFailed` | auth event boxes |
-| httpStatus.js | `HTTP.OK, HTTP.CREATED, HTTP.BAD_REQUEST, ...` | constants from .env |
-| responseFormat.js | `sendSuccess(res, status, data, message)`, `sendError(...)` | consistent response shape |
+| safeLog.js | `safeLog(action, details, level)` | Structured JSON logging |
+| authLogger.js | `authLog.loginSuccess / loginFailed / ...` | Auth event terminal boxes |
+| httpStatus.js | `HTTP.OK, HTTP.CREATED, HTTP.BAD_REQUEST, ...` | HTTP status constants |
+| responseFormat.js | `sendSuccess(res, status, data, msg)`, `sendError(...)` | Consistent response shape |
+| normalizeName.js | `normalizeName(name)` | Normalize customer name |
+| normalizePhone.js | `normalizePhone(phone)` | Normalize phone to 628... |
+| propertyKeywordFilter.js | `hasPropertyKeyword(msg)`, `isPropertyContextContinuation(msg, history)`, `extractLocationFromMessage(msg)`, `extractPropertyTypeFromMessage(msg)`, `extractTransactionTypeFromMessage(msg)` | Property intent detection |
+| terminalSwitch.js | `isTerminalActive(platform)`, `getActiveTerminals()` | Control which WA platform logs to terminal via `MASSEGE_TERMINAL` env |
+| whatsappPropertyContext.js | `getWhatsappPropertyContext(customerMessage)` | Rumah123 → flat JSON fallback for WhatsApp AI |
+| whatsappUtils.js | `sanitizeLog(text)`, `maskPhone(phone)`, `maskName(name)` | Safe terminal logging |
+
+### propertyKeywordFilter.js — Detection Logic
+
+```
+hasPropertyKeyword(msg):
+  True if: (property type keyword) AND (action word)
+         OR standalone unambiguous keyword (KPR, kavling, perumahan, etc.)
+  Exclusions: "rumah makan", "rumah sakit", "sewa mobil", etc.
+
+isPropertyContextContinuation(msg, history):
+  True if: short answer that continues a property conversation
+  14 patterns:
+  - Lease duration: "^\d+\s*(tahun|bulan)s?"
+  - Month name fast-path: "^\s*\d{0,2}\s*(januari|...|december)"
+  - Q4 household: "sendiri|sendiran|sama [person]|bersama|keluarga|istri|suami"
+  - Q6 anchor: "dekat|deket|near|di jalan|di sekitar|samping"
+  - Short negation ≤30 chars starting with "tidak|ga|gak|ngga|enggak|nggak"
+  - ... and 9 more patterns
+```
+
+### terminalSwitch.js
+
+Controls which platform's logs appear in terminal:
+```env
+MASSEGE_TERMINAL=FONNTE              # only Fonnte shows in terminal
+MASSEGE_TERMINAL=FONNTE,DIALOG       # Fonnte + 360dialog
+MASSEGE_TERMINAL=FONNTE,DIALOG,WATI  # all platforms
+```
+
+### whatsappPropertyContext.js
+
+Priority order for property data in WhatsApp AI responses:
+1. Rumah123 live data (Apify) — if `APIFY_API_TOKEN` set AND `RUMAH123_DATA=ON`
+2. Fallback: `backend/asset/json_data/indonesia_property_36_provinces_flat.json`
+
+Returns `{ contextText, source: 'rumah123'|'flat_json'|'none', location, propertyType, transactionType }`

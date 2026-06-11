@@ -22,13 +22,15 @@ Stores registered agents (login system).
 | status | INT | 1=active, 2=blocked, 3=deleted, default 1, INDEX |
 | privilege | VARCHAR(50) | nullable, INDEX(privilege,status) composite |
 | fonnte_token | VARCHAR(100) | Fonnte token per-agent (nullable — null = not setup yet) |
+| dialog360_token | VARCHAR(200) | 360dialog API key per-agent (nullable) |
 | created_date, created_by | DATETIME/VARCHAR | audit |
 | updated_date, update_by | DATETIME/VARCHAR | audit |
 
 **Indexes:** `user_id`, `username`, `status`, `(privilege, status)`, `phone`
 
-> `fonnte_token` diisi agent via halaman `/profile`.
+> `fonnte_token` diisi agent via halaman `/profile` atau direct SQL.
 > Agent tanpa `fonnte_token` tidak akan diproses oleh `fonnteChatController`.
+> `dialog360_token` = D360-API-KEY header value (sandbox: send START to +551146733492).
 
 ---
 
@@ -127,6 +129,30 @@ Frontend navigation and action logging.
 
 ---
 
+---
+
+### facilities
+Master data for property facilities (AC, pool, CCTV, parking, etc.).
+
+| Column | Type | Notes |
+|---|---|---|
+| id | INT AI PK | |
+| facility_id | VARCHAR(30) | Generated: name prefix + random alphanumeric + 3-digit count, UNIQUE |
+| name | VARCHAR(100) | e.g. "AC", "Kolam Renang", "CCTV" |
+| description | VARCHAR(255) | nullable |
+| icon | VARCHAR(50) | emoji or CSS class (e.g. 🏊, fa-wifi), nullable |
+| category | VARCHAR(50) | e.g. "Keamanan", "Kenyamanan", "Rekreasi", nullable, INDEX |
+| sort_order | INT | display order (ascending), default 0, INDEX |
+| status | INT | 1=aktif, 2=disabled, 3=deleted (soft delete), INDEX |
+| created_date | DATE | |
+| created_by | VARCHAR(50) | FK → users.user_id |
+| updated_date | DATE | nullable |
+| updated_by | VARCHAR(50) | FK → users.user_id, nullable |
+
+**Indexes:** `facility_id`, `status`, `category`, `sort_order`, `name`
+
+---
+
 ## Sequelize Models (`backend/models/`)
 
 | File | Table |
@@ -135,6 +161,7 @@ Frontend navigation and action logging.
 | `ChatSession.js` | chat_sessions |
 | `ChatMessage.js` | chat_messages |
 | `Contact.js` | contacts |
+| `Facility.js` | facilities |
 | `WhatsAppInbound.js` | whatsapp_inbound_messages |
 | `Property.js` | properties (property catalog) |
 | `Log.js` | logs |
