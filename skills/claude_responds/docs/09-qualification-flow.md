@@ -101,8 +101,32 @@ If property type is also unknown, combine:
 
 ```
 ID: Halo! 😊 Mau *sewa* atau *beli*? Dan tipe properti apa yang Anda cari?
-    Saya punya: *rumah, apartemen, villa, kos-kosan, ruko, kantor, gudang*, dan banyak lagi 🏡
+    Saya punya: *rumah, apartemen, villa, hotel, kos-kosan, ruko, kantor, gudang,
+    toko, mansion, kondotel*, dan banyak lagi 🏡
 ```
+
+#### Q1 Per-Type Framing (when type is known from first message)
+
+When the customer mentions the property type upfront, acknowledge it specifically and frame the conversation accordingly:
+
+| Building Type | Transaction | Frame / context hint |
+|---|---|---|
+| Hotel | Sewa (booking) | Switch to **booking frame**: tanggal check-in/out, tipe kamar, breakfast — bukan sewa bulanan |
+| Kondotel | Sewa (booking) | Same as Hotel — booking per malam, check-in/out |
+| Kondotel | Beli | **Investment frame**: ROI focus, operator hotel, strata title |
+| Villa | Sewa/malam | Clarify rental period first: per malam/minggu/bulan |
+| Villa | Beli | Personal use or investment? Private pool is usually mandatory |
+| Kos-kosan | Sewa | Practical: dekat kampus/kantor, putra/putri/campur |
+| Gudang | Sewa/Beli | Luas m², kawasan industri, loading dock, daya listrik |
+| Kantor | Sewa | Headcount first, CBD location, grade gedung (A/B/C) |
+| Ruko | Sewa/Beli | Jenis bisnis, jumlah lantai, lebar frontage |
+| Toko | Sewa/Beli | Mal/pusat perbelanjaan vs standalone, foot traffic |
+| Mansion | Sewa/Beli | Luxury: private pool (almost always mandatory), smart home, security |
+| Rumah | Sewa/Beli | Bedroom count (from Q4), location anchor, furnishing |
+| Apartemen | Sewa/Beli | Tower/floor preference (Q12), view, facilities (gym/pool) |
+| Properti Lain | Sewa/Beli | Tujuan penggunaan first: parkir, event, pertanian, pabrik, klinik, dll |
+
+**Rule:** For hotel/kondotel sewa, never ask "masuk bulan apa?" like for residential — instead ask check-in tanggal berapa (specific date). For villa sewa, always clarify rental period (malam/minggu/bulan) before asking check-in date.
 
 ---
 

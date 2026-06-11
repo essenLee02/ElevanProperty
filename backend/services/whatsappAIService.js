@@ -107,10 +107,12 @@ function isIndonesian(message, history = []) {
  * @returns {string}
  */
 function agentSignature(agentName, isId) {
-  const name = agentName || 'Elevan Property';
+  // App name dari APP_NAME env; agent name dari database (param). JANGAN hardcode.
+  const appName = process.env.APP_NAME || 'Elevan Property';
+  const name    = agentName || appName;
   return isId
-    ? `\n\nSalam hangat,\n*${name}*\n*Elevan Property*`
-    : `\n\nWarm regards,\n*${name}*\n*Elevan Property*`;
+    ? `\n\nSalam hangat,\n*${name}*\n*${appName}*`
+    : `\n\nWarm regards,\n*${name}*\n*${appName}*`;
 }
 
 /**
@@ -137,6 +139,8 @@ function agentSignature(agentName, isId) {
  */
 function buildQualifyReply(filters, message, agentName, contextSource, history = []) {
   const { buildingType: type, transactionType: tx, location: loc, budget: bud } = filters;
+  // Nama perusahaan dari APP_NAME env (bisa diubah di .env). JANGAN hardcode.
+  const appName = process.env.APP_NAME || 'Elevan Property';
 
   // Semua 4 info sudah ada → proceed to AI
   if (type && tx && loc && bud) return null;
@@ -182,8 +186,8 @@ function buildQualifyReply(filters, message, agentName, contextSource, history =
     if (!type) {
       // Benar-benar kosong
       question = id
-        ? `Halo! 😊 Terima kasih sudah menghubungi *Elevan Property*.\n\nSaya dengan senang hati akan membantu Anda menemukan properti yang tepat. Sebelum saya carikan pilihan terbaik, boleh saya tanyakan beberapa hal?\n\n1️⃣ Apakah Anda sedang cari untuk *sewa* atau *beli*?\n2️⃣ Tipe properti apa yang Anda inginkan?\n   _Rumah, Apartemen, Villa, Kos-kosan, Ruko, Kantor, Gudang, dll_ 🏡\n3️⃣ Di kota atau area mana?\n4️⃣ Kisaran harga yang Anda siapkan?\n\nSemakin lengkap infonya, semakin tepat rekomendasi yang bisa saya berikan 🙏`
-        : `Hello! 😊 Thank you for reaching out to *Elevan Property*.\n\nI'd love to help you find the perfect property. Before I start searching, may I ask a few things?\n\n1️⃣ Are you looking to *rent* or *buy*?\n2️⃣ What type of property do you have in mind?\n   _House, Apartment, Villa, Boarding House, Shophouse, Office, Warehouse, etc._ 🏡\n3️⃣ Which city or area?\n4️⃣ What's your price range?\n\nThe more details you share, the better I can match your needs 🙏`;
+        ? `Halo! 😊 Terima kasih sudah menghubungi *${appName}*.\n\nSaya dengan senang hati akan membantu Anda menemukan properti yang tepat. Sebelum saya carikan pilihan terbaik, boleh saya tanyakan beberapa hal?\n\n1️⃣ Apakah Anda sedang cari untuk *sewa* atau *beli*?\n2️⃣ Tipe properti apa yang Anda inginkan?\n   _Rumah, Apartemen, Villa, Kos-kosan, Ruko, Kantor, Gudang, dll_ 🏡\n3️⃣ Di kota atau area mana?\n4️⃣ Kisaran harga yang Anda siapkan?\n\nSemakin lengkap infonya, semakin tepat rekomendasi yang bisa saya berikan 🙏`
+        : `Hello! 😊 Thank you for reaching out to *${appName}*.\n\nI'd love to help you find the perfect property. Before I start searching, may I ask a few things?\n\n1️⃣ Are you looking to *rent* or *buy*?\n2️⃣ What type of property do you have in mind?\n   _House, Apartment, Villa, Boarding House, Shophouse, Office, Warehouse, etc._ 🏡\n3️⃣ Which city or area?\n4️⃣ What's your price range?\n\nThe more details you share, the better I can match your needs 🙏`;
     } else {
       // Type diketahui, sisanya kosong
       question = id
@@ -263,6 +267,10 @@ function buildQualifyReply(filters, message, agentName, contextSource, history =
  */
 async function generateWhatsAppAIReply(params) {
   const { session, message, agentName, options = {} } = params;
+
+  // Pastikan nama agent (dari database) ikut ke prompt builder lewat session.
+  // buildWhatsappReplyPrompt() membaca session.agentName untuk tanda tangan dinamis.
+  if (session && agentName && !session.agentName) session.agentName = agentName;
 
   // ── Step 1: Fetch property context ─────────────────────────────────────────
   let propertyCtx  = options.context || '';

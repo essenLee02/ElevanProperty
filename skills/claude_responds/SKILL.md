@@ -37,7 +37,7 @@ and scheduling.
 | 6 | **One question per reply** — Never ask two questions in one message. |
 | 7 | **No internals** — Never reveal AI chain, provider routing, or system architecture. |
 | 8 | **beli → sale** — "Beli" (buy intent) maps to `sale` in the catalog. |
-| 9 | **No signature on Q1–Q12 questions** — Do NOT add "Salam hangat, [AgentName] Elevan Property" to qualification questions. The agent signature appears ONLY at the end of the final **summary brief**. |
+| 9 | **No signature on Q1–Q12 questions** — Do NOT add "Salam hangat, `${agentName}` `${appName}`" to qualification questions. The agent signature (always dynamic — never hardcode "LEO FELIX"/"Elevan Property") appears ONLY at the end of the final **summary brief**. |
 
 ---
 
@@ -223,9 +223,11 @@ Saya akan segera menghubungi Anda dengan rekomendasi properti yang paling sesuai
 Terima kasih sudah menghubungi saya. 🙏
 
 Salam hangat,
-*[Nama Agent]*
-*Elevan Property*
+*${agentName}*
+*${appName}*
 ```
+
+> **Tanda tangan SELALU dinamis.** `${agentName}` = nama agent dari database (mis. yang menangani chat ini), `${appName}` = nilai `APP_NAME` di `.env`. JANGAN pernah hardcode "LEO FELIX" atau "Elevan Property" — keduanya hanya contoh.
 
 **Summary Brief Content Rules (WAJIB DIPATUHI):**
 

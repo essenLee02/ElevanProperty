@@ -808,7 +808,8 @@ class FonnteChatController {
         return res.status(process.env.HTTP_NOT_FOUND).json({ success: false, message: 'Tidak ada agent dengan fonnte_token' });
       }
 
-      const target    = agents.find(a => a.name === 'LEO FELIX') || agents[0];
+      // Pakai agent pertama yang punya fonnte_token (jangan hardcode nama agent tertentu).
+      const target    = agents[0];
       const tokenStr  = String(target.fonnte_token).trim();
       const results   = {};
 

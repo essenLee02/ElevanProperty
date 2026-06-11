@@ -80,23 +80,28 @@ function extractQualificationState(history = [], currentMessage = '') {
     const SUMMARY_RE_P0 = /[✓✔]\s*Rencana\s*:/i;
     const histForP0 = ALL.slice(0, -1);
 
-    // Word-boundary aware detectors (mirror Phase 1 / 3B precision).
+    // Word-boundary aware detectors — all 12 building types, priority order matters:
+    // kondotel before hotel/apartment, mansion/rumah mewah before rumah, store after shophouse.
     const typeOfP0 = (txt) => {
       const w = (txt || '').toLowerCase();
-      if (/\bvill?a\b/.test(w))                               return 'villa';
-      if (/\bapartemen\b|\bapartment\b/.test(w))              return 'apartment';
-      if (/\brumah\b|\bhouse\b|\bkontrakan\b/.test(w))       return 'house';
-      if (/\bhotel\b|\bpenginapan\b/.test(w))                return 'hotel';
-      if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(w)) return 'boarding_house';
-      if (/\bruko\b|\brukan\b/.test(w))                      return 'shophouse';
-      if (/\bkantor\b/.test(w))                              return 'office';
-      if (/\bgudang\b/.test(w))                              return 'warehouse';
+      if (/\bkondotel\b|\bcondotel\b/.test(w))                             return 'kondotel';
+      if (/\bmansion\b|\brumah\s+mewah\b/.test(w))                        return 'mansion';
+      if (/\bvill?a\b/.test(w))                                            return 'villa';
+      if (/\bapartemen\b|\bapartment\b/.test(w))                           return 'apartment';
+      if (/\bhotel\b|\bpenginapan\b/.test(w))                             return 'hotel';
+      if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(w))              return 'boarding_house';
+      if (/\bruko\b|\brukan\b/.test(w))                                   return 'shophouse';
+      if (/\btoko\b|\bkios\b|\bwarung\b|\bretail\b/.test(w))             return 'store';
+      if (/\bkantor\b/.test(w))                                           return 'office';
+      if (/\bgudang\b/.test(w))                                           return 'warehouse';
+      if (/\brumah\b|\bhouse\b|\bkontrakan\b/.test(w))                   return 'house';
+      if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(w)) return 'others';
       return null;
     };
     const txOfP0 = (txt) => {
       const w = (txt || '').toLowerCase();
-      if (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|rent|rental|lease)\b/.test(w)) return 'rent';
-      if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase)\b/.test(w))                     return 'sale';
+      if (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|rent|rental|lease|booking|book|pesan|reservasi)\b/.test(w)) return 'rent';
+      if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase|invest|investasi)\b/.test(w))                                   return 'sale';
       return null;
     };
 
@@ -160,24 +165,29 @@ function extractQualificationState(history = [], currentMessage = '') {
     const raw  = msg.message || '';
     const text = raw.toLowerCase().trim();
 
-    // Q1 — Transaction type
+    // Q1 — Transaction type. "booking/pesan" = rent frame (hotel/kondotel/villa)
     if (!state.transactionType) {
-      if (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|rent|rental|lease)\b/.test(text))
+      if (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|rent|rental|lease|booking|book|pesan|reservasi)\b/.test(text))
         state.transactionType = 'rent';
-      else if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase)\b/.test(text))
+      else if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase|invest|investasi)\b/.test(text))
         state.transactionType = 'sale';
     }
 
-    // Building type (primary)
+    // Building type (primary) — all 12 types, detection-order: most specific first.
+    // kondotel before hotel/apartment; mansion/rumah mewah before rumah; store after shophouse.
     if (!state.buildingType) {
-      if (/\bvill?a\b/.test(text))                               state.buildingType = 'villa';
-      else if (/\bapartemen\b|\bapartment\b/.test(text))         state.buildingType = 'apartment';
-      else if (/\brumah\b|\bhouse\b|\bkontrakan\b/.test(text))  state.buildingType = 'house';
-      else if (/\bhotel\b|\bpenginapan\b/.test(text))           state.buildingType = 'hotel';
-      else if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(text)) state.buildingType = 'boarding_house';
-      else if (/\bruko\b|\brukan\b/.test(text))                 state.buildingType = 'shophouse';
-      else if (/\bkantor\b/.test(text))                         state.buildingType = 'office';
-      else if (/\bgudang\b/.test(text))                         state.buildingType = 'warehouse';
+      if (/\bkondotel\b|\bcondotel\b/.test(text))                          state.buildingType = 'kondotel';
+      else if (/\bmansion\b|\brumah\s+mewah\b/.test(text))               state.buildingType = 'mansion';
+      else if (/\bvill?a\b/.test(text))                                    state.buildingType = 'villa';
+      else if (/\bapartemen\b|\bapartment\b/.test(text))                   state.buildingType = 'apartment';
+      else if (/\bhotel\b|\bpenginapan\b/.test(text))                     state.buildingType = 'hotel';
+      else if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(text))      state.buildingType = 'boarding_house';
+      else if (/\bruko\b|\brukan\b/.test(text))                           state.buildingType = 'shophouse';
+      else if (/\btoko\b|\bkios\b|\bwarung\b|\bretail\b/.test(text))     state.buildingType = 'store';
+      else if (/\bkantor\b/.test(text))                                   state.buildingType = 'office';
+      else if (/\bgudang\b/.test(text))                                   state.buildingType = 'warehouse';
+      else if (/\brumah\b|\bhouse\b|\bkontrakan\b/.test(text))           state.buildingType = 'house';
+      else if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(text)) state.buildingType = 'others';
     }
 
     // Fallback types — "kalau/jika tidak/enggak ada [type] ... [type] saja"
@@ -441,19 +451,23 @@ function extractQualificationState(history = [], currentMessage = '') {
       state.furnishing       = null;
       state.apartmentPref    = null;
 
-      // Re-populate ONLY what the current message explicitly states
+      // Re-populate ONLY what the current message explicitly states — all 12 types.
       const cur = (currentMessage || '').toLowerCase().trim();
-      if      (/\bvill?a\b/.test(cur))                               state.buildingType = 'villa';
-      else if (/\bapartemen\b|\bapartment\b/.test(cur))              state.buildingType = 'apartment';
-      else if (/\brumah\b|\bhouse\b|\bkontrakan\b/.test(cur))       state.buildingType = 'house';
-      else if (/\bhotel\b|\bpenginapan\b/.test(cur))                state.buildingType = 'hotel';
-      else if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(cur)) state.buildingType = 'boarding_house';
-      else if (/\bruko\b|\brukan\b/.test(cur))                       state.buildingType = 'shophouse';
-      else if (/\bkantor\b/.test(cur))                               state.buildingType = 'office';
-      else if (/\bgudang\b/.test(cur))                               state.buildingType = 'warehouse';
+      if      (/\bkondotel\b|\bcondotel\b/.test(cur))                          state.buildingType = 'kondotel';
+      else if (/\bmansion\b|\brumah\s+mewah\b/.test(cur))                    state.buildingType = 'mansion';
+      else if (/\bvill?a\b/.test(cur))                                         state.buildingType = 'villa';
+      else if (/\bapartemen\b|\bapartment\b/.test(cur))                        state.buildingType = 'apartment';
+      else if (/\bhotel\b|\bpenginapan\b/.test(cur))                          state.buildingType = 'hotel';
+      else if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(cur))           state.buildingType = 'boarding_house';
+      else if (/\bruko\b|\brukan\b/.test(cur))                                state.buildingType = 'shophouse';
+      else if (/\btoko\b|\bkios\b|\bwarung\b|\bretail\b/.test(cur))          state.buildingType = 'store';
+      else if (/\bkantor\b/.test(cur))                                        state.buildingType = 'office';
+      else if (/\bgudang\b/.test(cur))                                        state.buildingType = 'warehouse';
+      else if (/\brumah\b|\bhouse\b|\bkontrakan\b/.test(cur))                state.buildingType = 'house';
+      else if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(cur)) state.buildingType = 'others';
 
-      if      (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|rent|rental|lease)\b/.test(cur)) state.transactionType = 'rent';
-      else if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase)\b/.test(cur))                    state.transactionType = 'sale';
+      if      (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|rent|rental|lease|booking|book|pesan|reservasi)\b/.test(cur)) state.transactionType = 'rent';
+      else if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase|invest|investasi)\b/.test(cur))                               state.transactionType = 'sale';
 
       const cityMatch = (currentMessage || '').match(CITY_RE);
       if (cityMatch) state.location = cityMatch[1];
@@ -476,39 +490,47 @@ function extractQualificationState(history = [], currentMessage = '') {
     const histType = histMsgs.reduce((t, msg) => {
       if (t) return t;
       const w = (msg.message || '').toLowerCase();
-      if (/\bvill?a\b/.test(w))                               return 'villa';
-      if (/\bapartemen\b|\bapartment\b/.test(w))              return 'apartment';
-      if (/\brumah\b|\bhouse\b|\bkontrakan\b/.test(w))       return 'house';
-      if (/\bhotel\b|\bpenginapan\b/.test(w))                return 'hotel';
-      if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(w)) return 'boarding_house';
-      if (/\bruko\b|\brukan\b/.test(w))                      return 'shophouse';
-      if (/\bkantor\b/.test(w))                              return 'office';
-      if (/\bgudang\b/.test(w))                              return 'warehouse';
+      if (/\bkondotel\b|\bcondotel\b/.test(w))                             return 'kondotel';
+      if (/\bmansion\b|\brumah\s+mewah\b/.test(w))                        return 'mansion';
+      if (/\bvill?a\b/.test(w))                                            return 'villa';
+      if (/\bapartemen\b|\bapartment\b/.test(w))                           return 'apartment';
+      if (/\bhotel\b|\bpenginapan\b/.test(w))                             return 'hotel';
+      if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(w))              return 'boarding_house';
+      if (/\bruko\b|\brukan\b/.test(w))                                   return 'shophouse';
+      if (/\btoko\b|\bkios\b|\bwarung\b|\bretail\b/.test(w))             return 'store';
+      if (/\bkantor\b/.test(w))                                           return 'office';
+      if (/\bgudang\b/.test(w))                                           return 'warehouse';
+      if (/\brumah\b|\bhouse\b|\bkontrakan\b/.test(w))                   return 'house';
+      if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(w)) return 'others';
       return null;
     }, null);
 
     const histTx = histMsgs.reduce((t, msg) => {
       if (t) return t;
       const w = (msg.message || '').toLowerCase();
-      if (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|rent|rental|lease)\b/.test(w))  return 'rent';
-      if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase)\b/.test(w))                      return 'sale';
+      if (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|rent|rental|lease|booking|book|pesan|reservasi)\b/.test(w)) return 'rent';
+      if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase|invest|investasi)\b/.test(w))                                  return 'sale';
       return null;
     }, null);
 
     const cur = (currentMessage || '').toLowerCase().trim();
     let curType = null;
-    if      (/\bvill?a\b/.test(cur))                               curType = 'villa';
-    else if (/\bapartemen\b|\bapartment\b/.test(cur))              curType = 'apartment';
-    else if (/\brumah\b|\bhouse\b|\bkontrakan\b/.test(cur))       curType = 'house';
-    else if (/\bhotel\b|\bpenginapan\b/.test(cur))                curType = 'hotel';
-    else if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(cur)) curType = 'boarding_house';
-    else if (/\bruko\b|\brukan\b/.test(cur))                       curType = 'shophouse';
-    else if (/\bkantor\b/.test(cur))                               curType = 'office';
-    else if (/\bgudang\b/.test(cur))                               curType = 'warehouse';
+    if      (/\bkondotel\b|\bcondotel\b/.test(cur))                          curType = 'kondotel';
+    else if (/\bmansion\b|\brumah\s+mewah\b/.test(cur))                    curType = 'mansion';
+    else if (/\bvill?a\b/.test(cur))                                         curType = 'villa';
+    else if (/\bapartemen\b|\bapartment\b/.test(cur))                        curType = 'apartment';
+    else if (/\bhotel\b|\bpenginapan\b/.test(cur))                          curType = 'hotel';
+    else if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(cur))           curType = 'boarding_house';
+    else if (/\bruko\b|\brukan\b/.test(cur))                                curType = 'shophouse';
+    else if (/\btoko\b|\bkios\b|\bwarung\b|\bretail\b/.test(cur))          curType = 'store';
+    else if (/\bkantor\b/.test(cur))                                        curType = 'office';
+    else if (/\bgudang\b/.test(cur))                                        curType = 'warehouse';
+    else if (/\brumah\b|\bhouse\b|\bkontrakan\b/.test(cur))                curType = 'house';
+    else if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(cur)) curType = 'others';
 
     let curTx = null;
-    if      (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|rent|rental|lease)\b/.test(cur)) curTx = 'rent';
-    else if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase)\b/.test(cur))                     curTx = 'sale';
+    if      (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|rent|rental|lease|booking|book|pesan|reservasi)\b/.test(cur)) curTx = 'rent';
+    else if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase|invest|investasi)\b/.test(cur))                                  curTx = 'sale';
 
     // Building type changed → full Q2–Q12 reset + ⚠️ banner
     const buildingTypeChanged = Boolean(histType && curType && histType !== curType);
@@ -546,17 +568,21 @@ function extractQualificationState(history = [], currentMessage = '') {
   return state;
 }
 
-/** Simple building type key lookup for state extractor */
+/** Simple building type key lookup for fallback type extractor — all 12 types */
 function _typeKeyFromWord(word = '') {
   const w = word.toLowerCase().trim();
+  if (/kondotel|condotel/.test(w))               return 'kondotel';
+  if (/mansion|rumah\s*mewah/.test(w))           return 'mansion';
   if (/vill?a/.test(w))                          return 'villa';
   if (/apartemen|apartment/.test(w))             return 'apartment';
-  if (/rumah|house|kontrakan/.test(w))           return 'house';
   if (/hotel|penginapan/.test(w))                return 'hotel';
   if (/kos|kost|kosan|indekos/.test(w))          return 'boarding_house';
   if (/ruko|rukan|shophouse/.test(w))            return 'shophouse';
+  if (/toko|kios|warung|retail/.test(w))         return 'store';
   if (/kantor|office/.test(w))                   return 'office';
   if (/gudang|warehouse/.test(w))                return 'warehouse';
+  if (/rumah|house|kontrakan/.test(w))           return 'house';
+  if (/tanah|kavling|lahan|spbu|pabrik/.test(w)) return 'others';
   return null;
 }
 
@@ -570,35 +596,126 @@ function findNextQuestion(state) {
   const loc  = state.location ? `*${state.location}*` : '*[area]*';
   const typeLbl = state.buildingType || '[tipe]';
   const isSewa  = tx.includes('sewa') || tx.includes('rent');
-  const isApt   = type.includes('apart') || type === 'studio';
+  const isApt   = type === 'apartment';
+  const isBooking = (type === 'hotel' || type === 'kondotel') && isSewa;
+  const isCommercial = ['shophouse', 'office', 'warehouse', 'store'].includes(type);
+  const isLuxury = type === 'mansion';
 
-  // Priority: Q1 → Q2 → Q2b → Q3 → Q8 → Q4 → Q5 → Q6 → Q7 → Q9 → Q10 → Q11 → Q12
+  // Q1 — tipe transaksi + building type (keduanya wajib)
   if (!state.transactionType || !state.buildingType)
-    return { q: 'Q1', hint: 'Tanyakan: mau sewa atau beli? Dan tipe propertinya apa? 🏠' };
-  if (!state.location)
-    return { q: 'Q2', hint: `Oke, mau ${tx} ${typeLbl}. 📍 Di kota atau area mana yang Anda pertimbangkan?` };
-  if (!state.searchHistory)
+    return { q: 'Q1', hint: 'Tanyakan: mau sewa atau beli? Dan tipe propertinya apa? (rumah, apartemen, villa, hotel, kos, ruko, kantor, gudang, toko, mansion, kondotel, dll) 🏠' };
+
+  // Q2 — Lokasi (per-type context)
+  if (!state.location) {
+    if (isBooking) {
+      const tipeLabel = type === 'hotel' ? 'Hotel' : 'Kondotel';
+      return { q: 'Q2', hint: `Siap, *booking ${tipeLabel}*! 📍 Di kota atau area mana? Dan sudah ada gambaran tanggal check-in? (Bisa jawab lokasinya dulu)` };
+    }
+    if (type === 'villa' && isSewa)
+      return { q: 'Q2', hint: `Mau sewa *Villa*! 📍 Di mana — Bali, Malang, Lombok, atau kota lain? (Nanti saya tanyakan periode sewanya: per malam, minggu, atau bulan)` };
+    if (type === 'boarding_house')
+      return { q: 'Q2', hint: `Mau cari *Kos-kosan*. 📍 Di area mana? Dekat kampus, kantor, atau area tertentu?` };
+    if (type === 'warehouse')
+      return { q: 'Q2', hint: `Oke, mau ${isSewa ? 'sewa' : 'beli'} *Gudang*. 📍 Di kota atau kawasan industri mana yang diinginkan?` };
+    if (type === 'office')
+      return { q: 'Q2', hint: `Mau sewa *Kantor*. 📍 Di CBD mana? (Jakarta Selatan, SCBD, Sudirman, Semarang, Surabaya, dll)` };
+    if (type === 'store')
+      return { q: 'Q2', hint: `Mau ${isSewa ? 'sewa' : 'beli'} *Toko*. 📍 Di mal/pusat perbelanjaan atau toko pinggir jalan di kota mana?` };
+    if (type === 'others')
+      return { q: 'Q2', hint: `Mau ${isSewa ? 'sewa' : 'beli'} *Properti*. 📍 Di area mana? Dan apa tujuan penggunaannya?` };
+    return { q: 'Q2', hint: `Oke, mau ${tx} *${typeLbl}*. 📍 Di kota atau area mana yang Anda pertimbangkan?` };
+  }
+
+  // Q2b — Riwayat pencarian (kecuali untuk booking hotel/kondotel dan properti komersial)
+  if (!state.searchHistory && !isBooking)
     return { q: 'Q2b', hint: `Sudah lihat berapa properti di ${loc}? Apa yang membuat belum cocok dari yang sudah dilihat?` };
+
+  // Q3 — Budget (via 2 harga kontras — JANGAN tanya langsung)
   if (!state.budget)
-    return { q: 'Q3', hint: `Di ${loc} ada *${typeLbl}* kisaran [harga rendah] dan [harga tinggi]. Kira-kira yang mana lebih sesuai? 💰` };
-  if (!state.moveInDate)
+    return { q: 'Q3', hint: `Di ${loc} ada *${typeLbl}* kisaran [harga rendah${isBooking ? '/malam' : ''}] dan [harga tinggi${isBooking ? '/malam' : ''}]. Kira-kira yang mana lebih sesuai? 💰` };
+
+  // Q8 — Tanggal masuk/check-in (MANDATORY)
+  if (!state.moveInDate) {
+    if (isBooking)
+      return { q: 'Q8', hint: 'Rencananya check-in tanggal berapa? 📅' };
     return { q: 'Q8', hint: 'Rencananya masuk atau pindah bulan apa? 📅' };
-  if (!state.household)
+  }
+
+  // Q4 — Penghuni (skip: commercial + hotel/kondotel booking — jumlah orang ditanya via Q14 tipe kamar)
+  if (!state.household && !isCommercial && !isBooking)
     return { q: 'Q4', hint: 'Nanti akan tinggal bersama siapa saja? Biar saya bisa carikan yang pas jumlah kamarnya 🛏️' };
-  if (!state.redFlags)
+
+  // Q5 — Red flags
+  if (!state.redFlags) {
+    if (isCommercial)
+      return { q: 'Q5', hint: `Ada syarat yang mutlak diperlukan atau yang tidak boleh ada untuk ${typeLbl === 'office' ? 'kantor' : typeLbl} ini? 🚫` };
     return { q: 'Q5', hint: 'Ada yang pasti tidak cocok? Misalnya yang hadap barat, dekat jalan ramai, gang sempit, atau rumah tua? 🚫' };
-  if (!state.anchorPoint)
+  }
+
+  // Q6 — Patokan lokasi
+  if (!state.anchorPoint) {
+    if (isCommercial)
+      return { q: 'Q6', hint: `Ada lokasi atau kawasan tertentu yang jadi prioritas? Misalnya dekat kawasan industri, pelabuhan, atau pusat bisnis? 📍` };
     return { q: 'Q6', hint: 'Ada lokasi tertentu yang jadi patokan? Misalnya dekat sekolah anak, kantor, atau mall tertentu? 📍' };
+  }
+
+  // Q7 — Area alternatif
   if (!state.alternativeAreas)
     return { q: 'Q7', hint: `Selain ${loc}, area sekitar yang masih oke? 🗺️` };
+
+  // Q9 — Decision maker
   if (!state.decisionMaker)
     return { q: 'Q9', hint: 'Kalau nanti ada yang cocok, langsung bisa jadwalkan viewing atau perlu koordinasi dulu sama keluarga lain?' };
-  if (isSewa && !state.leaseDuration)
+
+  // Q10 — Durasi sewa (sewa only, skip hotel/kondotel/villa booking — durasi = malam/minggu)
+  if (isSewa && !isBooking && !state.leaseDuration)
     return { q: 'Q10', hint: 'Rencananya sewa untuk berapa lama? ⏱️ (durasi, bukan tanggal — contoh: 6 bulan, 1 tahun)' };
-  if (!state.furnishing)
+
+  // Q11 — Furnishing (sewa only, skip: commercial, hotel/kondotel booking, villa)
+  // Villa sewa selalu dilengkapi furniture (booking frame per malam/minggu/bulan).
+  if (isSewa && !isCommercial && !isBooking && type !== 'villa' && type !== 'mansion' && !state.furnishing)
     return { q: 'Q11', hint: 'Untuk furnitur, lebih prefer yang sudah *furnished*, *semi-furnished*, atau *kosongan* saja? 🛋️' };
+
+  // Q12 — Apartemen spesifik
   if (isApt && !state.apartmentPref)
     return { q: 'Q12', hint: 'Ada preferensi tower atau lantai tertentu? Misalnya hadap timur, lantai rendah/tengah/tinggi? 🏢' };
+
+  // Q14 — Type-specific slots (fired after Q12 based on building type + transaction)
+  // AI checks from conversation history whether these were already answered.
+  if (isBooking) {
+    return { q: 'Q14', hint: `Lanjutkan Q14 ${type === 'hotel' ? 'hotel' : 'kondotel'} booking: (a) check-out/berapa malam? (b) tipe kamar? Standard/Deluxe/Suite/Family? (c) breakfast included? — CEK history dulu sebelum tanya yang sudah dijawab.` };
+  }
+  if (type === 'villa' && isSewa) {
+    return { q: 'Q14', hint: 'Lanjutkan Q14 villa sewa: (a) per malam/minggu/bulan? (b) perlu private pool? (c) tanggal check-in? — CEK history dulu.' };
+  }
+  if (type === 'villa' && !isSewa) {
+    return { q: 'Q14', hint: 'Lanjutkan Q14 villa beli: (a) wajib private pool? (b) freehold (SHM) atau leasehold? — CEK history dulu.' };
+  }
+  if (type === 'boarding_house') {
+    return { q: 'Q14', hint: 'Lanjutkan Q14 kos: (a) putra/putri/campur? (b) kamar mandi dalam/luar? (c) include makan? — CEK history dulu.' };
+  }
+  if (type === 'shophouse') {
+    return { q: 'Q14', hint: 'Lanjutkan Q14 ruko: (a) jenis bisnis? (b) berapa lantai? (c) lebar depan minimum? (d) posisi hook/pojok? — CEK history dulu.' };
+  }
+  if (type === 'store') {
+    return { q: 'Q14', hint: 'Lanjutkan Q14 toko: (a) jenis bisnis? (b) mal/pusat perbelanjaan atau standalone? (c) lebar depan minimum? — CEK history dulu.' };
+  }
+  if (type === 'office') {
+    return { q: 'Q14', hint: 'Lanjutkan Q14 kantor: (a) berapa orang karyawan? (b) Grade A/B/C? (c) fit-out siap pakai atau shell & core? — CEK history dulu.' };
+  }
+  if (type === 'warehouse') {
+    return { q: 'Q14', hint: 'Lanjutkan Q14 gudang: (a) luas minimum m²? (b) tinggi plafon minimum? (c) perlu loading dock? (d) daya listrik KVA? — CEK history dulu.' };
+  }
+  if (isLuxury) {
+    return { q: 'Q14', hint: 'Lanjutkan Q14 mansion: (a) wajib private pool? (b) perlu smart home? (c) kamar staf? (d) kapasitas garasi? — CEK history dulu.' };
+  }
+  if (type === 'kondotel' && !isSewa) {
+    return { q: 'Q14', hint: 'Lanjutkan Q14 kondotel investasi: (a) target ROI per tahun? (b) tipe unit studio/1KT? (c) preferensi operator hotel? — CEK history dulu.' };
+  }
+  if (type === 'others') {
+    return { q: 'Q14', hint: 'Lanjutkan Q14 properti lainnya: (a) tujuan penggunaan? (b) luas lahan m²/hektar? (c) zonasi yang diperlukan? — CEK history dulu.' };
+  }
+
   return null; // all answered → show summary
 }
 
@@ -812,15 +929,20 @@ function formatConversationHistory(history = []) {
   return history.map((item) => `${item.role}: ${item.message}`).join('\n');
 }
 
-function buildContactReplyPrompt({ name, email, phone, subject, message }, provider = 'shared') {
+function buildContactReplyPrompt({ name, email, phone, subject, message, agentName = '', appName = '' }, provider = 'shared') {
   const firstName = (name || '').split(' ')[0] || name;
+
+  // Nama agent & app SELALU dinamis — agent dari database (di-pass via payload),
+  // app dari APP_NAME env. JANGAN hardcode "Elvan" / "Elevan Property".
+  const resolvedAppName   = appName || process.env.APP_NAME || 'Elevan Property';
+  const resolvedAgentName = agentName || process.env.AGENT_NAME || resolvedAppName;
 
   return `${getProjectSkillInstruction(provider)}
 
 Task: Compose a professional, warm, and empathetic WhatsApp follow-up reply for a new Contact Form submission from a prospective property client.
 
 ## Persona
-You are Elvan, a senior property consultant at ${process.env.APP_NAME || 'Elevan Property'} — a trusted Indonesian property agency.
+You are ${resolvedAgentName}, a senior property consultant at ${resolvedAppName} — a trusted Indonesian property agency.
 You are professional, elegant, empathetic, patient, and fluent in the customer's language.
 Your communication style feels human, warm, and trustworthy — like a knowledgeable friend who works in real estate.
 
@@ -844,7 +966,7 @@ Follow this structure exactly — each section separated by a blank line:
    Express genuine enthusiasm to help.
 
 3. **Brief Value Statement**
-   One sentence about how Elevan Property can help them achieve their property goal.
+   One sentence about how ${resolvedAppName} can help them achieve their property goal.
    Be specific to their inquiry (buying, renting, selling, inquiry, etc.).
 
 4. **ONE Focused Follow-up Question**
@@ -856,7 +978,7 @@ Follow this structure exactly — each section separated by a blank line:
 5. **Warm Closing**
    Invite them to continue the conversation freely on WhatsApp.
    Sign off warmly.
-   Use: "Salam hangat," (Indonesian) or "Warm regards," (English) followed by "*Elvan*\\n*${process.env.APP_NAME || 'Elevan Property'}*"
+   Use: "Salam hangat," (Indonesian) or "Warm regards," (English) followed by "*${resolvedAgentName}*\\n*${resolvedAppName}*"
 
 ## Tone & Style
 - Professional but warm — like a trusted consultant, not a sales pitch.
@@ -914,6 +1036,11 @@ Do not keep asking discovery questions before showing options when the customer 
 }
 
 function buildWhatsappReplyPrompt(session, history, userMessage, propertyContext = '', provider = 'shared') {
+  // ── Identitas dinamis (JANGAN hardcode "LEO FELIX" / "Elevan Property") ──
+  // Nama agent SELALU dari database (session.agentName); nama app dari APP_NAME env.
+  const resolvedAppName   = process.env.APP_NAME || 'Elevan Property';
+  const resolvedAgentName = session?.agentName || process.env.AGENT_NAME || resolvedAppName;
+
   // ── Server-side language detection (overrides AI guessing) ───────────────
   // Detect from full history + current message. Inject as hard constraint so
   // AI never switches to English for short answers like "2-4 juta/seminggu",
@@ -1050,8 +1177,8 @@ Terima kasih sudah menghubungi saya. 🙏
 
 
 Salam hangat,
-LEO FELIX
-Elevan Property
+${resolvedAgentName}
+${resolvedAppName}
 \`\`\`
 
 ### Summary Strict Rules
@@ -1072,7 +1199,7 @@ Elevan Property
 
 ### Tanda Tangan / Signature
 ⛔ **JANGAN tambahkan** "Salam hangat," atau nama/tanda tangan agen di akhir pertanyaan kualifikasi Q1–Q12 MANAPUN.
-⛔ **JANGAN akhiri pertanyaan dengan "Salam hangat," "LEO FELIX", atau "Elevan Property"** — akhiri pertanyaan LANGSUNG setelah kalimat tanya atau emoji terakhir.
+⛔ **JANGAN akhiri pertanyaan dengan "Salam hangat," nama agen, atau nama perusahaan** — akhiri pertanyaan LANGSUNG setelah kalimat tanya atau emoji terakhir.
 ✅ Tanda tangan HANYA boleh ada satu kali — di dalam summary brief final (sudah termasuk dalam template di atas), dan TIDAK di tempat lain.
 ` : '';
 

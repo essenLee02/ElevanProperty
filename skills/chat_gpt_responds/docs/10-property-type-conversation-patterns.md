@@ -1,8 +1,8 @@
 # 10 — Property-Type Conversation Patterns & Q14 Slots
 
-## Character — LEO FELIX
+## Character — `${agentName}`
 
-Elevan Property's AI assistant presents as **LEO FELIX**: intelligent, warm, elegant, professional.
+The AI assistant presents as **`${agentName}`** (the agent's name from the database — e.g. "LEO FELIX" is only an example) for **`${appName}`** (the company name from `APP_NAME` env): intelligent, warm, elegant, professional. Never hardcode a specific agent or company name in output — always use the dynamic values.
 
 | Trait | Application |
 |-------|-------------|
@@ -375,17 +375,44 @@ Saya akan carikan kondotel dengan potensi ROI terbaik! 🏨
 
 ```
 Q0/Q1 → Q2 (Location) → Q2b (Search history) → Q3 (Budget anchor)
-→ Q8 (Move-in date) → Q4 (Household/Occupants → infer bedrooms)
+→ Q8 (Move-in date / check-in date for hotel) → Q4 (Household/Occupants → infer bedrooms)
 → Q5 (Red flags) → Q6 (Anchor point) → Q7 (Alternative areas)
 → Q9 (Decision maker) → Q10 (Lease duration, sewa only)
 → Q10a (Payment terms, lease ≥1 year) → Q11 (Furnishing, sewa only)
 → Q12 (Apartment-specific, type=apartment only)
-→ Q14 (Type-specific slots — hotel/villa/kos/ruko/kantor/gudang/toko/mansion/kondotel/other)
+→ Q14 (Type-specific slots — see table below)
 → Q-FINAL (Confirmation summary)
 ```
 
 **Max 3 unanswered slots before showing first listing** (catalog mode).
 **Max 12 AI messages before showing summary brief** (summary mode).
+
+### Skip Rules per Building Type
+
+| Question | Skip when building type is... |
+|---|---|
+| Q2b (Search history) | hotel, kondotel (booking frame — no prior search history relevant) |
+| Q4 (Household/penghuni) | shophouse, office, warehouse, store (commercial — no bedrooms) **+ hotel, kondotel booking** (occupancy captured via Q14 tipe kamar) |
+| Q10 (Lease duration) | hotel, kondotel booking (duration = nights, captured in Q14) |
+| Q11 (Furnishing) | hotel, kondotel (always furnished), villa (always furnished for booking/rental), mansion, shophouse, office, warehouse, store (commercial) |
+| Q12 (Apt preference) | All except `apartment` |
+
+### Q14 First-Slot by Type (most important slot to ask first)
+
+| Building Type | First Q14 slot | Example question |
+|---|---|---|
+| Hotel (sewa) | check-out / berapa malam | "Check-out tanggal berapa? Atau berapa malam?" |
+| Kondotel (sewa) | tipe unit | "Tipe unit yang diinginkan? Studio, 1 kamar, atau suite?" |
+| Kondotel (beli) | target ROI | "Target ROI per tahun berapa? Misalnya 7%, 10%, atau lebih?" |
+| Villa (sewa) | rental period | "Sewa villa-nya per malam, per minggu, atau per bulan?" |
+| Villa (beli) | private pool | "Wajib ada private pool? Ini biasanya syarat utama villa premium." |
+| Kos-kosan | kos type | "Kos yang dicari untuk putra, putri, atau campur?" |
+| Shophouse/Ruko | business type | "Bisnis apa yang akan dijalankan di sana?" |
+| Toko | business type + lokasi | "Bisnis apa yang dibuka? Dan lebih prefer di mal atau toko pinggir jalan?" |
+| Office/Kantor | headcount | "Berapa orang yang akan bekerja di kantor ini?" |
+| Warehouse/Gudang | floor area | "Luas gudang minimum yang dibutuhkan? (dalam m²)" |
+| Mansion | private pool | "Wajib ada private pool? Hampir selalu jadi standar mansion premium." |
+| Others | purpose | "Properti ini untuk tujuan apa? (parkir, event, pabrik, klinik, dll)" |
 
 ---
 

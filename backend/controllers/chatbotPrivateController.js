@@ -628,10 +628,14 @@ class ResponseBuilderWhatsApp {
   #lang;
   /** @type {string} */
   #agentName;
+  /** @type {string} - App/agency name, sourced from APP_NAME env (never hardcoded) */
+  #appName;
 
-  constructor(lang = 'en', agentName = 'Elevan Property') {
+  constructor(lang = 'en', agentName = '', appName = '') {
     this.#lang      = lang;
-    this.#agentName = agentName;
+    // Agent name selalu dari database (di-pass via param); fallback ke appName bila kosong.
+    this.#appName   = appName || process.env.APP_NAME || 'Elevan Property';
+    this.#agentName = agentName || this.#appName;
   }
 
   #summarizeRequest(filters = {}) {
@@ -758,8 +762,8 @@ class ResponseBuilderWhatsApp {
   #addFooter() {
     const isId = this.#lang === 'id';
     return isId
-      ? `\n\nSaya siap membantu Anda menemukan rumah, villa, apartemen, atau properti lainnya yang cocok untuk Anda.\nApakah ada yang ingin Anda tanyakan lebih lanjut?\n\n\nSalam hangat,\n*${this.#agentName}*\n*Elevan Property*`
-      : `\n\nI am ready to help you find a house, villa, apartment, or other property that suits you.\nWould you like to know more details?\n\n\nWarm regards,\n*${this.#agentName}*\n*Elevan Property*`;
+      ? `\n\nSaya siap membantu Anda menemukan rumah, villa, apartemen, atau properti lainnya yang cocok untuk Anda.\nApakah ada yang ingin Anda tanyakan lebih lanjut?\n\n\nSalam hangat,\n*${this.#agentName}*\n*${this.#appName}*`
+      : `\n\nI am ready to help you find a house, villa, apartment, or other property that suits you.\nWould you like to know more details?\n\n\nWarm regards,\n*${this.#agentName}*\n*${this.#appName}*`;
   }
 
   exactMatch({ rumah123Listings = [], catalogMatches = [], filters = {} }) {
@@ -966,8 +970,8 @@ class ResponseBuilderWhatsApp {
       : `${header}\n\n${bulletBlock}\n\nI will reach out to you with the best property recommendations soon! 🏠\nThank you for contacting me. 🙏`;
 
     const signature = isId
-      ? `\n\nSalam hangat,\n*${this.#agentName}*\n*Elevan Property*`
-      : `\n\nWarm regards,\n*${this.#agentName}*\n*Elevan Property*`;
+      ? `\n\nSalam hangat,\n*${this.#agentName}*\n*${this.#appName}*`
+      : `\n\nWarm regards,\n*${this.#agentName}*\n*${this.#appName}*`;
 
     return summary + signature;
   }
@@ -2598,11 +2602,15 @@ class ChatbotPrivateService {
    * @param {string} contactPayload.message  - Customer's detailed message
    * @returns {{ reply: string, source: string }}
    */
-  static generateContactFormReply({ name = '', phone = '', subject = '', message = '' } = {}) {
+  static generateContactFormReply({ name = '', phone = '', subject = '', message = '', agentName = '', appName = '' } = {}) {
     const firstName   = (name || '').split(' ')[0] || name || 'Bapak/Ibu';
     const combinedMsg = `${subject} ${message}`.toLowerCase();
     const lang        = LanguageDetector.detect(combinedMsg);
     const isId        = lang === 'id';
+
+    // Nama agent & nama app SELALU dinamis — agent dari database, app dari APP_NAME env.
+    const resolvedAppName   = appName || process.env.APP_NAME || 'Elevan Property';
+    const resolvedAgentName = agentName || process.env.AGENT_NAME || resolvedAppName;
 
     // Detect inquiry intent from subject + message
     const isRent      = /sewa|rent|kontrak|kost|boarding/i.test(combinedMsg);
@@ -2646,20 +2654,20 @@ class ChatbotPrivateService {
     // Compose the WhatsApp reply in the detected language
     let reply;
     if (isId) {
-      const greeting   = `Halo *${firstName}*, terima kasih telah menghubungi *Elevan Property*! 🏡`;
+      const greeting   = `Halo *${firstName}*, terima kasih telah menghubungi *${resolvedAppName}*! 🏡`;
       const ack        = subject
         ? `Saya sudah menerima pesan Anda mengenai *"${subject}"* dan dengan senang hati akan membantu Anda menemukan ${propType} yang paling sesuai dengan kebutuhan Anda.`
         : `Saya sudah menerima pesan Anda dan dengan senang hati akan membantu Anda menemukan ${propType} yang paling sesuai dengan kebutuhan Anda.`;
       const value      = `Saya siap mendampingi Bapak/Ibu mulai dari pencarian hingga proses penyelesaian transaksi dengan nyaman dan profesional.`;
-      const signOff    = `Silakan lanjutkan percakapan ini kapan saja — saya siap membantu!\n\nSalam hangat,\n*Elvan*\n*Elevan Property* 🌟`;
+      const signOff    = `Silakan lanjutkan percakapan ini kapan saja — saya siap membantu!\n\nSalam hangat,\n*${resolvedAgentName}*\n*${resolvedAppName}* 🌟`;
       reply = [greeting, ack, value, followUp, signOff].join('\n\n');
     } else {
-      const greeting   = `Hello *${firstName}*, thank you for reaching out to *Elevan Property*! 🏡`;
+      const greeting   = `Hello *${firstName}*, thank you for reaching out to *${resolvedAppName}*! 🏡`;
       const ack        = subject
         ? `I've received your inquiry regarding *"${subject}"* and I'd be delighted to help you find the perfect ${propType} that fits your needs.`
         : `I've received your message and I'd be delighted to help you find the right ${propType} for your needs.`;
       const value      = `I am here to guide you every step of the way — from property search to a smooth, stress-free transaction.`;
-      const signOff    = `Feel free to continue this conversation anytime — I'm always here to help!\n\nWarm regards,\n*Elvan*\n*Elevan Property* 🌟`;
+      const signOff    = `Feel free to continue this conversation anytime — I'm always here to help!\n\nWarm regards,\n*${resolvedAgentName}*\n*${resolvedAppName}* 🌟`;
       reply = [greeting, ack, value, followUp, signOff].join('\n\n');
     }
 

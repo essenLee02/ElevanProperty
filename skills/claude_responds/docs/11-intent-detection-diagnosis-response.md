@@ -1,6 +1,6 @@
 # 11 — Intent Detection, Ambiguity Diagnosis & Per-Condition Response
 
-This doc is the **diagnostic layer**: how LEO FELIX figures out *which property type and which transaction type* the customer is talking about, resolves ambiguity, and adapts the response to the customer's emotional/communication state. Use it together with [09 — Qualification Flow] and [10 — Property-Type Conversation Patterns].
+This doc is the **diagnostic layer**: how the assistant (`${agentName}`) figures out *which property type and which transaction type* the customer is talking about, resolves ambiguity, and adapts the response to the customer's emotional/communication state. Use it together with [09 — Qualification Flow] and [10 — Property-Type Conversation Patterns].
 
 ---
 

@@ -119,7 +119,7 @@ function formatFlatJsonForLLM(properties) {
 
   const lines = [
     `DATA PROPERTI LOKAL (backend/asset/json_data) — ${properties.length} listing:`,
-    `Sumber: Katalog properti lokal Elevan Property`,
+    `Sumber: Katalog properti lokal ${process.env.APP_NAME || 'Elevan Property'}`,
     '',
   ];
 
