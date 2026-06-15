@@ -543,6 +543,10 @@ class FonnteChatController {
         message,
         agentName: agent.name,
       });
+      if (result.skipResponse) {
+        return res.status(process.env.HTTP_OK).json({ status: true, message: '', skipResponse: true });
+      }
+
       aiReply = result.reply;
 
       await ChatMessage.create({

@@ -216,6 +216,10 @@ Q2b  Search history      "Sudah lihat berapa properti di [kota]?
      (highest value)      Apa yang membuat belum cocok dari yang sudah dilihat?"
      Extracts: red flags, budget ceiling, anchor, urgency, decision signals.
      Fires: after location established, AI has asked ≤ 3 questions.
+     ⚠️ FIRES ONCE ONLY. If QUALIFICATION STATE shows ✅ or ⏭️ for Q2b →
+     SKIP immediately, proceed to next ❓. Even if customer answered something
+     else (facility, price, etc.) instead of Q2b — accept their answer, collect
+     that info, and move on. Never repeat Q2b.
 
 Q3   Budget              NEVER ask directly — use two contrasting price anchors:
                          "Di [area] ada [Tipe] sekitar [LOW] dan ada yang [HIGH].

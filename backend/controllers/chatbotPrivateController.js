@@ -2482,9 +2482,9 @@ class ChatbotPrivateService {
     // Resolve filters — use provided context or extract on the fly
     const filters = recommendationContext?.filters || extractPropertyFilters(userMessage, history);
 
-    // Guard: reject off-topic messages immediately
+    // Guard: reject off-topic messages immediately — no response at all
     if (LanguageDetector.isOffTopic(userMessage)) {
-      return this.#wrap(builder.offTopic(), { skillInfo, filters });
+      return this.#wrap(null, { skillInfo, filters, skipResponse: true });
     }
 
     // Guard: ask for clarification when intent is unclear
@@ -2569,9 +2569,9 @@ class ChatbotPrivateService {
       agent    : agentName,
     });
 
-    // ── Guard: off-topic pesan (bukan properti sama sekali) ──────────────────
+    // ── Guard: off-topic pesan — abaikan, tidak ada balasan ─────────────────
     if (LanguageDetector.isOffTopic(userMessage)) {
-      return this.#wrap(builder.offTopic(), { skillInfo });
+      return this.#wrap(null, { skillInfo, skipResponse: true });
     }
 
     // ── Resolve filters dari context atau extract baru ───────────────────────
@@ -2945,6 +2945,10 @@ exports.sendPrivateMessage = async (req, res) => {
       recommendationContext,
       externalError: new Error('Direct private chatbot endpoint used.'),
     });
+
+    if (result.skipResponse) {
+      return res.json({ success: true, reply: null, skipResponse: true, source: 'private_agent' });
+    }
 
     await saveAssistantMessage(session.id, result.reply, 'website_chatbot_private', {
       source:               'private_agent',

@@ -90,6 +90,10 @@ class FonnteWebhookController {
             externalError:         error
           });
 
+          if (privateResult.skipResponse) {
+            return res.json({ success: true, message: 'Off-topic — skipped.', skipResponse: true });
+          }
+
           await saveAssistantMessage(session.id, privateResult.reply, 'whatsapp_private', {
             source:           'private_agent',
             fallbackUsed:     true,

@@ -475,8 +475,8 @@ function isPropertyContextContinuation(message, history = []) {
   if (/^(sewa|beli|jual|beli\s+aja|mau\s+sewa|mau\s+beli|untuk\s+sewa|untuk\s+beli|rent|buy|purchase)$/.test(lower.trim())) return true;
   // Durasi sewa singkat — juga cek di sini (setelah hasPropertyCtx) untuk kelengkapan
   if (/^\d+\s*(tahun|year|bulan|month)s?$/.test(lower.trim())) return true;
-  // Harga dengan satuan — jawaban Q3 ("2-4 juta/seminggu", "5 jt per bulan")
-  if (/\b\d[\d.,]*\s*(juta|ribu|miliar|rb|jt)\b/i.test(lower)) return true;
+  // Harga dengan satuan — jawaban Q3 ("2-4 juta/seminggu", "5 jt per bulan", "700-900K")
+  if (/\b\d[\d.,]*\s*(juta|ribu|miliar|rb|jt|k)\b/i.test(lower)) return true;
   // Q2b answer fast-path: "Saya belum pernah lihat", "sudah lihat 3", "belum pernah survey"
   // These are ALWAYS Q2b answers and must pass even before hasRecentPropertyQuestion check.
   if (/\b(belum\s+pernah\s+lihat|pernah\s+lihat|sudah\s+lihat\s+\d|belum\s+lihat|sudah\s+survey|belum\s+ada\s+yang\s+cocok|belum\s+pernah\s+survey)\b/i.test(lower)) return true;
@@ -491,6 +491,10 @@ function isPropertyContextContinuation(message, history = []) {
     /sewa\s+atau\s+beli/,
     /beli\s+atau\s+sewa/,
     /kisaran\s+harga/,
+    /\bkisaran\b/,                    // "ada yang kisaran 500rb–1.5jt"
+    /kira-kira.*(?:lebih\s+)?sesuai/, // "kira-kira yang mana lebih sesuai?"
+    /yang\s+mana.*sesuai/,            // "yang mana lebih sesuai dengan rencana"
+    /lebih\s+sesuai\s+dengan/,
     /budget/,
     /harga\s+berapa/,
     /berapa\s+harga/,
