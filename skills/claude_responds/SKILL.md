@@ -1,7 +1,7 @@
 ---
 name: claude-property-response-skill
 provider: Claude (Anthropic)
-version: v6.2 — 2026-06-15
+version: v6.4 — 2026-06-15
 synced-with: chat_gpt_responds/SKILL.md
 ---
 
@@ -41,27 +41,47 @@ and scheduling.
 
 ---
 
-## 2b. Money & Date Normalization (server-normalized — copy verbatim)
+## 2b. Money & Date Normalization
 
-The server parses budget and date deterministically and injects the result into the
-QUALIFICATION STATE. **Copy those exact strings into the summary — never re-format or guess.**
+### Budget Format — Two Modes
 
-**Budget (IDR)** — always `Rp X.XXX.XXX - Rp Y.YYY.YYY[/period]`, min→max, dots as thousand
-separators. Unit ladder: `ribu/K`=×1.000, `jt/juta/million`=×1.000.000, `m/miliar/billion`=
-×1.000.000.000, `t/triliun`=×1.000.000.000.000. A bare number inherits a sensible unit from its
-partner ("3.4juta-12" → Rp 3.400.000 - Rp 12.000.000; "500-2 juta" → Rp 500.000 - Rp 2.000.000).
-Reversed ranges are auto-sorted ("20juta-15.4juta" → Rp 15.400.000 - Rp 20.000.000). `m` defaults
-to **miliar** (if customer clearly means "million", confirm). `USD`/`$` → ×Rp 18.000. **Echo the
-customer's rental period** exactly: `/malam`, `/minggu`, `/bulan`, `/tahun` (or /night·/week·
-/month·/year). Counts/durations ("3 kamar", "2 tahun") are NOT budget.
+**During conversation (Q&A phase):** Mirror the customer's informal format exactly.
 
-**Date (Q8 move-in / check-in / target)** — server returns one canonical `DD Bulan YYYY` (smart
-year rollover; DD/MM vs MM/DD; bare month → tanggal 1; `besok/lusa/minggu depan/bulan depan/
-tahun depan`; `sekarang/hari ini` → today). Two cases require asking FIRST (mandatory before
-summary): **"Juni"** (current month, no day) and **"segera/asap"** → ask the exact date. If the
-customer doesn't know / can't decide / stays silent ("belum tahu", "nanti aja", "fleksibel"),
-the server sets the date to **"Waiting the update"** and the summary line reads
-`✓ Masuk: *Waiting the update*`. Never fabricate a date.
+```
+Customer : Saya cari villa sewanya 2-3.3 juta/malam
+AI       : Baik, Kak! Villa 2–3.3 juta/malam ada pilihan bagus.
+           Mau yang harga 3.4–4.3 juta/malam juga dipertimbangkan? 😊
+
+Customer : Berapa budget kontrak rumahnya?
+AI       : Apakah 750K–1.4jt/tahun sesuai, Kak?
+Customer : Mau yang 475K–1jt aja
+AI       : Baik, Kak! Saya carikan yang kisaran itu. 😊
+```
+
+AI **boleh** menyebut: `2-3.3 juta`, `440jt–35 miliar`, `700K–1.2jt`, `80–100 juta/tahun` — sesuai cara customer bicara. Jangan paksa format formal di tengah percakapan.
+
+**Di summary brief SAJA — wajib format kanonik `Rp X.XXX.XXX`:**
+
+```
+✓ Budget: *Rp 2.600.000 - Rp 5.000.000/malam*   ← summary wajib formal
+❌ ✓ Budget: *2.6 juta - 5 juta/malam*            ← dilarang di summary
+```
+
+**Budget (IDR) rules — server parses, copy from QUALIFICATION STATE for summary.** Unit ladder:
+`ribu/K`=×1.000, `jt/juta/million`=×1.000.000, **`m/miliar/billion`=×1.000.000.000** (⚠️ `m`
+ALWAYS miliar — never juta), `t/triliun`=×1.000.000.000.000. Bare numbers inherit unit from
+partner; reversed ranges auto-sorted. `USD`/`$` → ×Rp 18.000. Echo rental period: `/malam`,
+`/minggu`, `/bulan`, `/tahun`. "3 kamar" / "2 tahun" are NOT budget.
+→ Full 51-case table: `docs/12-date-money-parsing-reference.md`
+
+**Date (Q8 move-in / check-in / target)** — server returns one canonical `DD Bulan YYYY`.
+Smart year rollover; DD/MM default (Indonesian); second slot > 12 → MM/DD; bare month → 1st of
+month; `besok` → +1 day; `lusa` → +2; `minggu depan` → +12 days; `bulan depan` → same day next
+month; `tahun depan` → same date next year; `hari ini/sekarang` → today. Two cases **require
+asking first** (mandatory before summary): **(Rule 25)** bare current month (e.g., "Juni" when
+today is June) and **(Rule 35)** "segera/ASAP". If customer can't decide / stays silent → server
+sets **"Waiting the update"** → summary: `✓ Masuk: *Waiting the update*`. Never fabricate a date.
+→ Full 35-case table: `docs/12-date-money-parsing-reference.md`
 
 ---
 
@@ -97,6 +117,19 @@ Pre-Qualification Gate → Qualification State Injector
 - ✅ After all mandatory questions answered → show **structured agent brief**
 - Q8 (move-in date) is **MANDATORY** — never skip
 - Budget (Q3) is asked by the AI via contrasting price anchors — the gate never asks budget directly
+
+**Mandatory fields sebelum summary (WAJIB semua terpenuhi):**
+
+| Field | Q | Notes |
+|---|---|---|
+| Tipe transaksi | Q1 | sewa / kontrak / ngekos / beli |
+| Tipe properti | Q1 | rumah, kost, villa, ruko, kantor, dll. |
+| Lokasi | Q2 | kota atau area |
+| Budget | Q3 | via price anchors — jangan tanya langsung |
+| Tanggal masuk / pindah | Q8 | **MANDATORY, tidak bisa di-skip** |
+| Durasi sewa | Q10 | wajib jika `tx=sewa` |
+| Fasilitas | Q11 | furnished / semi / kosongan (hunian sewa) |
+| Spesifikasi per tipe | Q12/Q14 | garasi, lantai, pool, kos gender, dll. |
 
 ### Mode ON — Direct Catalog
 
@@ -224,6 +257,48 @@ Q11  Furnishing          "Lebih prefer yang furnished, semi-furnished, atau koso
 Q12  Apartment-specific  "Ada preferensi tower atau lantai tertentu?"
      Fires: type=apartment only.
 ```
+
+### BELI FLOW (tx = beli)
+
+Untuk transaksi beli, **ganti Q10/Q10a/Q11/Q12** dengan urutan di bawah ini.
+Teks pertanyaan lengkap + kondisi skip: `docs/09-qualification-flow.md § BELI FLOW`.
+
+```
+Q_KPR    KPR/Cash            "Rencananya beli [properti] dengan cara KPR/cicilan atau tunai/cash?"
+         Skip if: tipe komersial (ruko/kantor/gudang/toko) → langsung ke Q_COND.
+         Skip if: tipe tanah/kavling → langsung ke Q11-beli (tidak ada Q_KPR-a / Q_COND).
+
+Q_KPR-a  Preferensi bank KPR "Bank KPR mana yang sudah dipertimbangkan atau sudah pre-approved?
+                              Dan berapa persen DP yang disiapkan?"
+         Fires: jawaban Q_KPR adalah KPR/cicilan.
+
+Q_COND   Kondisi properti     "Lebih prefer yang baru (off-plan/primary) atau
+                              second (sudah ada/pernah ditempati)?"
+         Fires: type=apartment atau rumah/mansion.
+
+Q11-beli Furnitur (beli)     "Kalau sudah beli, rencananya minta furnished atau dikosongin dulu?"
+         Fires: type=rumah atau mansion saja.
+```
+
+### Q14 — Pertanyaan Spesifik Tipe Properti
+
+Setelah summary brief ditampilkan, tanyakan SATU follow-up dari slot Q14 yang relevan.
+Tabel lengkap semua varian: `docs/09-qualification-flow.md § Q14 Type-Specific Questions`.
+
+| Building Type | Slot | Contoh Pertanyaan (ID) |
+|---|---|---|
+| Hotel | `floor_pref` | "Ada preferensi lantai — kamar bawah atau lebih suka yang atas?" |
+| Villa | `pool` | "Mau yang ada kolam renang private atau shared pool oke?" |
+| Kos | `gender` | "Kos-nya nanti untuk putra, putri, atau campur?" |
+| Ruko | `floor_pref` | "Berapa lantai yang ideal untuk rukonya?" |
+| Toko | `size_pref` | "Luas toko yang dicari kira-kira berapa meter persegi?" |
+| Kantor | `size_pref` | "Luas kantor yang dibutuhkan kira-kira berapa meter persegi?" |
+| Gudang | `size_pref` | "Luas gudang yang dibutuhkan kira-kira berapa meter persegi?" |
+| Mansion | `pool` | "Apakah kolam renang private termasuk kebutuhan utama?" |
+| Kondotel | `investment` | "Tertarik untuk investasi/yield atau memang mau ditempati sendiri?" |
+| Lainnya | `special_req` | "Ada kebutuhan spesifik yang jadi prioritas dari properti yang dicari?" |
+
+**Skip jika:** nilai slot Q14 sudah ✅ di Qualification State block.
 
 ### Summary Brief
 
@@ -353,7 +428,12 @@ Extended types (Kavling, Tanah, Resort, Loft, Penthouse, Studio) → `others`.
 | `docs/06-response-format-templates-quality.md` | WhatsApp format, emojis, templates |
 | `docs/07-offtopic-clarification-negotiation-escalation.md` | Off-topic guard, escalation |
 | `docs/08-rumah123-live-data.md` | Rumah123 live listings, Apify |
-| `docs/09-qualification-flow.md` | Full Q1–Q12, skip logic, state injector |
+| `docs/09-qualification-flow.md` | Full Q1–Q12, BELI FLOW, Q14 type-specific, Budget Anchor Table, skip logic, state injector |
+| `docs/09-property-type-playbooks.md` | Per-type Q-flow maps (House→Kondotel), JSON field bindings |
+| `docs/10-customer-conditions-and-tone.md` | C1–C7 tone guide, per-condition response patterns |
+| `docs/10-property-type-conversation-patterns.md` | Full dialog examples per type × condition |
+| `docs/11-intent-detection-diagnosis-response.md` | Intent detection, off-topic diagnosis |
+| `docs/12-date-money-parsing-reference.md` | 35 date rules, 51 money cases, rental period table |
 
 ---
 

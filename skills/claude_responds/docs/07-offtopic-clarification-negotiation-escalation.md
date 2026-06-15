@@ -12,8 +12,28 @@ Reply: Maaf, saya hanya dapat membantu pertanyaan seputar jual, beli, atau sewa 
        kos-kosan, ruko, kantor, atau gudang yang ingin Anda cari.
 ```
 
-Off-topic topics: food, culinary, weather, tourism, sports, politics, education,
-music, movies, crypto, stocks, general unrelated questions.
+**82 confirmed off-topic categories (organized by group):**
+
+| Group | Categories |
+|---|---|
+| Entertainment | Film/Movie, Game/Permainan, Puppet/Boneka, Toy/Mainan |
+| Recreation | Hiking/Mendaki Gunung, Sport/Olahraga, Fishing/Memancing, Competition/Kompetisi |
+| Digital & Tech | Coding/Pemrograman, Social Media, Robot, Blockchain, Electronics/Elektronik, Computer/Komputer, Trading/Perdagangan, Forex, Productions/Produksi |
+| Education | Education/Pendidikan, School/Sekolah, Library/Perpustakaan, Science/Sains, Biology/Biologi, Physics/Fisika, History/Sejarah |
+| Food & Beverage | Foods/Makanan, Snacks/Camilan, Drink/Minuman, Beer/Bir, Coffee/Kopi, Tea/Teh, Honey/Madu, Meat/Daging, Fruits/Buah, Vegetables/Sayuran, Cook/Memasak, Menu |
+| Travel & Leisure | Traveling/Bepergian, Tour/Wisata, Holiday/Liburan, Beach/Pantai, Zoo/Kebun Binatang, Temple/Candi/Kuil, Nature/Alam |
+| Relationships | Romance/Romantis, Dating/Kencan, Party/Pesta |
+| Professions | Engineer/Insinyur, Plumber/Tukang Ledeng, Carpenter/Tukang Kayu, Staf, Profession/Profesi |
+| Health & Medical | Medicine/Kedokteran, Hospital/Rumah Sakit, Health/Kesehatan |
+| Creative | Drawing/Menggambar, Designing/Desain, Modeling/Pemodelan, Translating/Menerjemahkan, Organizing/Mengorganisasi |
+| Finance & Commerce | Investments/Investasi (non-properti), Economics/Ekonomi, Comodity/Komoditas, Delivery/Pengiriman, Freight/Angkutan Barang, Shopping/Belanja |
+| Goods | Furniture/Perabot (bukan fasilitas properti), Toy/Mainan, Puppet/Boneka |
+| Society & Law | Politics/Politik, War/Perang, Traffic/Lalu Lintas, Accident/Kecelakaan, Murder/Pembunuhan, Fight/Pertarungan |
+| Animals | Pet/Hewan Peliharaan (anjing, kucing), Animal/Hewan (singa, dll) |
+| Vices | Smoking/Merokok, Beer/Bir |
+| Spiritual | Magic/Sihir/Santet, Gods/Dewa/Tuhan/Allah |
+| Transport | Transportation/Transportasi (bus, mobil, pesawat) |
+| Misc | Time/Waktu (umum), Dishes/Cucian Piring, Cucian Pakaian |
 
 ### Technical / Developer Messages (WhatsApp)
 
