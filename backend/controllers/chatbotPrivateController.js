@@ -1235,6 +1235,59 @@ class ConversationQualifier {
         'kosongan', 'full furnish', 'sudah ada furnitur', 'mau yang kosong',
         'perabot', 'furniture', 'furnish',
       ]),
+
+      /* ── Q_KPR: Financing (beli only — pengganti durasi sewa) ── */
+      hasFinancing: this.#has(custText, [
+        'cash', 'tunai', 'kpr', 'kredit', 'cicil', 'kombinasi', 'kpr komersial',
+        'kpt', 'pembiayaan', 'dp ', 'down payment', 'mortgage', 'installment',
+      ]),
+      aiAskedFinancing: this.#has(aiText, [
+        'cash atau kpr', 'kpr atau cash', 'pembiayaannya', 'rencananya cash',
+        'cash, kpr', 'pembiayaan', 'financing', 'pay cash or',
+      ]),
+      // Whether customer's financing answer indicates KPR/kredit (→ ask Q_KPR-a)
+      financingIsKPR: this.#has(custText, ['kpr', 'kredit', 'cicil', 'kombinasi', 'kpt', 'mortgage']),
+
+      /* ── Q_KPR-a: KPR readiness (bank + DP) ── */
+      hasKprDetails: this.#has(custText, [
+        'bca', 'mandiri', 'bni', 'bri', 'btn', 'cimb', 'danamon', 'permata',
+        'dp 10', 'dp 15', 'dp 20', 'dp 25', 'dp 30', 'dp 40', 'dp 50',
+        'persen', '%', 'sudah approve', 'pre-approved', 'sudah cek bank',
+      ]),
+      aiAskedKprDetails: this.#has(aiText, [
+        'bank mana', 'dp berapa', 'berapa persen', 'which bank', 'down payment',
+        'rekomendasikan bank', 'sudah ada bank',
+      ]),
+
+      /* ── Q_COND: Property condition (beli residensial) ── */
+      hasPropertyCondition: this.#has(custText, [
+        'baru', 'ready', 'ready stock', 'primary', 'second', 'bekas', 'secondary',
+        'inden', 'indent', 'pre-order', 'kondisi baik', 'siap huni',
+      ]),
+      aiAskedPropertyCondition: this.#has(aiText, [
+        'baru/ready', 'baru, second', 'ready, second', 'second, atau inden',
+        'kondisi rumah', 'primary atau secondary', 'baru atau second', 'new or second',
+      ]),
+
+      /* ── Q14 beli: tenant status (ruko/toko investasi) ── */
+      hasTenantStatus: this.#has(custText, [
+        'ada tenant', 'sudah ada penyewa', 'tenant existing', 'kosong',
+        'ada penyewa', 'sudah disewa', 'tenant berjalan', 'tanpa tenant',
+      ]),
+      aiAskedTenantStatus: this.#has(aiText, [
+        'sudah ada tenant', 'ada penyewa berjalan', 'tenant existing', 'kosong atau',
+        'unit kosong atau',
+      ]),
+
+      /* ── Q14 beli: zonasi / legalitas (gudang/others) ── */
+      hasZonasi: this.#has(custText, [
+        'zona industri', 'zonasi', 'shm', 'shgb', 'imb', 'legalitas', 'sertifikat',
+        'pergudangan', 'peruntukan', 'zona perumahan', 'zona komersial',
+      ]),
+      aiAskedZonasi: this.#has(aiText, [
+        'zona industri', 'pengecekan legalitas', 'zonasi', 'peruntukan', 'sertifikat',
+        'due diligence',
+      ]),
       // Use word-boundary regex for month names so brand names like "indomaret"
       // don't falsely trigger hasMoveInDate (indomaret.includes("maret") = true).
       hasMoveInDate: (() => {
@@ -1441,7 +1494,13 @@ class ConversationQualifier {
       aiAskedLocation   : this.#has(aiText, ['daerah', 'kota mana', 'which area', 'which city', 'lokasi mana']),
       aiAskedSearchHist : this.#has(aiText, ['sudah lihat berapa', 'how many properties', 'belum cocok', 'sudah survey']),
       aiAskedBudget     : this.#has(aiText, ['kisaran', 'anggaran', 'budget', 'harga yang', 'price range', 'ribu, juta', 'thousand, million', 'maksudnya dalam']),
-      aiAskedMoveIn     : this.#has(aiText, ['masuk bulan', 'pindah bulan', 'rencananya masuk', 'move in', 'moving']),
+      aiAskedMoveIn     : this.#has(aiText, [
+        'masuk bulan', 'pindah bulan', 'rencananya masuk', 'move in', 'moving',
+        'target kapan proses belinya', 'kapan rencananya mulai operasional',
+        // Rule 25/35 clarification phrasings
+        'kira-kira tanggalnya', 'tanggal berapa rencananya', 'info tanggalnya',
+        'around which date', 'which date are you planning', 'target date to close',
+      ]),
       aiAskedHousehold  : this.#has(aiText, ['tinggal bersama', 'akan tinggal', 'living with', 'who will be']),
       aiAskedFurnish    : this.#has(aiText, ['furnished', 'furnitur', 'furnishing', 'semi-furnished']),
     };
@@ -1475,6 +1534,10 @@ class ConversationQualifier {
         'aiAskedCheckIn', 'aiAskedCheckOut', 'aiAskedRoomType', 'aiAskedBreakfast',
         'aiAskedPrivatePool', 'aiAskedRentalPeriod', 'aiAskedKosType', 'aiAskedBathroomType',
         'aiAskedBusinessType', 'aiAskedHeadcount', 'aiAskedRoi', 'aiAskedPropertyPurpose',
+        // BELI flow (Q_KPR / Q_KPR-a / Q_COND + per-type Q14 beli)
+        'hasFinancing', 'aiAskedFinancing', 'financingIsKPR', 'hasKprDetails',
+        'aiAskedKprDetails', 'hasPropertyCondition', 'aiAskedPropertyCondition',
+        'hasTenantStatus', 'aiAskedTenantStatus', 'hasZonasi', 'aiAskedZonasi',
       ];
       resetFields.forEach(f => { profile[f] = false; });
       // Keep only what the CURRENT message explicitly says
@@ -1503,6 +1566,10 @@ class ConversationQualifier {
         'aiAskedCheckIn', 'aiAskedCheckOut', 'aiAskedRoomType', 'aiAskedBreakfast',
         'aiAskedPrivatePool', 'aiAskedRentalPeriod', 'aiAskedKosType', 'aiAskedBathroomType',
         'aiAskedBusinessType', 'aiAskedHeadcount', 'aiAskedRoi', 'aiAskedPropertyPurpose',
+        // BELI flow (Q_KPR / Q_KPR-a / Q_COND + per-type Q14 beli)
+        'hasFinancing', 'aiAskedFinancing', 'financingIsKPR', 'hasKprDetails',
+        'aiAskedKprDetails', 'hasPropertyCondition', 'aiAskedPropertyCondition',
+        'hasTenantStatus', 'aiAskedTenantStatus', 'hasZonasi', 'aiAskedZonasi',
       ];
       resetFields.forEach(f => { profile[f] = false; });
       profile.budget             = null;
@@ -1713,8 +1780,39 @@ class ConversationQualifier {
         : `In *${loc}* I have options across different price ranges. Do you prefer something more *affordable/economy* or *mid-to-premium range*? 💰`;
     }
 
-    /* ── Q8: move-in date (MANDATORY — never skipped) ── */
+    /* ── Q8: move-in / target date (MANDATORY — never skipped) ──
+     * Wording adapts to the combination:
+     *   beli            → target tanggal proses beli selesai
+     *   sewa komersial  → kapan mulai operasional (ruko/kantor/gudang/toko/others)
+     *   sewa hunian     → masuk/pindah bulan apa
+     * (hotel/kondotel booking pakai check-in via Q14, bukan Q8 ini)
+     */
+    // Rule 25 (bulan berjalan "Juni") & Rule 35 ("Segera"): WAJIB tanya tanggal
+    // pastinya dulu sebelum lanjut. Hanya jika belum di-resolve & belum ditanya.
+    if (profile.moveInDateAsk && !profile.moveInDateValue && !profile.aiAskedMoveIn) {
+      if (profile.moveInDateAsk === 'soon') {
+        return isId
+          ? `Kak, boleh tau kira-kira tanggalnya? Mohon segera info tanggalnya ya 📅`
+          : `Could you let me know roughly which date? Please share it soon 📅`;
+      }
+      // current_month — tanggal harus ≥ hari ini
+      return isId
+        ? `Untuk bulan ini, kira-kira tanggal berapa rencananya, Kak? 📅`
+        : `For this month, around which date are you planning? 📅`;
+    }
+
     if (!profile.hasMoveInDate && !profile.aiAskedMoveIn) {
+      const isCommercial = ['shophouse', 'office', 'warehouse', 'store', 'others'].includes(type);
+      if (tx === 'sale') {
+        return isId
+          ? `Ada target kapan proses belinya mau selesai? 📅`
+          : `Is there a target date to close the purchase? 📅`;
+      }
+      if (isCommercial) {
+        return isId
+          ? `Kapan rencananya mulai operasional? 📅`
+          : `When do you plan to start operations? 📅`;
+      }
       return isId
         ? `Rencananya masuk atau pindah bulan apa? 📅`
         : `What month are you planning to move in? 📅`;
@@ -1732,6 +1830,59 @@ class ConversationQualifier {
       return isId
         ? `Untuk furnitur, lebih prefer yang sudah *furnished*, *semi-furnished*, atau *kosongan* saja? 🛋️`
         : `For furnishing, do you prefer *fully furnished*, *semi-furnished*, or *unfurnished*? 🛋️`;
+    }
+
+    /* ══════════════════════════════════════════════════════════════════════
+     * BELI FLOW — pengganti durasi sewa (Q_KPR → Q_KPR-a → Q_COND)
+     * Membedakan 24 kombinasi: untuk transaksi BELI, financing + kondisi
+     * menggantikan durasi sewa + payment terms.
+     * ══════════════════════════════════════════════════════════════════════ */
+    if (tx === 'sale') {
+      const isCommercial = ['shophouse', 'office', 'warehouse', 'store', 'hotel', 'kondotel', 'others'].includes(type);
+
+      /* ── Q_KPR: pembiayaan (MANDATORY beli) ── */
+      if (!profile.hasFinancing && !profile.aiAskedFinancing) {
+        if (type === 'others') {
+          return isId
+            ? `Untuk pembiayaan, rencananya *cash* atau *KPR*? (untuk tanah biasanya KPT — Kredit Pemilikan Tanah) 💳`
+            : `For financing, will it be *cash* or a *loan*? (land usually uses a Land Ownership Credit/KPT) 💳`;
+        }
+        if (isCommercial) {
+          return isId
+            ? `Untuk pembiayaan, rencananya *cash*, *KPR komersial*, atau *kombinasi*? 💳`
+            : `For financing, *cash*, *commercial mortgage*, or a *combination*? 💳`;
+        }
+        return isId
+          ? `Untuk pembiayaan, rencananya *cash* atau *KPR*? 💳`
+          : `For financing, will it be *cash* or a *mortgage (KPR)*? 💳`;
+      }
+
+      /* ── Q_KPR-a: kesiapan KPR (bank + DP) — hanya jika KPR/kombinasi ── */
+      if (profile.financingIsKPR && !profile.hasKprDetails && !profile.aiAskedKprDetails) {
+        return isId
+          ? `Sudah ada gambaran bank yang dituju, atau perlu saya bantu rekomendasikan? Dan DP-nya kira-kira berapa persen yang disiapkan? 🏦`
+          : `Do you already have a target bank, or should I recommend one? And roughly what down-payment percentage are you preparing? 🏦`;
+      }
+
+      /* ── Q_COND: kondisi properti (beli residensial: rumah/apartemen/mansion) ── */
+      if (['house', 'apartment', 'mansion'].includes(type)
+          && !profile.hasPropertyCondition && !profile.aiAskedPropertyCondition) {
+        return type === 'apartment'
+          ? (isId
+              ? `Untuk kondisi unit, prefer yang *baru/primary* dari developer, atau *secondary* yang sudah jadi? 🏢`
+              : `For condition, do you prefer *new/primary* from the developer, or *secondary* (ready) units? 🏢`)
+          : (isId
+              ? `Untuk kondisi, lebih prefer yang *baru/ready*, *second* kondisi baik, atau *inden* tidak masalah? 🏠`
+              : `For condition, do you prefer *new/ready*, a good-condition *second-hand*, or is *off-plan/inden* okay? 🏠`);
+      }
+
+      /* ── Q11-beli: furnishing (residensial beli, if not stated) ── */
+      if (['house', 'apartment', 'mansion'].includes(type)
+          && !profile.hasFurnishing && !profile.aiAskedFurnish) {
+        return isId
+          ? `Untuk furnitur, prefer yang sudah *furnished*, *semi-furnished*, atau *kosongan*? 🛋️`
+          : `For furnishing, do you prefer *furnished*, *semi-furnished*, or *unfurnished*? 🛋️`;
+      }
     }
 
     /* ══════════════════════════════════════════════════════════════════════
@@ -1838,6 +1989,17 @@ class ConversationQualifier {
       if (type === 'shophouse') {
         if (!profile.hasBusinessType && !profile.aiAskedBusinessType)
           return isId ? `Bisnis apa yang akan dijalankan di sana? 🏪` : `What kind of business will be run there? 🏪`;
+        // Beli: tenant status (langsung cashflow jika sudah ada tenant)
+        if (tx === 'sale' && !profile.hasTenantStatus && !profile.aiAskedTenantStatus)
+          return isId ? `Prefer ruko *kosong* atau yang sudah ada *tenant* berjalan? (tenant existing = langsung cashflow) 🏪` : `Do you prefer an *empty* shophouse or one with an *existing tenant*? (existing tenant = instant cashflow) 🏪`;
+      }
+
+      // Toko / Store: business type + (beli) mal-prime vs trade center + tenant status
+      if (type === 'store') {
+        if (!profile.hasBusinessType && !profile.aiAskedBusinessType)
+          return isId ? `Bisnis apa yang akan dibuka di toko ini? Dan lebih prefer di *mal/pusat perbelanjaan* atau *standalone*? 🛍️` : `What business will open here? And do you prefer a *mall* unit or *standalone*? 🛍️`;
+        if (tx === 'sale' && !profile.hasTenantStatus && !profile.aiAskedTenantStatus)
+          return isId ? `Prefer unit *mal prime* (stabil) atau *trade center* (yield lebih tinggi)? Dan unit kosong atau sudah ada penyewa? 🛍️` : `Prefer a *prime mall* unit (stable) or *trade center* (higher yield)? And empty or with an existing tenant? 🛍️`;
       }
 
       // Kantor / Office: headcount + building grade
@@ -1862,10 +2024,20 @@ class ConversationQualifier {
           return isId ? `Tipe unit yang paling laku disewakan? *Studio* atau *1 kamar* biasanya ROI terbaik. 🛏️` : `Which unit type rents best? *Studio* or *1-bedroom* usually gives the best ROI. 🛏️`;
       }
 
-      // Properti Lainnya: purpose first
+      // Gudang / Warehouse: purpose + (beli) zonasi/legalitas
+      if (type === 'warehouse') {
+        if (!profile.hasBusinessType && !profile.aiAskedBusinessType)
+          return isId ? `Gudangnya untuk apa — *produksi*, *distribusi*, atau *penyimpanan*? 📦` : `What is the warehouse for — *production*, *distribution*, or *storage*? 📦`;
+        if (tx === 'sale' && !profile.hasZonasi && !profile.aiAskedZonasi)
+          return isId ? `Perlu pengecekan legalitas *zona industri/pergudangan* sebelum deal? (agar tidak salah peruntukan) 📋` : `Should we verify the *industrial/warehouse zoning* legality before the deal? 📋`;
+      }
+
+      // Properti Lainnya: purpose first + (beli) sertifikat & zonasi
       if (type === 'others') {
         if (!profile.hasPropertyPurpose && !profile.aiAskedPropertyPurpose)
           return isId ? `Properti ini rencananya untuk tujuan apa? (parkir, event, pertanian, pabrik, klinik, dll) 🏗️` : `What is the planned purpose of this property? (parking, events, farming, factory, clinic, etc.) 🏗️`;
+        if (tx === 'sale' && !profile.hasZonasi && !profile.aiAskedZonasi)
+          return isId ? `Perlu pengecekan *sertifikat (SHM)* dan *zonasi* sebelum deal? (agar peruntukannya sesuai rencana) 📋` : `Should we verify the *certificate (SHM)* and *zoning* before the deal? 📋`;
       }
     }
     /* ── End summary-only questions ── */
@@ -2409,6 +2581,21 @@ class ChatbotPrivateService {
     // ── Build customer profile dari seluruh percakapan ───────────────────────
     const profile = ConversationQualifier.buildProfile(history, userMessage, filters);
 
+    // ── Date ask-directive (rules 25/35) from deterministic customerDateParser ──
+    // The qualification-state extractor runs parseCustomerDate() on the move-in /
+    // target date. When the customer gives an ambiguous date ("Juni" = bulan
+    // berjalan, rule 25) or "segera" (rule 35), it returns an ask-directive that
+    // the private flow must honor (WAJIB tanya dulu before summary). When the date
+    // is resolvable it returns the normalized "DD Bulan YYYY" string (or
+    // "Waiting the update" once the customer says they don't know).
+    try {
+      const _qs = extractQualificationState(history, userMessage);
+      profile.moveInDateAsk   = _qs.moveInDateAsk || null;  // 'current_month' | 'soon' | null
+      profile.moveInDateValue = _qs.moveInDate   || null;   // normalized date | 'Waiting the update' | null
+      // A resolved value (real date or "Waiting the update") satisfies Q8.
+      if (profile.moveInDateValue) profile.hasMoveInDate = true;
+    } catch (_e) { /* non-fatal — fall back to regex hasMoveInDate */ }
+
     console.log('[PrivateAgent/Qualifier]', {
       tx       : profile.transactionType || '(unknown)',
       type     : profile.buildingType    || '(unknown)',
@@ -2888,3 +3075,6 @@ Warm regards,
 };
 
 module.exports.loadPrivateChatbotSkillInfo     = ()        => ChatbotPrivateService.loadSkillInfo();
+
+// Exposed for unit tests (deterministic qualification flow — 24 combinations + dates)
+module.exports.ConversationQualifier = ConversationQualifier;

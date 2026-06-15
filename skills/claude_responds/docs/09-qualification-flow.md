@@ -737,3 +737,95 @@ AI (Q3):  Oke, berarti 1 kamar sudah cukup ya 😊
 Customer: yang 3-5 juta aja
 AI:       [budget set → all 4 fields present → proceed to listing or next mode behavior]
 ```
+
+---
+
+## Q8 — Date Interpretation Rules (35 cases — server `customerDateParser`)
+
+The backend normalizes every Q8 answer (move-in / check-in / start-operasional /
+target-beli) through **`backend/utils/customerDateParser.js`** *before* the AI sees it.
+The reference "today" is always the live server clock (`new Date()`). The worked
+examples below use **today = 12 Juni 2026** (per spec). The AI receives the already-
+normalized `DD Bulan YYYY` string in the QUALIFICATION STATE — it must **copy that exact
+value** into the summary and must NOT re-interpret the raw text itself.
+
+**Two answers REQUIRE the AI to ask before summarizing** (rules 25 & 35). For those the
+state shows an ask-directive, not a date; if the customer still can't/won't give a date
+(belum tahu / tidak bisa memutuskan / diam), the summary value becomes **`Waiting the update`**.
+
+| # | Customer says | Normalized result (today = 12 Juni 2026) |
+|---|---|---|
+| 1 | Minggu depan | 19 Juni 2026 *(+7 hari)* |
+| 2 | Besok | 13 Juni 2026 |
+| 3 | Bulan depan | 12 Juli 2026 |
+| 4 | 19 Agustus | 19 Agustus 2026 |
+| 5 | 12 Mei *(sudah lewat)* | 12 Mei 2027 |
+| 6 | Tahun depan | 12 Juni 2027 *(+1 tahun)* |
+| 7 | 11 September 2026 | 11 September 2026 |
+| 8 | 11 September 26 | 11 September 2026 *(2-digit → 20xx)* |
+| 9 | 11 Sep 2026 | 11 September 2026 |
+| 10 | 9 Feb 2027 | 09 Februari 2027 |
+| 11 | Maret, 12 | 12 Maret 2027 *(lewat → tahun depan)* |
+| 12 | Desember, 28 | 28 Desember 2026 |
+| 13 | Dec, 28 2026 | 28 Desember 2026 |
+| 14 | Dec, 28 2027 | 28 Desember 2027 |
+| 15 | 13/06/2026 | 13 Juni 2026 *(DD/MM)* |
+| 16 | 02/07/2026 | 02 Juli 2026 *(ambigu → DD/MM)* |
+| 17 | 06/15/2026 | 15 Juni 2026 *(angka ke-2 >12 → MM/DD)* |
+| 18 | 09/13/2026 | 13 September 2026 *(MM/DD)* |
+| 19 | 01/15/2027 | 15 Januari 2027 *(MM/DD)* |
+| 20 | 02/13/2027 | 13 Februari 2027 *(MM/DD)* |
+| 21 | 01/05/2027 | 01 Mei 2027 *(ambigu → DD/MM)* |
+| 22 | 11/12/2026 | 11 Desember 2026 *(ambigu → DD/MM)* |
+| 23 | 2026 Agustus | 01 Agustus 2026 *(tahun + bulan → tgl 1)* |
+| 24 | Mei *(bare, lewat)* | 01 Mei 2027 |
+| 25 | **Juni** *(bulan berjalan)* | **AI WAJIB TANYA** tanggal pastinya (≥ 12 Juni 2026). Belum tahu → `Waiting the update` |
+| 26 | Juli *(bare, depan)* | 01 Juli 2026 |
+| 27 | Agustus *(bare, depan)* | 01 Agustus 2026 |
+| 28 | Feb *(bare, lewat)* | 01 Februari 2027 |
+| 29 | Jan *(bare, lewat)* | 01 Januari 2027 |
+| 30 | 18 Jan | 18 Januari 2027 |
+| 31 | Aug 2 | 02 Agustus 2026 |
+| 32 | Hari ini / sekarang | 12 Juni 2026 |
+| 33 | June 12 2026 | 12 Juni 2026 |
+| 34 | Lusa | 14 Juni 2026 |
+| 35 | **Segera** | **AI WAJIB TANYA** dulu. Belum tahu → `Waiting the update` |
+
+### Disambiguation logic (numeric `a/b/yyyy`)
+- angka pertama `a > 12` → **DD/MM**
+- angka kedua `b > 12` → **MM/DD**
+- keduanya `≤ 12` → **DD/MM** (default Indonesia)
+- tahun 2 digit (`26`) → `2026` (abad sama dengan `now`)
+- bulan tanpa tahun → kemunculan terdekat (kalau sudah lewat tahun ini → tahun depan tgl 1)
+
+### Rule 25 — bulan berjalan ("Juni" saat ini Juni)
+Customer hanya menyebut bulan yang sedang berjalan tanpa tanggal. Tanggal harus **≥ tanggal
+hari ini**. **WAJIB tanya tanggal pastinya dulu** sebelum membuat summary:
+
+```
+ID: Untuk bulan Juni ini, kira-kira tanggal berapa rencananya, Kak? 📅
+EN: For this June, around which date are you planning? 📅
+```
+
+Kalau customer belum tahu / tidak bisa memutuskan / diam → summary `✓ Masuk: *Waiting the update*`.
+
+### Rule 35 — "Segera"
+**WAJIB tanya dulu**, jangan auto-resolve ke tanggal apa pun:
+
+```
+1. "Kak, boleh tau kira-kira tanggalnya?" 📅
+2. (jika belum dijawab) "Baik, kak. Mohon segera info tanggalnya ya."
+```
+
+Kalau tetap belum tahu / diam → summary `✓ Masuk: *Waiting the update*`.
+
+### Server integration (don't re-parse in the AI)
+- `extractQualificationState()` calls `parseCustomerDate(raw, new Date())` for Q8 and stores the
+  normalized string (or sets `moveInDateAsk = 'current_month' | 'soon'`).
+- `isDontKnowDateAnswer()` detects "belum tahu / belum pasti / not sure / nanti aja" → after an
+  ask-directive this sets `moveInDate = 'Waiting the update'`.
+- The QUALIFICATION STATE row `Tanggal masuk ⚠️WAJIB [Q8]` shows the final value; the
+  ⚡ PERTANYAAN BERIKUTNYA box carries the ask-directive hint when rules 25/35 apply.
+- **The conversation never "stops" on a date answer** — a Q8 reply like "Juni 2026" is always a
+  property continuation, the flow proceeds to the next ❓ question (this fixes the bug where the
+  chat dead-ended after the customer answered the move-in month).

@@ -432,3 +432,68 @@ Q0/Q1 → Q2 (Location) → Q2b (Search history) → Q3 (Budget anchor)
 | Mansion | Private pool (mandatory), smart home, security | Premium, luxury |
 | Kondotel | Booking: dates + unit type; Beli: ROI focus | Investment-savvy |
 | Other | Purpose first → then land area + zoning | Flexible, exploratory |
+
+---
+
+## 24-Combination Response Matrix (12 tipe × 2 transaksi)
+
+> **Setiap kombinasi tipe properti × tipe transaksi punya alur response yang berbeda.**
+> Bukan hanya membedakan *sewa vs beli* — setiap *tipe properti* juga punya pertanyaan
+> kunci dan slot Q14 sendiri. Total **24 alur** (lihat `ELEVAN_PROPERTY_CUSTOMER_FLOW_IN_ORDER.md`).
+
+The server-side `findNextQuestion(state)` is the oracle: it returns the next question keyed by
+`buildingType` + `transactionType`. The AI must follow the ⚡ PERTANYAAN BERIKUTNYA directive,
+which already encodes the correct branch for the current combination.
+
+### SEWA vs BELI — what replaces what
+
+| Aspek | SEWA | BELI |
+|---|---|---|
+| Pengganti durasi | Q10 Durasi sewa + Q10a payment terms (≥1 th) | **Q_KPR** Pembiayaan (cash/KPR) + **Q_KPR-a** kesiapan |
+| Pertanyaan waktu (Q8) | Masuk / check-in / mulai operasional | **Target tanggal deal/beli** |
+| Kondisi properti | Q11 Furnishing | **Q_COND** baru/second/inden (residensial) + furnishing |
+| Fokus red flags | Kenyamanan & kecocokan | Legalitas, struktur, sertifikat |
+| Khusus investasi | — | Target market, ROI, tenant status |
+
+### BELI-only question sequence (after Q8 target date)
+
+```
+Q_KPR   (MANDATORY beli)  → "Untuk pembiayaan, rencananya *cash* atau *KPR*?"
+                            (komersial untuk hotel/ruko/kantor/gudang/toko/kondotel;
+                             KPT/Kredit Pemilikan Tanah untuk 'others'/tanah)
+Q_KPR-a (jika KPR/kombinasi) → "Bank mana yang dituju, dan DP berapa persen yang disiapkan?"
+Q_COND  (residensial: rumah/apartemen/mansion) → "Prefer yang *baru/ready*, *second* kondisi baik,
+                                                  atau *inden* tidak masalah?"
+Q4 (investasi) → ganti "tinggal bersama siapa" jadi "Targetnya disewakan ke siapa —
+                 karyawan, mahasiswa, atau expat?" / target tenant / target market
+→ lalu Q14 per-tipe (lihat tabel di bawah) → Q-FINAL (Template B / D)
+```
+
+**Detection (server-side, aliases):**
+- BELI = `beli | purchase | KPR | cicil | investasi | akuisisi`
+- Financing: `cash` → strong buyer; `KPR`/`kredit`/`cicil` → KPR (fires Q_KPR-a); `kombinasi`/`50% cash` → kombinasi
+- Condition: `baru`/`ready`/`primary` ; `second`/`bekas`/`secondary` ; `inden`/`indent`/`pre-order`
+
+### Per-type BELI Q14 emphasis (the slot that makes each combination unique)
+
+| Tipe (BELI) | Slot kunci Q14 | Contoh pertanyaan |
+|---|---|---|
+| Rumah | kondisi + furnishing | (via Q_COND) lalu "Furnished, semi, atau kosongan?" |
+| Apartemen | primary/secondary + SHMSRS + furnished (invest) | "Prefer unit *primary* dari developer atau *secondary*?" |
+| Hotel | operasional/lahan, jumlah kamar, management, bintang | "Hotel *operasional* atau *bangunan/lahan* untuk dikembangkan?" |
+| Villa | use-case, land tenure (freehold/leasehold), ROI | "Status kepemilikan — *freehold (SHM)* atau *leasehold* oke?" |
+| Kos | operasional/lahan, jumlah kamar, target market, pengelola | "Pengelola sekarang dilanjutkan atau Anda kelola sendiri?" |
+| Ruko | use-case, jumlah lantai, hook, **tenant status** | "Prefer ruko *kosong* atau yang sudah ada *tenant* berjalan?" |
+| Toko | mal-prime vs **trade center** (yield), tenant status | "Prefer unit *mal prime* (stabil) atau *trade center* (yield tinggi)?" |
+| Kantor | headcount→luas, grade, fit-out, **SHMSRS/strata** | "Status sertifikat unit — *SHMSRS/strata title*?" |
+| Gudang | use-case, m², plafon, dock, KVA, **zonasi industri** | "Perlu pengecekan legalitas *zona industri/pergudangan* sebelum deal?" |
+| Mansion | komposisi+staff, **multi-generasi/aksesibilitas**, off-market | "Untuk multi-generasi, perlu lift internal atau kamar utama lantai dasar?" |
+| Kondotel | **ROI mandatory**, operator, SHMSRS, usage split | "Target *ROI* per tahun? Ini jadi filter utama." |
+| Others | subtype/purpose, land area, matang/mentah, **izin/zonasi** | "Perlu pengecekan *sertifikat (SHM) dan zonasi* sebelum deal?" |
+
+### Universal (berlaku di 24 alur)
+- **Budget tidak pernah ditanya langsung** — selalu dua opsi harga kontras (Q3 anchor table di atas).
+- **Jumlah kamar/kapasitas tidak pernah ditanya langsung** — selalu lewat "tinggal/pakai bersama siapa".
+- **Decision maker tidak pernah ditanya langsung** — selalu lewat logistik viewing.
+- **Q8 tanggal selalu MANDATORY** — tidak pernah di-skip; dinormalisasi via `customerDateParser` (35 aturan, lihat doc 09).
+- **Summary + konfirmasi WAJIB** sebelum eksekusi pencarian (Template B untuk beli, D untuk kondotel investasi).

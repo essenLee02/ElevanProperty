@@ -1,5 +1,6 @@
 const { loadProjectSkillPrompt } = require('./skillPromptService');
 const { detectBudget }           = require('./propertyRecommendationService');
+const { parseCustomerDate, isDontKnowDateAnswer, WAITING_THE_UPDATE } = require('../utils/customerDateParser');
 
 /* ─── Qualification State Extractor ────────────────────────────────────────── */
 /* Scans full conversation history to build a per-question answered/unanswered  */
@@ -33,10 +34,15 @@ function extractQualificationState(history = [], currentMessage = '') {
     anchorPoint     : null,   // Q6
     alternativeAreas: null,   // Q7
     moveInDate      : null,   // Q8 MANDATORY
+    moveInDateAsk   : null,   // 'current_month' | 'soon' — Q8 perlu klarifikasi (rule 25/35)
     decisionMaker   : null,   // Q9
     leaseDuration   : null,   // Q10
     furnishing      : null,   // Q11
     apartmentPref   : null,   // Q12
+    financing       : null,   // Q_KPR  (beli only): cash | KPR | kombinasi
+    kprDetails      : null,   // Q_KPR-a (beli + KPR): bank & DP
+    propertyCondition: null,  // Q_COND (beli residensial): baru/ready | second | inden
+    useCase         : null,   // beli: own-use | investment
   };
 
   const MONTH_ID = 'januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember';
@@ -271,27 +277,46 @@ function extractQualificationState(history = [], currentMessage = '') {
       }
     }
 
-    // Q8 — Move-in date (with year inference for past months)
+    // Q8 — Move-in / check-in / target date — deterministic 35-rule parser.
+    // 'ok'                → store normalized "DD Bulan YYYY" (year rollover, DD/MM vs
+    //                        MM/DD disambiguation, bare month → tanggal 1, dll).
+    // 'ask_current_month' → customer menyebut bulan berjalan tanpa tanggal (rule 25)
+    // 'ask_soon'          → customer bilang "segera" (rule 35)
+    // Keduanya WAJIB diklarifikasi dulu; jika customer tidak tahu → "Waiting the update".
     if (!state.moveInDate) {
-      const dm = raw.match(MONTH_RE);
-      if (dm) {
-        const matched = dm[0].trim();
-        const hasExplicitYear = /\b(202[4-9]|203[0-9])\b/.test(matched);
-        if (hasExplicitYear) {
-          state.moveInDate = matched;
-        } else {
-          const mMatch = matched.toLowerCase().match(new RegExp(`\\b(${MONTH_ID}|${MONTH_EN})\\b`));
-          const mNum   = mMatch ? (MONTH_NUMBERS[mMatch[1]] || 0) : 0;
-          const dayMatch = matched.match(/^(\d{1,2})\s/);
-          const day    = dayMatch ? parseInt(dayMatch[1], 10) : 1;
-          // If mentioned month is already past this year (or same month but day already past)
-          // → treat as next year.  If future (or today) → current year.
-          const isPast = mNum > 0 && (mNum < SYS_MONTH || (mNum === SYS_MONTH && day < SYS_DAY));
-          const year   = isPast ? SYS_YEAR + 1 : SYS_YEAR;
-          state.moveInDate = mNum > 0 ? `${matched} ${year}` : matched;
+      const parsed = parseCustomerDate(raw, now);
+      if (parsed) {
+        if (parsed.status === 'ok') {
+          state.moveInDate    = parsed.formatted;
+          state.moveInDateAsk = null;
+        } else if (parsed.status === 'ask_current_month') {
+          state.moveInDateAsk = 'current_month';
+        } else if (parsed.status === 'ask_soon') {
+          state.moveInDateAsk = 'soon';
         }
-      } else if (/\b(bulan depan|next month|minggu depan|segera|sekarang|asap)\b/.test(text)) {
-        state.moveInDate = text.includes('bulan depan') ? 'bulan depan' : 'segera/ASAP';
+      }
+    }
+
+    // ── BELI-only slots (Q_KPR / Q_COND / use-case) — bagian dari 24 kombinasi ──
+    if (state.transactionType === 'sale') {
+      // Q_KPR — pembiayaan (MANDATORY untuk semua 12 tipe beli)
+      if (!state.financing) {
+        const hasKpr  = /\b(kpr|kpa|kpt|kredit|mortgage|dp\s*\d+)\b/.test(text);
+        const hasCash = /\b(cash|tunai)\b/.test(text);
+        if (hasKpr && hasCash)  state.financing = 'kombinasi cash + KPR';
+        else if (hasKpr)        state.financing = 'KPR';
+        else if (hasCash)       state.financing = 'cash';
+      }
+      // Q_COND — kondisi (beli residensial): baru/ready | second | inden
+      if (!state.propertyCondition) {
+        if (/\bready\s*stock\b|\bbaru\/ready\b/.test(text))      state.propertyCondition = 'baru/ready';
+        else if (/\b(second|bekas)\b/.test(text))                 state.propertyCondition = 'second';
+        else if (/\binden\b/.test(text))                          state.propertyCondition = 'inden';
+      }
+      // Use-case — investasi vs huni/pakai sendiri (menentukan framing Q4)
+      if (!state.useCase) {
+        if (/\binvest(asi)?\b|\bdisewakan\b|\buntuk sewa\b/.test(text))                 state.useCase = 'investasi';
+        else if (/\b(ditempati|tinggal|huni|pakai|usaha|operasional)\s+sendiri\b/.test(text)) state.useCase = 'huni/pakai sendiri';
       }
     }
 
@@ -381,6 +406,29 @@ function extractQualificationState(history = [], currentMessage = '') {
       }
       // If it looks like a date: leave leaseDuration null so Q10 gets re-asked with clearer hint
     }
+    // Q8 follow-up — AI sudah menanyakan tanggal (klarifikasi rule 25/35) dan
+    // customer menjawab "belum tahu / belum pasti / tidak bisa memutuskan"
+    // → nilai summary Q8 = "Waiting the update" (jangan tanya berulang-ulang).
+    if (!state.moveInDate &&
+        /tanggal|masuk bulan apa|check-?in|target.*(beli|deal)|kapan.*(masuk|pindah|mulai|proses)/.test(aiText) &&
+        isDontKnowDateAnswer(custResp)) {
+      state.moveInDate    = WAITING_THE_UPDATE;
+      state.moveInDateAsk = null;
+    }
+
+    // Q_KPR-a — bank & DP (fires hanya jika AI menanyakan detail KPR)
+    if (!state.kprDetails && /bank.{0,30}(dituju|approve|rekomendasi)|dp.{0,20}persen|berapa\s+persen.{0,20}dp/.test(aiText)) {
+      state.kprDetails = custResp;
+    }
+
+    // Q_COND — kondisi properti (fires jika AI menanyakan baru/second/inden)
+    if (!state.propertyCondition && /baru.{0,30}second|second.{0,30}inden|kondisi.{0,20}(rumah|unit|properti)|ready.{0,10}stock.{0,20}inden/.test(aiText)) {
+      if (/\b(baru|ready)\b/i.test(custResp))       state.propertyCondition = 'baru/ready';
+      else if (/\b(second|bekas)\b/i.test(custResp)) state.propertyCondition = 'second';
+      else if (/\binden\b/i.test(custResp))          state.propertyCondition = 'inden';
+      else if (custResp.trim())                      state.propertyCondition = custResp.trim();
+    }
+
     // Q5 — red flags
     if (!state.redFlags && /pasti tidak cocok|hadap barat|gang sempit|rumah tua/.test(aiText)) {
       state.redFlags = custResp;
@@ -446,10 +494,15 @@ function extractQualificationState(history = [], currentMessage = '') {
       state.anchorPoint      = null;
       state.alternativeAreas = null;
       state.moveInDate       = null;
+      state.moveInDateAsk    = null;
       state.decisionMaker    = null;
       state.leaseDuration    = null;
       state.furnishing       = null;
       state.apartmentPref    = null;
+      state.financing        = null;
+      state.kprDetails       = null;
+      state.propertyCondition = null;
+      state.useCase          = null;
 
       // Re-populate ONLY what the current message explicitly states — all 12 types.
       const cur = (currentMessage || '').toLowerCase().trim();
@@ -557,10 +610,15 @@ function extractQualificationState(history = [], currentMessage = '') {
       state.anchorPoint      = null;
       state.alternativeAreas = null;
       state.moveInDate       = null;
+      state.moveInDateAsk    = null;
       state.decisionMaker    = null;
       state.leaseDuration    = null;
       state.furnishing       = null;
       state.apartmentPref    = null;
+      state.financing        = null;
+      state.kprDetails       = null;
+      state.propertyCondition = null;
+      state.useCase          = null;
       state.fallbackTypes    = [];
     }
   }
@@ -634,16 +692,30 @@ function findNextQuestion(state) {
   if (!state.budget)
     return { q: 'Q3', hint: `Di ${loc} ada *${typeLbl}* kisaran [harga rendah${isBooking ? '/malam' : ''}] dan [harga tinggi${isBooking ? '/malam' : ''}]. Kira-kira yang mana lebih sesuai? 💰` };
 
-  // Q8 — Tanggal masuk/check-in (MANDATORY)
+  // Q8 — Tanggal masuk/check-in/target beli (MANDATORY — wording per 24 kombinasi)
   if (!state.moveInDate) {
+    // Rule 25/35 klarifikasi: customer menjawab "bulan berjalan" atau "segera"
+    if (state.moveInDateAsk === 'current_month')
+      return { q: 'Q8', hint: 'Customer menyebut bulan berjalan tanpa tanggal. Tanyakan tanggal pastinya (harus ≥ tanggal hari ini). Jika customer belum tahu/tidak bisa memutuskan → tulis "Waiting the update" sebagai nilai tanggal di summary. 📅' };
+    if (state.moveInDateAsk === 'soon')
+      return { q: 'Q8', hint: 'Customer bilang "segera". Tanyakan: "Kak, boleh tau kira-kira tanggalnya?" — lalu jika perlu: "Baik, kak. Mohon segera info tanggalnya ya." Jika customer belum tahu/diam → tulis "Waiting the update" di summary. 📅' };
     if (isBooking)
       return { q: 'Q8', hint: 'Rencananya check-in tanggal berapa? 📅' };
+    if (!isSewa)
+      return { q: 'Q8', hint: 'Ada target kapan proses belinya selesai? 📅 (untuk beli: "target beli" menggantikan "tanggal masuk")' };
+    if (isCommercial)
+      return { q: 'Q8', hint: 'Kapan rencananya mulai operasional? 📅' };
     return { q: 'Q8', hint: 'Rencananya masuk atau pindah bulan apa? 📅' };
   }
 
   // Q4 — Penghuni (skip: commercial + hotel/kondotel booking — jumlah orang ditanya via Q14 tipe kamar)
-  if (!state.household && !isCommercial && !isBooking)
+  if (!state.household && !isCommercial && !isBooking) {
+    if (!isSewa && state.useCase === 'investasi')
+      return { q: 'Q4', hint: 'Untuk investasi: targetnya nanti disewakan ke siapa — karyawan, mahasiswa, keluarga, atau expat? Biar saya carikan tipe yang paling laku 🛏️' };
+    if (!isSewa)
+      return { q: 'Q4', hint: 'Nanti akan ditempati bersama siapa saja? Biar pas jumlah kamarnya 🛏️ (Jika untuk investasi: tanyakan target penyewanya)' };
     return { q: 'Q4', hint: 'Nanti akan tinggal bersama siapa saja? Biar saya bisa carikan yang pas jumlah kamarnya 🛏️' };
+  }
 
   // Q5 — Red flags
   if (!state.redFlags) {
@@ -671,49 +743,96 @@ function findNextQuestion(state) {
   if (isSewa && !isBooking && !state.leaseDuration)
     return { q: 'Q10', hint: 'Rencananya sewa untuk berapa lama? ⏱️ (durasi, bukan tanggal — contoh: 6 bulan, 1 tahun)' };
 
-  // Q11 — Furnishing (sewa only, skip: commercial, hotel/kondotel booking, villa)
-  // Villa sewa selalu dilengkapi furniture (booking frame per malam/minggu/bulan).
-  if (isSewa && !isCommercial && !isBooking && type !== 'villa' && type !== 'mansion' && !state.furnishing)
+  // Q_KPR — Pembiayaan (MANDATORY untuk SEMUA tipe beli — pengganti durasi sewa)
+  if (!isSewa && !state.financing) {
+    if (isCommercial || type === 'hotel' || type === 'kondotel')
+      return { q: 'Q_KPR', hint: 'Untuk pembiayaan, rencananya cash, KPR komersial, atau kombinasi? 💳' };
+    if (type === 'others')
+      return { q: 'Q_KPR', hint: 'Cash atau KPR? (Untuk tanah biasanya KPT — Kredit Pemilikan Tanah, syaratnya sedikit berbeda) 💳' };
+    return { q: 'Q_KPR', hint: 'Untuk pembiayaan, rencananya cash atau KPR? 💳' };
+  }
+
+  // Q_KPR-a — KPR readiness (fires only jika financing = KPR/kombinasi)
+  if (!isSewa && /kpr|kombinasi/i.test(state.financing || '') && !state.kprDetails)
+    return { q: 'Q_KPR-a', hint: 'Sudah ada bank yang dituju, atau perlu saya bantu rekomendasikan? Dan DP-nya kira-kira berapa persen yang disiapkan? 🏦' };
+
+  // Q_COND — Kondisi properti (beli residensial: rumah/apartemen/mansion)
+  if (!isSewa && ['house', 'apartment', 'mansion'].includes(type) && !state.propertyCondition)
+    return { q: 'Q_COND', hint: 'Lebih prefer yang *baru/ready*, *second* kondisi baik, atau *inden* tidak masalah? 🏗️' };
+
+  // Q11 — Furnishing
+  // Sewa: skip commercial, booking, villa, mansion (villa/mansion sewa selalu furnished).
+  // Beli: rumah/apartemen/mansion juga ditanya furnishing (per spec 24 flow).
+  const askFurnSewa = isSewa && !isCommercial && !isBooking && type !== 'villa' && type !== 'mansion';
+  const askFurnBeli = !isSewa && ['house', 'apartment', 'mansion'].includes(type);
+  if ((askFurnSewa || askFurnBeli) && !state.furnishing)
     return { q: 'Q11', hint: 'Untuk furnitur, lebih prefer yang sudah *furnished*, *semi-furnished*, atau *kosongan* saja? 🛋️' };
 
   // Q12 — Apartemen spesifik
   if (isApt && !state.apartmentPref)
     return { q: 'Q12', hint: 'Ada preferensi tower atau lantai tertentu? Misalnya hadap timur, lantai rendah/tengah/tinggi? 🏢' };
 
-  // Q14 — Type-specific slots (fired after Q12 based on building type + transaction)
+  // Q14 — Type-specific slots: 24 kombinasi (12 tipe × sewa/beli).
   // AI checks from conversation history whether these were already answered.
   if (isBooking) {
     return { q: 'Q14', hint: `Lanjutkan Q14 ${type === 'hotel' ? 'hotel' : 'kondotel'} booking: (a) check-out/berapa malam? (b) tipe kamar? Standard/Deluxe/Suite/Family? (c) breakfast included? — CEK history dulu sebelum tanya yang sudah dijawab.` };
+  }
+  if (type === 'hotel' && !isSewa) {
+    return { q: 'Q14', hint: 'Lanjutkan Q14 hotel akuisisi: (a) hotel operasional atau bangunan/lahan untuk dikembangkan? (b) minimal berapa kamar? (c) kelola sendiri / management contract / franchise? (d) target bintang? — CEK history dulu.' };
   }
   if (type === 'villa' && isSewa) {
     return { q: 'Q14', hint: 'Lanjutkan Q14 villa sewa: (a) per malam/minggu/bulan? (b) perlu private pool? (c) tanggal check-in? — CEK history dulu.' };
   }
   if (type === 'villa' && !isSewa) {
-    return { q: 'Q14', hint: 'Lanjutkan Q14 villa beli: (a) wajib private pool? (b) freehold (SHM) atau leasehold? — CEK history dulu.' };
+    return { q: 'Q14', hint: 'Lanjutkan Q14 villa beli: (a) wajib private pool? (b) status kepemilikan freehold (SHM) atau leasehold? (c) jika investasi: target yield/tamu? — CEK history dulu.' };
   }
-  if (type === 'boarding_house') {
-    return { q: 'Q14', hint: 'Lanjutkan Q14 kos: (a) putra/putri/campur? (b) kamar mandi dalam/luar? (c) include makan? — CEK history dulu.' };
+  if (type === 'boarding_house' && isSewa) {
+    return { q: 'Q14', hint: 'Lanjutkan Q14 kos sewa: (a) putra/putri/campur? (b) kamar mandi dalam/luar? (c) include makan? (d) bayar bulanan/semester/tahunan? — CEK history dulu.' };
   }
-  if (type === 'shophouse') {
-    return { q: 'Q14', hint: 'Lanjutkan Q14 ruko: (a) jenis bisnis? (b) berapa lantai? (c) lebar depan minimum? (d) posisi hook/pojok? — CEK history dulu.' };
+  if (type === 'boarding_house' && !isSewa) {
+    return { q: 'Q14', hint: 'Lanjutkan Q14 kos investasi: (a) kos operasional atau lahan bangun baru? (b) minimal berapa kamar? (c) target putra/putri/campur? (d) pengelola sekarang dilanjutkan atau kelola sendiri? — CEK history dulu.' };
   }
-  if (type === 'store') {
-    return { q: 'Q14', hint: 'Lanjutkan Q14 toko: (a) jenis bisnis? (b) mal/pusat perbelanjaan atau standalone? (c) lebar depan minimum? — CEK history dulu.' };
+  if (type === 'shophouse' && isSewa) {
+    return { q: 'Q14', hint: 'Lanjutkan Q14 ruko sewa: (a) untuk usaha apa? (b) berapa lantai? (c) lebar muka (frontage) minimum? (d) posisi hook? (e) parkir pelanggan? — CEK history dulu.' };
   }
-  if (type === 'office') {
-    return { q: 'Q14', hint: 'Lanjutkan Q14 kantor: (a) berapa orang karyawan? (b) Grade A/B/C? (c) fit-out siap pakai atau shell & core? — CEK history dulu.' };
+  if (type === 'shophouse' && !isSewa) {
+    return { q: 'Q14', hint: 'Lanjutkan Q14 ruko beli: (a) usaha sendiri atau investasi disewakan? (b) berapa lantai + hook? (c) jika investasi: prefer ruko kosong atau sudah ada tenant berjalan? — CEK history dulu.' };
   }
-  if (type === 'warehouse') {
-    return { q: 'Q14', hint: 'Lanjutkan Q14 gudang: (a) luas minimum m²? (b) tinggi plafon minimum? (c) perlu loading dock? (d) daya listrik KVA? — CEK history dulu.' };
+  if (type === 'store' && isSewa) {
+    return { q: 'Q14', hint: 'Lanjutkan Q14 toko sewa: (a) jualan apa? (b) di dalam mal / standalone / trade center? (c) luas? (d) info deposit mal 3-6 bulan sewa! (e) ground floor atau upper? — CEK history dulu.' };
   }
-  if (isLuxury) {
-    return { q: 'Q14', hint: 'Lanjutkan Q14 mansion: (a) wajib private pool? (b) perlu smart home? (c) kamar staf? (d) kapasitas garasi? — CEK history dulu.' };
+  if (type === 'store' && !isSewa) {
+    return { q: 'Q14', hint: 'Lanjutkan Q14 toko beli: (a) usaha sendiri atau investasi? (b) mal prime (stabil) atau trade center (yield 8-12%)? (c) luas? (d) prefer unit kosong atau sudah ada penyewa berjalan? — CEK history dulu.' };
+  }
+  if (type === 'office' && isSewa) {
+    return { q: 'Q14', hint: 'Lanjutkan Q14 kantor sewa: (a) tim berapa orang? (infer luas 5-7 m²/orang) (b) Grade A/B/C? (c) fit-out atau shell & core? (d) klarifikasi budget all-in service charge! (e) parkir & kebutuhan IT? — CEK history dulu.' };
+  }
+  if (type === 'office' && !isSewa) {
+    return { q: 'Q14', hint: 'Lanjutkan Q14 kantor beli: (a) dipakai perusahaan sendiri atau investasi disewakan? (b) tim berapa orang? (c) Grade gedung? (d) fit-out atau shell? (e) cek SHMSRS/strata title + service charge! — CEK history dulu.' };
+  }
+  if (type === 'warehouse' && isSewa) {
+    return { q: 'Q14', hint: 'Lanjutkan Q14 gudang sewa: (a) untuk produksi/distribusi/penyimpanan? (b) luas m²? (c) tinggi plafon? (d) loading dock? (e) daya listrik KVA? (f) perlu ruang kantor di dalam? — CEK history dulu.' };
+  }
+  if (type === 'warehouse' && !isSewa) {
+    return { q: 'Q14', hint: 'Lanjutkan Q14 gudang beli: (a) operasional sendiri atau investasi? Dan untuk produksi/distribusi/penyimpanan? (b) luas? (c) plafon + dock + KVA? (d) WAJIB tawarkan pengecekan legalitas zona industri/pergudangan sebelum deal! — CEK history dulu.' };
+  }
+  if (isLuxury && isSewa) {
+    return { q: 'Q14', hint: 'Lanjutkan Q14 mansion sewa: (a) wajib private pool/smart home? (b) komposisi termasuk staf (ART/sopir) → kamar staf? (c) kapasitas garasi? (d) sebutkan akses off-market listing! — CEK history dulu.' };
+  }
+  if (isLuxury && !isSewa) {
+    return { q: 'Q14', hint: 'Lanjutkan Q14 mansion beli: (a) fasilitas wajib (pool, garasi, garden)? (b) multi-generasi? → perlu lift internal / kamar utama lantai dasar? (c) kamar staf? (d) sebutkan akses off-market listing! — CEK history dulu.' };
   }
   if (type === 'kondotel' && !isSewa) {
-    return { q: 'Q14', hint: 'Lanjutkan Q14 kondotel investasi: (a) target ROI per tahun? (b) tipe unit studio/1KT? (c) preferensi operator hotel? — CEK history dulu.' };
+    return { q: 'Q14', hint: 'Lanjutkan Q14 kondotel investasi: (a) investasi murni atau kadang dipakai sendiri? (b) target ROI per tahun? (WAJIB — filter utama) (c) tipe unit studio/1KT? (d) preferensi operator hotel? (e) status SHMSRS? — CEK history dulu.' };
   }
-  if (type === 'others') {
-    return { q: 'Q14', hint: 'Lanjutkan Q14 properti lainnya: (a) tujuan penggunaan? (b) luas lahan m²/hektar? (c) zonasi yang diperlukan? — CEK history dulu.' };
+  if (type === 'others' && isSewa) {
+    return { q: 'Q14', hint: 'Lanjutkan Q14 properti lainnya sewa: (a) tujuan penggunaan? (parkir/pertanian/event/glamping/dll) (b) luas lahan? (c) infrastruktur (PLN/PDAM/pagar/akses)? (d) kejelasan izin peruntukan? — CEK history dulu.' };
+  }
+  if (type === 'others' && !isSewa) {
+    return { q: 'Q14', hint: 'Lanjutkan Q14 properti lainnya beli: (a) tujuan (bangun sendiri/investasi/usaha)? (b) jika relevan: sudah operasional atau lahan? (c) luas? (d) matang siap bangun atau mentah? (e) WAJIB tawarkan pengecekan sertifikat (SHM) + zonasi sebelum deal! — CEK history dulu.' };
+  }
+  if (type === 'apartment' && !isSewa) {
+    return { q: 'Q14', hint: 'Lanjutkan Q14 apartemen beli: (a) primary dari developer atau secondary? (b) status SHMSRS? (c) jika investasi: furnished lebih cepat laku disewakan — sarankan! — CEK history dulu.' };
   }
 
   return null; // all answered → show summary
@@ -787,6 +906,29 @@ function buildQualificationStateBlock(state) {
     row('Durasi sewa      [Q10]', state.leaseDuration),
     row('Furnitur         [Q11]', state.furnishing),
     row('Apt preference   [Q12]', state.apartmentPref),
+  );
+
+  // BELI-only rows — hanya ditampilkan untuk transaksi beli (bagian 24 kombinasi)
+  const isSale = (state.transactionType || '').toLowerCase().includes('sale')
+    || (state.transactionType || '').toLowerCase().includes('beli');
+  if (isSale) {
+    lines.push(
+      row('Pembiayaan ⚠️WAJIB [Q_KPR]', state.financing),
+      row('Detail KPR    [Q_KPR-a]', /kpr|kombinasi/i.test(state.financing || '') ? state.kprDetails : 'N/A (cash)'),
+      row('Kondisi        [Q_COND]', state.propertyCondition),
+      row('Use-case (huni/invest) ', state.useCase),
+    );
+  }
+
+  // Q8 perlu klarifikasi (rule 25 "bulan berjalan" / rule 35 "segera")
+  if (!state.moveInDate && state.moveInDateAsk) {
+    lines.push('');
+    lines.push(state.moveInDateAsk === 'current_month'
+      ? '⚠️  Q8 KLARIFIKASI: customer menyebut BULAN BERJALAN tanpa tanggal — tanyakan tanggal pastinya (≥ hari ini). Jika customer tidak tahu → nilai Q8 di summary = "Waiting the update".'
+      : '⚠️  Q8 KLARIFIKASI: customer bilang "SEGERA" — tanyakan: "Kak, boleh tau kira-kira tanggalnya?" Jika customer tidak tahu/diam → nilai Q8 di summary = "Waiting the update".');
+  }
+
+  lines.push(
     '',
     '→ Tanyakan HANYA field ❓ di atas, mulai dari nomor Q terkecil.',
     '→ SATU pertanyaan per pesan. Jangan gabungkan dua pertanyaan.',
@@ -800,6 +942,7 @@ function buildQualificationStateBlock(state) {
   const missingMandatory = [];
   if (!state.budget)           missingMandatory.push('Q3 Budget');
   if (!state.moveInDate)       missingMandatory.push('Q8 Tanggal masuk');
+  if (isSale && !state.financing) missingMandatory.push('Q_KPR Pembiayaan (WAJIB untuk beli)');
   if (!state.redFlags)         missingMandatory.push('Q5 Red flags');
   if (!state.anchorPoint)      missingMandatory.push('Q6 Patokan lokasi');
   if (!state.alternativeAreas) missingMandatory.push('Q7 Area alternatif');
@@ -1136,6 +1279,33 @@ Most customers don't know exactly what they want. Guide discovery through OPTION
 **Q12 — Apartment specific** (only if property type = apartment)
 "Ada preferensi tower atau lantai tertentu? Misalnya hadap timur, lantai rendah/tengah/tinggi?"
 
+### 24 KOMBINASI RESPONSE (12 tipe properti × sewa/beli)
+
+Setiap kombinasi tipe properti + tipe transaksi punya alur berbeda. Ikuti directive ⚡ PERTANYAAN BERIKUTNYA — pertanyaannya sudah disesuaikan per kombinasi. Pembeda utama SEWA vs BELI:
+
+| Aspek | SEWA | BELI |
+|---|---|---|
+| Pengganti durasi | Q10 durasi sewa + payment terms (≥1 thn) | Q_KPR pembiayaan cash/KPR (MANDATORY) + Q_KPR-a bank/DP jika KPR |
+| Pertanyaan waktu (Q8) | Tanggal masuk / check-in / mulai operasional | Target kapan proses beli selesai |
+| Kondisi | Furnishing saja | Baru/ready, second, atau inden (Q_COND) + furnishing |
+| Q4 jika investasi | — | Target penyewa/tenant menggantikan komposisi penghuni |
+| Fokus red flags | Kenyamanan & kecocokan | Legalitas, sertifikat, struktur, zonasi |
+| Khusus investasi | — | Target market, ROI (kondotel WAJIB), tenant status (ruko/toko) |
+
+Slot khusus per tipe (Q14) — sesuai directive: hotel booking (check-in/out, malam, tipe kamar, breakfast) vs hotel beli (operasional/lahan, jumlah kamar, management contract, bintang); kos sewa (putra/putri/campur, KM dalam/luar, makan) vs kos beli (operasional, jumlah kamar, pengelola); ruko/toko (jenis usaha DI AWAL, frontage, hook / tenant status untuk beli); kantor (headcount → luas 5-7 m²/orang, grade, fit-out, service charge all-in); gudang (tujuan DI AWAL, m², plafon, dock, KVA / zonasi untuk beli); mansion (kamar staf, off-market); kondotel beli (ROI WAJIB, operator, SHMSRS); others (tujuan DI AWAL, luas, izin/zonasi).
+
+### ATURAN INTERPRETASI TANGGAL (Q8) — WAJIB DIIKUTI
+
+Tanggal hari ini (server): **${(() => { const n = new Date(); const M = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember']; return `${n.getDate()} ${M[n.getMonth()]} ${n.getFullYear()}`; })()}**. Server sudah menormalkan jawaban tanggal customer ke format "DD Bulan YYYY" di QUALIFICATION STATE — gunakan nilai itu apa adanya. Aturan yang dipakai (contoh dengan hari ini = 12 Juni 2026):
+1. Relatif: "besok"→13 Juni 2026; "lusa"→14 Juni 2026; "minggu depan"→+7 hari; "bulan depan"→12 Juli 2026; "tahun depan"→+1 tahun; "hari ini/sekarang"→12 Juni 2026.
+2. Tanggal tanpa tahun ("19 Agustus", "Aug 2", "Maret, 12"): jika sudah lewat tahun ini → tahun depan ("12 Mei"→12 Mei 2027); jika belum → tahun ini.
+3. Tahun 2 digit = 20XX ("11 September 26" → 11 September 2026).
+4. Format numerik: "13/06/2026"→13 Juni (DD/MM); angka pertama >12 → DD/MM; angka kedua >12 → MM/DD ("06/15/2026"→15 Juni 2026); dua-duanya ≤12 → default DD/MM Indonesia ("01/05/2027"→01 Mei 2027).
+5. "2026 Agustus" → 01 Agustus 2026 (tanggal 1).
+6. Nama bulan saja: bulan setelah bulan berjalan → tanggal 1 tahun ini ("Juli"→01 Juli 2026); bulan yang sudah lewat → tanggal 1 tahun depan ("Mei"→01 Mei 2027, "Jan"→01 Januari 2027).
+7. ⚠️ Bulan BERJALAN tanpa tanggal ("Juni" saat ini Juni): WAJIB tanya tanggal pastinya dulu (harus ≥ hari ini) SEBELUM summary. Jika customer tidak tahu/tidak bisa memutuskan/diam → tulis nilai Q8 di summary: "Waiting the update".
+8. ⚠️ "Segera": WAJIB tanya dulu — "Kak, boleh tau kira-kira tanggalnya?" / "Baik, kak. Mohon segera info tanggalnya ya." SEBELUM summary. Jika customer tidak tahu/diam → nilai Q8 di summary: "Waiting the update".
+
 ### When to Show Summary (Brief)
 
 Show the structured brief ONLY when ALL of the following are answered:
@@ -1156,7 +1326,11 @@ Baik, permintaan utama Anda sudah saya catat, sebagai berikut 📝 🔥
 
 ✓ Budget: *[nilai dari Q3 — HANYA jika ✅]*
 
-✓ Masuk: *[nilai dari Q8 — HANYA jika ✅]*
+✓ Masuk: *[nilai dari Q8 — HANYA jika ✅; bisa juga "Waiting the update"]*
+
+✓ Pembiayaan: *[nilai dari Q_KPR — HANYA untuk transaksi BELI dan jika ✅; sertakan bank/DP dari Q_KPR-a jika ada]*
+
+✓ Kondisi: *[nilai dari Q_COND (baru/second/inden) — HANYA untuk BELI residensial dan jika ✅]*
 
 ✓ Keputusan bersama: *[nilai dari Q9 — HANYA jika ✅]*
 
@@ -1188,7 +1362,8 @@ ${resolvedAppName}
 - **⛔ DILARANG KERAS tulis "Disebutkan", "Ada", "Iya", "Diketahui", "Pernah", "Sudah", atau frasa samar apapun sebagai nilai field di summary.** Jika fieldnya ❓ → baris itu TIDAK ADA di summary, titik.
 - **⛔ DILARANG KERAS: Jangan inferensi "Masuk: [bulan]" dari tanggal sistem.** Jika Q8 ❓ → baris "Masuk" TIDAK ADA di brief.
 - **⛔ DILARANG KERAS: Jangan tulis "Patokan lokasi: Disebutkan" atau "Hindari: Disebutkan".** Jika Q6 ❓ atau Q5 ❓ → baris itu TIDAK ADA di brief.
-- **⛔ DILARANG KERAS: Jangan tampilkan summary jika Q8 (Tanggal masuk) masih ❓.** Tanyakan Q8 dulu.
+- **⛔ DILARANG KERAS: Jangan tampilkan summary jika Q8 (Tanggal masuk) masih ❓.** Tanyakan Q8 dulu. Pengecualian: jika customer sudah ditanya tanggal tapi belum tahu/tidak bisa memutuskan → Q8 = "Waiting the update" dan summary boleh tampil.
+- **⛔ DILARANG KERAS (BELI): Jangan tampilkan summary jika transaksi = beli dan Q_KPR (Pembiayaan) masih ❓.** Tanyakan cash/KPR dulu.
 - **⛔ DILARANG KERAS: Jangan tampilkan summary jika Q5 (Red flags) masih ❓.** Tanyakan Q5 dulu.
 - **⛔ DILARANG KERAS: Jangan tampilkan summary jika Q6 (Patokan lokasi) masih ❓.** Tanyakan Q6 dulu.
 - **⛔ Label "Hindari" TIDAK ADA** dalam template brief. Jangan gunakan label "Hindari" — gunakan "Red flags" jika Q5 ✅.
@@ -1279,4 +1454,5 @@ module.exports = {
   buildPreferenceExtractionPrompt,
   extractQualificationState,
   buildQualificationStateBlock,
+  findNextQuestion,
 };
