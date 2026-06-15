@@ -1,6 +1,7 @@
 const { loadProjectSkillPrompt } = require('./skillPromptService');
 const { detectBudget }           = require('./propertyRecommendationService');
 const { parseCustomerDate, isDontKnowDateAnswer, WAITING_THE_UPDATE } = require('../utils/customerDateParser');
+const { parseMoneyRange }        = require('../utils/customerMoneyParser');
 
 /* ─── Qualification State Extractor ────────────────────────────────────────── */
 /* Scans full conversation history to build a per-question answered/unanswered  */
@@ -241,23 +242,35 @@ function extractQualificationState(history = [], currentMessage = '') {
     }
 
     // Q3 — Budget
-    // Reuse the robust detector so the QUALIFICATION STATE matches the gate:
-    //   • parses ranges in full ("2-4jt" → Rp 2.000.000 - Rp 4.000.000)
-    //   • rejects counts ("2 kali" is NOT 2 ribu, "3 kamar" is NOT budget)
-    //   • maps affordability words → terjangkau/affordable
-    // Ambiguous ranges (no unit on either side) are left ❓ so Q3 is re-asked.
+    // detectBudget() acts as the GATE (it rejects counts/durations: "2 kali",
+    // "3 kamar", "2 tahun" → not budget; maps affordability words). The display
+    // value is produced by the comprehensive customerMoneyParser (51 money + 13
+    // rental cases: USD, triliun, reversed ranges, full-IDR + bare scaling,
+    // /malam·/minggu·/bulan·/tahun suffix). A strict "money-shaped" check also
+    // opens the gate for USD/triliun expressions detectBudget alone may miss —
+    // never for bare counts/years (no monetary unit ⇒ gate stays closed).
     if (!state.budget) {
       const b = detectBudget(raw);
-      if (b && !b.ambiguous) {
-        if (b.preference === 'affordable') {
-          state.budget = 'terjangkau/affordable';
-        } else {
-          const periodSuffix = b.period === 'year'  ? '/tahun'
-            : b.period === 'month' ? '/bulan'
-            : b.period === 'night' ? '/malam'
-            : b.period === 'week'  ? '/minggu'
-            : '';
-          state.budget = b.text + periodSuffix;
+      if (b && b.preference === 'affordable') {
+        state.budget = 'terjangkau/affordable';
+      } else {
+        const moneyShaped =
+          /\b\d[\d.,]*\s*(?:k|rb|ribu|jt|juta|jutaan|m|miliar|milyar|t|triliun|million|millions|billion|trillion)\b/i.test(raw) ||
+          /\b\d[\d.,]*\s*(?:usd|us\$)\b/i.test(raw) || /\$\s*\d/.test(raw) ||
+          /\d{1,3}(?:\.\d{3})+/.test(raw);                       // full-IDR grouped e.g. 837.000
+        const gateOpen = (b && !b.ambiguous) || moneyShaped;
+        if (gateOpen) {
+          const money = parseMoneyRange(raw);
+          if (money && money.status === 'ok') {
+            state.budget = money.formatted;                      // already includes /period
+          } else if (b && !b.ambiguous) {
+            const periodSuffix = b.period === 'year'  ? '/tahun'
+              : b.period === 'month' ? '/bulan'
+              : b.period === 'night' ? '/malam'
+              : b.period === 'week'  ? '/minggu'
+              : '';
+            state.budget = b.text + periodSuffix;
+          }
         }
       }
     }
