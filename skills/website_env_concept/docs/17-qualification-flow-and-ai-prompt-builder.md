@@ -292,3 +292,50 @@ Asking Q9 would be redundant and slightly offensive. Auto-set to "Mandiri" silen
 Red flags and anchor point are the two pieces of information most critical for accurate
 matching. Without them, agent risks recommending properties the customer will immediately
 reject on viewing. Added to `DIBLOKIR` banner and Task point 5 check.
+
+---
+
+## Recent Enhancements (current build)
+
+The Q1–Q12 base above is now extended by several deterministic, server-side modules so the AI
+copies normalized values instead of guessing:
+
+**1. Deterministic date parser — `utils/customerDateParser.js` (35 rules).**
+Q8 normalized to `"DD Bulan YYYY"`: relative ("minggu depan", "besok", "bulan depan"), bare months,
+`DD/MM` vs `MM/DD` disambiguation, 2-digit years. Rule 25 ("Juni" = current month) and Rule 35
+("segera") force asking the exact date first; if still unknown → `"Waiting the update"`.
+
+**2. Money parser — `utils/customerMoneyParser.js`.**
+Ranges → `"Rp 2.000.000 - Rp 3.000.000"`; handles K/juta/miliar/triliun, USD (kurs `USD_IDR_RATE`),
+and rental periods (`/malam`, `/bulan`, `/tahun`).
+
+**3. Facilities — `detectFacilities()` (19 labels) + `Q_FAC`.**
+Amenities (AC, WiFi, Kolam renang, Gym, Kids zone, Keamanan 24 jam, …) accumulate and show as
+`✓ Fasilitas: …`. **For SEWA, Q_FAC is MANDATORY** — ask facilities (after furnishing) before the
+summary; if never asked → `✗ Fasilitas: (Belum ditanyakan)`.
+
+**4. Household group-size detection.**
+`"N orang"` of any size + `rombongan / grup / gathering / reuni / keluarga besar` now set
+`household`. Group ≥6 → `"15 orang (rombongan/grup)"` (strong villa signal).
+
+**5. 24-combination flow (12 types × sewa/beli).**
+`findNextQuestion()` branches per type+transaction. BELI adds `Q_KPR` (cash/KPR), `Q_KPR-a`
+(bank/DP if KPR), `Q_COND` (baru/second/inden), plus per-type `Q14` (hotel operasional, kos
+pengelola, ruko/toko tenant status, gudang/others zonasi, kondotel ROI, …).
+
+**6. House v2 pilot — `claude_responds/docs/12-house-v2-pilot.md` (env `HOUSE_PILOT_V2`).**
+Unnamed assistant + QM motivation + QF financing readiness; ends with a VISIBLE summary
+(`✓` answered / `✗ (Belum ditanyakan)`) + handoff + internal `[BRIEF_READY]`. Scoring HOT/WARM/
+INCOMPLETE (financing weighted 2; cash-from-unsold-asset capped at WARM + flagged).
+
+**7. Anti-loop / history fixes.**
+`extractFromHistory` accumulates over the last **24** customer messages (was 8) so the opening
+message's type/tx/location/budget never scrolls out (which used to replay the opener at the end of
+long flows). "belum pernah lihat" = hard Q2b-answered → never re-ask. Multi-type comparison
+("villa atau apartemen, lebih cocok?") → brief recommendation (group ≥6 → villa), then continue.
+
+**8. Summary humanizes type** (`apartment` → "Apartemen"), includes `✓ Fasilitas` & `✓ Budget`, and
+uses the dynamic `${agentName}` / `${appName}` signature (never hardcode names).
+
+All of this runs identically across Fonnte / WATI / 360dialog via the shared `whatsappAIService` —
+see `docs/16-multi-agent-whatsapp-architecture.md` (Unified Inbound Processing Pipeline).
