@@ -1,6 +1,7 @@
 const { loadProjectSkillPrompt } = require('./skillPromptService');
 const { detectBudget, detectFacilities } = require('./propertyRecommendationService');
 const { parseCustomerDate, isDontKnowDateAnswer, WAITING_THE_UPDATE } = require('../utils/customerDateParser');
+const { parseMoneyRange }        = require('../utils/customerMoneyParser');
 
 /* ─── Qualification State Extractor ────────────────────────────────────────── */
 /* Scans full conversation history to build a per-question answered/unanswered  */
@@ -44,6 +45,7 @@ function extractQualificationState(history = [], currentMessage = '') {
     kprDetails      : null,   // Q_KPR-a (beli + KPR): bank & DP
     propertyCondition: null,  // Q_COND (beli residensial): baru/ready | second | inden
     useCase         : null,   // beli: own-use | investment
+    aiAskedQ2b      : false,  // true when AI has already asked Q2b in this session
   };
 
   const MONTH_ID = 'januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember';
@@ -242,23 +244,35 @@ function extractQualificationState(history = [], currentMessage = '') {
     }
 
     // Q3 — Budget
-    // Reuse the robust detector so the QUALIFICATION STATE matches the gate:
-    //   • parses ranges in full ("2-4jt" → Rp 2.000.000 - Rp 4.000.000)
-    //   • rejects counts ("2 kali" is NOT 2 ribu, "3 kamar" is NOT budget)
-    //   • maps affordability words → terjangkau/affordable
-    // Ambiguous ranges (no unit on either side) are left ❓ so Q3 is re-asked.
+    // detectBudget() acts as the GATE (it rejects counts/durations: "2 kali",
+    // "3 kamar", "2 tahun" → not budget; maps affordability words). The display
+    // value is produced by the comprehensive customerMoneyParser (51 money + 13
+    // rental cases: USD, triliun, reversed ranges, full-IDR + bare scaling,
+    // /malam·/minggu·/bulan·/tahun suffix). A strict "money-shaped" check also
+    // opens the gate for USD/triliun expressions detectBudget alone may miss —
+    // never for bare counts/years (no monetary unit ⇒ gate stays closed).
     if (!state.budget) {
       const b = detectBudget(raw);
-      if (b && !b.ambiguous) {
-        if (b.preference === 'affordable') {
-          state.budget = 'terjangkau/affordable';
-        } else {
-          const periodSuffix = b.period === 'year'  ? '/tahun'
-            : b.period === 'month' ? '/bulan'
-            : b.period === 'night' ? '/malam'
-            : b.period === 'week'  ? '/minggu'
-            : '';
-          state.budget = b.text + periodSuffix;
+      if (b && b.preference === 'affordable') {
+        state.budget = 'terjangkau/affordable';
+      } else {
+        const moneyShaped =
+          /\b\d[\d.,]*\s*(?:k|rb|ribu|jt|juta|jutaan|m|miliar|milyar|t|triliun|million|millions|billion|trillion)\b/i.test(raw) ||
+          /\b\d[\d.,]*\s*(?:usd|us\$)\b/i.test(raw) || /\$\s*\d/.test(raw) ||
+          /\d{1,3}(?:\.\d{3})+/.test(raw);                       // full-IDR grouped e.g. 837.000
+        const gateOpen = (b && !b.ambiguous) || moneyShaped;
+        if (gateOpen) {
+          const money = parseMoneyRange(raw);
+          if (money && money.status === 'ok') {
+            state.budget = money.formatted;                      // already includes /period
+          } else if (b && !b.ambiguous) {
+            const periodSuffix = b.period === 'year'  ? '/tahun'
+              : b.period === 'month' ? '/bulan'
+              : b.period === 'night' ? '/malam'
+              : b.period === 'week'  ? '/minggu'
+              : '';
+            state.budget = b.text + periodSuffix;
+          }
         }
       }
     }
@@ -342,6 +356,15 @@ function extractQualificationState(history = [], currentMessage = '') {
         state.furnishing = 'furnished';
       }
     }
+  }
+
+  // ── Phase 1.5: Detect whether AI already asked Q2b (even if customer didn't answer it) ──
+  // This flag prevents the AI from re-asking Q2b when the customer redirected the conversation.
+  if (!state.searchHistory) {
+    const Q2B_ASKED_RE = /sudah\s+lihat\s+berapa|how\s+many\s+(prop|properties)|apa\s+yang\s+membuat\s+belum\s+cocok|yang\s+sudah\s+dilihat|berapa\s+properti.*sudah/;
+    state.aiAskedQ2b = ACTIVE_ALL.some(m =>
+      QS_AI_ROLES.has(m.role) && Q2B_ASKED_RE.test((m.message || '').toLowerCase())
+    );
   }
 
   // ── Phase 2: Detect context-dependent Q6/Q7/Q9/Q10 from AI→Customer pairs ─
@@ -697,7 +720,8 @@ function findNextQuestion(state) {
   }
 
   // Q2b — Riwayat pencarian (kecuali untuk booking hotel/kondotel dan properti komersial)
-  if (!state.searchHistory && !isBooking)
+  // Only fires ONCE — skip if AI already asked Q2b (even if customer didn't answer directly)
+  if (!state.searchHistory && !state.aiAskedQ2b && !isBooking)
     return { q: 'Q2b', hint: `Sudah lihat berapa properti di ${loc}? Apa yang membuat belum cocok dari yang sudah dilihat?` };
 
   // Q3 — Budget (via 2 harga kontras — JANGAN tanya langsung)
@@ -870,6 +894,7 @@ function buildQualificationStateBlock(state) {
     '╔══════════════════════════════════════════════════════════╗',
     '║  📋 QUALIFICATION STATE — STATUS JAWABAN CUSTOMER        ║',
     '║  ✅ = SUDAH DIJAWAB → JANGAN TANYA LAGI                  ║',
+    '║  ⏭️  = SUDAH DITANYAKAN, SKIP → JANGAN ULANGI           ║',
     '║  ❓ = BELUM DIJAWAB → TANYAKAN BERIKUTNYA (urutan Q↑)    ║',
     '╚══════════════════════════════════════════════════════════╝',
     '',
@@ -903,11 +928,13 @@ function buildQualificationStateBlock(state) {
     row('Tipe transaksi    [Q1]', state.transactionType),
     row('Tipe properti         ', state.buildingType ? state.buildingType + fbNote : null),
     row('Lokasi            [Q2]', state.location),
-    // Q2b is shown as ✅ when AI asked search-history question and customer answered;
-    // shown as ❓ otherwise (not yet asked). Q2b is the HIGHEST-VALUE question.
+    // Q2b: ✅ = customer answered; ⏭️ = AI asked but customer redirected (skip, don't repeat);
+    //      ❓ = not yet asked.
     state.searchHistory
       ? `✅ Riwayat pencarian [Q2b]: ${state.searchHistory}`
-      : `❓ Riwayat pencarian [Q2b]: BELUM DITANYAKAN`,
+      : state.aiAskedQ2b
+        ? `⏭️ Riwayat pencarian [Q2b]: Sudah ditanyakan — customer tidak menjawab langsung. ⛔ JANGAN tanya ulang. Lanjut ke Q berikutnya.`
+        : `❓ Riwayat pencarian [Q2b]: Belum ditanyakan`,
     row('Budget            [Q3]', state.budget),
     row('Penghuni          [Q4]', state.household),
     row('Red flags         [Q5]', state.redFlags),
@@ -944,6 +971,7 @@ function buildQualificationStateBlock(state) {
   lines.push(
     '',
     '→ Tanyakan HANYA field ❓ di atas, mulai dari nomor Q terkecil.',
+    '→ Field ⏭️ berarti SUDAH DITANYAKAN — SKIP, jangan tanya ulang.',
     '→ SATU pertanyaan per pesan. Jangan gabungkan dua pertanyaan.',
     '→ Q3 Budget: JANGAN tanya langsung — gunakan 2 harga kontras sebagai pilihan.',
     '→ Q8 Tanggal masuk WAJIB dijawab sebelum summary ditampilkan.',
@@ -1249,9 +1277,10 @@ Most customers don't know exactly what they want. Guide discovery through OPTION
 **Q1 — Transaction type** (skip if already known from history)
 "Lagi cari untuk sewa atau beli?"
 
-**Q2 — Search history** (after location is established — HIGHEST VALUE QUESTION)
+**Q2b — Search history** (after location is established — HIGHEST VALUE QUESTION — tanyakan SEKALI saja)
 "Sudah lihat berapa properti di area itu? Apa yang membuat belum cocok dari yang sudah dilihat?"
 → Extracts: red flags, budget ceiling, decision maker signals, anchor point, urgency.
+→ **⛔ JANGAN tanya ulang Q2b.** Jika ⏭️ atau ✅ di QUALIFICATION STATE, lanjut ke Q berikutnya — jangan ulang meskipun jawaban customer tidak langsung menjawab Q2b. Customer yang tidak menjawab Q2b → terima saja, catat fasilitas/info yang mereka berikan, lanjut.
 
 **Q3 — Budget** (NEVER ask directly — always show two contrasting price options)
 "Di [area] ada Villa yang di kisaran [LOW range] dan ada juga yang [HIGH range]. Kira-kira yang mana lebih sesuai dengan rencana Bapak/Ibu?"

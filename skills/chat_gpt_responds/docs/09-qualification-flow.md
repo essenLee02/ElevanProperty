@@ -851,3 +851,306 @@ Kalau tetap belum tahu / diam → summary `✓ Masuk: *Waiting the update*`.
 - **The conversation never "stops" on a date answer** — a Q8 reply like "Juni 2026" is always a
   property continuation, the flow proceeds to the next ❓ question (this fixes the bug where the
   chat dead-ended after the customer answered the move-in month).
+
+---
+
+## Budget Anchor Price Table (Q3)
+
+These are the reference price ranges used for the Q3 two-option anchor question (`getBudgetAnchors(buildingType, transactionType)` — sourced from `chatbotPrivateController.js`).
+
+Template:
+```
+"Di *[lokasi]* ada *[Tipe]* yang di kisaran *[LOW]* dan ada juga yang *[HIGH]*.
+Kira-kira yang mana lebih sesuai dengan rencana Anda? 💰"
+```
+
+| Tipe Properti | Sewa — Rendah | Sewa — Tinggi | Beli — Rendah | Beli — Tinggi |
+|---|---|---|---|---|
+| Rumah | 2–5 juta/bln | 10–25 juta/bln | 300–800 juta | 1–5 miliar |
+| Apartemen | 2–5 juta/bln | 8–20 juta/bln | 300–700 juta | 1–3 miliar |
+| Hotel | 400–800 rb/malam | 2–6 juta/malam | — | — |
+| Villa | 1–3 juta/malam | 5–15 juta/malam | 1–3 miliar | 5–20 miliar |
+| Kos | 500rb–1,5 juta/bln | 2–5 juta/bln | — | — |
+| Ruko | 15–40 juta/bln | 60–150 juta/bln | 1–3 miliar | 5–20 miliar |
+| Kantor | 50–100 rb/m²/bln | 150–300 rb/m²/bln | 2–5 miliar | 10–30 miliar |
+| Gudang | 20–50 juta/bln | 80–200 juta/bln | 1–3 miliar | 5–15 miliar |
+| Toko | 10–30 juta/bln | 50–150 juta/bln | 500 jt–2 M | 5–15 miliar |
+| Mansion | 5–15 juta/bln | 30–100 juta/bln | 5–15 miliar | 30–100 miliar |
+| Kondotel | 500rb–1,5 juta/malam | 3–8 juta/malam | 500–900 juta | 1,5–4 miliar |
+| Lainnya | 10–30 juta/bln | 50–200 juta/bln | 500 jt–3 M | 5–25 miliar |
+
+**Notes:**
+- Hotel dan Kos tidak ada opsi beli → clarify jika customer minta beli (mungkin investasi gedung)
+- Kantor: satuan per m²/bulan → perlu luas dari headcount (Q14-O1) untuk anchoring yang akurat
+- Villa sewa: default per malam → tanyakan period via Q14-V1 jika durasi tidak jelas
+- `"terjangkau"`, `"murah"`, `"affordable"`, `"hemat"`, `"low budget"` → Q3 ✅ tanpa angka, budget = affordable → lanjut Q8
+
+---
+
+## BELI FLOW — Q_KPR → Q_KPR-a → Q_COND → Q11-beli
+
+*(Menggantikan Q10/Q10a/Q11 untuk transaksi `sale`)*
+
+Untuk transaksi **beli**, alur setelah Q4 (household) berbeda dari sewa:
+
+```
+SEWA: Q8 → Q4 → Q5 → Q6 → Q7 → Q9 → Q10 → Q10a → Q11 → Q12 → [Q14]
+BELI: Q8 → Q4 → Q_KPR → [Q_KPR-a] → [Q_COND] → [Q11-beli] → [Q14]
+```
+
+Q5/Q6/Q7/Q9/Q10/Q10a/Q12 **TIDAK ditanyakan** untuk transaksi beli.
+
+---
+
+### Q_KPR — Pembiayaan (MANDATORY untuk semua transaksi beli)
+
+**Fires when:** `transactionType === 'sale'` AND customer belum menyebut pembiayaan.
+
+```
+Residensial (rumah/apartemen/villa/mansion/kos):
+  ID: "Untuk pembiayaan, rencananya *cash* atau *KPR*? 💳"
+  EN: "For financing, will it be *cash* or a *mortgage (KPR)*? 💳"
+
+Komersial (ruko/kantor/gudang/toko/hotel/kondotel/others):
+  ID: "Untuk pembiayaan, rencananya *cash*, *KPR komersial*, atau *kombinasi*? 💳"
+  EN: "For financing, *cash*, *commercial mortgage*, or a *combination*? 💳"
+
+Tanah/Kavling/Lahan (type = others, customer menyebut tanah/kavling):
+  ID: "Untuk pembiayaan, rencananya *cash* atau *KPR*?
+      (untuk tanah biasanya KPT — Kredit Pemilikan Tanah) 💳"
+  EN: "For financing, will it be *cash* or a *loan*?
+      (land usually uses a Land Ownership Credit/KPT) 💳"
+```
+
+**Skip Q_KPR** jika sudah ada kata berikut di conversation: `cash`, `tunai`, `kpr`, `kredit`, `cicil`, `kombinasi`, `kpt`, `pembiayaan`, `dp`, `down payment`, `mortgage`, `installment`.
+
+---
+
+### Q_KPR-a — KPR Readiness: Bank + DP %
+
+**Fires when:** Customer memilih KPR/cicil/kredit/kombinasi/KPT (`financingIsKPR = true`) DAN belum menyebut bank/DP.
+
+```
+ID: "Sudah ada gambaran bank yang dituju, atau perlu saya bantu rekomendasikan?
+    Dan DP-nya kira-kira berapa persen yang disiapkan? 🏦"
+EN: "Do you already have a target bank, or should I recommend one?
+    And roughly what down-payment percentage are you preparing? 🏦"
+```
+
+**Skip Q_KPR-a** jika customer sudah menyebut bank (BCA, Mandiri, BNI, BRI, BTN, CIMB, Danamon, Permata) atau `"sudah approve"`, `"pre-approved"`, `"sudah cek bank"`.
+
+---
+
+### Q_COND — Kondisi Properti (residensial beli: rumah/apartemen/mansion)
+
+**Fires when:** `buildingType` ∈ {house, apartment, mansion} AND `transactionType === 'sale'`.
+**NOT asked** untuk commercial (ruko/toko/kantor/gudang/hotel/kondotel/others).
+
+```
+Apartemen:
+  ID: "Untuk kondisi unit, prefer yang *baru/primary* dari developer,
+      atau *secondary* yang sudah jadi? 🏢"
+  EN: "For condition, do you prefer *new/primary* from the developer,
+      or *secondary* (ready) units? 🏢"
+
+Rumah / Mansion:
+  ID: "Untuk kondisi, lebih prefer yang *baru/ready*,
+      *second* kondisi baik, atau *inden* tidak masalah? 🏠"
+  EN: "For condition, do you prefer *new/ready*, a good-condition *second-hand*,
+      or is *off-plan/inden* okay? 🏠"
+```
+
+**Skip Q_COND** jika sudah ada: `baru`, `ready`, `ready stock`, `primary`, `second`, `bekas`, `secondary`, `inden`, `indent`, `pre-order`, `kondisi baik`, `siap huni`.
+
+---
+
+### Q11-beli — Furnishing (residensial beli, jika belum disebutkan)
+
+**Fires when:** `buildingType` ∈ {house, apartment, mansion} AND `transactionType === 'sale'` AND furnishing belum disebutkan.
+
+```
+ID: "Untuk furnitur, prefer yang sudah *furnished*, *semi-furnished*, atau *kosongan*? 🛋️"
+EN: "For furnishing, do you prefer *furnished*, *semi-furnished*, or *unfurnished*? 🛋️"
+```
+
+**NOT asked** untuk: hotel, kondotel, villa (assumed furnished); commercial (irrelevant).
+
+---
+
+### BELI FLOW — Summary Brief Display
+
+Untuk transaksi beli, summary TIDAK menampilkan `Durasi sewa` atau `Payment terms`.
+Tampilkan (jika ✅ di QUALIFICATION STATE):
+
+```
+✓ Pembiayaan: *[Cash / KPR — Bank BCA, DP 20% / KPR komersial / Kombinasi]*
+✓ Kondisi: *[Baru/ready / Secondary / Inden]*
+✓ Furnitur: *[Furnished / Semi-furnished / Kosongan]*
+```
+
+---
+
+## Q14 — Type-Specific Questions (Mode OFF / Summary Mode Only)
+
+*(Ditanyakan setelah core Q1–Q12 + BELI FLOW selesai — SATU pertanyaan per pesan)*
+
+Q14 adalah pertanyaan follow-up spesifik per tipe properti, diambil dari `ConversationQualifier.getNextQuestion()` (mode = `'summary'`). Lewati jika sudah dijawab di QUALIFICATION STATE atau conversation history.
+
+**Q14 TIDAK ditanyakan** dalam Mode ON (`RESPOND_CATALOG_RUN=ON`) — listing langsung ditampilkan.
+
+---
+
+### Q14-H — Hotel & Kondotel Sewa (Booking Frame)
+
+Hotel dan Kondotel sewa = **booking per malam**, bukan sewa bulanan.
+⚠️ **Jangan tanya Q8 (masuk bulan apa)** seperti residensial — langsung Q14-H1 (check-in tanggal spesifik).
+
+| Slot | ID | EN |
+|---|---|---|
+| Q14-H1 Check-in date | "Rencananya check-in tanggal berapa? 📅" | "What is your planned check-in date? 📅" |
+| Q14-H2 Check-out/berapa malam | "Check-out tanggal berapa? (atau berapa malam?) 🌙" | "Check-out date? (or how many nights?) 🌙" |
+| Q14-H3 Tipe kamar | "Tipe kamar yang diinginkan? *Standard*, *Deluxe*, *Suite*, atau *Family room*? 🛏️" | "Preferred room type? *Standard*, *Deluxe*, *Suite*, or *Family room*? 🛏️" |
+| Q14-H4 Breakfast | "Termasuk *breakfast* ya? Atau tanpa breakfast juga oke? ☕" | "Do you want *breakfast included*, or room only is fine? ☕" |
+
+---
+
+### Q14-V — Villa
+
+**Villa Sewa:**
+
+| Slot | ID | EN |
+|---|---|---|
+| Q14-V1 Rental period (tanya SEBELUM check-in) | "Sewa villa-nya per *malam*, per *minggu*, atau per *bulan*? ⏱️" | "Renting the villa per *night*, per *week*, or per *month*? ⏱️" |
+| Q14-V2 Private pool | "Perlu villa dengan *private pool*? Atau shared pool juga oke? 🏊" | "Do you need a villa with a *private pool*, or is a shared pool okay? 🏊" |
+| Q14-V3 Check-in date (SETELAH period diketahui) | "Tanggal check-in? 📅" | "Check-in date? 📅" |
+
+**Villa Beli:**
+
+| Slot | ID | EN |
+|---|---|---|
+| Q14-V2-beli Private pool (hampir selalu mandatory) | "Untuk villa, wajib ada *private pool*? Ini biasanya jadi standar villa premium. 🏊" | "For the villa, is a *private pool* a must? It's usually a standard for premium villas. 🏊" |
+
+---
+
+### Q14-K — Kos / Boarding House
+
+| Slot | ID | EN |
+|---|---|---|
+| Q14-K1 Tipe kos | "Kos yang dicari untuk *putra*, *putri*, atau *campur*? 🏠" | "Looking for *male-only*, *female-only*, or *mixed* boarding house? 🏠" |
+| Q14-K2 Kamar mandi | "Kamar mandi *dalam* (en-suite) atau *luar* (shared) oke? 🚿" | "*Private bathroom* (en-suite) or *shared bathroom* is okay? 🚿" |
+
+---
+
+### Q14-R — Ruko / Shophouse
+
+| Slot | ID | EN |
+|---|---|---|
+| Q14-R1 Bisnis apa | "Bisnis apa yang akan dijalankan di sana? 🏪" | "What kind of business will be run there? 🏪" |
+| Q14-R2-beli Tenant status (beli only) | "Prefer ruko *kosong* atau yang sudah ada *tenant* berjalan? (tenant existing = langsung cashflow) 🏪" | "Do you prefer an *empty* shophouse or one with an *existing tenant*? (existing tenant = instant cashflow) 🏪" |
+
+---
+
+### Q14-T — Toko / Store
+
+| Slot | ID | EN |
+|---|---|---|
+| Q14-T1 Bisnis + lokasi preferensi | "Bisnis apa yang akan dibuka di toko ini? Dan lebih prefer di *mal/pusat perbelanjaan* atau *standalone*? 🛍️" | "What business will open here? And do you prefer a *mall* unit or *standalone*? 🛍️" |
+| Q14-T2-beli Unit type + tenant (beli only) | "Prefer unit *mal prime* (stabil) atau *trade center* (yield lebih tinggi)? Dan unit kosong atau sudah ada penyewa? 🛍️" | "Prefer a *prime mall* unit (stable) or *trade center* (higher yield)? And empty or with an existing tenant? 🛍️" |
+
+---
+
+### Q14-O — Kantor / Office
+
+| Slot | ID | EN |
+|---|---|---|
+| Q14-O1 Headcount | "Berapa orang yang akan bekerja di kantor ini? (untuk tentukan luas & grade gedung) 👥" | "How many people will work in this office? (to determine size & building grade) 👥" |
+| Q14-O2 Grade gedung | "Preferensi gedung *Grade A* (premium), *Grade B* (mid), atau *Grade C* (ekonomis)? 🏢" | "Preference: *Grade A* (premium), *Grade B* (mid), or *Grade C* (economy) building? 🏢" |
+
+---
+
+### Q14-M — Mansion
+
+| Slot | ID | EN |
+|---|---|---|
+| Q14-M1 Private pool (hampir selalu mandatory) | "Untuk mansion, wajib ada *private pool*? Ini hampir selalu jadi standar mansion premium. 🏊" | "Is a *private pool* mandatory for the mansion? It's nearly always standard for premium properties. 🏊" |
+
+---
+
+### Q14-C — Kondotel Beli (Frame Investasi)
+
+Kondotel beli = investasi, bukan hunian pribadi.
+
+| Slot | ID | EN |
+|---|---|---|
+| Q14-C1 ROI target | "Target ROI per tahun berapa? (misalnya 7%, 10%, atau lebih?) 📈" | "What's your target annual ROI? (e.g. 7%, 10%, or higher?) 📈" |
+| Q14-C2 Unit type (yield terbaik) | "Tipe unit yang paling laku disewakan? *Studio* atau *1 kamar* biasanya ROI terbaik. 🛏️" | "Which unit type rents best? *Studio* or *1-bedroom* usually gives the best ROI. 🛏️" |
+
+---
+
+### Q14-W — Gudang / Warehouse
+
+| Slot | ID | EN |
+|---|---|---|
+| Q14-W1 Tujuan penggunaan | "Gudangnya untuk apa — *produksi*, *distribusi*, atau *penyimpanan*? 📦" | "What is the warehouse for — *production*, *distribution*, or *storage*? 📦" |
+| Q14-W2-beli Zonasi (beli only) | "Perlu pengecekan legalitas *zona industri/pergudangan* sebelum deal? (agar tidak salah peruntukan) 📋" | "Should we verify the *industrial/warehouse zoning* legality before the deal? 📋" |
+
+---
+
+### Q14-L — Properti Lainnya (Tanah/Kavling/Lahan/SPBU/Pabrik/Klinik)
+
+| Slot | ID | EN |
+|---|---|---|
+| Q14-L1 Peruntukan/tujuan | "Properti ini rencananya untuk tujuan apa? (parkir, event, pertanian, pabrik, klinik, dll) 🏗️" | "What is the planned purpose of this property? (parking, events, farming, factory, clinic, etc.) 🏗️" |
+| Q14-L2-beli SHM + zonasi (beli only) | "Perlu pengecekan *sertifikat (SHM)* dan *zonasi* sebelum deal? (agar peruntukannya sesuai rencana) 📋" | "Should we verify the *certificate (SHM)* and *zoning* before the deal? 📋" |
+
+---
+
+### Q14 Skip Rules
+
+| Kondisi | Q14 yang di-skip |
+|---|---|
+| Hotel/Kondotel sewa | Q11 furnishing (always furnished), Q10 lease duration, Q12 apartment prefs |
+| Commercial (ruko/kantor/gudang/toko) | Q4 bedroom count, Q11 furnishing, Q12 apartment prefs |
+| Villa/Mansion sewa | Q4 household (bukan hunian biasa), Q11 (assumed furnished) |
+| Villa/Mansion beli | Q14-V1 rental period (tidak relevan untuk sale) |
+| Mode = catalog (RESPOND_CATALOG_RUN=ON) | Q14 TIDAK ditanyakan — listing langsung tampil |
+| Sudah dijawab sebelumnya | Pertanyaan terkait di-skip (cek ✅ di QUALIFICATION STATE) |
+
+---
+
+### Full Q Flow Map (Mode OFF / Summary Mode)
+
+```
+Q0/Q1   → Tx type + property type (combined if both unknown)
+Q2      → Location
+Q2b     → Search history (highest-value, fires once, extracts red flags + budget signals)
+Q3      → Budget (two price anchors — NEVER a direct "budget berapa?" ask)
+Q8      → Move-in / check-in / target beli date ⚠️ MANDATORY
+Q4      → Household composition (infers bedrooms + decision maker)
+
+── SEWA ──────────────────────── ── BELI ──────────────────────────────
+Q5   Red flags (skip if Q2b)      Q_KPR   Pembiayaan: cash/KPR/KPR komersial
+Q6   Anchor point (skip if Q2b)   Q_KPR-a KPR readiness: bank + DP % (if KPR)
+Q7   Alternative areas             Q_COND  Kondisi: baru/second/inden (residensial)
+Q9   Decision maker (indirect)     Q11-b   Furnishing: furnished/semi/kosongan (residensial)
+Q10  Lease duration (rent only)
+Q10a Payment terms (≥ 1 year)
+Q11  Furnishing: furnished/semi/kosongan
+Q12  Apartment prefs (apart only)
+──────────────────────────────── ──────────────────────────────────────
+
+Q14 Type-specific slots (one per message, skip if already answered):
+  Hotel/Kondotel sewa → H1 check-in → H2 check-out/nights → H3 room type → H4 breakfast
+  Villa sewa          → V1 period (malam/minggu/bln) → V2 private pool → V3 check-in
+  Villa beli          → V2 private pool mandatory check
+  Kos                 → K1 tipe (putra/putri/campur) → K2 kamar mandi (dalam/luar)
+  Ruko                → R1 bisnis → R2 tenant status (beli only)
+  Toko                → T1 bisnis + mal/standalone → T2 prime/trade + tenant (beli only)
+  Kantor              → O1 headcount → O2 grade gedung (A/B/C)
+  Mansion             → M1 private pool mandatory check
+  Kondotel beli       → C1 ROI target → C2 unit type (studio/1BR)
+  Gudang              → W1 tujuan (produksi/distribusi/penyimpanan) → W2 zonasi (beli only)
+  Lainnya             → L1 peruntukan (parkir/event/pertanian/pabrik/dll) → L2 SHM+zonasi (beli)
+
+✅ SUMMARY BRIEF → Agent handoff
+```

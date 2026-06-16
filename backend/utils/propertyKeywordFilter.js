@@ -81,8 +81,9 @@ const RUMAH_EXCLUSIONS = [
 
 const ACTION_WORDS = [
   // ── Bahasa Indonesia ──────────────────────────────────────────────────────
-  // Transaksi
+  // Transaksi (sewa = sewa|kontrak|booking|ngekos|rent|book — semua bernilai "sewa")
   'sewa', 'sewain', 'rental', 'ngontrak', 'kontrak',
+  'booking', 'book', 'ngebooking', 'ngebook',
   'beli', 'purchase',
   'jual', 'dijual', 'disewakan', 'dikontrakkan',
   'cari', 'nyari', 'mencari',
@@ -145,7 +146,39 @@ const STANDALONE_KEYWORDS = [
   // Pertanyaan spesifik properti
   'berapa kamar', 'berapa lantai', 'luas bangunan', 'luas tanah',
   'fasilitas perumahan', 'akses tol', 'dekat sekolah', 'dekat mall',
+  // Ngekos = intent sewa kamar kos (boarding house) — tidak ambigu
+  'ngekos', 'ngekost', 'ngekos-kosan',
 ];
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   3b. OVERRIDE NON-PROPERTI — frasa yang MENGANDUNG kata tipe/aksi properti
+      tetapi BUKAN obrolan properti. Dicek PALING AWAL → paksa return false.
+
+   Diabaikan AI: "sewa mobil", "beli mobil/snack/teh/kopi/baju", "sewa tenda/baju/
+   buku", "kontrak kerja/bagi hasil/hutang", "booking meja/tempat/kursi restoran",
+   "pergi ke kos/kontrakan", "ngebooking kursi".
+   TETAP lolos: "booking hotel/villa", "ngekos dekat kampus" (properti asli).
+══════════════════════════════════════════════════════════════════════════════ */
+const NON_PROPERTY_OVERRIDE = [
+  // Kendaraan
+  /\b(sewa|beli|rental|booking|book|kredit|cicil)\s+(mobil|motor|kendaraan|sepeda|truk|bus|tiket)\b/,
+  // Barang non-properti yang sering pakai "sewa/beli"
+  /\b(sewa|beli|booking|book)\s+(baju|kostum|gaun|jas|buku|tenda|panggung|sound|alat|kursi|meja|sepatu|tas|lapangan|studio\s+foto|wedding|snack|camilan|kopi|teh|minuman)\b/,
+  // Kontrak yang bukan properti
+  /\bkontrak\s+(kerja|kerjasama|kerja\s+sama|bagi\s+hasil|hutang|utang|asuransi|kredit|karyawan|proyek)\b/,
+  /\bbagi\s+hasil\b/,
+  // Booking yang bukan properti
+  /\b(booking|book|ngebooking|reservasi|pesan)\s+(meja|tempat|kursi|tiket|lapangan|salon|dokter|nonton|bioskop|restoran|resto|cafe|kafe|studio)\b/,
+  /\bngebooking\s+kursi\b/,
+  // Pergi/navigasi ke tempat (bukan mencari properti) — motion verb + ke + tempat
+  /\b(pergi|jalan|menuju|mampir|berangkat|balik|pulang|nganter|antar|mau)\s+ke\s+(kos|kost|kontrakan|rumah|toko|kantor|hotel|gudang|kios)\b/,
+  // Restoran / kuliner
+  /\b(makan|nongkrong|pergi|mampir)\s+(di|ke)\s+(restoran|resto|restaurant|cafe|kafe|warung)\b/,
+];
+
+function isNonPropertyOverride(lower) {
+  return NON_PROPERTY_OVERRIDE.some((re) => re.test(lower));
+}
 
 /* ══════════════════════════════════════════════════════════════════════════════
    4. FUNGSI DETEKSI
@@ -246,6 +279,9 @@ function hasPropertyKeyword(message) {
   const lower = message.toLowerCase().trim();
   if (!lower || lower.length < 3) return false;
 
+  // Override: frasa non-properti yang kebetulan memuat kata tipe/aksi → diabaikan
+  if (isNonPropertyOverride(lower)) return false;
+
   // Kondisi A: Kata kunci mandiri (tidak perlu kondisi lain)
   if (hasStandaloneKeyword(lower)) return true;
 
@@ -343,8 +379,8 @@ function extractTransactionTypeFromMessage(message) {
   if (!message) return '';
   const lower = message.toLowerCase();
 
-  if (lower.match(/\b(sewa|rental|ngontrak|kontrak|disewakan|kost|kos|boarding|rent|lease)\b/i)) return 'rent';
-  if (lower.match(/\b(beli|jual|dijual|purchase|buy|sell|kpr|inden|dp|cicilan|over kredit)\b/i)) return 'sale';
+  if (lower.match(/\b(sewa|rental|ngontrak|kontrak|disewakan|kost|kos|boarding|ngekos|ngekost|booking|book|rent|lease)\b/i)) return 'rent';
+  if (lower.match(/\b(beli|pembelian|jual|dijual|purchase|buy|sell|sale|kpr|inden|dp|cicilan|over kredit)\b/i)) return 'sale';
 
   return '';
 }
@@ -439,8 +475,8 @@ function isPropertyContextContinuation(message, history = []) {
   if (/^(sewa|beli|jual|beli\s+aja|mau\s+sewa|mau\s+beli|untuk\s+sewa|untuk\s+beli|rent|buy|purchase)$/.test(lower.trim())) return true;
   // Durasi sewa singkat — juga cek di sini (setelah hasPropertyCtx) untuk kelengkapan
   if (/^\d+\s*(tahun|year|bulan|month)s?$/.test(lower.trim())) return true;
-  // Harga dengan satuan — jawaban Q3 ("2-4 juta/seminggu", "5 jt per bulan")
-  if (/\b\d[\d.,]*\s*(juta|ribu|miliar|rb|jt)\b/i.test(lower)) return true;
+  // Harga dengan satuan — jawaban Q3 ("2-4 juta/seminggu", "5 jt per bulan", "700-900K")
+  if (/\b\d[\d.,]*\s*(juta|ribu|miliar|rb|jt|k)\b/i.test(lower)) return true;
   // Q2b answer fast-path: "Saya belum pernah lihat", "sudah lihat 3", "belum pernah survey"
   // These are ALWAYS Q2b answers and must pass even before hasRecentPropertyQuestion check.
   if (/\b(belum\s+pernah\s+lihat|pernah\s+lihat|sudah\s+lihat\s+\d|belum\s+lihat|sudah\s+survey|belum\s+ada\s+yang\s+cocok|belum\s+pernah\s+survey)\b/i.test(lower)) return true;
@@ -455,6 +491,10 @@ function isPropertyContextContinuation(message, history = []) {
     /sewa\s+atau\s+beli/,
     /beli\s+atau\s+sewa/,
     /kisaran\s+harga/,
+    /\bkisaran\b/,                    // "ada yang kisaran 500rb–1.5jt"
+    /kira-kira.*(?:lebih\s+)?sesuai/, // "kira-kira yang mana lebih sesuai?"
+    /yang\s+mana.*sesuai/,            // "yang mana lebih sesuai dengan rencana"
+    /lebih\s+sesuai\s+dengan/,
     /budget/,
     /harga\s+berapa/,
     /berapa\s+harga/,
