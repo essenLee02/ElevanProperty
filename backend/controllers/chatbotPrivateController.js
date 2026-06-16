@@ -930,8 +930,11 @@ class ResponseBuilderWhatsApp {
     if (txLabel && brief.transactionType?.value !== 'UNKNOWN') {
       lines.push(`✓ ${isId ? 'Rencana' : 'Plan'}: *${txLabel}*`);
     }
-    const typeL = fmt(isId ? 'Tipe' : 'Type', brief.buildingType);
-    if (typeL) lines.push(typeL);
+    // Humanize the building type key (apartment → Apartemen / Apartment).
+    if (brief.buildingType && brief.buildingType.value !== 'UNKNOWN' && brief.buildingType.value != null) {
+      const typeHuman = PropertyFormatter.humanBuildingType(brief.buildingType.value, this.#lang);
+      lines.push(`✓ ${isId ? 'Tipe' : 'Type'}: *${typeHuman}*`);
+    }
     const locL = fmt(isId ? 'Lokasi' : 'Location', brief.location);
     if (locL) lines.push(locL);
     const budL = fmt(isId ? 'Budget' : 'Budget', brief.budget);
@@ -944,6 +947,8 @@ class ResponseBuilderWhatsApp {
     if (dmL) lines.push(dmL);
     const furL = fmt(isId ? 'Furnitur' : 'Furnishing', brief.furnishing);
     if (furL) lines.push(furL);
+    const facL = fmt(isId ? 'Fasilitas' : 'Facilities', brief.facilities);
+    if (facL) lines.push(facL);
     const altL = fmt(isId ? 'Area alternatif' : 'Alt. areas', brief.alternativeAreas);
     if (altL) lines.push(altL);
     const rfL  = fmt(isId ? 'Hindari' : 'Avoid', brief.redFlags);
@@ -974,6 +979,73 @@ class ResponseBuilderWhatsApp {
       : `\n\nWarm regards,\n*${this.#agentName}*\n*${this.#appName}*`;
 
     return summary + signature;
+  }
+
+  /**
+   * House v2 pilot — customer-facing HANDOFF message (no sourcing promise, no summary).
+   * The structured [BRIEF_READY] is internal (returned in metadata), never in this text.
+   */
+  houseHandoff() {
+    const isId = this.#lang === 'id';
+    return isId
+      ? `Siap, Kak! Semua sudah saya catat lengkap. Saya teruskan ke *${this.#agentName}* sekarang ya — beliau yang akan lanjut hubungi Kak langsung untuk pilihan dan langkah berikutnya. Terima kasih! 🙏`
+      : `All set, Kak! I've noted everything. I'm handing this over to *${this.#agentName}* now — they'll reach out to you directly with options and next steps. Thank you! 🙏`;
+  }
+
+  /**
+   * House — customer-facing SUMMARY (visible recap, then handoff).
+   * Shows the CORE fields always: ✓ when answered, "X … (Belum ditanyakan)" when a
+   * field was never asked — so both customer and agent see exactly what's covered and
+   * what's still missing. Closes with the dynamic agent signature.
+   *
+   * @param {object} brief - From ConversationQualifier.buildAgentBrief()
+   */
+  houseSummary(brief) {
+    const isId = this.#lang === 'id';
+    const known = (f) => f && f.value !== 'UNKNOWN' && f.value != null && String(f.value).trim() !== '';
+    const notAsked = isId ? '(Belum ditanyakan)' : '(Not asked yet)';
+    // ✓ label: *value*   OR   X label: *(Belum ditanyakan)*
+    const row = (label, field) => known(field)
+      ? `✓ ${label}: *${field.value}*`
+      : `✗ ${label}: *${notAsked}*`;
+
+    const txLabel = brief.transactionType?.value === 'rent'
+      ? (isId ? 'Sewa' : 'Rent')
+      : brief.transactionType?.value === 'sale'
+        ? (isId ? 'Beli' : 'Buy')
+        : null;
+    const typeHuman = (brief.buildingType && brief.buildingType.value !== 'UNKNOWN' && brief.buildingType.value != null)
+      ? PropertyFormatter.humanBuildingType(brief.buildingType.value, this.#lang)
+      : null;
+
+    const lines = [];
+    if (txLabel) lines.push(`✓ ${isId ? 'Rencana' : 'Plan'}: *${txLabel}*`);
+    if (typeHuman) lines.push(`✓ ${isId ? 'Tipe' : 'Type'}: *${typeHuman}*`);
+    lines.push(row(isId ? 'Lokasi' : 'Location',            brief.location));
+    lines.push(row(isId ? 'Masuk' : 'Move-in',              brief.moveInDate));
+    lines.push(row(isId ? 'Keputusan bersama' : 'Decision', brief.decisionMaker));
+    lines.push(row(isId ? 'Furnitur' : 'Furnishing',        brief.furnishing));
+    lines.push(row(isId ? 'Fasilitas' : 'Facilities',       brief.facilities));
+    lines.push(row(isId ? 'Budget' : 'Budget',              brief.budget));
+    lines.push(row(isId ? 'Patokan lokasi' : 'Anchor',      brief.anchorPoint));
+
+    const priorityBadge = {
+      HIGH      : isId ? '📋 Prioritas Tinggi'   : '📋 High Priority',
+      NORMAL    : isId ? '📋 Prioritas Normal'   : '📋 Normal Priority',
+      INCOMPLETE: isId ? '⚠️ Data Belum Lengkap' : '⚠️ Incomplete Data',
+    }[brief.priority] || '';
+
+    const header = isId
+      ? `Baik, semua sudah saya catat! 📝 ${priorityBadge}`
+      : `Got it, I've noted everything! 📝 ${priorityBadge}`;
+    const closing = isId
+      ? `Saya akan segera menghubungi Anda dengan rekomendasi properti yang paling sesuai! 🏠\n\nTerima kasih sudah menghubungi saya. 🙏`
+      : `I'll reach out soon with the most suitable property recommendations! 🏠\n\nThank you for contacting me. 🙏`;
+    const signature = isId
+      ? `Salam hangat,\n*${this.#agentName}*\n*${this.#appName}*`
+      : `Warm regards,\n*${this.#agentName}*\n*${this.#appName}*`;
+
+    return `${header}\n\n${lines.join('\n')}\n\n${closing}\n\n${signature}`;
   }
 }
 
@@ -1236,6 +1308,15 @@ class ConversationQualifier {
         'perabot', 'furniture', 'furnish',
       ]),
 
+      /* ── Q_FAC: Facilities/amenities (WAJIB ditanyakan untuk transaksi SEWA) ──
+       * Captured via filters.facilities (detectFacilities accumulates across the
+       * session). hasFacilities is true once the customer has named ≥1 amenity. */
+      hasFacilities: Array.isArray(filters.facilities) && filters.facilities.length > 0,
+      aiAskedFacilities: this.#has(aiText, [
+        'fasilitas tertentu', 'fasilitas yang', 'fasilitas apa', 'fasilitas yang diinginkan',
+        'fasilitas wajib', 'ada fasilitas', 'amenities', 'facilities', 'fasilitas khusus',
+      ]),
+
       /* ── Q_KPR: Financing (beli only — pengganti durasi sewa) ── */
       hasFinancing: this.#has(custText, [
         'cash', 'tunai', 'kpr', 'kredit', 'cicil', 'kombinasi', 'kpr komersial',
@@ -1252,11 +1333,41 @@ class ConversationQualifier {
       hasKprDetails: this.#has(custText, [
         'bca', 'mandiri', 'bni', 'bri', 'btn', 'cimb', 'danamon', 'permata',
         'dp 10', 'dp 15', 'dp 20', 'dp 25', 'dp 30', 'dp 40', 'dp 50',
-        'persen', '%', 'sudah approve', 'pre-approved', 'sudah cek bank',
+        'persen', '%', 'sudah approve', 'pre-approved', 'pre approval', 'preapproval',
+        'sudah cek bank', 'sudah ajukan', 'belum cek', 'belum ajukan', 'masih rencana', 'blm',
       ]),
       aiAskedKprDetails: this.#has(aiText, [
         'bank mana', 'dp berapa', 'berapa persen', 'which bank', 'down payment',
-        'rekomendasikan bank', 'sudah ada bank',
+        'rekomendasikan bank', 'sudah ada bank', 'sudah sempat cek', 'sudah sempat ajukan',
+        'cek atau ajukan',
+      ]),
+
+      /* ── QM: Motivation / why now (house pilot) ── */
+      hasMotivation: this.#has(custText, [
+        'pindah', 'pindahan', 'mutasi', 'kontrak abis', 'kontrak habis', 'ngontrak',
+        'keluarga nambah', 'nambah anak', 'anak masuk', 'tahun ajaran', 'sekolah anak',
+        'investasi', 'invest', 'disewakan', 'pensiun', 'menikah', 'nikah', 'kerja baru',
+        'relokasi', 'butuh rumah', 'numpang', 'pisah', 'cerai', 'growing family',
+        'relocation', 'lease ending', 'moving',
+      ]),
+      aiAskedMotivation: this.#has(aiText, [
+        'apa yang membuat', 'apa yang bikin cari', 'kenapa cari', 'mulai cari rumah sekarang',
+        'why now', 'what made you', 'apa yang bikin kak cari',
+      ]),
+
+      /* ── QF: Financing — cash from sale-of-asset contingency (house pilot) ── */
+      financingCash: this.#has(custText, ['cash', 'tunai', 'dana siap', 'dana pribadi']),
+      financingFromSale: this.#has(custText, [
+        'jual rumah', 'jual aset', 'rumah lama', 'penjualan aset', 'dari jual',
+        'hasil penjualan', 'jual properti', 'sell my', 'sale of',
+      ]),
+      hasContingencyStatus: this.#has(custText, [
+        'sudah terjual', 'sudah laku', 'sold', 'masih proses', 'masih dipasarkan',
+        'belum laku', 'belum terjual', 'in-progress', 'belum dijual', 'belum dipasarkan',
+      ]),
+      aiAskedContingency: this.#has(aiText, [
+        'sudah terjual atau masih proses', 'asetnya sudah', 'rumah lamanya sudah',
+        'dari dana siap atau dari penjualan', 'cash-nya dari', 'cashnya dari',
       ]),
 
       /* ── Q_COND: Property condition (beli residensial) ── */
@@ -1302,9 +1413,12 @@ class ConversationQualifier {
         'family', 'wife', 'husband', 'children', 'parents', 'alone', 'partner',
         'couple', '2 orang', '3 orang', '4 orang', 'anak-anak', 'ortu',
       ]),
+      // NOTE: bare 'sudah'/'pernah' removed — they false-matched "kontrakan sudah
+      // habis" (a motivation phrase) as a search-history answer. Require the
+      // specific "sudah lihat / pernah lihat / sudah survey" phrasings instead.
       hasSearchHistory: this.#has(custText, [
-        'sudah lihat', 'pernah lihat', 'sudah survey', 'sudah cari',
-        'belum cocok', 'tidak cocok', 'kurang cocok', 'sudah', 'pernah',
+        'sudah lihat', 'pernah lihat', 'sudah survey', 'pernah survey', 'sudah cari',
+        'belum cocok', 'tidak cocok', 'kurang cocok', 'belum pernah lihat',
         'have seen', 'already visited', 'viewed', "haven't found", 'not a match',
       ]),
       hasRedFlags: this.#has(custText, [
@@ -1538,6 +1652,10 @@ class ConversationQualifier {
         'hasFinancing', 'aiAskedFinancing', 'financingIsKPR', 'hasKprDetails',
         'aiAskedKprDetails', 'hasPropertyCondition', 'aiAskedPropertyCondition',
         'hasTenantStatus', 'aiAskedTenantStatus', 'hasZonasi', 'aiAskedZonasi',
+        // House v2 pilot (motivation + financing contingency)
+        'hasMotivation', 'aiAskedMotivation', 'financingCash', 'financingFromSale',
+        'hasContingencyStatus', 'aiAskedContingency',
+        'hasFacilities', 'aiAskedFacilities',
       ];
       resetFields.forEach(f => { profile[f] = false; });
       // Keep only what the CURRENT message explicitly says
@@ -1570,6 +1688,10 @@ class ConversationQualifier {
         'hasFinancing', 'aiAskedFinancing', 'financingIsKPR', 'hasKprDetails',
         'aiAskedKprDetails', 'hasPropertyCondition', 'aiAskedPropertyCondition',
         'hasTenantStatus', 'aiAskedTenantStatus', 'hasZonasi', 'aiAskedZonasi',
+        // House v2 pilot (motivation + financing contingency)
+        'hasMotivation', 'aiAskedMotivation', 'financingCash', 'financingFromSale',
+        'hasContingencyStatus', 'aiAskedContingency',
+        'hasFacilities', 'aiAskedFacilities',
       ];
       resetFields.forEach(f => { profile[f] = false; });
       profile.budget             = null;
@@ -1832,6 +1954,13 @@ class ConversationQualifier {
         : `For furnishing, do you prefer *fully furnished*, *semi-furnished*, or *unfurnished*? 🛋️`;
     }
 
+    /* ── Q_FAC: facilities/amenities (WAJIB untuk SEWA — tanyakan sebelum summary) ── */
+    if (tx === 'rent' && !profile.hasFacilities && !profile.aiAskedFacilities) {
+      return isId
+        ? `Ada fasilitas tertentu yang Anda inginkan? Misalnya AC, kolam renang, gym, keamanan 24 jam, atau yang lainnya? 🏊`
+        : `Any specific facilities you'd like? For example AC, swimming pool, gym, 24-hour security, or others? 🏊`;
+    }
+
     /* ══════════════════════════════════════════════════════════════════════
      * BELI FLOW — pengganti durasi sewa (Q_KPR → Q_KPR-a → Q_COND)
      * Membedakan 24 kombinasi: untuk transaksi BELI, financing + kondisi
@@ -2046,6 +2175,258 @@ class ConversationQualifier {
     return null;
   }
 
+  /* ═══════════════════════════════════════════════════════════════════════════
+   * HOUSE v2 PILOT — agent-representative qualifier (building_type=house only)
+   *   - Unnamed assistant: "asisten dari ${agentName} (${appName})"
+   *   - Adds MOTIVATION (QM) + FINANCING READINESS (QF: method/DP/approval/contingency)
+   *   - Ends with a HANDOFF (no "saya carikan") + an internal [BRIEF_READY]
+   * Enabled when HOUSE_PILOT_V2 !== 'OFF' and buildingType === 'house'.
+   * Returns the next question text, or null when ready to hand off.
+   * ═══════════════════════════════════════════════════════════════════════════ */
+  static housePilotEnabled(profile) {
+    return String(process.env.HOUSE_PILOT_V2 || 'ON').toUpperCase() !== 'OFF'
+      && profile.buildingType === 'house';
+  }
+
+  static getNextQuestionHousePilot(profile, lang = 'id', priceAnchors = null, agentName = '', appName = '') {
+    const isId  = lang === 'id';
+    const tx    = profile.transactionType;            // 'rent' | 'sale' | ''
+    const loc   = profile.location;
+    const agent = agentName || appName || (isId ? 'agen kami' : 'our agent');
+    const greet = profile.aiCount === 0
+      ? (isId
+          ? `Halo Kak, saya asisten dari *${agent}*${appName ? ` (*${appName}*)` : ''}. Saya bantu catat kebutuhannya dulu ya. `
+          : `Hi Kak, I'm the assistant for *${agent}*${appName ? ` (*${appName}*)` : ''}. Let me note your needs first. `)
+      : '';
+
+    /* ── New search after handoff → restart ── */
+    if (profile.summaryAlreadyShown) {
+      return isId
+        ? `Baik, Kak! Untuk pencarian rumah yang baru — rencananya *beli* atau *sewa*?`
+        : `Sure! For your new house search — looking to *buy* or *rent*?`;
+    }
+
+    /* ── Transaction type ── */
+    if (!tx && !profile.aiAskedTxType) {
+      return greet + (isId
+        ? `Untuk rumahnya, rencananya mau *beli* atau *sewa*, Kak? 🏠`
+        : `For the house, are you looking to *buy* or *rent*, Kak? 🏠`);
+    }
+
+    /* ── Q3: Location ── */
+    if (!loc && !profile.aiAskedLocation) {
+      return greet + (isId
+        ? `Rumahnya di kota atau area mana yang Kak incar? 📍`
+        : `Which city or area are you looking at, Kak? 📍`);
+    }
+
+    /* ── QM: Motivation / why now (HIGH VALUE) ── */
+    if (!profile.hasMotivation && !profile.aiAskedMotivation) {
+      return isId
+        ? `Boleh tahu, apa yang membuat Kak mulai cari rumah sekarang? Misalnya mau pindah, keluarga nambah, pindah kerja, atau untuk investasi?`
+        : `May I ask what's prompting your house search now, Kak? E.g. moving, growing family, a job relocation, or investment?`;
+    }
+
+    /* ── Q4: Search history (gold-mine) ── */
+    if (!profile.hasSearchHistory && !profile.aiAskedSearchHist && profile.aiCount <= 4) {
+      return isId
+        ? `Sebelumnya sudah sempat lihat beberapa rumah, Kak? Kalau sudah, biasanya apa yang bikin belum cocok?`
+        : `Have you viewed a few houses already, Kak? If so, what usually hasn't quite fit?`;
+    }
+
+    /* ── Q5: Budget via two options (never direct) ── */
+    if (!profile.budget && !profile.aiAskedBudget && loc) {
+      const anchors = priceAnchors || ConversationQualifier.getBudgetAnchors('house', tx, lang);
+      if (anchors) {
+        return isId
+          ? `Di *${loc}* ada yang di kisaran *${anchors.low}* dan ada yang lebih di *${anchors.high}*. Kira-kira yang mana lebih mendekati rencana Kak? 💰`
+          : `In *${loc}* there are options around *${anchors.low}* and others higher at *${anchors.high}*. Which is closer to your plan, Kak? 💰`;
+      }
+      return isId
+        ? `Untuk budget rumah di *${loc}*, Kak lebih prefer yang *terjangkau* atau yang *menengah ke atas*? 💰`
+        : `For your house budget in *${loc}*, do you prefer *affordable* or *mid-to-upper* range? 💰`;
+    }
+
+    /* ── Q6: Occupants → infer bedrooms (never ask rooms directly) ── */
+    if (!profile.hasHouseholdInfo && !profile.aiAskedHousehold) {
+      return isId
+        ? `Nanti akan ditinggali bersama siapa saja, Kak? Biar saya catat jumlah kamar yang pas 🛏️`
+        : `Who will be living there with you, Kak? So I can note the right number of bedrooms 🛏️`;
+    }
+
+    if (tx === 'sale') {
+      /* ── QF: Financing method (WAJIB, ranks the lead) ── */
+      if (!profile.hasFinancing && !profile.aiAskedFinancing) {
+        return isId
+          ? `Untuk pembeliannya, rencana pakai *KPR* atau *cash*, Kak?`
+          : `For the purchase, are you planning *mortgage (KPR)* or *cash*, Kak?`;
+      }
+      /* ── QF-a (KPR): approval + DP readiness ── */
+      if (profile.financingIsKPR && !profile.hasKprDetails && !profile.aiAskedKprDetails) {
+        return isId
+          ? `Untuk KPR-nya, sudah sempat cek atau ajukan ke bank, atau masih rencana, Kak? Biar *${agent}* bisa bantu siapkan dari awal. (Sekalian, DP-nya kira-kira berapa persen?)`
+          : `For the mortgage, have you checked or applied with a bank yet, or still planning, Kak? So *${agent}* can help prepare early. (And roughly what DP percentage?)`;
+      }
+      /* ── QF-b (cash from sale): contingency status ── */
+      if (profile.financingCash && profile.financingFromSale
+          && !profile.hasContingencyStatus && !profile.aiAskedContingency) {
+        return isId
+          ? `Oh, dananya dari hasil penjualan aset ya — asetnya sudah terjual atau masih proses, Kak? Ini penting untuk timing-nya.`
+          : `Ah, the funds come from selling an asset — is it already sold or still in progress, Kak? This matters for timing.`;
+      }
+      /* ── Q8: Target timeline ── */
+      if (!profile.hasMoveInDate && !profile.aiAskedMoveIn) {
+        return isId
+          ? `Ada target kapan rencananya proses belinya, Kak? 📅`
+          : `Is there a target timeline to close the purchase, Kak? 📅`;
+      }
+    } else {
+      /* ── Q8: Move-in date (sewa) ── */
+      if (!profile.hasMoveInDate && !profile.aiAskedMoveIn) {
+        return isId
+          ? `Rencananya masuk bulan apa, Kak? 📅`
+          : `Which month are you planning to move in, Kak? 📅`;
+      }
+    }
+
+    /* ── Q9: Decision maker (indirect) ── */
+    if (!profile.hasDecisionMaker && !profile.aiAskedDecisionMaker) {
+      return isId
+        ? `Kalau nanti ada yang cocok, langsung bisa jadwalkan survey, atau perlu koordinasi dulu dengan keluarga, Kak?`
+        : `When something fits, can you schedule a viewing right away, or coordinate with family first, Kak?`;
+    }
+
+    /* ── Q7: Red flags (if not captured at Q4) ── */
+    if (!profile.hasRedFlags && !profile.aiAskedRedFlags && profile.aiAskedSearchHist) {
+      return isId
+        ? `Ada yang pasti Kak hindari? Misalnya rawan banjir, hadap barat, gang sempit, atau dekat jalan terlalu ramai? 🚫`
+        : `Anything you definitely want to avoid? E.g. flood-prone, west-facing, narrow alley, or too-busy road? 🚫`;
+    }
+
+    /* ── QA: Alternative areas ── */
+    if (!profile.hasAlternativeArea && !profile.aiAskedAltArea && loc) {
+      return isId
+        ? `Selain *${loc}*, ada area lain yang masih oke buat Kak pertimbangkan? 🗺️`
+        : `Besides *${loc}*, any other areas you'd consider, Kak? 🗺️`;
+    }
+
+    if (tx === 'sale') {
+      /* ── Q11: Condition (beli) ── */
+      if (!profile.hasPropertyCondition && !profile.aiAskedPropertyCondition) {
+        return isId
+          ? `Kondisinya Kak prefer yang *baru*, *second* yang terawat, atau *inden* tidak masalah?`
+          : `For condition, do you prefer *new*, a well-kept *second-hand*, or is *off-plan* okay?`;
+      }
+    } else {
+      /* ── Q10: Lease duration (sewa) ── */
+      if (!profile.hasLeaseDuration && !profile.aiAskedLeaseDuration) {
+        return isId
+          ? `Sewa rencananya berapa lama, Kak? ⏱️`
+          : `How long do you plan to rent, Kak? ⏱️`;
+      }
+      /* ── Q10a: Payment terms (lease ≥ 1 year) ── */
+      if (profile.hasLeaseDuration && !profile.hasPaymentTerms && !profile.aiAskedPaymentTerms) {
+        const longLease = /\b[1-9]\d*\s*(tahun|year)/i.test(profile._custText || '') || /\bsetahun\b/i.test(profile._custText || '');
+        if (longLease) {
+          return isId
+            ? `Untuk pembayaran, lebih cocok bayar di muka penuh atau ada yang bisa cicil per 6 bulan, Kak? 💳`
+            : `For payment, full upfront or installments every 6 months work better, Kak? 💳`;
+        }
+      }
+      /* ── Q11: Furnished (sewa) ── */
+      if (!profile.hasFurnishing && !profile.aiAskedFurnish) {
+        return isId
+          ? `Furniturnya prefer *Full Furnished*, *Semi*, atau *Kosongan*, Kak? 🛋️`
+          : `For furnishing, do you prefer *Fully Furnished*, *Semi*, or *Unfurnished*, Kak? 🛋️`;
+      }
+      /* ── Q_FAC: facilities/amenities (WAJIB untuk SEWA) ── */
+      if (!profile.hasFacilities && !profile.aiAskedFacilities) {
+        return isId
+          ? `Ada fasilitas tertentu yang Kak inginkan? Misalnya AC, kolam renang, gym, keamanan 24 jam, atau lainnya? 🏊`
+          : `Any specific facilities you'd like, Kak? E.g. AC, swimming pool, gym, 24-hour security, or others? 🏊`;
+      }
+    }
+
+    /* ── All captured → hand off ── */
+    return null;
+  }
+
+  /**
+   * Build the internal [BRIEF_READY] object + score/priority for the house pilot.
+   * Never shown to the customer — returned in response metadata for the agent.
+   */
+  static buildHousePilotBrief(profile, filters = {}, history = [], userMessage = '') {
+    const qs = (() => { try { return extractQualificationState(history, userMessage); } catch (_e) { return {}; } })();
+    const isSale = profile.transactionType === 'sale';
+
+    const method = !profile.hasFinancing ? 'unknown'
+      : profile.financingIsKPR ? 'KPR'
+      : (profile.financingCash && profile.financingFromSale) ? 'cash'
+      : profile.financingCash ? 'cash' : 'unknown';
+    const contingency = profile.financingFromSale ? 'sale-of-current-property' : (profile.hasFinancing ? 'none' : 'unknown');
+    const contingencyStatus = profile.financingFromSale
+      ? (profile.hasContingencyStatus ? 'in-progress' : 'unknown') : 'n/a';
+    const approval = profile.financingIsKPR
+      ? (profile.hasKprDetails ? 'applied/pre-approved' : 'not-started') : (profile.financingCash ? 'n/a' : 'unknown');
+    const dpReady = profile.hasKprDetails ? 'ready/partial' : 'unknown';
+
+    // financing_readiness = 2 only if method known AND (dp or approval known) AND contingency surfaced
+    const financingReady = (method !== 'unknown')
+      && (profile.hasKprDetails || profile.financingCash)
+      && (contingency !== 'unknown');
+
+    // Scoring (beli weighting; sewa skips financing, leans on motivation+timeline)
+    let score = 0;
+    if (profile.budget) score += 2;
+    if (isSale) { if (financingReady) score += 2; }
+    else        { if (profile.hasLeaseDuration || profile.hasFurnishing) score += 1; }
+    if (profile.location) score += 1;
+    if (profile.hasMoveInDate) score += 1;
+    if (profile.hasHouseholdInfo) score += 1;
+    if (profile.hasDecisionMaker) score += 1;
+    if (profile.hasMotivation) score += 1;
+    score = Math.min(score, 9);
+
+    let priority = score >= 7 ? 'HOT' : score >= 4 ? 'WARM' : 'INCOMPLETE';
+    // Cash-from-unsold-asset → cap at WARM and flag
+    let agentNote = null;
+    if (isSale && profile.financingFromSale && contingencyStatus !== 'sold') {
+      if (priority === 'HOT') priority = 'WARM';
+      agentNote = 'Cash dependent on an unsold asset — do NOT treat as cash-ready; timing depends on the sale.';
+    }
+    if (isSale && method === 'KPR' && approval === 'not-started') {
+      agentNote = agentNote || 'KPR not-started / DP unknown — qualify financing before viewing.';
+    }
+
+    const tag = (v) => (v ? 'stated' : 'unknown');
+    const brief = {
+      property_type: 'rumah',
+      transaction: isSale ? 'beli' : 'sewa',
+      market: profile.hasPropertyCondition ? 'primary|secondary' : 'unknown',
+      motivation_source: tag(profile.hasMotivation),
+      location_city: filters.location || (qs.location || null),
+      location_source: tag(!!profile.location),
+      budget: filters.budget?.text || qs.budget || null,
+      budget_source: tag(!!profile.budget),
+      financing: isSale ? {
+        method, dp_readiness: dpReady, approval_status: approval,
+        contingency, contingency_status: contingencyStatus,
+      } : undefined,
+      occupants_source: tag(profile.hasHouseholdInfo),
+      target_timeline: qs.moveInDate || null,
+      timeline_source: tag(profile.hasMoveInDate),
+      decision_maker_source: tag(profile.hasDecisionMaker),
+      condition_pref_source: isSale ? tag(profile.hasPropertyCondition) : undefined,
+      furnished_source: !isSale ? tag(profile.hasFurnishing) : undefined,
+      red_flags_captured: !!profile.hasRedFlags,
+      anchor_captured: !!profile.hasAnchorPoint,
+      search_stage: profile.hasSearchHistory ? 'active' : 'early',
+      score, priority,
+      agent_note: agentNote,
+    };
+    return { score, priority, brief, agentNote };
+  }
+
   /* ─── Public: build agent brief from profile ────────────────────────────── */
 
   /**
@@ -2149,12 +2530,22 @@ class ConversationQualifier {
       },
       anchorPoint: {
         // Prefer qualState.anchorPoint (Phase 2 — exact full customer reply to Q6,
-        // e.g. "deket indomaret, cafe dan ubaya"). This avoids truncation at commas
-        // that the regex extractor suffers from on joined customer text.
+        // e.g. "deket indomaret, cafe dan ubaya"). The raw #extractAnchorPoint fallback
+        // is gated on the anchor having actually been ASKED (aiAskedAnchorPoint) —
+        // otherwise "deket <kota>" (a location phrase) and joined multi-message text
+        // produce a garbage anchor. If never asked → UNKNOWN (shown as "Belum ditanyakan").
         value : qualState.anchorPoint
           ? this.#capitalizeFirst(qualState.anchorPoint)
-          : (profile.hasAnchorPoint ? this.#extractAnchorPoint(custText) : 'UNKNOWN'),
-        source: (qualState.anchorPoint || profile.hasAnchorPoint) ? 'stated' : 'UNKNOWN',
+          : ((profile.hasAnchorPoint && profile.aiAskedAnchorPoint) ? this.#extractAnchorPoint(custText) : 'UNKNOWN'),
+        source: (qualState.anchorPoint || (profile.hasAnchorPoint && profile.aiAskedAnchorPoint)) ? 'stated' : 'UNKNOWN',
+      },
+      facilities: {
+        // Customer-requested amenities (gym, kids zone, kolam renang, etc.), accumulated
+        // across the session by extractPropertyFilters → detectFacilities.
+        value : (Array.isArray(filters.facilities) && filters.facilities.length)
+          ? filters.facilities.join(', ')
+          : 'UNKNOWN',
+        source: (Array.isArray(filters.facilities) && filters.facilities.length) ? 'stated' : 'UNKNOWN',
       },
 
       // ─ Meta ─
@@ -2630,6 +3021,32 @@ class ChatbotPrivateService {
     //  Catalog is NEVER shown in this mode.
     // ════════════════════════════════════════════════════════════════════════
     if (!showCatalogDirect) {
+
+      // ── HOUSE v2 PILOT (building_type=house) — unnamed assistant, motivation +
+      //    financing readiness, handoff + INTERNAL [BRIEF_READY] (no customer summary).
+      if (ConversationQualifier.housePilotEnabled(profile)) {
+        const resolvedAppName = process.env.APP_NAME || 'Elevan Property';
+        const pilotQ = ConversationQualifier.getNextQuestionHousePilot(
+          profile, lang, priceAnchors, agentName, resolvedAppName
+        );
+        if (pilotQ) {
+          console.log(`[PrivateAgent/HousePilot] Asking Q (aiCount=${profile.aiCount})`);
+          return this.#wrap(builder.qualificationQuestion(pilotQ), {
+            skillInfo, filters, qualificationMode: true, housePilot: true,
+          });
+        }
+        // Ready → show the customer a VISIBLE summary (✓ answered / ✗ belum ditanyakan),
+        // then the internal [BRIEF_READY] rides in metadata for the agent.
+        const pilot = ConversationQualifier.buildHousePilotBrief(profile, filters, history, userMessage);
+        const custBrief = ConversationQualifier.buildAgentBrief(profile, filters, history, userMessage);
+        console.log('[PrivateAgent/HousePilot] ✅ Summary', { score: pilot.score, priority: pilot.priority });
+        return this.#wrap(builder.houseSummary(custBrief), {
+          skillInfo, filters, responseMode: 'house_pilot_summary', housePilot: true,
+          briefReady: pilot.brief, briefScore: pilot.score, briefPriority: pilot.priority,
+          agentNote: pilot.agentNote, agentName,
+        });
+      }
+
       const nextQuestion = ConversationQualifier.getNextQuestion(
         profile, lang, priceAnchors, 'summary'
       );
@@ -3078,3 +3495,4 @@ module.exports.loadPrivateChatbotSkillInfo     = ()        => ChatbotPrivateServ
 
 // Exposed for unit tests (deterministic qualification flow — 24 combinations + dates)
 module.exports.ConversationQualifier = ConversationQualifier;
+module.exports.ResponseBuilderWhatsApp = ResponseBuilderWhatsApp;

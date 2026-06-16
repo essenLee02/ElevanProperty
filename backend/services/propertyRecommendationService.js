@@ -193,10 +193,42 @@ function detectLocation(message = '') {
   return '';
 }
 
+// Facility keyword → customer-facing display label. Each entry: [label, [keywords...]].
+// Ordered so the most distinctive amenities surface first in the summary.
+const _FACILITY_MAP = [
+  ['Kids zone',      ['kids zone', 'kids club', 'kid zone', 'kods zone', 'area bermain anak', 'playground', 'kidzone']],
+  ['Gym',            ['gym', 'fitness', 'fitnes']],
+  ['Kolam renang',   ['kolam renang', 'swimming pool', 'pool', 'kolam']],
+  ['Keamanan 24 jam',['security', 'keamanan 24', 'keamanan', 'satpam', 'cctv', '24 jam', 'one gate', 'one-gate']],
+  ['AC',             ['ac', 'air conditioner']],
+  ['WiFi',           ['wifi', 'wi-fi', 'internet']],
+  ['Lift',           ['lift', 'elevator']],
+  ['Parkir',         ['parkir', 'parking']],
+  ['Carport',        ['carport']],
+  ['Garasi',         ['garasi', 'garage']],
+  ['Taman',          ['taman', 'garden']],
+  ['Dapur',          ['dapur', 'kitchen', 'kitchen set', 'pantry']],
+  ['Water heater',   ['water heater', 'pemanas air']],
+  ['Balkon',         ['balkon', 'balcony']],
+  ['Rooftop',        ['rooftop']],
+  ['Jogging track',  ['jogging track', 'jogging']],
+  ['Mushola',        ['mushola', 'musholla', 'masjid']],
+  ['Concierge',      ['concierge']],
+  ['Laundry',        ['laundry']],
+];
+
 function detectFacilities(message = '') {
   const text = normalizeText(message);
-  return ['ac', 'wi-fi', 'wifi', 'parking', 'parkir', 'kitchen', 'dapur', 'full furnish', 'furnished', 'security']
-    .filter((facility) => text.includes(facility));
+  const out = [];
+  for (const [label, keywords] of _FACILITY_MAP) {
+    // Word-boundary match so short tokens like "ac" don't match "macet"/"kapasitas".
+    const hit = keywords.some((k) => {
+      const esc = k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(`(^|\\W)${esc}(\\W|$)`, 'i').test(text);
+    });
+    if (hit) out.push(label);
+  }
+  return out;
 }
 
 function parseNumberToken(token = '') {
@@ -400,9 +432,16 @@ const CUSTOMER_ROLES = new Set(['user', 'customer']);
 const AI_ROLES       = new Set(['assistant', 'ai']);
 
 function extractFromHistory(history = []) {
+  // Window harus cukup besar untuk menampung SATU sesi kualifikasi penuh (Q1–Q12 +
+  // Q14). Sebelumnya .slice(-8) terlalu kecil: pada percakapan ≥9 pesan, pesan
+  // pembuka yang membawa tipe/transaksi/lokasi/budget bisa keluar dari window,
+  // sehingga gate keliru menganggap semua field kosong dan mengulang pertanyaan
+  // pembuka di akhir alur. History sudah dibatasi ~24 pesan oleh pemanggil; di sini
+  // kita pakai 24 pesan customer terakhir (deteksi ganti-tipe per-pesan tetap jalan
+  // di loop untuk mencegah warisan dari pencarian lama).
   const recentUserMsgs = (history || [])
     .filter((item) => CUSTOMER_ROLES.has(item.role))
-    .slice(-8); // ambil maks 8 pesan customer terakhir
+    .slice(-24);
 
   const accumulated = {
     buildingType:   '',
@@ -1014,6 +1053,7 @@ module.exports = {
   detectFallbackTypes,
   findWithExpandedBudget,
   detectBudget,
+  detectFacilities,
   parsePropertyPrice,
   budgetMatches,
   propertyMatchesCoreVisibleRequest,

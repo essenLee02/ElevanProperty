@@ -457,6 +457,27 @@ The word "kosongan" (unfurnished) contains "kos" as a substring, but the server-
 
 ---
 
+### Q_FAC — Facilities / Amenities *(rent only — WAJIB / MANDATORY for sewa)*
+
+For **every sewa (rent) transaction**, the AI **must** ask which facilities the customer wants —
+unless they already volunteered them. Fires after Q11 (furnishing), before the summary.
+
+```
+ID: Ada fasilitas tertentu yang Anda inginkan? Misalnya AC, kolam renang,
+    gym, keamanan 24 jam, atau yang lainnya? 🏊
+EN: Any specific facilities you'd like? For example AC, swimming pool, gym,
+    24-hour security, or others? 🏊
+```
+
+- Detected amenities accumulate across the session and appear as `✓ Fasilitas: Kids zone, Gym`
+  in the summary. Common labels: AC, WiFi, Kolam renang, Gym, Kids zone, Keamanan 24 jam, Lift,
+  Parkir, Carport, Garasi, Taman, Dapur, Water heater, Balkon, Rooftop.
+- If the customer says "tidak ada / bebas / standar saja" → record facilities as none and proceed.
+- **Do NOT show the summary for a sewa transaction until facilities has been asked.** If still
+  un-asked at summary time → it appears as `✗ Fasilitas: (Belum ditanyakan)` (a gap for the agent).
+
+---
+
 ### Q12 — Apartment-Specific *(type = apartment only)*
 
 ```
@@ -604,6 +625,7 @@ Baik, permintaan utama Anda sudah saya catat, sebagai berikut 📝 🔥
 ✓ Masuk: *[nilai dari Q8]* — HANYA jika ✅
 ✓ Keputusan bersama: *[nilai dari Q9]* — HANYA jika ✅
 ✓ Furnitur: *[nilai dari Q11]* — HANYA jika ✅
+✓ Fasilitas: *[amenities yang diminta customer — mis. "Kids zone, Gym, Kolam renang"; gabung dengan koma]* — HANYA jika ✅
 ✓ Patokan: *[nilai dari Q6 — nilai PERSIS dari QUALIFICATION STATE]* — HANYA jika ✅
 ✓ Area alternatif: *[nilai dari Q7]* — HANYA jika ✅
 

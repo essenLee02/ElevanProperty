@@ -1,5 +1,5 @@
 const { loadProjectSkillPrompt } = require('./skillPromptService');
-const { detectBudget }           = require('./propertyRecommendationService');
+const { detectBudget, detectFacilities } = require('./propertyRecommendationService');
 const { parseCustomerDate, isDontKnowDateAnswer, WAITING_THE_UPDATE } = require('../utils/customerDateParser');
 
 /* ─── Qualification State Extractor ────────────────────────────────────────── */
@@ -38,6 +38,7 @@ function extractQualificationState(history = [], currentMessage = '') {
     decisionMaker   : null,   // Q9
     leaseDuration   : null,   // Q10
     furnishing      : null,   // Q11
+    facilities      : null,   // amenities (gym, kids zone, kolam renang, dll) — opsional
     apartmentPref   : null,   // Q12
     financing       : null,   // Q_KPR  (beli only): cash | KPR | kombinasi
     kprDetails      : null,   // Q_KPR-a (beli + KPR): bank & DP
@@ -259,6 +260,15 @@ function extractQualificationState(history = [], currentMessage = '') {
             : '';
           state.budget = b.text + periodSuffix;
         }
+      }
+    }
+
+    // Facilities (optional — accumulate amenities across the session)
+    {
+      const fac = detectFacilities(raw);
+      if (fac.length) {
+        const prev = Array.isArray(state.facilities) ? state.facilities : [];
+        state.facilities = [...new Set([...prev, ...fac])];
       }
     }
 
@@ -498,6 +508,7 @@ function extractQualificationState(history = [], currentMessage = '') {
       state.decisionMaker    = null;
       state.leaseDuration    = null;
       state.furnishing       = null;
+      state.facilities       = null;
       state.apartmentPref    = null;
       state.financing        = null;
       state.kprDetails       = null;
@@ -614,6 +625,7 @@ function extractQualificationState(history = [], currentMessage = '') {
       state.decisionMaker    = null;
       state.leaseDuration    = null;
       state.furnishing       = null;
+      state.facilities       = null;
       state.apartmentPref    = null;
       state.financing        = null;
       state.kprDetails       = null;
@@ -905,6 +917,7 @@ function buildQualificationStateBlock(state) {
     row('Keputusan         [Q9]', state.decisionMaker),
     row('Durasi sewa      [Q10]', state.leaseDuration),
     row('Furnitur         [Q11]', state.furnishing),
+    row('Fasilitas (opsional)   ', Array.isArray(state.facilities) && state.facilities.length ? state.facilities.join(', ') : null),
     row('Apt preference   [Q12]', state.apartmentPref),
   );
 
@@ -1335,6 +1348,8 @@ Baik, permintaan utama Anda sudah saya catat, sebagai berikut 📝 🔥
 ✓ Keputusan bersama: *[nilai dari Q9 — HANYA jika ✅]*
 
 ✓ Furnitur: *[nilai dari Q11 — HANYA jika ✅]*
+
+✓ Fasilitas: *[nilai dari baris "Fasilitas" di QUALIFICATION STATE — HANYA jika ✅; gabung dengan koma, mis. "Kids zone, Gym"]*
 
 ✓ Red flags: *[nilai PERSIS dari Q5 di QUALIFICATION STATE — HANYA jika ✅]*
 
