@@ -38,7 +38,9 @@ const { sanitizeLog, maskPhone, maskName } = require('../utils/whatsappUtils');
 ══════════════════════════════════════════════════════════════════════════════ */
 
 const { isAlreadyProcessed: _isAlreadyProcessed,
-        markProcessed:      _markProcessed } = require('../utils/messageDedup');
+        markProcessed:      _markProcessed,
+        isContentAlreadyProcessed: _isContentDup,
+        markContentProcessed:      _markContentDup } = require('../utils/messageDedup');
 
 /* ══════════════════════════════════════════════════════════════════════════════
    BAGIAN 1 — UTILITY FUNCTIONS
@@ -233,16 +235,22 @@ async function processIncomingMessage(body, agent) {
   // ── Skip media/non-teks ─────────────────────────────────────────────
   if (!message) return;
 
-  // ── Dedup guard (idempotent against Fonnte webhook retries) ─────────
-  // Only blocks customer messages; AI replies are written directly and have no messageId.
+  // ── Dedup guard layer 1: stable message-ID (Fonnte webhook retries) ─
   if (_isAlreadyProcessed(messageId)) {
-    console.log(`[FONNTE DEDUP] ⚠️  Pesan sudah diproses, skip: ${messageId}`);
+    console.log(`[FONNTE DEDUP] ⚠️  Pesan sudah diproses (ID), skip: ${messageId}`);
     return;
   }
   _markProcessed(messageId);
 
-  // ── Find/create session ─────────────────────────────────────────────
+  // ── Dedup guard layer 2: content-based (same sender+text within 90s) ─
+  // Catches cases where Fonnte delivers the same message with different IDs
+  // (e.g. webhook + polling race, or Fonnte retry with new inboxid).
   const normSender = normalizePhone(sender);
+  if (_isContentDup(normSender, message)) {
+    console.log(`[FONNTE DEDUP] ⚠️  Konten sama dari ${normSender} dalam 90s, skip.`);
+    return;
+  }
+  _markContentDup(normSender, message);
   const source     = `fonnte_${agent.name.toLowerCase().replace(/\s+/g, '_')}`;
 
   let session = await ChatSession.findOne({ where: { normalizedPhone: normSender, source } });

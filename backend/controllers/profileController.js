@@ -52,7 +52,7 @@ exports.getCurrentProfile = async (req, res) => {
 
     const user = await User.findOne({
       where: { refresh_token: refreshTokenFromCookie },
-      attributes: ['user_id', 'name', 'username', 'phone', 'birthdate', 'status', 'fonnte_token']
+      attributes: ['user_id', 'name', 'username', 'phone', 'birthdate', 'status', 'fonnte_token', 'chakra_hq_token']
     });
 
     if (!user) {
@@ -78,7 +78,7 @@ exports.updateDataAgent = async (req, res) => {
   const refreshTokenFromCookie = req.cookies ? req.cookies[refreshCookieName] : null;
 
   // username sengaja TIDAK diambil dari body — tidak boleh diupdate
-  const { name, phone, birthdate, password, fonnte_token } = req.body;
+  const { name, phone, birthdate, password, fonnte_token, chakra_hq_token } = req.body;
 
   const requestInfo = {
     ip:    req.ip || req.connection?.remoteAddress || 'unknown',
@@ -148,6 +148,12 @@ exports.updateDataAgent = async (req, res) => {
       : null;
     updateFields.fonnte_token = cleanFonnte || null;
 
+    // ChakraHQ Access Token — boleh kosong / null
+    const cleanChakra = chakra_hq_token !== undefined && chakra_hq_token !== null
+      ? String(chakra_hq_token).trim()
+      : null;
+    updateFields.chakra_hq_token = cleanChakra || null;
+
     // Metadata update
     updateFields.updated_date = new Date();
     updateFields.update_by    = user.username;
@@ -165,7 +171,7 @@ exports.updateDataAgent = async (req, res) => {
     /* 5. Kembalikan data terbaru (tanpa password) */
     const updatedUser = await User.findOne({
       where: { user_id: user.user_id },
-      attributes: ['user_id', 'name', 'username', 'phone', 'birthdate', 'fonnte_token']
+      attributes: ['user_id', 'name', 'username', 'phone', 'birthdate', 'fonnte_token', 'chakra_hq_token']
     });
 
     // Log ke terminal

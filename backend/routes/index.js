@@ -50,6 +50,7 @@ const whatsappInboundController  = require('../controllers/whatsappInboundContro
 const watiChatController         = require('../controllers/watiChatController');
 const fonnteChatController       = require('../controllers/fonnteChatController');
 const dialogChatController       = require('../controllers/dialogChatController');
+const chakraHQController         = require('../controllers/chakraHQController');
 
 // Auth controllers
 const registerController         = require('../controllers/registerController');
@@ -133,6 +134,10 @@ router.post('/wati/webhook-raw',         webhookLimiter, watiChatController.webh
 router.post('/dialog-chat/webhook',      webhookLimiter, dialogChatController.handleInboundMessage);
 router.post('/dialog-chat/webhook-raw',  webhookLimiter, dialogChatController.webhookRawCatcher);
 
+// ChakraHQ webhook (public)
+router.post('/chakrahq/webhook',         webhookLimiter, chakraHQController.handleInboundMessage);
+router.post('/chakrahq/webhook-raw',     webhookLimiter, chakraHQController.webhookRawCatcher);
+
 /* ══════════════════════════════════════════════════════════════════════════════
    WHATSAPP ADMIN ROUTES — Butuh login (verifyToken)
    Endpoint simulate, debug, agent list hanya untuk user terautentikasi.
@@ -157,6 +162,15 @@ router.get('/wati/agents/list',                   verifyToken, watiChatControlle
 router.get('/wati/agent-chats/:agentName',        verifyToken, watiChatController.getAgentChats);
 router.get('/wati/chat-history/:sessionId',       verifyToken, watiChatController.getChatHistory);
 router.get('/wati/status',                        verifyToken, watiChatController.getWatiStatus);
+
+// ChakraHQ admin endpoints (butuh login)
+router.post('/chakrahq/simulate',                      verifyToken, chakraHQController.simulateInboundMessage);
+router.get('/chakrahq/debug-info',                     verifyToken, chakraHQController.getDebugInfo);
+router.get('/chakrahq/agents',                         verifyToken, chakraHQController.getAgentsWithChakra);
+router.get('/chakrahq/agent-chats/:agentName',         verifyToken, chakraHQController.getAgentChats);
+router.get('/chakrahq/chat-history/:sessionId',        verifyToken, chakraHQController.getChatHistory);
+router.get('/chakrahq/status',                         verifyToken, chakraHQController.getChakraStatus);
+router.get('/chakrahq/check-api',                      verifyToken, chakraHQController.checkChakraApi);
 
 // 360dialog admin endpoints
 router.post('/dialog-chat/setup-webhook',              verifyToken, dialogChatController.setupWebhook);

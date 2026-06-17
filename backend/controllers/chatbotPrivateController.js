@@ -1156,7 +1156,7 @@ class ConversationQualifier {
       if (/\bruko\b|\brukan\b/.test(w))                                     return 'shophouse';
       if (/\bkantor\b/.test(w))                                             return 'office';
       if (/\bgudang\b/.test(w))                                             return 'warehouse';
-      if (/\btoko\b|\bwarung\b|\bretail\b/.test(w))                        return 'store';
+      if (/\btoko\b|\bretail\b/.test(w))                                  return 'store';
       if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(w))  return 'others';
       return null;
     };
@@ -1257,7 +1257,7 @@ class ConversationQualifier {
     else if (/\bruko\b|\brukan\b/.test(histCustJoined))                                    histBuildingType = 'shophouse';
     else if (/\bkantor\b/.test(histCustJoined))                                            histBuildingType = 'office';
     else if (/\bgudang\b/.test(histCustJoined))                                            histBuildingType = 'warehouse';
-    else if (/\btoko\b|\bwarung\b|\bretail\b/.test(histCustJoined))                       histBuildingType = 'store';
+    else if (/\btoko\b|\bretail\b/.test(histCustJoined))                                  histBuildingType = 'store';
     else if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(histCustJoined)) histBuildingType = 'others';
 
     const curMsgLower = (userMessage || '').toLowerCase();
@@ -1272,7 +1272,7 @@ class ConversationQualifier {
     else if (/\bruko\b|\brukan\b/.test(curMsgLower))                                    curBuildingType = 'shophouse';
     else if (/\bkantor\b/.test(curMsgLower))                                            curBuildingType = 'office';
     else if (/\bgudang\b/.test(curMsgLower))                                            curBuildingType = 'warehouse';
-    else if (/\btoko\b|\bwarung\b|\bretail\b/.test(curMsgLower))                       curBuildingType = 'store';
+    else if (/\btoko\b|\bretail\b/.test(curMsgLower))                                  curBuildingType = 'store';
     else if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(curMsgLower)) curBuildingType = 'others';
 
     let histTx = null;
@@ -1293,10 +1293,33 @@ class ConversationQualifier {
       !buildingTypeChanged && histTx && curTx && histTx !== curTx
     );
 
+    // ── Tx / type recovery: if extractPropertyFilters lost tx due to an edge-case
+    // (ambiguous message, race-condition history, or period-mismatch budget),
+    // scan custText directly as a safety net so Q1 never re-fires mid-flow.
+    let recoveredTx   = filters.transactionType || '';
+    let recoveredType = filters.buildingType    || '';
+    if (!recoveredTx) {
+      if (/\b(sewa|menyewa|ngontrak|kontrak|rent|rental|lease)\b/i.test(custText))   recoveredTx = 'rent';
+      else if (/\b(beli|membeli|buy|purchase)\b/i.test(custText))                    recoveredTx = 'sale';
+    }
+    if (!recoveredType) {
+      if (/\bvill?a\b/i.test(custText))                                              recoveredType = 'villa';
+      else if (/\bapartemen\b|\bapartment\b/i.test(custText))                        recoveredType = 'apartment';
+      else if (/\bmansion\b|\brumah mewah\b/i.test(custText))                       recoveredType = 'mansion';
+      else if (/\brumah\b|\bhouse\b|\bkontrakan\b/i.test(custText))                 recoveredType = 'house';
+      else if (/\bhotel\b|\bpenginapan\b/i.test(custText))                          recoveredType = 'hotel';
+      else if (/\bkondotel\b|\bcondo\b/i.test(custText))                            recoveredType = 'kondotel';
+      else if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/i.test(custText))           recoveredType = 'boarding_house';
+      else if (/\bruko\b|\brukan\b/i.test(custText))                                recoveredType = 'shophouse';
+      else if (/\bkantor\b/i.test(custText))                                         recoveredType = 'office';
+      else if (/\bgudang\b/i.test(custText))                                         recoveredType = 'warehouse';
+      else if (/\btoko\b|\bretail\b/i.test(custText))                               recoveredType = 'store';
+    }
+
     const profile = {
       /* ── Core filters (from propertyRecommendationService) ── */
-      transactionType : filters.transactionType || '',   // 'rent'|'sale'|''
-      buildingType    : filters.buildingType    || '',   // 'house'|'apartment'|...
+      transactionType : recoveredTx,
+      buildingType    : recoveredType,
       location        : filters.location        || '',   // 'malang'|'surabaya'|...
       budget          : filters.budget?.ambiguous ? null : (filters.budget || null), // { min, max, text } | null
       budgetAmbiguous : filters.budget?.ambiguous ? filters.budget : null, // { rawMin, rawMax } needs unit clarification
@@ -1420,19 +1443,9 @@ class ConversationQualifier {
       hasSearchHistory: this.#has(custText, [
         'sudah lihat', 'pernah lihat', 'sudah survey', 'pernah survey', 'sudah cari',
         'belum cocok', 'tidak cocok', 'kurang cocok', 'belum pernah lihat',
-        'belum pernah', 'baru mulai', 'belum survey',
+        'belum pernah', 'tidak pernah', 'baru mulai', 'belum survey', 'belum cek',
         'have seen', 'already visited', 'viewed', "haven't found", 'not a match',
-      ]),
-      hasRedFlags: this.#has(custText, [
-        'tidak mau', 'jangan', 'avoid', 'tidak suka', 'kurang suka',
-        'hadap barat', 'west facing', 'bising', 'noisy', 'gang sempit',
-        'banjir', 'jauh', 'lorong', 'tua banget',
-      ]),
-      hasAlternativeArea: this.#has(custText, [
-        'atau', 'or', 'sekitar', 'nearby', 'area lain', 'wilayah lain',
-        'bisa juga', 'bisa di', 'juga oke', 'juga boleh', 'sekitarnya',
-      ]),
-
+      ]) || /\b0\s*(?:kali|x|properti|property|villa|rumah|unit)\b/.test(custText),
       /* ── Q5: Red flags (yang tidak diinginkan) ── */
       hasRedFlags: this.#has(custText, [
         'tidak mau', 'jangan', 'avoid', 'tidak suka', 'kurang suka',
@@ -1557,7 +1570,7 @@ class ConversationQualifier {
       hasRentalPeriod: this.#has(custText, [
         'per malam', 'per minggu', 'per bulan', 'semalam', 'seminggu',
         'bulanan', 'mingguan', 'harian',
-      ]),
+      ]) || /\/(?:malam|minggu|bulan|hari|week|night|month|day)\b/i.test(custText),
       aiAskedRentalPeriod: this.#has(aiText, ['per malam', 'per minggu', 'per bulan', 'sewa villa']),
 
       /* ── Q14: Kos specific ── */
@@ -1609,7 +1622,19 @@ class ConversationQualifier {
       aiAskedPropType   : this.#has(aiText, ['tipe properti', 'property type', 'jenis properti', 'rumah, apartemen']),
       aiAskedLocation   : this.#has(aiText, ['daerah', 'kota mana', 'which area', 'which city', 'lokasi mana']),
       aiAskedSearchHist : this.#has(aiText, ['sudah lihat berapa', 'how many properties', 'belum cocok', 'sudah survey']),
-      aiAskedBudget     : this.#has(aiText, ['kisaran', 'anggaran', 'budget', 'harga yang', 'price range', 'ribu, juta', 'thousand, million', 'maksudnya dalam']),
+      aiAskedBudget     : this.#has(aiText, ['kisaran', 'anggaran', 'budget', 'harga yang', 'price range', 'ribu, juta', 'thousand, million', 'maksudnya dalam', 'kira-kira yang mana', 'yang mana lebih sesuai']),
+      // True when customer text contains any number+unit that looks like a budget.
+      // Guards Q3 from repeating even if filters.budget came back null (edge case).
+      customerStatedBudget: /\b\d[\d.,]*\s*(?:juta|ribu|miliar|rb|jt)\b/i.test(custText),
+      // Guards Q2b from looping when a buildingTypeChanged reset clears hasSearchHistory.
+      // Regex survives the reset because it is NOT in resetFields — computed fresh each call.
+      customerStatedSearchHistory:
+        /\b(belum pernah|tidak pernah|belum cek|belum survey|pernah lihat|sudah lihat|sudah survey|belum ada yang|baru mulai)\b/.test(custText)
+        || /\b0\s*(?:kali|x|properti|property|villa|rumah|unit)\b/.test(custText),
+      // Guards Q4 from repeating when customer already stated household composition
+      // in any message (e.g. "bersama istri", "saya sendiri", "berdua").
+      customerStatedHousehold: /\b(sendiri|seorang\s+diri|sendirian|berdua|bertiga|berempat|berlima|bersama|sama\s+\w+|dengan\s+\w+|istri|suami|anak|keluarga|pasangan|partner|couple|alone|family)\b/i.test(custText)
+        || /\b\d{1,2}\s*(orang|pax|people|tamu)\b/i.test(custText),
       aiAskedMoveIn     : this.#has(aiText, [
         'masuk bulan', 'pindah bulan', 'rencananya masuk', 'move in', 'moving',
         'target kapan proses belinya', 'kapan rencananya mulai operasional',
@@ -1876,10 +1901,13 @@ class ConversationQualifier {
     }
 
     /* ── Q2: search history (highest-value question — fire early, once) ── */
-    if (!profile.hasSearchHistory && !profile.aiAskedSearchHist && profile.aiCount <= 3 && loc) {
+    if (!profile.hasSearchHistory && !profile.aiAskedSearchHist && !profile.customerStatedSearchHistory && profile.aiCount <= 3 && loc) {
+      const typeWord = typeLabel
+        ? (isId ? typeLabel : PropertyFormatter.humanBuildingType(type, 'en'))
+        : (isId ? 'properti' : 'property');
       return isId
-        ? `Sudah lihat berapa properti di *${loc}*? Apa yang membuat belum cocok dari yang sudah dilihat?`
-        : `How many properties have you seen in *${loc}*? What hasn't quite worked about the ones you've viewed?`;
+        ? `Sudah lihat berapa ${typeWord} di *${loc}*? Apa yang membuat belum cocok dari yang sudah dilihat?`
+        : `How many ${typeWord} options have you seen in *${loc}*? What hasn't quite worked about the ones you've viewed?`;
     }
 
     /* ── Q3-pre: ambiguous budget — no unit given, ask to clarify ── */
@@ -1891,7 +1919,10 @@ class ConversationQualifier {
     }
 
     /* ── Q3: budget via two price anchors (NEVER a direct ask) ── */
-    if (!profile.budget && !profile.aiAskedBudget && loc) {
+    // Skip if: budget in filters, AI already asked Q3, or customer already stated a number+unit amount.
+    // The customerStatedBudget guard prevents Q3 from looping when filters.budget is null
+    // for any reason (period mismatch, DB timing, edge case) but customer DID give a number.
+    if (!profile.budget && !profile.aiAskedBudget && !profile.customerStatedBudget && loc) {
       // Use passed-in anchors first, then fall back to built-in type-specific table
       const anchors = priceAnchors || ConversationQualifier.getBudgetAnchors(type, tx, lang);
       if (anchors) {
@@ -1943,7 +1974,7 @@ class ConversationQualifier {
     }
 
     /* ── Q4: household composition (infers bedrooms, reveals decision maker) ── */
-    if (!profile.hasHouseholdInfo && !profile.aiAskedHousehold) {
+    if (!profile.hasHouseholdInfo && !profile.aiAskedHousehold && !profile.customerStatedHousehold) {
       return isId
         ? `Nanti akan tinggal bersama siapa saja? Biar saya bisa carikan yang pas jumlah kamarnya 🛏️`
         : `Who will be living there with you? That helps me find the right number of bedrooms 🛏️`;
@@ -2230,14 +2261,14 @@ class ConversationQualifier {
     }
 
     /* ── Q4: Search history (gold-mine) ── */
-    if (!profile.hasSearchHistory && !profile.aiAskedSearchHist && profile.aiCount <= 4) {
+    if (!profile.hasSearchHistory && !profile.aiAskedSearchHist && !profile.customerStatedSearchHistory && profile.aiCount <= 4) {
       return isId
         ? `Sebelumnya sudah sempat lihat beberapa rumah, Kak? Kalau sudah, biasanya apa yang bikin belum cocok?`
         : `Have you viewed a few houses already, Kak? If so, what usually hasn't quite fit?`;
     }
 
     /* ── Q5: Budget via two options (never direct) ── */
-    if (!profile.budget && !profile.aiAskedBudget && loc) {
+    if (!profile.budget && !profile.aiAskedBudget && !profile.customerStatedBudget && loc) {
       const anchors = priceAnchors || ConversationQualifier.getBudgetAnchors('house', tx, lang);
       if (anchors) {
         return isId

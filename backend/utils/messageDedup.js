@@ -22,6 +22,12 @@ const _seen        = new Map();
 const DEDUP_TTL_MS = 10 * 60 * 1000;   // 10 minutes
 const MAX_ENTRIES  = 1000;
 
+// Content-based dedup: prevents the same (phone, message) pair from being
+// processed twice within 90 seconds. Covers Fonnte webhook double-delivery
+// and polling+webhook overlap where message IDs differ but content is identical.
+const _contentSeen = new Map();
+const CONTENT_TTL_MS = 90 * 1000;   // 90 seconds
+
 // Synthetic id prefixes that are NOT stable across retries — never dedup these.
 const _SYNTHETIC_PREFIXES = ['fonnte_', 'wati_', 'dialog_', 'dialog360_'];
 
@@ -56,4 +62,37 @@ function markProcessed(messageId) {
   }
 }
 
-module.exports = { isAlreadyProcessed, markProcessed };
+/**
+ * Content-based dedup: prevent the same (phone + message) from being processed
+ * twice within CONTENT_TTL_MS (90s). Catches Fonnte duplicate webhooks where
+ * message IDs differ (e.g. different inboxid per delivery).
+ *
+ * @param {string} phone   - Normalized sender phone
+ * @param {string} content - Message content (trimmed)
+ * @returns {boolean} true if this phone+content was already processed
+ */
+function isContentAlreadyProcessed(phone, content) {
+  if (!phone || !content) return false;
+  const key = `${String(phone).trim()}::${String(content).trim().slice(0, 120)}`;
+  const ts = _contentSeen.get(key);
+  if (!ts) return false;
+  if (Date.now() - ts > CONTENT_TTL_MS) { _contentSeen.delete(key); return false; }
+  return true;
+}
+
+/**
+ * Record a (phone, content) pair as processed.
+ * @param {string} phone
+ * @param {string} content
+ */
+function markContentProcessed(phone, content) {
+  if (!phone || !content) return;
+  const key = `${String(phone).trim()}::${String(content).trim().slice(0, 120)}`;
+  _contentSeen.set(key, Date.now());
+  if (_contentSeen.size > MAX_ENTRIES) {
+    const cutoff = Date.now() - CONTENT_TTL_MS;
+    for (const [k, ts] of _contentSeen) { if (ts < cutoff) _contentSeen.delete(k); }
+  }
+}
+
+module.exports = { isAlreadyProcessed, markProcessed, isContentAlreadyProcessed, markContentProcessed };

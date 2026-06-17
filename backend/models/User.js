@@ -20,6 +20,7 @@ const sequelize = require('../config/database');
  * - status        : 1 = aktif, 2 = blocked, 3 = delete
  * - privilege     : level akses / role (nullable)
  * - fonnte_token  : Fonnte token milik agent (untuk kirim WA via Fonnte, nullable)
+ * - chakra_hq_token: ChakraHQ Access Token milik agent (Bearer token untuk API ChakraHQ, nullable)
  */
 const User = sequelize.define('User', {
   user_id: {
@@ -96,6 +97,12 @@ const User = sequelize.define('User', {
     allowNull: true,
     defaultValue: null,
     comment: '360dialog API key milik agent (D360-API-KEY header). Dapat dari sandbox: kirim START ke +551146733492'
+  },
+  chakra_hq_token: {
+    type: DataTypes.STRING(2000),
+    allowNull: true,
+    defaultValue: null,
+    comment: 'ChakraHQ Access Token milik agent (Bearer token untuk API ChakraHQ)'
   }
 }, {
   tableName: 'users',

@@ -399,6 +399,13 @@ const PROPERTY_QUESTION_PATTERNS = [
   // ── Q12 apartment tower / floor ─────────────────────────────────────────────
   /tower\s+atau\s+lantai/, /preferensi\s+tower/, /lantai\s+(rendah|tinggi|tertentu|berapa)/,
   /tower\s+or\s+floor/, /floor\s+(prefer|choice)/,
+  // Q2b — "Sudah lihat berapa properti/villa/rumah di X? Apa yang membuat belum cocok?"
+  // Q4 house pilot — "Sebelumnya sudah sempat lihat beberapa rumah, Kak?"
+  /sudah\s+lihat\s+berapa/, /sudah\s+sempat\s+lihat/, /sebelumnya\s+sudah\s+sempat/,
+  /apa\s+yang\s+membuat\s+belum\s+cocok/, /belum\s+cocok\s+dari\s+yang/,
+  // Q3 — price anchor format: "ada ... yang di kisaran ... dan ada juga yang ... Kira-kira yang mana lebih sesuai?"
+  /kira-kira\s+yang\s+mana/, /yang\s+mana\s+lebih\s+sesuai/, /ada\s+yang\s+di\s+kisaran/,
+  /di\s+kisaran\s+\d/, /lebih\s+sesuai\s+dengan\s+rencana/, /sesuai\s+dengan\s+rencana\s+anda/,
 ];
 
 /** Apakah salah satu dari ≤2 pesan AI terakhir adalah pertanyaan properti? */
@@ -512,9 +519,10 @@ function isPropertyContextContinuation(message, history = []) {
   if (/^\d+\s*(tahun|year|bulan|month)s?$/.test(lower.trim())) return true;
   // Harga dengan satuan — jawaban Q3 ("2-4 juta/seminggu", "5 jt per bulan")
   if (/\b\d[\d.,]*\s*(juta|ribu|miliar|rb|jt)\b/i.test(lower)) return true;
-  // Q2b answer fast-path: "Saya belum pernah lihat", "sudah lihat 3", "belum pernah survey"
+  // Q2b answer fast-path: "Saya belum pernah lihat", "sudah lihat 3", "belum pernah survey",
+  // "Belum pernah." (standalone — customer never searched before).
   // These are ALWAYS Q2b answers and must pass even before hasRecentPropertyQuestion check.
-  if (/\b(belum\s+pernah\s+lihat|pernah\s+lihat|sudah\s+lihat\s+\d|belum\s+lihat|sudah\s+survey|belum\s+ada\s+yang\s+cocok|belum\s+pernah\s+survey)\b/i.test(lower)) return true;
+  if (/\b(belum\s+pernah\s+lihat|belum\s+pernah\s+survey|belum\s+pernah\s+cek|belum\s+pernah|pernah\s+lihat|sudah\s+lihat\s+\d|belum\s+lihat|sudah\s+survey|belum\s+ada\s+yang\s+cocok)\b/i.test(lower)) return true;
 
   // Note: context (hasPropertyCtx OR hasRecentPropertyQ) was already verified above.
   // We do NOT re-require a recent question here — that used to drop valid answers in

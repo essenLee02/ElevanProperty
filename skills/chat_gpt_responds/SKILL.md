@@ -157,16 +157,27 @@ Q1   Transaction type    "Lagi cari untuk sewa atau beli?"
 Q2   Location            "Di kota atau area mana yang Anda inginkan?"
      Fires: after type + tx established.
 
-Q2b  Search history      "Sudah lihat berapa properti di [kota]?
+Q2b  Search history      "Sudah lihat berapa [tipe] di [kota]?
      (highest value)      Apa yang membuat belum cocok dari yang sudah dilihat?"
      Extracts: red flags, budget ceiling, anchor, urgency, decision signals.
      Fires: after location established, AI has asked ≤ 3 questions.
+     ⚠️ FIRES ONCE ONLY. If QUALIFICATION STATE shows ✅ or ⏭️ → SKIP immediately.
+     Valid Q2b answers: "Belum pernah.", "belum pernah cek", "sudah lihat 3",
+     "belum ada yang cocok" — ALL count. ACKNOWLEDGE briefly then move to Q3.
+     If customer redirected to other info (facilities, etc.) → ⏭️, never repeat.
 
 Q3   Budget              NEVER ask directly — use two contrasting price anchors:
                          "Di [area] ada [Tipe] sekitar [LOW] dan ada yang [HIGH].
                           Kira-kira yang mana lebih sesuai?"
      If no price data:   "Prefer yang terjangkau/ekonomis atau menengah ke atas?"
      Accepted:           terjangkau / murah / affordable → budget set → PROCEED.
+     ⚠️ FIRES ONCE ONLY. If QUALIFICATION STATE shows ✅ Budget → SKIP, never ask again.
+     Valid Q3 answers include: anchor choice ("yang murah"), absolute amount
+     ("badget 2-3 juta/minggu", "5jt/malam", "sekitar 10 juta"), or affordability words.
+     Period mismatch (customer says /minggu, catalog shows /malam) is NOT a reason to
+     re-ask — accept the stated amount and proceed.
+     If customer stated budget in their FIRST message → Q3 is PRE-ANSWERED. Do NOT
+     present price anchors. Follow the ⚡ PERTANYAAN BERIKUTNYA directive instead.
 
 Q4   Household           "Nanti akan tinggal bersama siapa saja?
      (never ask rooms)    Biar saya bisa carikan yang pas jumlah kamarnya 🛏️"

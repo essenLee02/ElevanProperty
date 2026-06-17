@@ -81,10 +81,15 @@ app.post('/', (req, res) => {
     return WatiChatController.handleInboundMessage(req, res);
   }
 
+  if (active === 'CHAKRAHQ') {
+    const ChakraHQController = require('./controllers/chakraHQController');
+    return ChakraHQController.handleInboundMessage(req, res);
+  }
+
   // Fallback jika MASSEGE_TERMINAL tidak dikenali
   return res.status(process.env.HTTP_OK).json({
     success : true,
-    message : 'Webhook diterima. Set MASSEGE_TERMINAL=FONNTE|DIALOG|WATI di .env untuk routing.'
+    message : 'Webhook diterima. Set MASSEGE_TERMINAL=FONNTE|DIALOG|WATI|CHAKRAHQ di .env untuk routing.'
   });
 });
 
@@ -97,7 +102,8 @@ app.use((req, res, next) => {
     '/api/fonnte-chat/webhook',
     '/api/fonnte/webhook',
     '/api/wati/webhook',
-    '/api/whatsapp/webhook'
+    '/api/whatsapp/webhook',
+    '/api/chakrahq/webhook'
   ];
   if (webhookPaths.includes(req.path) && req.method === 'POST') {
     const contentType  = req.headers['content-type'] || '(no content-type)';

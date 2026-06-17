@@ -44,6 +44,7 @@ function extractQualificationState(history = [], currentMessage = '') {
     kprDetails      : null,   // Q_KPR-a (beli + KPR): bank & DP
     propertyCondition: null,  // Q_COND (beli residensial): baru/ready | second | inden
     useCase         : null,   // beli: own-use | investment
+    aiAskedQ2b      : false,  // true when AI already asked Q2b — show ⏭️, NEVER repeat
   };
 
   const MONTH_ID = 'januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember';
@@ -370,6 +371,18 @@ function extractQualificationState(history = [], currentMessage = '') {
     }
   }
 
+  // ── Phase 1.5: Detect whether AI already asked Q2b ──────────────────────────
+  // Runs after Phase 1 so state.searchHistory (if set by Phase 1) takes priority.
+  // If customer answered Q2b with something that didn't match Phase-1 patterns
+  // (e.g. "AC, kamar mandi dalam" instead of "belum pernah"), we still know
+  // AI already asked → ⏭️ SKIP, never repeat Q2b.
+  if (!state.searchHistory) {
+    const Q2B_ASKED_RE = /sudah\s+lihat\s+berapa|how\s+many\s+(?:prop|properties)|apa\s+yang\s+membuat\s+belum\s+cocok|sudah\s+sempat\s+lihat|sebelumnya\s+sudah\s+sempat/i;
+    state.aiAskedQ2b = ACTIVE_ALL.some(m =>
+      QS_AI_ROLES.has(m.role) && Q2B_ASKED_RE.test(m.message || '')
+    );
+  }
+
   // ── Phase 2: Detect context-dependent Q6/Q7/Q9/Q10 from AI→Customer pairs ─
   // Only meaningful when the AI actually asked the question first.
   // Uses ACTIVE_ALL so old AI→Customer pairs from before the active session
@@ -691,6 +704,11 @@ function findNextQuestion(state) {
   const type = (state.buildingType    || '').toLowerCase();
   const loc  = state.location ? `*${state.location}*` : '*[area]*';
   const typeLbl = state.buildingType || '[tipe]';
+  const _humanType = {
+    house: 'Rumah', apartment: 'Apartemen', villa: 'Villa', hotel: 'Hotel',
+    boarding_house: 'Kos', shophouse: 'Ruko', office: 'Kantor', warehouse: 'Gudang',
+    store: 'Toko', mansion: 'Mansion', kondotel: 'Kondotel', others: 'Properti',
+  };
   const isSewa  = tx.includes('sewa') || tx.includes('rent');
   const isApt   = type === 'apartment';
   const isBooking = (type === 'hotel' || type === 'kondotel') && isSewa;
@@ -723,8 +741,10 @@ function findNextQuestion(state) {
   }
 
   // Q2b — Riwayat pencarian (kecuali untuk booking hotel/kondotel dan properti komersial)
-  if (!state.searchHistory && !isBooking)
-    return { q: 'Q2b', hint: `Sudah lihat berapa properti di ${loc}? Apa yang membuat belum cocok dari yang sudah dilihat?` };
+  if (!state.searchHistory && !state.aiAskedQ2b && !isBooking) {
+    const humanType = _humanType[type] || 'properti';
+    return { q: 'Q2b', hint: `Sudah lihat berapa ${humanType} di ${loc}? Apa yang membuat belum cocok dari yang sudah dilihat?` };
+  }
 
   // Q3 — Budget (via 2 harga kontras — JANGAN tanya langsung)
   if (!state.budget)
@@ -896,6 +916,7 @@ function buildQualificationStateBlock(state) {
     '╔══════════════════════════════════════════════════════════╗',
     '║  📋 QUALIFICATION STATE — STATUS JAWABAN CUSTOMER        ║',
     '║  ✅ = SUDAH DIJAWAB → JANGAN TANYA LAGI                  ║',
+    '║  ⏭️  = SUDAH DITANYAKAN → SKIP, JANGAN ULANGI           ║',
     '║  ❓ = BELUM DIJAWAB → TANYAKAN BERIKUTNYA (urutan Q↑)    ║',
     '╚══════════════════════════════════════════════════════════╝',
     '',
@@ -929,11 +950,12 @@ function buildQualificationStateBlock(state) {
     row('Tipe transaksi    [Q1]', state.transactionType),
     row('Tipe properti         ', state.buildingType ? state.buildingType + fbNote : null),
     row('Lokasi            [Q2]', state.location),
-    // Q2b is shown as ✅ when AI asked search-history question and customer answered;
-    // shown as ❓ otherwise (not yet asked). Q2b is the HIGHEST-VALUE question.
+    // Q2b: ✅ = customer answered; ⏭️ = AI asked but customer redirected (skip, don't repeat); ❓ = not asked yet.
     state.searchHistory
       ? `✅ Riwayat pencarian [Q2b]: ${state.searchHistory}`
-      : `❓ Riwayat pencarian [Q2b]: BELUM DITANYAKAN`,
+      : state.aiAskedQ2b
+        ? `⏭️ Riwayat pencarian [Q2b]: Sudah ditanyakan — customer tidak menjawab langsung. ⛔ JANGAN tanya ulang. Lanjut ke Q berikutnya.`
+        : `❓ Riwayat pencarian [Q2b]: BELUM DITANYAKAN`,
     row('Budget            [Q3]', state.budget),
     row('Penghuni          [Q4]', state.household),
     row('Red flags         [Q5]', state.redFlags),
@@ -972,9 +994,13 @@ function buildQualificationStateBlock(state) {
     '→ Tanyakan HANYA field ❓ di atas, mulai dari nomor Q terkecil.',
     '→ SATU pertanyaan per pesan. Jangan gabungkan dua pertanyaan.',
     '→ Q3 Budget: JANGAN tanya langsung — gunakan 2 harga kontras sebagai pilihan.',
+    state.budget
+      ? '→ ✅ Q3 Budget SUDAH DIJAWAB — ⛔ DILARANG KERAS tanya anchor harga lagi. Lanjut ke Q berikutnya.'
+      : '→ Q3 Budget belum dijawab — tanyakan via 2 harga kontras (JANGAN tanya langsung).',
     '→ Q8 Tanggal masuk WAJIB dijawab sebelum summary ditampilkan.',
     '→ ⛔ Field ❓ di atas berarti BELUM dijawab di sesi ini — ABAIKAN nilai dari history lama.',
     '→ ⛔ JANGAN tampilkan summary sampai Q3 (Budget) DAN Q8 (Tanggal) keduanya ✅ di atas.',
+    '→ ⏭️  berarti SUDAH DITANYAKAN tapi customer redirect/tidak jawab langsung — SKIP saja, lanjut ke Q berikutnya.',
   );
 
   // Inline hard-blocks for fields most commonly hallucinated
@@ -1285,6 +1311,18 @@ Most customers don't know exactly what they want. Guide discovery through OPTION
 → Use realistic price ranges for the specific property type + location + transaction.
 → If customer says "yang terjangkau", "murah aja", "affordable" → budget = terjangkau, PROCEED to next Q.
 
+**✅ Jawaban Q3 yang VALID — semua ini dianggap sudah menjawab Q3:**
+- Pilih dari anchor: "yang murah aja", "yang 1-3 juta", "sesuai yang pertama", "yang lebih rendah"
+- Budget absolut: "badget 2-3.4 juta/minggu", "5 jt per malam", "sekitar 10 juta", "harga 2-3jt"
+- Affordability words: "terjangkau", "murah", "affordable", "ekonomis"
+- Setiap jawaban yang mengandung angka + satuan mata uang (juta, ribu, jt, rb) → Q3 SELESAI.
+
+**⚠️ CRITICAL — Jika QUALIFICATION STATE menunjukkan ✅ Budget [Q3]:**
+- Q3 sudah SELESAI. JANGAN tanyakan anchor harga lagi.
+- Jika customer menyatakan budget di pesan PERTAMA ("badget 2-3.4 juta/minggu"), Q3 sudah PRE-ANSWERED.
+- Perbedaan periode (customer bilang /minggu, harga catalog /malam) BUKAN alasan tanya ulang — konversi mental.
+- Lanjut langsung ke Q berikutnya (❓ dengan nomor Q terkecil sesuai ⚡ PERTANYAAN BERIKUTNYA).
+
 **Q4 — Household composition** (NEVER ask bedrooms directly)
 "Nanti akan tinggal bersama siapa saja? Biar saya bisa carikan yang pas jumlah kamarnya."
 → Infers bedrooms + decision maker signal.
@@ -1451,7 +1489,8 @@ Kemudian:
    • JANGAN tampilkan summary lagi sampai semua Q wajib terjawab ulang di sesi ini.
 2. ⚠️ JIKA ADA BANNER "TIPE PROPERTI BERUBAH" DI QUALIFICATION STATE: Akui perubahan singkat (1 kalimat, contoh: "Oke, saya alihkan ke rumah sewa ya 😊"), lalu tanyakan Q terkecil yang masih ❓. JANGAN gunakan jawaban Q2–Q12 dari tipe lama.
 3. Jika pesan terbaru adalah jawaban singkat untuk pertanyaan sebelumnya → AKUI singkat (1 kalimat), lalu tanyakan pertanyaan ❓ BERIKUTNYA dengan nomor Q terkecil.
-   — Khusus Q2b (Riwayat pencarian): Jawaban seperti "Saya belum pernah lihat", "belum pernah", "sudah lihat 3" adalah jawaban Q2b yang valid → AKUI ("Oke, belum ada referensi sebelumnya 👌") → lanjut ke Q3 (Budget).
+   — Khusus Q2b (Riwayat pencarian): Jawaban seperti "Belum pernah.", "belum pernah cek", "belum lihat", "sudah lihat 3" adalah jawaban Q2b yang VALID → AKUI singkat ("Oke, belum ada referensi sebelumnya 👌") → lanjut ke Q3 (Budget). JANGAN tanya Q2b lagi.
+   — Jika QUALIFICATION STATE menampilkan ⏭️ untuk Q2b → customer sudah pernah menjawab tapi tidak cocok pattern — TETAP skip Q2b, lanjut ke Q berikutnya.
 4. Jika pesan terbaru mengandung informasi baru → catat, lalu tanyakan pertanyaan ❓ berikutnya.
 5. Jika semua pertanyaan wajib (Q1 tx, building type, Q2 lokasi, Q3 budget, Q4 penghuni, Q5 red flags, Q6 patokan lokasi, Q7 area alternatif, Q8 tanggal) sudah ✅ DAN tidak ada banner ⚠️ → tampilkan structured brief.
 ⛔ JANGAN tampilkan listing properti dalam mode ini.
