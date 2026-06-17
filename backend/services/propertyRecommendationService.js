@@ -22,7 +22,10 @@ const PROPERTY_TYPES = {
   store         : ['toko', 'store', 'retail', 'kios'],
   office        : ['kantor', 'office'],
   house         : ['rumah', 'house', 'home', 'kontrakan', 'residential'], // ← SETELAH warehouse/shophouse/mansion
-  others        : ['lainnya', 'others', 'other', 'tanah', 'kavling', 'kaveling', 'lahan', 'spbu', 'pabrik']
+  // NOTE: bare 'lainnya'/'other'/'others' removed — they false-match natural phrases
+  // like "rumah makan lainnya" / "atau yang lainnya" and wrongly flip type → reset.
+  // Use explicit "properti lainnya" instead.
+  others        : ['properti lainnya', 'properti lain', 'other property', 'tanah', 'kavling', 'kaveling', 'lahan', 'spbu', 'pabrik']
 };
 
 // Tipe percakapan baru (mansion/kondotel/store) belum tentu ada di katalog JSON
@@ -147,6 +150,16 @@ function stripNearPhrases(text) {
 }
 
 /**
+ * Remove ambiguous "rumah X" phrases that are NOT a house ("rumah makan",
+ * "rumah sakit", "rumah tangga", …). Without this, a customer saying they want to
+ * be near a "rumah makan" (restaurant) gets mis-detected as building type house,
+ * which then flips the type mid-flow and resets the whole qualification state.
+ */
+function stripAmbiguousRumah(text) {
+  return text.replace(/\brumah\s+(makan|sakit|tangga|ibadah|duka|produksi|tahanan|kos|kost|susun|potong)\b/gi, '');
+}
+
+/**
  * Word-bounded keyword match.
  * Multi-word keywords (contain space) → simple substring (already unambiguous).
  * Single-word keywords → require word boundary so "kosongan" ≠ "kos",
@@ -163,8 +176,9 @@ function includesAnyWordBounded(text, words = []) {
 
 function detectBuildingType(message = '') {
   const text = normalizeText(message);
-  // Strip "dekat X" phrases so location anchors don't pollute type detection
-  const textForType = stripNearPhrases(text);
+  // Strip "dekat X" anchors AND ambiguous "rumah makan/sakit/…" so neither pollutes
+  // building-type detection (a restaurant anchor must not become type=house).
+  const textForType = stripAmbiguousRumah(stripNearPhrases(text));
   return Object.entries(PROPERTY_TYPES).find(([, keywords]) => includesAnyWordBounded(textForType, keywords))?.[0] || '';
 }
 
@@ -325,7 +339,12 @@ const _BUDGET_RANGE_RE = new RegExp(
 );
 
 function detectBudget(message = '') {
-  const text = normalizeText(message);
+  // Strip currency markers that sit directly before a number ("rp1.4", "rp 3.5",
+  // "idr 5jt"). Without this, a ranged answer like "Rp1.4 - Rp 3.5 juta" breaks the
+  // range regex (the inner "rp" isn't part of a number token) and only the max value
+  // gets captured → the budget question loops. Removing the marker leaves clean
+  // "1.4 - 3.5 juta" which parses as a proper range.
+  const text = normalizeText(message).replace(/\b(?:rp|idr)\s*(?=\d)/gi, '');
 
   const period = /tahun|year|annual|per tahun|\/tahun/.test(text) ? 'year'
     : /bulan|month|monthly|per bulan|\/bulan/.test(text) ? 'month'

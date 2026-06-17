@@ -1149,7 +1149,7 @@ class ConversationQualifier {
       if (/\bvill?a\b/.test(w))                                              return 'villa';
       if (/\bapartemen\b|\bapartment\b/.test(w))                             return 'apartment';
       if (/\bmansion\b|\brumah mewah\b/.test(w))                            return 'mansion';
-      if (/\brumah\b|\bhouse\b|\bkontrakan\b/.test(w))                      return 'house';
+      if (/\brumah\b(?!\s+(?:makan|sakit|tangga|ibadah|duka|produksi|tahanan|susun|potong|kos))|\bhouse\b|\bkontrakan\b/.test(w))                      return 'house';
       if (/\bhotel\b|\bpenginapan\b/.test(w))                               return 'hotel';
       if (/\bkondotel\b|\bcondo\b/.test(w))                                 return 'kondotel';
       if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(w))                return 'boarding_house';
@@ -1250,7 +1250,7 @@ class ConversationQualifier {
     if      (/\bvill?a\b/.test(histCustJoined))                                             histBuildingType = 'villa';
     else if (/\bapartemen\b|\bapartment\b/.test(histCustJoined))                            histBuildingType = 'apartment';
     else if (/\bmansion\b|\brumah mewah\b/.test(histCustJoined))                           histBuildingType = 'mansion';
-    else if (/\brumah\b|\bhouse\b|\bkontrakan\b/.test(histCustJoined))                     histBuildingType = 'house';
+    else if (/\brumah\b(?!\s+(?:makan|sakit|tangga|ibadah|duka|produksi|tahanan|susun|potong|kos))|\bhouse\b|\bkontrakan\b/.test(histCustJoined))                     histBuildingType = 'house';
     else if (/\bhotel\b|\bpenginapan\b/.test(histCustJoined))                              histBuildingType = 'hotel';
     else if (/\bkondotel\b|\bcondo\b/.test(histCustJoined))                                histBuildingType = 'kondotel';
     else if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(histCustJoined))               histBuildingType = 'boarding_house';
@@ -1265,7 +1265,7 @@ class ConversationQualifier {
     if      (/\bvill?a\b/.test(curMsgLower))                                             curBuildingType = 'villa';
     else if (/\bapartemen\b|\bapartment\b/.test(curMsgLower))                            curBuildingType = 'apartment';
     else if (/\bmansion\b|\brumah mewah\b/.test(curMsgLower))                           curBuildingType = 'mansion';
-    else if (/\brumah\b|\bhouse\b|\bkontrakan\b/.test(curMsgLower))                     curBuildingType = 'house';
+    else if (/\brumah\b(?!\s+(?:makan|sakit|tangga|ibadah|duka|produksi|tahanan|susun|potong|kos))|\bhouse\b|\bkontrakan\b/.test(curMsgLower))                     curBuildingType = 'house';
     else if (/\bhotel\b|\bpenginapan\b/.test(curMsgLower))                              curBuildingType = 'hotel';
     else if (/\bkondotel\b|\bcondo\b/.test(curMsgLower))                                curBuildingType = 'kondotel';
     else if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(curMsgLower))               curBuildingType = 'boarding_house';
@@ -1411,14 +1411,16 @@ class ConversationQualifier {
         'keluarga', 'suami', 'istri', 'anak', 'orang tua',
         'sendiri', 'pasangan', 'berdua', 'bertiga', 'berempat',
         'family', 'wife', 'husband', 'children', 'parents', 'alone', 'partner',
-        'couple', '2 orang', '3 orang', '4 orang', 'anak-anak', 'ortu',
-      ]),
+        'couple', 'anak-anak', 'ortu', 'rombongan', 'grup', 'group', 'gathering',
+        'reuni', 'arisan',
+      ]) || /\b\d{1,3}\s*(orang|pax|people|tamu|peserta)\b/.test(custText),
       // NOTE: bare 'sudah'/'pernah' removed — they false-matched "kontrakan sudah
       // habis" (a motivation phrase) as a search-history answer. Require the
       // specific "sudah lihat / pernah lihat / sudah survey" phrasings instead.
       hasSearchHistory: this.#has(custText, [
         'sudah lihat', 'pernah lihat', 'sudah survey', 'pernah survey', 'sudah cari',
         'belum cocok', 'tidak cocok', 'kurang cocok', 'belum pernah lihat',
+        'belum pernah', 'baru mulai', 'belum survey',
         'have seen', 'already visited', 'viewed', "haven't found", 'not a match',
       ]),
       hasRedFlags: this.#has(custText, [
@@ -2591,14 +2593,21 @@ class ConversationQualifier {
   }
 
   static #extractHouseholdSummary(custText) {
-    if (/sendiri|alone/.test(custText))       return 'Sendiri';
-    if (/berdua|pasangan|couple/.test(custText)) return 'Berdua (pasangan)';
-    if (/bertiga/.test(custText))             return '3 orang';
-    if (/berempat/.test(custText))            return '4 orang';
-    if (/\d+\s*anak/.test(custText)) {
-      const m = custText.match(/(\d+)\s*anak/);
-      return m ? `Keluarga dengan ${m[1]} anak` : 'Ada anak';
+    const childM = custText.match(/(\d+)\s*anak/);
+    if (childM) return `Keluarga dengan ${childM[1]} anak`;
+    // Explicit headcount of any size (e.g. "15 orang") — a group (≥6) is flagged.
+    const headM = custText.match(/\b(\d{1,3})\s*(?:orang|pax|people|tamu|peserta)\b/);
+    if (headM) {
+      const n = parseInt(headM[1], 10);
+      return n >= 6 ? `${n} orang (rombongan/grup)` : `${n} orang`;
     }
+    if (/sendiri|alone/.test(custText))          return 'Sendiri';
+    if (/berdua|pasangan|couple/.test(custText)) return 'Berdua (pasangan)';
+    if (/bertiga/.test(custText))                return '3 orang';
+    if (/berempat/.test(custText))               return '4 orang';
+    if (/rombongan|grup|group|reuni|arisan|gathering/.test(custText)) return 'Rombongan/grup';
+    if (/keluarga besar/.test(custText))         return 'Keluarga besar';
+    if (/keluarga/.test(custText))               return 'Keluarga';
     return 'Disebutkan';
   }
 
@@ -2873,9 +2882,9 @@ class ChatbotPrivateService {
     // Resolve filters — use provided context or extract on the fly
     const filters = recommendationContext?.filters || extractPropertyFilters(userMessage, history);
 
-    // Guard: reject off-topic messages immediately — no response at all
+    // Guard: reject off-topic messages immediately
     if (LanguageDetector.isOffTopic(userMessage)) {
-      return this.#wrap(null, { skillInfo, filters, skipResponse: true });
+      return this.#wrap(builder.offTopic(), { skillInfo, filters });
     }
 
     // Guard: ask for clarification when intent is unclear
@@ -2960,9 +2969,9 @@ class ChatbotPrivateService {
       agent    : agentName,
     });
 
-    // ── Guard: off-topic pesan — abaikan, tidak ada balasan ─────────────────
+    // ── Guard: off-topic pesan (bukan properti sama sekali) ──────────────────
     if (LanguageDetector.isOffTopic(userMessage)) {
-      return this.#wrap(null, { skillInfo, skipResponse: true });
+      return this.#wrap(builder.offTopic(), { skillInfo });
     }
 
     // ── Resolve filters dari context atau extract baru ───────────────────────
@@ -3362,10 +3371,6 @@ exports.sendPrivateMessage = async (req, res) => {
       recommendationContext,
       externalError: new Error('Direct private chatbot endpoint used.'),
     });
-
-    if (result.skipResponse) {
-      return res.json({ success: true, reply: null, skipResponse: true, source: 'private_agent' });
-    }
 
     await saveAssistantMessage(session.id, result.reply, 'website_chatbot_private', {
       source:               'private_agent',

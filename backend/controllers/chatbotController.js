@@ -221,10 +221,6 @@ class ChatbotController {
             externalError:         error
           });
 
-          if (privateResult.skipResponse) {
-            return res.json({ success: true, reply: null, skipResponse: true, source: 'private_agent' });
-          }
-
           await saveAssistantMessage(session.id, privateResult.reply, 'website_chatbot_private', {
             source:                  'private_agent',
             controller:              'chatbotPrivateController',

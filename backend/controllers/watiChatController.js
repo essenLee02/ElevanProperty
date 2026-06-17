@@ -209,21 +209,10 @@ async function processWatiMessage(payload, agent) {
     platform  : 'wati'
   });
 
-  // ── Simpan pesan customer (selalu, terlepas dari keyword) ────────────────
-  await saveMessage(session, 'customer', customerMessage, {
-    agentName   : agent.name,
-    agentUserId : agent.user_id,
-    messageId,
-    platform    : 'wati'
-  });
-
-  safeLog('WATI_INBOUND_MESSAGE', {
-    sessionId     : session.id,
-    agentName     : agent.name,
-    messageLength : customerMessage.length
-  });
-
-  // ── Cek kata kunci properti / lanjutan percakapan ───────────────────────
+  // ── GATE: cek kata kunci properti / lanjutan percakapan SEBELUM simpan DB ──
+  // Mengikuti fonnteChatController: pengecekan dilakukan SEBELUM menyimpan ke DB.
+  // Pesan non-properti TIDAK disimpan sama sekali (hanya tampil di terminal) —
+  // menjaga history percakapan tetap bersih & menghindari write DB yang sia-sia.
   const isPropertyQuery = hasPropertyKeyword(customerMessage);
 
   let isContinuation = false;
@@ -244,8 +233,22 @@ async function processWatiMessage(payload, agent) {
       ts,
       message        : customerMessage
     });
-    return;
+    return; // Tidak simpan ke DB, tidak balas
   }
+
+  // ── Simpan pesan customer (HANYA query properti / lanjutan) ──────────────
+  await saveMessage(session, 'customer', customerMessage, {
+    agentName   : agent.name,
+    agentUserId : agent.user_id,
+    messageId,
+    platform    : 'wati'
+  });
+
+  safeLog('WATI_INBOUND_MESSAGE', {
+    sessionId     : session.id,
+    agentName     : agent.name,
+    messageLength : customerMessage.length
+  });
 
   // ── Generate AI reply (ChatGPT → Claude → Private Agent) ────────────────
   let aiResult;

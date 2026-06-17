@@ -332,15 +332,9 @@ async function processIncomingMessage(msg, contacts, agent) {
     platform      : 'dialog360'
   });
 
-  // ── Simpan pesan customer (selalu) ───────────────────────────────────────
-  await saveMessage(session, 'customer', messageText, {
-    agentName : agent.name,
-    messageId,
-    platform  : 'dialog360',
-    msgType
-  });
-
-  // ── Cek kata kunci properti / lanjutan percakapan ───────────────────────
+  // ── GATE: cek kata kunci properti / lanjutan percakapan SEBELUM simpan DB ──
+  // Mengikuti fonnteChatController: pesan non-properti TIDAK disimpan ke DB
+  // (hanya tampil di terminal) — history tetap bersih, hemat write DB.
   const isPropertyQuery = hasPropertyKeyword(messageText);
 
   let isContinuation = false;
@@ -361,8 +355,16 @@ async function processIncomingMessage(msg, contacts, agent) {
       ts,
       message       : messageText
     });
-    return;
+    return; // Tidak simpan ke DB, tidak balas
   }
+
+  // ── Simpan pesan customer (HANYA query properti / lanjutan) ──────────────
+  await saveMessage(session, 'customer', messageText, {
+    agentName : agent.name,
+    messageId,
+    platform  : 'dialog360',
+    msgType
+  });
 
   // ── Generate AI reply (ChatGPT → Claude → Private Agent) ─────────────────
   let aiResult;

@@ -396,10 +396,6 @@ async function generateWhatsAppAIReply(params) {
       externalError        : new Error('ChatGPT and Claude unavailable for WhatsApp reply'),
     });
 
-    if (result.skipResponse) {
-      return { reply: null, skipResponse: true, provider: 'private_agent', contextSource };
-    }
-
     console.log(`[WhatsAppAI] Private Agent used (${result.exactMatches || 0} exact, ` +
                 `${result.alternatives || 0} alt, ${result.rumah123Listings || 0} rumah123)`);
 

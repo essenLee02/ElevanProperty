@@ -127,6 +127,21 @@ console.log('\n── Group 5: visible house SUMMARY (✓ answered / ✗ belum d
   ok('it is a summary, NOT silent handoff', !/teruskan ke \*LEO FELIX\* sekarang/.test(out));
 }
 
+console.log('\n── Group 6: group-size household ("N orang") detection ──');
+{
+  const { extractQualificationState } = require('../services/aiPromptBuilderService');
+  for (const m of ['Saya bersama 15 orang', 'dengan 15 orang', 'cari yang cukup untuk 15 orang', 'rombongan 15 orang']) {
+    const filters = extractPropertyFilters(m, []);
+    const profile = CQ.buildProfile([], m, filters);
+    ok(`profile.hasHouseholdInfo true: ${JSON.stringify(m)}`, profile.hasHouseholdInfo === true);
+    const st = extractQualificationState([], m);
+    ok(`state.household captures group: ${JSON.stringify(m)}`, /15 orang/.test(st.household || ''));
+  }
+  // Small household still works
+  const sf = extractPropertyFilters('sendiri saja', []);
+  ok('sendiri → household', CQ.buildProfile([], 'sendiri saja', sf).hasHouseholdInfo === true);
+}
+
 console.log('\n═══════════════════════════════════');
 console.log(`RESULT: ${pass}/${pass + fail} passed ${fail === 0 ? '✅ ALL PASS' : '❌ FAILURES'}`);
 console.log('═══════════════════════════════════');

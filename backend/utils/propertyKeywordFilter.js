@@ -81,9 +81,8 @@ const RUMAH_EXCLUSIONS = [
 
 const ACTION_WORDS = [
   // ── Bahasa Indonesia ──────────────────────────────────────────────────────
-  // Transaksi (sewa = sewa|kontrak|booking|ngekos|rent|book — semua bernilai "sewa")
+  // Transaksi
   'sewa', 'sewain', 'rental', 'ngontrak', 'kontrak',
-  'booking', 'book', 'ngebooking', 'ngebook',
   'beli', 'purchase',
   'jual', 'dijual', 'disewakan', 'dikontrakkan',
   'cari', 'nyari', 'mencari',
@@ -146,39 +145,7 @@ const STANDALONE_KEYWORDS = [
   // Pertanyaan spesifik properti
   'berapa kamar', 'berapa lantai', 'luas bangunan', 'luas tanah',
   'fasilitas perumahan', 'akses tol', 'dekat sekolah', 'dekat mall',
-  // Ngekos = intent sewa kamar kos (boarding house) — tidak ambigu
-  'ngekos', 'ngekost', 'ngekos-kosan',
 ];
-
-/* ══════════════════════════════════════════════════════════════════════════════
-   3b. OVERRIDE NON-PROPERTI — frasa yang MENGANDUNG kata tipe/aksi properti
-      tetapi BUKAN obrolan properti. Dicek PALING AWAL → paksa return false.
-
-   Diabaikan AI: "sewa mobil", "beli mobil/snack/teh/kopi/baju", "sewa tenda/baju/
-   buku", "kontrak kerja/bagi hasil/hutang", "booking meja/tempat/kursi restoran",
-   "pergi ke kos/kontrakan", "ngebooking kursi".
-   TETAP lolos: "booking hotel/villa", "ngekos dekat kampus" (properti asli).
-══════════════════════════════════════════════════════════════════════════════ */
-const NON_PROPERTY_OVERRIDE = [
-  // Kendaraan
-  /\b(sewa|beli|rental|booking|book|kredit|cicil)\s+(mobil|motor|kendaraan|sepeda|truk|bus|tiket)\b/,
-  // Barang non-properti yang sering pakai "sewa/beli"
-  /\b(sewa|beli|booking|book)\s+(baju|kostum|gaun|jas|buku|tenda|panggung|sound|alat|kursi|meja|sepatu|tas|lapangan|studio\s+foto|wedding|snack|camilan|kopi|teh|minuman)\b/,
-  // Kontrak yang bukan properti
-  /\bkontrak\s+(kerja|kerjasama|kerja\s+sama|bagi\s+hasil|hutang|utang|asuransi|kredit|karyawan|proyek)\b/,
-  /\bbagi\s+hasil\b/,
-  // Booking yang bukan properti
-  /\b(booking|book|ngebooking|reservasi|pesan)\s+(meja|tempat|kursi|tiket|lapangan|salon|dokter|nonton|bioskop|restoran|resto|cafe|kafe|studio)\b/,
-  /\bngebooking\s+kursi\b/,
-  // Pergi/navigasi ke tempat (bukan mencari properti) — motion verb + ke + tempat
-  /\b(pergi|jalan|menuju|mampir|berangkat|balik|pulang|nganter|antar|mau)\s+ke\s+(kos|kost|kontrakan|rumah|toko|kantor|hotel|gudang|kios)\b/,
-  // Restoran / kuliner
-  /\b(makan|nongkrong|pergi|mampir)\s+(di|ke)\s+(restoran|resto|restaurant|cafe|kafe|warung)\b/,
-];
-
-function isNonPropertyOverride(lower) {
-  return NON_PROPERTY_OVERRIDE.some((re) => re.test(lower));
-}
 
 /* ══════════════════════════════════════════════════════════════════════════════
    4. FUNGSI DETEKSI
@@ -279,9 +246,6 @@ function hasPropertyKeyword(message) {
   const lower = message.toLowerCase().trim();
   if (!lower || lower.length < 3) return false;
 
-  // Override: frasa non-properti yang kebetulan memuat kata tipe/aksi → diabaikan
-  if (isNonPropertyOverride(lower)) return false;
-
   // Kondisi A: Kata kunci mandiri (tidak perlu kondisi lain)
   if (hasStandaloneKeyword(lower)) return true;
 
@@ -379,8 +343,8 @@ function extractTransactionTypeFromMessage(message) {
   if (!message) return '';
   const lower = message.toLowerCase();
 
-  if (lower.match(/\b(sewa|rental|ngontrak|kontrak|disewakan|kost|kos|boarding|ngekos|ngekost|booking|book|rent|lease)\b/i)) return 'rent';
-  if (lower.match(/\b(beli|pembelian|jual|dijual|purchase|buy|sell|sale|kpr|inden|dp|cicilan|over kredit)\b/i)) return 'sale';
+  if (lower.match(/\b(sewa|rental|ngontrak|kontrak|disewakan|kost|kos|boarding|rent|lease)\b/i)) return 'rent';
+  if (lower.match(/\b(beli|jual|dijual|purchase|buy|sell|kpr|inden|dp|cicilan|over kredit)\b/i)) return 'sale';
 
   return '';
 }
@@ -388,6 +352,64 @@ function extractTransactionTypeFromMessage(message) {
 /* ══════════════════════════════════════════════════════════════════════════════
    6. CONTEXT CONTINUATION — Deteksi jawaban singkat sebagai lanjutan properti
 ══════════════════════════════════════════════════════════════════════════════ */
+
+// Pola pertanyaan properti dari AI (Q1–Q12 + Q_FAC). Jika pesan AI TERAKHIR cocok
+// salah satu pola ini, percakapan jelas sedang in-flow → cukup sebagai konteks
+// properti walau kata TIPE (apartemen/villa/…) sudah keluar dari window pesan.
+// Module-level agar tidak dibuat ulang tiap panggilan + bisa dipakai sebelum gate.
+const PROPERTY_QUESTION_PATTERNS = [
+  // ── Bahasa Indonesia ──────────────────────────────────────────────────────
+  /sewa\s+atau\s+beli/, /beli\s+atau\s+sewa/, /kisaran\s+harga/, /budget/,
+  /harga\s+berapa/, /berapa\s+harga/, /di\s+kota\s+(apa|mana)/,
+  /lokasi\s+(apa|mana|yang|di)/, /area\s+(mana|apa)/, /wilayah\s+(mana|apa)/,
+  /tipe\s+properti/, /jenis\s+properti/, /furnished|furnish|furnitur/,
+  /kamar\s+(tidur|mandi)/, /berapa\s+kamar/, /luas\s+(berapa|bangunan|tanah)/,
+  /fasilitas\s+(apa|yang|tertentu|tambahan|khusus|wajib)/, /ada\s+fasilitas/,
+  /kapan\s+(masuk|pindah|rencan)/, /bulan\s+apa/, /ada\s+yang\s+ingin.*tanyakan/,
+  /masih\s+(ada|butuh|perlu)/, /selain\s+itu/, /rencananya\s+masuk/,
+  /masuk\s+bulan/, /pindah\s+bulan/, /sewa\s+untuk\s+berapa/, /berapa\s+lama/,
+  /tinggal\s+bersama/, /bersama\s+(siapa|siapa\s+saja)/, /tinggal\s+dengan/,
+  /akan\s+tinggal/, /living\s+with/, /live\s+with/,
+  // ── English equivalents ─────────────────────────────────────────────────────
+  /rent\s+or\s+buy/, /buy\s+or\s+rent/, /price\s+range/, /budget\s+range/,
+  /which\s+(city|area|location)/, /what\s+type\s*(of\s*)?property/,
+  /planning\s+to\s+move/, /move[\s-]in/, /what\s+month/, /when.*plan/,
+  /how\s+long.*(?:rent|lease|plan)/, /lease\s+duration/, /who\s+will\s+be\s+living/,
+  /living\s+with\s+you/, /furnish(?:ing|ed)?\s+prefer/, /prefer.*furnish/,
+  /tower\s+or\s+floor/, /floor\s+prefer/, /have\s+you\s+seen/, /how\s+many\s+prop/,
+  /any.*(?:specific|prefer)/, /would\s+you\s+like.*(?:more|know|detail)/,
+  /what.*looking\s+for/, /are\s+you\s+looking\s+to/, /do\s+you\s+have\s*(a\s*)?budget/,
+  // ── Q2b search history ──────────────────────────────────────────────────────
+  /sudah\s+lihat\s+berapa/, /apa\s+yang\s+membuat\s+belum\s+cocok/,
+  /yang\s+sudah\s+dilihat/, /berapa\s+properti.*sudah/,
+  // ── Q5 red flags ────────────────────────────────────────────────────────────
+  /pasti\s+tidak\s+cocok/, /ada\s+yang.*tidak\s+cocok/,
+  /hadap\s+barat|gang\s+sempit|rumah\s+tua/, /definitely\s+want\s+to\s+avoid/, /anything.*avoid/,
+  // ── Q6 anchor point ─────────────────────────────────────────────────────────
+  /patokan/, /jadi\s+patokan/, /ada\s+lokasi.*tertentu/, /lokasi.*jadi\s+patokan/,
+  /dekat\s+sekolah|dekat\s+kantor|dekat\s+mall/, /specific\s+landmark/,
+  /near\s+a\s+(school|office|mall|station)/,
+  // ── Q7 alternative areas ────────────────────────────────────────────────────
+  /selain\s+\S.{0,30}area\s+sekitar/, /area\s+sekitar\s+(yang|masih)/,
+  /area.*lain.*oke/, /area.*lain.*pertimbangkan/, /besides\s+\S.{0,30}(area|city)/,
+  /other\s+(area|city|location)/,
+  // ── Q9 decision maker ───────────────────────────────────────────────────────
+  /jadwalkan\s+viewing/, /perlu\s+koordinasi/, /koordinasi\s+dulu/, /keluarga\s+lain/,
+  /schedule\s+(a\s+)?viewing/, /check\s+with\s+(family|spouse|partner)/,
+  // ── Q12 apartment tower / floor ─────────────────────────────────────────────
+  /tower\s+atau\s+lantai/, /preferensi\s+tower/, /lantai\s+(rendah|tinggi|tertentu|berapa)/,
+  /tower\s+or\s+floor/, /floor\s+(prefer|choice)/,
+];
+
+/** Apakah salah satu dari ≤2 pesan AI terakhir adalah pertanyaan properti? */
+function hasRecentPropertyQuestionIn(recentHistory) {
+  const lastAI = (recentHistory || [])
+    .filter(item => item.role === 'ai' || item.role === 'assistant')
+    .slice(-2);
+  return lastAI.some(item =>
+    PROPERTY_QUESTION_PATTERNS.some(p => p.test((item.message || '').toLowerCase()))
+  );
+}
 
 /**
  * Pola jawaban singkat yang bisa merupakan lanjutan percakapan properti.
@@ -418,7 +440,7 @@ function isPropertyContextContinuation(message, history = []) {
   // berisi fasilitas / landmark. Contoh valid yang harus LOLOS:
   //   "saya ingin ada fasilitas gym dan kolam renangnya, lalu dekat dengan PTC"
   //   "hadap timur, tidak mau dekat jalan tol, ada taman bermain untuk anak"
-  const hasPropertyFacility = /\b(fasilitas|gym|fitness|kolam\s*renang|kolam|renang|parkir|garasi|taman|playground|keamanan|cctv|ac|wifi|internet|lift|elevator|rooftop|balkon|balcony|view|pemandangan|clubhouse|sport|olahraga)\b/i.test(lower);
+  const hasPropertyFacility = /\b(fasilitas|gym|fitness|kolam\s*renang|kolam|renang|parkir|garasi|carport|taman|playground|play\s*ground|kids?\s*zone|kids?\s*club|keamanan|cctv|ac|wifi|internet|lift|elevator|rooftop|balkon|balcony|view|pemandangan|clubhouse|sport|olahraga|water\s*heater|mushola|jogging)\b/i.test(lower);
   const isLandmarkAnswer    = /\b(dekat|deket|near|close\s+to|di\s+jalan|di\s+sekitar|samping|next\s+to|beside|sebelah)\b/i.test(lower);
   const hasPropertyContent  = hasPropertyFacility || isLandmarkAnswer;
 
@@ -432,7 +454,7 @@ function isPropertyContextContinuation(message, history = []) {
   // Skip jika sudah terdeteksi sebagai landmark/facility answer
   if (!isLandmarkAnswer && !hasPropertyFacility) {
     const CLEAR_NON_PROPERTY = [
-      /\b(makanan|minuman|kuliner|restoran|cafe|kafe|masak|resep|menu)\b/,
+      /\b(makanan|minuman|kuliner|restoran|cafe|kafe|masak|resep|menu|makan|bakso|mie|nasi|ayam|sate|soto|jajan|ngopi|kopi|camilan|gorengan|warteg)\b/,
       /\b(kendaraan|mobil|motor|sepeda|tiket|travel|wisata|hotel liburan|penginapan wisata)\b/,
       /\b(elektronik|laptop|hp|handphone|gadget|komputer|printer)\b/,
       /\b(pakaian|baju|sepatu|tas|fashion|belanja online)\b/,
@@ -457,10 +479,23 @@ function isPropertyContextContinuation(message, history = []) {
   if (recentHistory.length >= 2) {
     // Durasi sewa singkat — jawaban Q10 ("1 tahun", "6 bulan", "2 bulan", "3 months")
     if (/^\d+\s*(tahun|year|bulan|month)s?$/.test(lower.trim())) return true;
+
+    // Fasilitas / patokan lokasi (Q_FAC / Q6) — konten properti yang kuat.
+    // AMAN walau kata TIPE properti (villa/rumah/dll) sudah keluar dari window 6 pesan
+    // terakhir di percakapan panjang — yang membuat hasPropertyCtx di bawah jadi false
+    // dan men-drop jawaban yang valid. Contoh:
+    //   "AC, kolam renang, kids zone, gym.. deket restoran/rumah makan"
+    // Percakapan sudah berjalan (≥2 pesan) → ini pasti lanjutan kualifikasi.
+    if (hasPropertyContent) return true;
   }
 
-  const hasPropertyCtx  = recentHistory.some(item => hasPropertyKeyword(item.message || ''));
-  if (!hasPropertyCtx) return false;
+  // Context = a property keyword in recent history OR (crucially) the LAST AI message
+  // being a property question. The latter keeps long flows alive: by the time the
+  // customer answers furnishing/budget/date, the property TYPE word has scrolled out
+  // of the window, so hasPropertyCtx alone would be false and the answer dropped.
+  const hasPropertyCtx        = recentHistory.some(item => hasPropertyKeyword(item.message || ''));
+  const hasRecentPropertyQ    = hasRecentPropertyQuestionIn(recentHistory);
+  if (!hasPropertyCtx && !hasRecentPropertyQ) return false;
 
   // ── Fast path: Jawaban yang SANGAT jelas sebagai lanjutan — tidak perlu cek AI question ──
   // Ini menghindari race condition di mana AI message belum tersimpan ke DB.
@@ -475,129 +510,15 @@ function isPropertyContextContinuation(message, history = []) {
   if (/^(sewa|beli|jual|beli\s+aja|mau\s+sewa|mau\s+beli|untuk\s+sewa|untuk\s+beli|rent|buy|purchase)$/.test(lower.trim())) return true;
   // Durasi sewa singkat — juga cek di sini (setelah hasPropertyCtx) untuk kelengkapan
   if (/^\d+\s*(tahun|year|bulan|month)s?$/.test(lower.trim())) return true;
-  // Harga dengan satuan — jawaban Q3 ("2-4 juta/seminggu", "5 jt per bulan", "700-900K")
-  if (/\b\d[\d.,]*\s*(juta|ribu|miliar|rb|jt|k)\b/i.test(lower)) return true;
+  // Harga dengan satuan — jawaban Q3 ("2-4 juta/seminggu", "5 jt per bulan")
+  if (/\b\d[\d.,]*\s*(juta|ribu|miliar|rb|jt)\b/i.test(lower)) return true;
   // Q2b answer fast-path: "Saya belum pernah lihat", "sudah lihat 3", "belum pernah survey"
   // These are ALWAYS Q2b answers and must pass even before hasRecentPropertyQuestion check.
   if (/\b(belum\s+pernah\s+lihat|pernah\s+lihat|sudah\s+lihat\s+\d|belum\s+lihat|sudah\s+survey|belum\s+ada\s+yang\s+cocok|belum\s+pernah\s+survey)\b/i.test(lower)) return true;
 
-  // ── Periksa apakah pesan AI terakhir berisi pertanyaan tentang properti ──
-  const lastAIMessages = recentHistory
-    .filter(item => item.role === 'ai' || item.role === 'assistant')
-    .slice(-2);
-
-  const PROPERTY_QUESTION_PATTERNS = [
-    // ── Bahasa Indonesia ──────────────────────────────────────────────────────
-    /sewa\s+atau\s+beli/,
-    /beli\s+atau\s+sewa/,
-    /kisaran\s+harga/,
-    /\bkisaran\b/,                    // "ada yang kisaran 500rb–1.5jt"
-    /kira-kira.*(?:lebih\s+)?sesuai/, // "kira-kira yang mana lebih sesuai?"
-    /yang\s+mana.*sesuai/,            // "yang mana lebih sesuai dengan rencana"
-    /lebih\s+sesuai\s+dengan/,
-    /budget/,
-    /harga\s+berapa/,
-    /berapa\s+harga/,
-    /di\s+kota\s+(apa|mana)/,
-    /lokasi\s+(apa|mana|yang|di)/,
-    /area\s+(mana|apa)/,
-    /wilayah\s+(mana|apa)/,
-    /tipe\s+properti/,
-    /jenis\s+properti/,
-    /furnished|furnish/,
-    /kamar\s+(tidur|mandi)/,
-    /berapa\s+kamar/,
-    /luas\s+(berapa|bangunan|tanah)/,
-    /fasilitas\s+(apa|yang)/,
-    /kapan\s+(masuk|pindah|rencan)/,
-    /bulan\s+apa/,
-    /ada\s+yang\s+ingin.*tanyakan/,
-    /masih\s+(ada|butuh|perlu)/,
-    /selain\s+itu/,
-    /rencananya\s+masuk/,
-    /masuk\s+bulan/,
-    /pindah\s+bulan/,
-    /sewa\s+untuk\s+berapa/,
-    /berapa\s+lama/,
-    /tinggal\s+bersama/,
-    /bersama\s+(siapa|siapa\s+saja)/,
-    /tinggal\s+dengan/,
-    /akan\s+tinggal/,
-    /living\s+with/,
-    /live\s+with/,
-    // ── English equivalents (AI may respond in English) ───────────────────────
-    /rent\s+or\s+buy/,
-    /buy\s+or\s+rent/,
-    /price\s+range/,
-    /budget\s+range/,
-    /which\s+(city|area|location)/,
-    /what\s+type\s*(of\s*)?property/,
-    /planning\s+to\s+move/,
-    /move[\s-]in/,
-    /what\s+month/,
-    /when.*plan/,
-    /how\s+long.*(?:rent|lease|plan)/,
-    /lease\s+duration/,
-    /who\s+will\s+be\s+living/,
-    /living\s+with\s+you/,
-    /furnish(?:ing|ed)?\s+prefer/,
-    /prefer.*furnish/,
-    /tower\s+or\s+floor/,
-    /floor\s+prefer/,
-    /have\s+you\s+seen/,
-    /how\s+many\s+prop/,
-    /any.*(?:specific|prefer)/,
-    /would\s+you\s+like.*(?:more|know|detail)/,
-    /what.*looking\s+for/,
-    /are\s+you\s+looking\s+to/,
-    /do\s+you\s+have\s*(a\s*)?budget/,
-    // ── Q2b: Search history — "Sudah lihat berapa properti?" ─────────────────
-    /sudah\s+lihat\s+berapa/,
-    /apa\s+yang\s+membuat\s+belum\s+cocok/,
-    /yang\s+sudah\s+dilihat/,
-    /berapa\s+properti.*sudah/,
-    // ── Q5: Red flags ─────────────────────────────────────────────────────────
-    /pasti\s+tidak\s+cocok/,
-    /ada\s+yang.*tidak\s+cocok/,
-    /hadap\s+barat|gang\s+sempit|rumah\s+tua/,
-    /definitely\s+want\s+to\s+avoid/,
-    /anything.*avoid/,
-    // ── Q6: Anchor point / patokan lokasi ────────────────────────────────────
-    /patokan/,
-    /jadi\s+patokan/,
-    /ada\s+lokasi.*tertentu/,
-    /lokasi.*jadi\s+patokan/,
-    /dekat\s+sekolah|dekat\s+kantor|dekat\s+mall/,
-    /specific\s+landmark/,
-    /near\s+a\s+(school|office|mall|station)/,
-    // ── Q7: Alternative areas ─────────────────────────────────────────────────
-    /selain\s+\S.{0,30}area\s+sekitar/,
-    /area\s+sekitar\s+(yang|masih)/,
-    /area.*lain.*oke/,
-    /area.*lain.*pertimbangkan/,
-    /besides\s+\S.{0,30}(area|city)/,
-    /other\s+(area|city|location)/,
-    // ── Q9: Decision maker / viewing logistics ───────────────────────────────
-    /jadwalkan\s+viewing/,
-    /perlu\s+koordinasi/,
-    /koordinasi\s+dulu/,
-    /keluarga\s+lain/,
-    /schedule\s+(a\s+)?viewing/,
-    /check\s+with\s+(family|spouse|partner)/,
-    // ── Q12: Apartment tower / floor preference ──────────────────────────────
-    /tower\s+atau\s+lantai/,
-    /preferensi\s+tower/,
-    /lantai\s+(rendah|tinggi|tertentu|berapa)/,
-    /tower\s+or\s+floor/,
-    /floor\s+(prefer|choice)/,
-  ];
-
-  const hasRecentPropertyQuestion = lastAIMessages.some(item => {
-    const msg = (item.message || '').toLowerCase();
-    return PROPERTY_QUESTION_PATTERNS.some(p => p.test(msg));
-  });
-
-  if (!hasRecentPropertyQuestion) return false;
+  // Note: context (hasPropertyCtx OR hasRecentPropertyQ) was already verified above.
+  // We do NOT re-require a recent question here — that used to drop valid answers in
+  // long flows. The answer-pattern checks below (+ final fallback) decide acceptance.
 
   // ── Cek apakah message saat ini terlihat seperti jawaban ─────────────────
 
@@ -687,6 +608,23 @@ function isPropertyContextContinuation(message, history = []) {
   //     "belum ada yang cocok", "sudah lihat tapi belum cocok"
   //     (Also covered in fast-path above for robustness)
   if (/\b(belum\s+pernah|pernah\s+lihat|sudah\s+lihat|belum\s+cocok|tidak\s+cocok|kurang\s+cocok|belum\s+ada\s+yang\s+cocok)\b/i.test(lower))
+    return true;
+
+  // 15) Jawaban preferensi jalan/akses/orientasi (Q5 red-flags / Q6) —
+  //     "jalan raya lebar", "akses mudah", "hook/pojok", "hadap timur", "menghadap".
+  if (/\b(jalan\s+(raya|lebar|besar|utama|kecil)|akses\s+(mudah|jalan|tol)|hook|pojok|sudut|menghadap|hadap\s+(timur|barat|utara|selatan|matahari)|bebas\s+banjir|tidak\s+banjir|jalan\s+ramai|bising)\b/i.test(lower))
+    return true;
+
+  // 16) ── FINAL FALLBACK ──────────────────────────────────────────────────────
+  //     Sampai titik ini sudah terbukti: (a) ada konteks properti di history,
+  //     (b) pesan AI terakhir adalah PERTANYAAN properti, (c) pesan bukan topik
+  //     non-properti (CLEAR_NON_PROPERTY sudah dicek di atas). Maka balasan PENDEK
+  //     (≤ 70 char) yang diawali "mau/ingin/prefer/yang/butuh/jangan/hindari" pasti
+  //     jawaban atas pertanyaan itu (mis. "Saya mau jalan raya lebar", "yang tenang").
+  //     Ini mencegah jawaban kualifikasi yang sah ter-drop hanya karena tidak match
+  //     salah satu pola spesifik di atas.
+  if (lower.length <= 70 &&
+      /^(saya\s+)?(mau|ingin|pengen|prefer|butuh|perlu|suka|lebih\s+suka|maunya|yang|jangan|hindari|tidak\s+mau|gak\s+mau|ga\s+mau|nggak\s+mau)\b/i.test(lower.trim()))
     return true;
 
   return false;

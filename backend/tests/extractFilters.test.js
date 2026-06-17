@@ -59,6 +59,98 @@ console.log('\n── Group 3: current message still wins ──');
   ok('tx stays sale', f.transactionType === 'sale');
 }
 
+console.log('\n── Group 4: budget detection (decimal ranges, Rp-prefix, period) ──');
+{
+  const { detectBudget } = require('../services/propertyRecommendationService');
+  const b = (m) => { const r = detectBudget(m); return r ? (r.ambiguous ? 'AMBIGUOUS' : r.text) : null; };
+  ok('decimal range "1.4-3.5 juta/malam"',        b('Saya mau 1.4-3.5 juta/malam') === 'Rp 1.400.000 - Rp 3.500.000');
+  ok('no-space "1.4-3.5juta/malam"',              b('Saya mau harga 1.4-3.5juta/malam') === 'Rp 1.400.000 - Rp 3.500.000');
+  ok('Rp-prefix range "Rp1.4 - Rp 3.5 juta"',     b('Saya mau Rp1.4 - Rp 3.5 juta/malam') === 'Rp 1.400.000 - Rp 3.500.000');
+  ok('Rp on both + juta on both',                 b('Rp 1.4 juta - Rp 3.5 juta') === 'Rp 1.400.000 - Rp 3.500.000');
+  ok('idr-prefix range',                          b('idr 2-3 juta') === 'Rp 2.000.000 - Rp 3.000.000');
+  ok('period night captured',                     detectBudget('1.4-3.5 juta/malam').period === 'night');
+  ok('malformed "1.4-3-5" stays ambiguous',       b('1.4-3-5 juta/malam') === 'AMBIGUOUS');
+  ok('plain "2-3 juta"',                          b('2-3 juta') === 'Rp 2.000.000 - Rp 3.000.000');
+  // single-value paths still work after rp-strip
+  ok('single "harga 5 juta"',                     b('budget harga 5 juta') === 'Rp 5.000.000');
+  ok('affordable preference',                     detectBudget('yang terjangkau saja').preference === 'affordable');
+}
+
+console.log('\n── Group 5: facilities+anchor answer must NOT reset type (rumah makan / lainnya) ──');
+{
+  const { extractQualificationState, findNextQuestion } = require('../services/aiPromptBuilderService');
+  const { isPropertyContextContinuation } = require('../utils/propertyKeywordFilter');
+  const C = (m) => ({ role: 'customer', message: m });
+  const A = (m) => ({ role: 'ai', message: m });
+  const msg = 'Saya mau AC, kolam renang, kids zone, play ground, gym.. Saya mau yang deket resturan atau rumah makan lainnya';
+
+  // "rumah makan" / "lainnya" must not be mis-detected as a building type
+  ok('"rumah makan lainnya" not house/others (inherits villa)',
+     extractPropertyFilters(msg, [C('sewa villa di malang')]).buildingType === 'villa');
+  ok('"deket rumah makan" alone → no type', extractPropertyFilters('yang deket rumah makan', []).buildingType === '');
+  ok('"properti lainnya" still → others', extractPropertyFilters('mau sewa properti lainnya', []).buildingType === 'others');
+
+  // gate must NOT drop the facilities+anchor answer deep in the flow
+  const deep = [
+    A('Rencananya masuk bulan apa? 📅'), C('checkin 12 Juli'),
+    A('Untuk furnitur prefer furnished, semi, atau kosongan? 🛋️'), C('furnished saja'),
+    A('Ada fasilitas tertentu yang Anda inginkan? 🏊'),
+  ];
+  ok('gate passes facilities+anchor answer', isPropertyContextContinuation(msg, deep) === true);
+
+  // full state: type intact, facilities + anchor captured, not back to Q1
+  const hist = [
+    C('sewa villa di malang 15 orang'), A('sudah lihat berapa properti?'),
+    C('Belum pernah, kapasitas 15 orang'), A('Di Malang ada Villa kisaran 1-3 juta/malam dan 5-15 juta/malam. Mana yang sesuai? 💰'),
+    C('Saya mau harga 1.4-3.5juta/malam'), A('Rencananya masuk bulan apa? 📅'),
+    C('checkin 12 Juli'), A('Untuk furnitur prefer furnished, semi, atau kosongan? 🛋️'),
+    C('furnished saja'), A('Ada fasilitas tertentu yang Anda inginkan? 🏊'),
+  ];
+  const st = extractQualificationState(hist, msg);
+  ok('state type stays villa (no reset)', st.buildingType === 'villa');
+  ok('state facilities captured',         Array.isArray(st.facilities) && st.facilities.includes('Gym') && st.facilities.includes('Kids zone'));
+  ok('state anchor captured (deket restoran)', /resturan|restoran|rumah makan/i.test(st.anchorPoint || ''));
+  ok('NEXT is not Q1 (flow continues)',   (function(){ const n = findNextQuestion(st); const q = n && (n.q || n); return q !== 'Q1' && q !== 'Q0'; })());
+}
+
+console.log('\n── Group 6: short preference answers to a property question (Q5/Q6) ──');
+{
+  const { isPropertyContextContinuation } = require('../utils/propertyKeywordFilter');
+  const A = (m) => ({ role: 'ai', message: m });
+  const rf = [A('Ada yang pasti tidak cocok? Misalnya yang hadap barat, dekat jalan ramai, gang sempit, atau rumah tua? 🚫')];
+  ok('"Saya mau jalan raya lebar" passes',     isPropertyContextContinuation('Saya mau jalan raya lebar', rf) === true);
+  ok('"yang tenang dan tidak bising" passes',  isPropertyContextContinuation('yang tenang dan tidak bising', rf) === true);
+  ok('"jalan raya lebar" (bare) passes',       isPropertyContextContinuation('jalan raya lebar', rf) === true);
+  ok('"hadap timur aja" passes',               isPropertyContextContinuation('hadap timur aja', rf) === true);
+  // guards — off-topic short replies after a property question still rejected
+  ok('"mau makan bakso dulu ah" rejected',     isPropertyContextContinuation('mau makan bakso dulu ah', rf) === false);
+  ok('"mau pesan tiket pesawat" rejected',     isPropertyContextContinuation('mau pesan tiket pesawat', rf) === false);
+  ok('"mau beli hp baru" rejected',            isPropertyContextContinuation('mau beli hp baru', rf) === false);
+  ok('no recent property question → rejected', isPropertyContextContinuation('Saya mau jalan raya lebar', [A('halo'), { role: 'customer', message: 'hai' }]) === false);
+}
+
+console.log('\n── Group 7: deep-flow answers when property TYPE has scrolled out of window ──');
+{
+  const { isPropertyContextContinuation } = require('../utils/propertyKeywordFilter');
+  const A = (m) => ({ role: 'ai', message: m });
+  const C = (m) => ({ role: 'customer', message: m });
+  // Last 6 msgs have NO property-type word; only a furnishing QUESTION provides context.
+  const deep = [
+    A('Saya mau pindah bulan apa? 📅'), C('24 agustus'),
+    A('Nanti akan tinggal bersama siapa saja? 🛏️'), C('4 orang'),
+    A('Untuk furnitur, lebih prefer yang sudah furnished, semi-furnished, atau kosongan saja? 🛋️'),
+  ];
+  ok('"Saya mau full furnished" passes (recent Q = context)', isPropertyContextContinuation('Saya mau full furnished', deep) === true);
+  ok('"furnished" passes',                                    isPropertyContextContinuation('furnished', deep) === true);
+  ok('"kosongan saja" passes',                                isPropertyContextContinuation('kosongan saja', deep) === true);
+  // budget question as context
+  const budQ = [A('Tinggal bersama siapa? 🛏️'), C('4 orang'), A('Di Malang ada Apartemen kisaran 2-5 juta/bln dan 8-20 juta/bln. Mana yang sesuai? 💰')];
+  ok('"1.2-2 juta/malam" passes (budget Q context)', isPropertyContextContinuation('Harga 1.2-2juta/malam', budQ) === true);
+  // guards: off-topic still rejected even with a recent property question
+  ok('"mau makan bakso dulu" rejected', isPropertyContextContinuation('mau makan bakso dulu', deep) === false);
+  ok('no context + no recent Q → rejected', isPropertyContextContinuation('Saya mau full furnished', [A('halo'), C('hai')]) === false);
+}
+
 console.log('\n═══════════════════════════════════');
 console.log(`RESULT: ${pass}/${pass + fail} passed ${fail === 0 ? '✅ ALL PASS' : '❌ FAILURES'}`);
 console.log('═══════════════════════════════════');

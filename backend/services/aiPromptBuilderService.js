@@ -1,7 +1,6 @@
 const { loadProjectSkillPrompt } = require('./skillPromptService');
 const { detectBudget, detectFacilities } = require('./propertyRecommendationService');
 const { parseCustomerDate, isDontKnowDateAnswer, WAITING_THE_UPDATE } = require('../utils/customerDateParser');
-const { parseMoneyRange }        = require('../utils/customerMoneyParser');
 
 /* ─── Qualification State Extractor ────────────────────────────────────────── */
 /* Scans full conversation history to build a per-question answered/unanswered  */
@@ -45,7 +44,6 @@ function extractQualificationState(history = [], currentMessage = '') {
     kprDetails      : null,   // Q_KPR-a (beli + KPR): bank & DP
     propertyCondition: null,  // Q_COND (beli residensial): baru/ready | second | inden
     useCase         : null,   // beli: own-use | investment
-    aiAskedQ2b      : false,  // true when AI has already asked Q2b in this session
   };
 
   const MONTH_ID = 'januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember';
@@ -103,7 +101,7 @@ function extractQualificationState(history = [], currentMessage = '') {
       if (/\btoko\b|\bkios\b|\bwarung\b|\bretail\b/.test(w))             return 'store';
       if (/\bkantor\b/.test(w))                                           return 'office';
       if (/\bgudang\b/.test(w))                                           return 'warehouse';
-      if (/\brumah\b|\bhouse\b|\bkontrakan\b/.test(w))                   return 'house';
+      if (/\brumah\b(?!\s+(?:makan|sakit|tangga|ibadah|duka|produksi|tahanan|susun|potong|kos))|\bhouse\b|\bkontrakan\b/.test(w))                   return 'house';
       if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(w)) return 'others';
       return null;
     };
@@ -195,7 +193,7 @@ function extractQualificationState(history = [], currentMessage = '') {
       else if (/\btoko\b|\bkios\b|\bwarung\b|\bretail\b/.test(text))     state.buildingType = 'store';
       else if (/\bkantor\b/.test(text))                                   state.buildingType = 'office';
       else if (/\bgudang\b/.test(text))                                   state.buildingType = 'warehouse';
-      else if (/\brumah\b|\bhouse\b|\bkontrakan\b/.test(text))           state.buildingType = 'house';
+      else if (/\brumah\b(?!\s+(?:makan|sakit|tangga|ibadah|duka|produksi|tahanan|susun|potong|kos))|\bhouse\b|\bkontrakan\b/.test(text))           state.buildingType = 'house';
       else if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(text)) state.buildingType = 'others';
     }
 
@@ -238,41 +236,29 @@ function extractQualificationState(history = [], currentMessage = '') {
     // captured even if the pair-based scan misses the turn (e.g. duplicate message
     // in ALL, race condition, or AI phrased the Q2b question differently).
     if (!state.searchHistory) {
-      if (/\b(belum\s+pernah\s+lihat|sudah\s+lihat\s+\d|belum\s+lihat|sudah\s+survey|belum\s+pernah\s+survey|belum\s+ada\s+yang\s+cocok)\b/i.test(text)) {
+      if (/\b(belum\s+pernah(\s+lihat|\s+survey)?|sudah\s+lihat\s+\d|belum\s+lihat|sudah\s+survey|baru\s+mulai|belum\s+survey|belum\s+ada\s+yang\s+cocok)\b/i.test(text)) {
         state.searchHistory = raw.trim() || 'dijawab';
       }
     }
 
     // Q3 — Budget
-    // detectBudget() acts as the GATE (it rejects counts/durations: "2 kali",
-    // "3 kamar", "2 tahun" → not budget; maps affordability words). The display
-    // value is produced by the comprehensive customerMoneyParser (51 money + 13
-    // rental cases: USD, triliun, reversed ranges, full-IDR + bare scaling,
-    // /malam·/minggu·/bulan·/tahun suffix). A strict "money-shaped" check also
-    // opens the gate for USD/triliun expressions detectBudget alone may miss —
-    // never for bare counts/years (no monetary unit ⇒ gate stays closed).
+    // Reuse the robust detector so the QUALIFICATION STATE matches the gate:
+    //   • parses ranges in full ("2-4jt" → Rp 2.000.000 - Rp 4.000.000)
+    //   • rejects counts ("2 kali" is NOT 2 ribu, "3 kamar" is NOT budget)
+    //   • maps affordability words → terjangkau/affordable
+    // Ambiguous ranges (no unit on either side) are left ❓ so Q3 is re-asked.
     if (!state.budget) {
       const b = detectBudget(raw);
-      if (b && b.preference === 'affordable') {
-        state.budget = 'terjangkau/affordable';
-      } else {
-        const moneyShaped =
-          /\b\d[\d.,]*\s*(?:k|rb|ribu|jt|juta|jutaan|m|miliar|milyar|t|triliun|million|millions|billion|trillion)\b/i.test(raw) ||
-          /\b\d[\d.,]*\s*(?:usd|us\$)\b/i.test(raw) || /\$\s*\d/.test(raw) ||
-          /\d{1,3}(?:\.\d{3})+/.test(raw);                       // full-IDR grouped e.g. 837.000
-        const gateOpen = (b && !b.ambiguous) || moneyShaped;
-        if (gateOpen) {
-          const money = parseMoneyRange(raw);
-          if (money && money.status === 'ok') {
-            state.budget = money.formatted;                      // already includes /period
-          } else if (b && !b.ambiguous) {
-            const periodSuffix = b.period === 'year'  ? '/tahun'
-              : b.period === 'month' ? '/bulan'
-              : b.period === 'night' ? '/malam'
-              : b.period === 'week'  ? '/minggu'
-              : '';
-            state.budget = b.text + periodSuffix;
-          }
+      if (b && !b.ambiguous) {
+        if (b.preference === 'affordable') {
+          state.budget = 'terjangkau/affordable';
+        } else {
+          const periodSuffix = b.period === 'year'  ? '/tahun'
+            : b.period === 'month' ? '/bulan'
+            : b.period === 'night' ? '/malam'
+            : b.period === 'week'  ? '/minggu'
+            : '';
+          state.budget = b.text + periodSuffix;
         }
       }
     }
@@ -286,17 +272,43 @@ function extractQualificationState(history = [], currentMessage = '') {
       }
     }
 
+    // Q6 — Anchor point (volunteered landmark). Capture "dekat/deket/near X" even
+    // when the customer states it inside another answer (e.g. with facilities) and
+    // not paired with the Q6 question. Exclude "dekat <kota>" (that's the location).
+    if (!state.anchorPoint) {
+      const am = raw.match(/\b(?:dekat|deket|near)\s+([a-z][\w\s,.\/&-]{2,60})/i);
+      if (am) {
+        const after = am[1].trim();
+        const cleaned = after.replace(/\s+(ya|dong|kak|aja|saja|nih|lainnya)\b.*$/i, '').trim();
+        if (cleaned && !CITY_RE.test(after)) {
+          state.anchorPoint = `dekat ${cleaned}`;
+        }
+      }
+    }
+
     // Q4 — Household
     if (!state.household) {
-      if (/\bsendiri\b|\bsendiran\b|\bjust me\b|\balone\b/.test(text)) {
+      // Explicit headcount "N orang / N pax / for N people" — works for ANY number,
+      // not just 2-4. A group (≥6) is a strong signal toward villa/large capacity.
+      const headcount = text.match(/\b(\d{1,3})\s*(?:orang|pax|people|tamu|peserta)\b/);
+      if (headcount) {
+        const n = parseInt(headcount[1], 10);
+        if (n >= 1 && n <= 200) {
+          state.household = n >= 6 ? `${n} orang (rombongan/grup)` : `${n} orang`;
+        }
+      }
+      if (!state.household && /\b(rombongan|grup|group|gathering|arisan|reuni|keluarga besar)\b/.test(text)) {
+        state.household = 'rombongan/grup';
+      }
+      if (!state.household && (/\bsendiri\b|\bsendiran\b|\bjust me\b|\balone\b/.test(text))) {
         state.household = '1 orang (sendiri)';
-      } else if (/\bsama (istri|suami)\b|\bbersama (istri|suami)\b/.test(text)) {
+      } else if (!state.household && /\bsama (istri|suami)\b|\bbersama (istri|suami)\b/.test(text)) {
         state.household = '2 orang (bersama pasangan)';
-      } else if (/\bberdua\b/.test(text) && !/\bberdua (sama|dengan)\s*(sekolah|kantor|mall)/.test(text)) {
+      } else if (!state.household && /\bberdua\b/.test(text) && !/\bberdua (sama|dengan)\s*(sekolah|kantor|mall)/.test(text)) {
         state.household = '2 orang (berdua)';
-      } else if (/\bkeluarga\b/.test(text) && !/\bkeluarga lain\b|\bkoordinasi.*keluarga\b/.test(text)) {
+      } else if (!state.household && /\bkeluarga\b/.test(text) && !/\bkeluarga lain\b|\bkoordinasi.*keluarga\b/.test(text)) {
         state.household = 'keluarga';
-      } else if (/\borangtua\b|\borang tua\b|\bparents\b/.test(text)) {
+      } else if (!state.household && (/\borangtua\b|\borang tua\b|\bparents\b/.test(text))) {
         state.household = 'dengan orangtua';
       }
     }
@@ -356,15 +368,6 @@ function extractQualificationState(history = [], currentMessage = '') {
         state.furnishing = 'furnished';
       }
     }
-  }
-
-  // ── Phase 1.5: Detect whether AI already asked Q2b (even if customer didn't answer it) ──
-  // This flag prevents the AI from re-asking Q2b when the customer redirected the conversation.
-  if (!state.searchHistory) {
-    const Q2B_ASKED_RE = /sudah\s+lihat\s+berapa|how\s+many\s+(prop|properties)|apa\s+yang\s+membuat\s+belum\s+cocok|yang\s+sudah\s+dilihat|berapa\s+properti.*sudah/;
-    state.aiAskedQ2b = ACTIVE_ALL.some(m =>
-      QS_AI_ROLES.has(m.role) && Q2B_ASKED_RE.test((m.message || '').toLowerCase())
-    );
   }
 
   // ── Phase 2: Detect context-dependent Q6/Q7/Q9/Q10 from AI→Customer pairs ─
@@ -550,7 +553,7 @@ function extractQualificationState(history = [], currentMessage = '') {
       else if (/\btoko\b|\bkios\b|\bwarung\b|\bretail\b/.test(cur))          state.buildingType = 'store';
       else if (/\bkantor\b/.test(cur))                                        state.buildingType = 'office';
       else if (/\bgudang\b/.test(cur))                                        state.buildingType = 'warehouse';
-      else if (/\brumah\b|\bhouse\b|\bkontrakan\b/.test(cur))                state.buildingType = 'house';
+      else if (/\brumah\b(?!\s+(?:makan|sakit|tangga|ibadah|duka|produksi|tahanan|susun|potong|kos))|\bhouse\b|\bkontrakan\b/.test(cur))                state.buildingType = 'house';
       else if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(cur)) state.buildingType = 'others';
 
       if      (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|rent|rental|lease|booking|book|pesan|reservasi)\b/.test(cur)) state.transactionType = 'rent';
@@ -587,7 +590,7 @@ function extractQualificationState(history = [], currentMessage = '') {
       if (/\btoko\b|\bkios\b|\bwarung\b|\bretail\b/.test(w))             return 'store';
       if (/\bkantor\b/.test(w))                                           return 'office';
       if (/\bgudang\b/.test(w))                                           return 'warehouse';
-      if (/\brumah\b|\bhouse\b|\bkontrakan\b/.test(w))                   return 'house';
+      if (/\brumah\b(?!\s+(?:makan|sakit|tangga|ibadah|duka|produksi|tahanan|susun|potong|kos))|\bhouse\b|\bkontrakan\b/.test(w))                   return 'house';
       if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(w)) return 'others';
       return null;
     }, null);
@@ -612,7 +615,7 @@ function extractQualificationState(history = [], currentMessage = '') {
     else if (/\btoko\b|\bkios\b|\bwarung\b|\bretail\b/.test(cur))          curType = 'store';
     else if (/\bkantor\b/.test(cur))                                        curType = 'office';
     else if (/\bgudang\b/.test(cur))                                        curType = 'warehouse';
-    else if (/\brumah\b|\bhouse\b|\bkontrakan\b/.test(cur))                curType = 'house';
+    else if (/\brumah\b(?!\s+(?:makan|sakit|tangga|ibadah|duka|produksi|tahanan|susun|potong|kos))|\bhouse\b|\bkontrakan\b/.test(cur))                curType = 'house';
     else if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(cur)) curType = 'others';
 
     let curTx = null;
@@ -720,8 +723,7 @@ function findNextQuestion(state) {
   }
 
   // Q2b — Riwayat pencarian (kecuali untuk booking hotel/kondotel dan properti komersial)
-  // Only fires ONCE — skip if AI already asked Q2b (even if customer didn't answer directly)
-  if (!state.searchHistory && !state.aiAskedQ2b && !isBooking)
+  if (!state.searchHistory && !isBooking)
     return { q: 'Q2b', hint: `Sudah lihat berapa properti di ${loc}? Apa yang membuat belum cocok dari yang sudah dilihat?` };
 
   // Q3 — Budget (via 2 harga kontras — JANGAN tanya langsung)
@@ -894,7 +896,6 @@ function buildQualificationStateBlock(state) {
     '╔══════════════════════════════════════════════════════════╗',
     '║  📋 QUALIFICATION STATE — STATUS JAWABAN CUSTOMER        ║',
     '║  ✅ = SUDAH DIJAWAB → JANGAN TANYA LAGI                  ║',
-    '║  ⏭️  = SUDAH DITANYAKAN, SKIP → JANGAN ULANGI           ║',
     '║  ❓ = BELUM DIJAWAB → TANYAKAN BERIKUTNYA (urutan Q↑)    ║',
     '╚══════════════════════════════════════════════════════════╝',
     '',
@@ -928,13 +929,11 @@ function buildQualificationStateBlock(state) {
     row('Tipe transaksi    [Q1]', state.transactionType),
     row('Tipe properti         ', state.buildingType ? state.buildingType + fbNote : null),
     row('Lokasi            [Q2]', state.location),
-    // Q2b: ✅ = customer answered; ⏭️ = AI asked but customer redirected (skip, don't repeat);
-    //      ❓ = not yet asked.
+    // Q2b is shown as ✅ when AI asked search-history question and customer answered;
+    // shown as ❓ otherwise (not yet asked). Q2b is the HIGHEST-VALUE question.
     state.searchHistory
       ? `✅ Riwayat pencarian [Q2b]: ${state.searchHistory}`
-      : state.aiAskedQ2b
-        ? `⏭️ Riwayat pencarian [Q2b]: Sudah ditanyakan — customer tidak menjawab langsung. ⛔ JANGAN tanya ulang. Lanjut ke Q berikutnya.`
-        : `❓ Riwayat pencarian [Q2b]: Belum ditanyakan`,
+      : `❓ Riwayat pencarian [Q2b]: BELUM DITANYAKAN`,
     row('Budget            [Q3]', state.budget),
     row('Penghuni          [Q4]', state.household),
     row('Red flags         [Q5]', state.redFlags),
@@ -971,7 +970,6 @@ function buildQualificationStateBlock(state) {
   lines.push(
     '',
     '→ Tanyakan HANYA field ❓ di atas, mulai dari nomor Q terkecil.',
-    '→ Field ⏭️ berarti SUDAH DITANYAKAN — SKIP, jangan tanya ulang.',
     '→ SATU pertanyaan per pesan. Jangan gabungkan dua pertanyaan.',
     '→ Q3 Budget: JANGAN tanya langsung — gunakan 2 harga kontras sebagai pilihan.',
     '→ Q8 Tanggal masuk WAJIB dijawab sebelum summary ditampilkan.',
@@ -1277,10 +1275,9 @@ Most customers don't know exactly what they want. Guide discovery through OPTION
 **Q1 — Transaction type** (skip if already known from history)
 "Lagi cari untuk sewa atau beli?"
 
-**Q2b — Search history** (after location is established — HIGHEST VALUE QUESTION — tanyakan SEKALI saja)
+**Q2 — Search history** (after location is established — HIGHEST VALUE QUESTION)
 "Sudah lihat berapa properti di area itu? Apa yang membuat belum cocok dari yang sudah dilihat?"
 → Extracts: red flags, budget ceiling, decision maker signals, anchor point, urgency.
-→ **⛔ JANGAN tanya ulang Q2b.** Jika ⏭️ atau ✅ di QUALIFICATION STATE, lanjut ke Q berikutnya — jangan ulang meskipun jawaban customer tidak langsung menjawab Q2b. Customer yang tidak menjawab Q2b → terima saja, catat fasilitas/info yang mereka berikan, lanjut.
 
 **Q3 — Budget** (NEVER ask directly — always show two contrasting price options)
 "Di [area] ada Villa yang di kisaran [LOW range] dan ada juga yang [HIGH range]. Kira-kira yang mana lebih sesuai dengan rencana Bapak/Ibu?"
