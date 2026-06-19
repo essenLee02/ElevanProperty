@@ -11,9 +11,6 @@ export const getFacilityList = (params = {}) =>
 export const getFacilityDetail = (facilityId) =>
   api.get(`/facility/detail/${facilityId}`).then(r => r.data);
 
-export const getFacilityCategories = () =>
-  api.get('/facility/categories').then(r => r.data);
-
 export const insertFacility = (payload) =>
   api.post('/facility/insert', payload).then(r => r.data);
 

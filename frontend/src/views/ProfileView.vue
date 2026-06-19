@@ -137,6 +137,19 @@
                 <p class="field-hint">Token API Fonnte pribadi Anda. Boleh dikosongkan.</p>
               </div>
 
+              <!-- ChakraHQ Token (opsional) -->
+              <div class="form-group">
+                <label for="chakraHqToken">ChakraHQ Token</label>
+                <input
+                  id="chakraHqToken"
+                  v-model.trim="form.chakra_hq_token"
+                  type="text"
+                  placeholder="Masukkan ChakraHQ Access Token (opsional)"
+                  :disabled="isSubmitting"
+                />
+                <p class="field-hint">Bearer token API ChakraHQ pribadi Anda. Boleh dikosongkan.</p>
+              </div>
+
               <!-- Submit Button -->
               <button
                 type="submit"
@@ -170,21 +183,23 @@ const router = useRouter();
 
 /* ── State ────────────────────────────────────── */
 const form = reactive({
-  user_id:    '',
-  name:       '',
-  username:   '',
-  phone:      '',
-  birthdate:  '',
-  password:   '',
-  fonnte_token: ''
+  user_id:        '',
+  name:           '',
+  username:       '',
+  phone:          '',
+  birthdate:      '',
+  password:       '',
+  fonnte_token:   '',
+  chakra_hq_token: ''
 });
 
 // Nilai awal (untuk deteksi perubahan — kecuali password)
 const originalForm = reactive({
-  name:       '',
-  phone:      '',
-  birthdate:  '',
-  fonnte_token: ''
+  name:            '',
+  phone:           '',
+  birthdate:       '',
+  fonnte_token:    '',
+  chakra_hq_token: ''
 });
 
 const alert       = reactive({ type: '', message: '' });
@@ -206,10 +221,11 @@ const alertClass = computed(() => {
 // - Password sudah diisi
 const hasChanges = computed(() => {
   return (
-    form.name       !== originalForm.name       ||
-    form.phone      !== originalForm.phone      ||
-    form.birthdate  !== originalForm.birthdate  ||
-    form.fonnte_token !== originalForm.fonnte_token ||
+    form.name            !== originalForm.name            ||
+    form.phone           !== originalForm.phone           ||
+    form.birthdate       !== originalForm.birthdate       ||
+    form.fonnte_token    !== originalForm.fonnte_token    ||
+    form.chakra_hq_token !== originalForm.chakra_hq_token ||
     form.password.length > 0
   );
 });
@@ -237,14 +253,16 @@ const loadProfile = async () => {
       form.username   = user.username   || '';
       form.phone      = user.phone      || '';
       form.birthdate  = user.birthdate ? user.birthdate.split('T')[0] : '';
-      form.fonnte_token = user.fonnte_token || '';
-      form.password   = '';
+      form.fonnte_token    = user.fonnte_token    || '';
+      form.chakra_hq_token = user.chakra_hq_token || '';
+      form.password        = '';
 
       // Simpan original (tidak termasuk password)
-      originalForm.name       = form.name;
-      originalForm.phone      = form.phone;
-      originalForm.birthdate  = form.birthdate;
-      originalForm.fonnte_token = form.fonnte_token;
+      originalForm.name            = form.name;
+      originalForm.phone           = form.phone;
+      originalForm.birthdate       = form.birthdate;
+      originalForm.fonnte_token    = form.fonnte_token;
+      originalForm.chakra_hq_token = form.chakra_hq_token;
     } else {
       setAlert('danger', result?.data?.message || 'Gagal memuat profil');
       setTimeout(() => router.push('/login'), 2000);
@@ -293,7 +311,8 @@ const submitUpdate = async () => {
       phone:      form.phone,
       birthdate:  form.birthdate  || null,
       password:   form.password,
-      fonnte_token: form.fonnte_token || null
+      fonnte_token:    form.fonnte_token    || null,
+      chakra_hq_token: form.chakra_hq_token || null
       // username TIDAK dikirim — backend mengabaikannya
     };
 
@@ -304,11 +323,12 @@ const submitUpdate = async () => {
       toast.success(result?.data?.message || 'Profil berhasil diupdate');
 
       // Reset original values & kosongkan password
-      originalForm.name       = form.name;
-      originalForm.phone      = form.phone;
-      originalForm.birthdate  = form.birthdate;
-      originalForm.fonnte_token = form.fonnte_token;
-      form.password           = '';
+      originalForm.name            = form.name;
+      originalForm.phone           = form.phone;
+      originalForm.birthdate       = form.birthdate;
+      originalForm.fonnte_token    = form.fonnte_token;
+      originalForm.chakra_hq_token = form.chakra_hq_token;
+      form.password                = '';
 
       setTimeout(() => clearAlert(), 3000);
     } else {

@@ -179,6 +179,15 @@ location or motivation) — but greet only once.
 ```
 Extract: urgency, life-event, and often a financing contingency ("mau jual rumah dulu").
 
+> **Server-side gate (CRITICAL):** A QM answer like *"Saya pindahan karena ada pindahan kerja,
+> sekalian mau menetap di Jakarta"* contains **no property-type keyword**, so `hasPropertyKeyword`
+> is false. It must pass the Fonnte/WATI gate via `isPropertyContextContinuation`. The keyword filter
+> (`propertyKeywordFilter.js`) treats life-event phrases — `pindah`, `pindahan`, `mutasi`, `relokasi`,
+> `kontrak habis`, `keluarga nambah`, `anak masuk/sekolah`, `investasi`, `menetap`, `pindah kerja`,
+> `kerja baru`, `menikah`, `pensiun` — as **motivation content**, so even a 70+ char answer is NOT
+> dropped, and the QM question itself is registered as a property question. If a QM answer is ever
+> dropped (log: `bukan query properti`), add the missing phrase to `isMotivationAnswer`.
+
 **Q4 — Search history (the gold-mine question):**
 ```
 "Sebelumnya sudah sempat lihat beberapa rumah, Kak?

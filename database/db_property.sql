@@ -500,8 +500,6 @@ CREATE TABLE `facilities` (
   `name` varchar(100) NOT NULL COMMENT 'Nama fasilitas, mis. AC, Kolam Renang, CCTV',
   `description` varchar(255) DEFAULT NULL COMMENT 'Deskripsi singkat fasilitas',
   `icon` varchar(50) DEFAULT NULL COMMENT 'Icon identifier, mis. emoji atau CSS class (fa-wifi, ?, dll.)',
-  `category` varchar(50) DEFAULT NULL COMMENT 'Kategori fasilitas, mis. Keamanan, Kenyamanan, Aksesibilitas, Rekreasi',
-  `sort_order` int(11) NOT NULL DEFAULT 0 COMMENT 'Urutan tampil fasilitas (ascending). 0 = default',
   `status` int(1) NOT NULL DEFAULT 1 COMMENT '1 = aktif, 2 = disabled/blocked, 3 = deleted (soft delete)',
   `created_date` date NOT NULL COMMENT 'Tanggal pembuatan data',
   `created_by` varchar(50) NOT NULL COMMENT 'FK ke users.user_id — siapa yang membuat',
@@ -896,8 +894,6 @@ ALTER TABLE `facilities`
   ADD UNIQUE KEY `facility_id` (`facility_id`),
   ADD KEY `facilities_facility_id` (`facility_id`),
   ADD KEY `facilities_status` (`status`),
-  ADD KEY `facilities_category` (`category`),
-  ADD KEY `facilities_sort_order` (`sort_order`),
   ADD KEY `facilities_name` (`name`);
 
 --

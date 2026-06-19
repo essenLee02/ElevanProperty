@@ -204,7 +204,6 @@ router.get('/chatbot/debug/test-rumah123', verifyToken,    chatbotPrivateControl
 ══════════════════════════════════════════════════════════════════════════════ */
 
 router.get('/facility/list',                        verifyToken, facilityMasterController.showDataFacility);
-router.get('/facility/categories',                  verifyToken, facilityMasterController.getCategories);
 router.get('/facility/detail/:facility_id',         verifyToken, facilityMasterController.getDetailFacility);
 router.post('/facility/insert',                     verifyToken, facilityMasterController.insertDataFacility);
 router.put('/facility/update/:facility_id',         verifyToken, facilityMasterController.updateDataFacility);

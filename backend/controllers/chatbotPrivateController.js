@@ -1694,35 +1694,27 @@ class ConversationQualifier {
       profile.summaryAlreadyShown = true;
       profile.buildingTypeChanged = false;
     }
-    // ── Post-processing: building-type change → reset Q2–Q12 answers ─────────
+    // ── Post-processing: building-type / transaction switch ──────────────────
+    // IMPORTANT: every has*/aiAsked* flag above is derived from custText/aiText,
+    // which are ALREADY scoped to `activeHistory` (Phase 0 trims everything before
+    // the switch). So those flags reflect ONLY the new post-switch search — the
+    // pre-switch answers were already discarded by the trim.
+    //
+    // ⛔ We must therefore NOT blanket-clear the answer flags here. Doing so wiped
+    // the customer's NEW answers (motivation, household, …) on EVERY turn for as
+    // long as the old search stayed inside the 24-message window, so the AI looped
+    // on the same question (e.g. re-asking QM after the customer already answered
+    // "pindah karena kerja"). Phase 0 already guarantees a clean Q1 restart.
+    //
+    // The only fields that can still leak the OLD search are those extracted from
+    // FULL history by extractPropertyFilters — location and budget — so we re-scope
+    // just those to the active session.
     else if (buildingTypeChanged) {
-      const resetFields = [
-        'hasSearchHistory', 'hasRedFlags', 'hasAlternativeArea', 'hasAnchorPoint',
-        'hasDecisionMaker', 'hasLeaseDuration', 'hasPaymentTerms', 'hasApartmentPrefs',
-        'hasFurnishing', 'hasMoveInDate', 'hasHouseholdInfo',
-        'aiAskedSearchHist', 'aiAskedBudget', 'aiAskedMoveIn', 'aiAskedHousehold',
-        'aiAskedFurnish', 'aiAskedRedFlags', 'aiAskedAnchorPoint', 'aiAskedAltArea',
-        'aiAskedDecisionMaker', 'aiAskedLeaseDuration', 'aiAskedPaymentTerms',
-        'aiAskedApartmentPrefs',
-        // Q14 type-specific slots
-        'hasCheckInDate', 'hasCheckOutDate', 'hasRoomType', 'hasBreakfastPref',
-        'hasPrivatePool', 'hasRentalPeriod', 'hasKosType', 'hasBathroomType',
-        'hasBusinessType', 'hasHeadcount', 'hasRoiExpectation', 'hasPropertyPurpose',
-        'aiAskedCheckIn', 'aiAskedCheckOut', 'aiAskedRoomType', 'aiAskedBreakfast',
-        'aiAskedPrivatePool', 'aiAskedRentalPeriod', 'aiAskedKosType', 'aiAskedBathroomType',
-        'aiAskedBusinessType', 'aiAskedHeadcount', 'aiAskedRoi', 'aiAskedPropertyPurpose',
-        // BELI flow (Q_KPR / Q_KPR-a / Q_COND + per-type Q14 beli)
-        'hasFinancing', 'aiAskedFinancing', 'financingIsKPR', 'hasKprDetails',
-        'aiAskedKprDetails', 'hasPropertyCondition', 'aiAskedPropertyCondition',
-        'hasTenantStatus', 'aiAskedTenantStatus', 'hasZonasi', 'aiAskedZonasi',
-        // House v2 pilot (motivation + financing contingency)
-        'hasMotivation', 'aiAskedMotivation', 'financingCash', 'financingFromSale',
-        'hasContingencyStatus', 'aiAskedContingency',
-        'hasFacilities', 'aiAskedFacilities',
-      ];
-      resetFields.forEach(f => { profile[f] = false; });
-      profile.budget             = null;
-      profile.location           = activeLocation;
+      profile.location  = activeLocation;
+      // Keep budget only if a price token actually appears in the active session
+      // text; otherwise it belongs to the abandoned search → drop so Q5 re-asks.
+      const activeHasPrice = /\b\d[\d.,]*\s*(juta|jt|miliar|m|ribu|rb|k)\b/i.test(custText);
+      profile.budget    = activeHasPrice ? profile.budget : null;
       profile.buildingTypeChanged = true;
     }
     // ── Post-processing: tx-only change → quietly update transaction type ─────

@@ -57,26 +57,6 @@
                 <p class="field-hint">Maksimal 100 karakter</p>
               </div>
 
-              <!-- Kategori -->
-              <div class="form-group">
-                <label for="category">Kategori</label>
-                <div class="input-with-datalist">
-                  <input
-                    id="category"
-                    v-model.trim="form.category"
-                    type="text"
-                    list="category-options"
-                    placeholder="Contoh: Keamanan, Kenyamanan, Rekreasi, Aksesibilitas"
-                    :disabled="isSubmitting"
-                    maxlength="50"
-                  />
-                  <datalist id="category-options">
-                    <option v-for="cat in suggestedCategories" :key="cat" :value="cat" />
-                  </datalist>
-                </div>
-                <p class="field-hint">Opsional. Ketik atau pilih dari daftar yang sudah ada</p>
-              </div>
-
               <!-- Icon -->
               <div class="form-group">
                 <label for="icon">Icon</label>
@@ -118,21 +98,6 @@
                   rows="3"
                 ></textarea>
                 <p class="field-hint">Opsional. Maksimal 255 karakter. Sisa: {{ 255 - (form.description || '').length }}</p>
-              </div>
-
-              <!-- Urutan Tampil -->
-              <div class="form-group">
-                <label for="sort_order">Urutan Tampil</label>
-                <input
-                  id="sort_order"
-                  v-model.number="form.sort_order"
-                  type="number"
-                  min="0"
-                  max="9999"
-                  placeholder="0"
-                  :disabled="isSubmitting"
-                />
-                <p class="field-hint">Opsional. Angka lebih kecil tampil lebih awal. Default: 0</p>
               </div>
 
               <!-- ── Info Pembuat/Pengubah (Edit mode only) ── -->
@@ -213,7 +178,6 @@ import { useRoute, useRouter } from 'vue-router';
 import { toast } from 'vue3-toastify';
 import {
   getFacilityDetail,
-  getFacilityCategories,
   insertFacility,
   updateFacility,
   toggleFacilityStatus
@@ -234,10 +198,8 @@ const isTogglingStatus = ref(false);
 const form = reactive({
   facility_id:     '',
   name:            '',
-  category:        '',
   icon:            '',
   description:     '',
-  sort_order:      0,
   status:          1,
   created_date:    '',
   created_by:      '',
@@ -249,14 +211,11 @@ const form = reactive({
 
 const originalForm = reactive({
   name:        '',
-  category:    '',
   icon:        '',
-  description: '',
-  sort_order:  0
+  description: ''
 });
 
-const alert             = reactive({ type: '', message: '' });
-const suggestedCategories = ref([]);
+const alert = reactive({ type: '', message: '' });
 
 /* ── Quick emoji list ────────────────────────────────────────────── */
 const quickEmojis = [
@@ -271,10 +230,8 @@ const hasChanges = computed(() => {
   }
   return (
     form.name        !== originalForm.name        ||
-    form.category    !== originalForm.category    ||
     form.icon        !== originalForm.icon        ||
-    form.description !== originalForm.description ||
-    form.sort_order  !== originalForm.sort_order
+    form.description !== originalForm.description
   );
 });
 
@@ -294,10 +251,8 @@ const formatDate = (dateStr) => {
 
 const syncOriginal = () => {
   originalForm.name        = form.name;
-  originalForm.category    = form.category;
   originalForm.icon        = form.icon;
   originalForm.description = form.description;
-  originalForm.sort_order  = form.sort_order;
 };
 
 /* ── Load detail (edit mode) ─────────────────────────────────────── */
@@ -311,10 +266,8 @@ const loadDetail = async () => {
       Object.assign(form, {
         facility_id:     f.facility_id     || '',
         name:            f.name            || '',
-        category:        f.category        || '',
         icon:            f.icon            || '',
         description:     f.description     || '',
-        sort_order:      f.sort_order      ?? 0,
         status:          f.status          ?? 1,
         created_date:    f.created_date    || '',
         created_by:      f.created_by      || '',
@@ -338,16 +291,6 @@ const loadDetail = async () => {
   }
 };
 
-/* ── Load categories ─────────────────────────────────────────────── */
-const loadCategories = async () => {
-  try {
-    const result = await getFacilityCategories();
-    if (result?.isSuccess === 1) {
-      suggestedCategories.value = result.data.response.categories || [];
-    }
-  } catch (_) {}
-};
-
 /* ── Submit ──────────────────────────────────────────────────────── */
 const submitForm = async () => {
   clearAlert();
@@ -366,10 +309,8 @@ const submitForm = async () => {
 
   const payload = {
     name:        form.name,
-    category:    form.category || null,
     icon:        form.icon     || null,
-    description: form.description || null,
-    sort_order:  form.sort_order ?? 0
+    description: form.description || null
   };
 
   try {
@@ -428,7 +369,6 @@ const handleToggleStatus = async () => {
 
 /* ── Lifecycle ──────────────────────────────────────────────────── */
 onMounted(() => {
-  loadCategories();
   if (isEditMode.value) {
     loadDetail();
   }

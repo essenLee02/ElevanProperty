@@ -406,6 +406,11 @@ const PROPERTY_QUESTION_PATTERNS = [
   // Q3 — price anchor format: "ada ... yang di kisaran ... dan ada juga yang ... Kira-kira yang mana lebih sesuai?"
   /kira-kira\s+yang\s+mana/, /yang\s+mana\s+lebih\s+sesuai/, /ada\s+yang\s+di\s+kisaran/,
   /di\s+kisaran\s+\d/, /lebih\s+sesuai\s+dengan\s+rencana/, /sesuai\s+dengan\s+rencana\s+anda/,
+  // QM (house pilot) — motivation / why now: "Boleh tahu, apa yang membuat Kak mulai cari rumah sekarang?"
+  /apa\s+yang\s+(membuat|bikin).*(cari|mulai)/, /mulai\s+cari\s+(rumah|properti)/,
+  /what'?s?\s+prompting.*search/, /what\s+made\s+you/, /why.*looking.*now/,
+  // QF (house pilot) — financing: "rencana pakai KPR atau cash?"
+  /kpr\s+atau\s+cash/, /cash\s+atau\s+kpr/, /mortgage.*or.*cash/, /cash.*or.*mortgage/,
 ];
 
 /** Apakah salah satu dari ≤2 pesan AI terakhir adalah pertanyaan properti? */
@@ -449,7 +454,12 @@ function isPropertyContextContinuation(message, history = []) {
   //   "hadap timur, tidak mau dekat jalan tol, ada taman bermain untuk anak"
   const hasPropertyFacility = /\b(fasilitas|gym|fitness|kolam\s*renang|kolam|renang|parkir|garasi|carport|taman|playground|play\s*ground|kids?\s*zone|kids?\s*club|keamanan|cctv|ac|wifi|internet|lift|elevator|rooftop|balkon|balcony|view|pemandangan|clubhouse|sport|olahraga|water\s*heater|mushola|jogging)\b/i.test(lower);
   const isLandmarkAnswer    = /\b(dekat|deket|near|close\s+to|di\s+jalan|di\s+sekitar|samping|next\s+to|beside|sebelah)\b/i.test(lower);
-  const hasPropertyContent  = hasPropertyFacility || isLandmarkAnswer;
+  // Jawaban QM (motivation / why now — house pilot). Frasa life-event ini bukan kata
+  // properti, tapi jelas jawaban atas "apa yang membuat Kak mulai cari rumah?".
+  // Contoh valid yang harus LOLOS (sebelumnya ter-drop karena > 70 char):
+  //   "Saya pindahan karena ada pindahan kerja, sekalian mau menetap di Jakarta"
+  const isMotivationAnswer  = /\b(pindah|pindahan|mutasi|relokasi|relocat|kontrak\s+(habis|abis)|ngontrak|keluarga\s+(nambah|bertambah)|nambah\s+anak|anak\s+(masuk|sekolah)|sekolah\s+anak|investasi|invest|disewakan|pensiun|menikah|nikah|kerja\s+baru|pindah\s+kerja|mutasi\s+kerja|menetap|growing\s+family|relocation|moving|job\s+(relocat|transfer))\b/i.test(lower);
+  const hasPropertyContent  = hasPropertyFacility || isLandmarkAnswer || isMotivationAnswer;
 
   // Pesan pendek (≤ 70 karakter) → proses normal
   // Pesan medium (71–200) dengan konten properti → masih bisa jawaban Q2b/Q5/Q6
@@ -608,8 +618,11 @@ function isPropertyContextContinuation(message, history = []) {
   //     Perlu ada history property context (sudah dicek di atas)
   if (/^(tidak|ga|gak|ngga|enggak|nggak|no)\s*(ada|masalah|preferensi|mau|perlu|usah|ingin|bisa|boleh|apa|tahu)?$/i.test(lower.trim()))
     return true;
-  // Negasi pendek ≤ 30 chars — mencakup "tidak mau deh", "ga mau ke sana", dll.
-  if (lower.length <= 30 && /^(tidak|ga|gak|ngga|enggak|nggak)\b/.test(lower.trim()))
+  // Negasi pendek ≤ 30 chars — boleh diawali "saya/aku" — mencakup "tidak mau deh",
+  // "ga mau ke sana", "saya enggak mau", "engga", "gamau", "gakmau", dll.
+  // (Jawaban "tidak" untuk Q5/Q7/Q11; konteks properti sudah diverifikasi di atas.)
+  if (lower.length <= 30 &&
+      /^(saya\s+|aku\s+)?(tidak|ga|gak|ngga|enggak|engga|nggak|gak\s*mau|gamau|gakmau|nggamau|no)\b/.test(lower.trim()))
     return true;
 
   // 14) Jawaban Q2b (riwayat pencarian) — "Saya belum pernah lihat", "sudah lihat 3",
@@ -632,7 +645,7 @@ function isPropertyContextContinuation(message, history = []) {
   //     Ini mencegah jawaban kualifikasi yang sah ter-drop hanya karena tidak match
   //     salah satu pola spesifik di atas.
   if (lower.length <= 70 &&
-      /^(saya\s+)?(mau|ingin|pengen|prefer|butuh|perlu|suka|lebih\s+suka|maunya|yang|jangan|hindari|tidak\s+mau|gak\s+mau|ga\s+mau|nggak\s+mau)\b/i.test(lower.trim()))
+      /^(saya\s+|aku\s+)?(mau|ingin|pengen|prefer|butuh|perlu|suka|lebih\s+suka|maunya|yang|jangan|hindari|tidak\s+mau|gak\s+mau|ga\s+mau|nggak\s+mau|enggak\s+mau|engga\s+mau|gamau|gakmau)\b/i.test(lower.trim()))
     return true;
 
   return false;

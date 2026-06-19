@@ -194,6 +194,15 @@ function cleanLocationCandidate(value = '') {
     .trim();
 }
 
+// Kata yang sering muncul setelah "di" tapi BUKAN lokasi (patokan lantai/posisi/dll).
+// Tanpa guard ini, "Di lantai 27" salah terbaca sebagai lokasi "lantai" dan
+// menimpa kota yang sudah benar (mis. Surabaya) di akumulasi filter.
+const NON_LOCATION_AFTER_DI = new RegExp(
+  '^(lantai|lantainya|tower|menara|gedung|unit|kamar|lt|atas|bawah|tengah|pojok|sudut|' +
+  'sini|sana|situ|dalam|luar|depan|belakang|samping|sebelah|tengahnya|mana|manapun|' +
+  'mana[\\s-]*saja|mana[\\s-]*aja|sekitar|area)\\b', 'i'
+);
+
 function detectLocation(message = '') {
   const text = normalizeText(message);
   const found = getKnownLocations().find((location) => new RegExp(`\\b${escapeRegExp(location.toLowerCase())}\\b`, 'i').test(text));
@@ -201,7 +210,9 @@ function detectLocation(message = '') {
 
   const afterDi = text.match(/\bdi\s+([a-zA-Z\s]{3,35})/i);
   if (afterDi && afterDi[1]) {
-    return cleanLocationCandidate(afterDi[1]);
+    const candidate = afterDi[1].trim();
+    if (NON_LOCATION_AFTER_DI.test(candidate)) return '';  // "di lantai 27" dst → bukan lokasi
+    return cleanLocationCandidate(candidate);
   }
 
   return '';
@@ -482,13 +493,18 @@ function extractFromHistory(history = []) {
       accumulated.transactionType = '';
       accumulated.location        = '';  // lokasi lama juga direset — bisa jadi beda kota
       accumulated.budget          = null;
+      accumulated.facilities      = [];  // fasilitas pencarian lama tidak diwarisi
     }
 
     if (h.buildingType)          accumulated.buildingType    = h.buildingType;
     if (h.transactionType)       accumulated.transactionType = h.transactionType;
     if (h.location)              accumulated.location        = h.location;
     if (h.budget)                accumulated.budget          = h.budget;
-    if (h.facilities?.length)    accumulated.facilities      = h.facilities;
+    // Fasilitas AKUMULATIF (union) — customer bisa menyebut "kolam renang, gym"
+    // di satu pesan dan "dapur lengkap" di pesan lain; semuanya diinginkan.
+    // Sebelumnya pakai '=' sehingga pesan terakhir menimpa yang sebelumnya
+    // (mis. "Dapur" menghapus "Kolam renang, Gym" → summary tidak lengkap).
+    if (h.facilities?.length)    accumulated.facilities      = [...new Set([...accumulated.facilities, ...h.facilities])];
     if (h.fallbackTypes?.length) accumulated.fallbackTypes   = h.fallbackTypes;
   }
 

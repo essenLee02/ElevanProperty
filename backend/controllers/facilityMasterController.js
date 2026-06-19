@@ -14,6 +14,39 @@ const { Facility, User } = require('../models');
 const { HTTP }           = require('../utils/httpStatus');
 const { sendSuccess, sendError } = require('../utils/responseFormat');
 
+/* ════════════════════════════════════════════════════════════════════════════
+   ANTI-REDUNDANCY — kelompok sinonim fasilitas
+   ────────────────────────────────────────────────────────────────────────────
+   Setiap grup berisi istilah-istilah yang BERMAKNA SAMA. Elemen pertama tiap
+   grup = nama kanonik. Saat user input fasilitas, namanya dinormalisasi
+   (huruf kecil, tanpa tanda baca, spasi dirapikan) lalu dicocokkan ke grup ini.
+   Jika dua input memetakan ke kanonik yang sama → dianggap duplikat.
+
+   Contoh yang dicegah:
+     "AC" / "air conditioner" / "pendingin ruangan"        → kanonik "ac"
+     "gym" / "gym club" / "tempat gym"                      → kanonik "gym"
+     "kolam renang" / "swimming pool" / "tempat berenang"  → kanonik "kolam renang"
+     "satpam" / "security" / "penjaga"                      → kanonik "satpam"
+     "cctv" / "kamera pengawas" / "camera"                  → kanonik "cctv"
+
+   Tambahkan grup baru di sini bila ada sinonim lain yang perlu disatukan.
+════════════════════════════════════════════════════════════════════════════ */
+const FACILITY_SYNONYM_GROUPS = [
+  ['ac', 'air conditioner', 'air conditioning', 'pendingin ruangan', 'pendingin udara', 'penyejuk ruangan'],
+  ['parkir mobil', 'tempat parkir mobil', 'area parkir mobil', 'lahan parkir mobil', 'parking mobil', 'car park'],
+  ['parkir motor', 'tempat parkir motor', 'area parkir motor', 'parking motor'],
+  ['gym', 'gym club', 'tempat gym', 'ruang gym', 'fitness', 'fitness center', 'fitnes', 'pusat kebugaran'],
+  ['kolam renang', 'tempat berenang', 'swimming pool', 'pool'],
+  ['satpam', 'security', 'sekuriti', 'penjaga', 'penjaga keamanan', 'petugas keamanan', 'keamanan 24 jam'],
+  ['cctv', 'kamera pengawas', 'kamera cctv', 'kamera keamanan', 'kamera', 'camera'],
+  ['wifi', 'wi fi', 'internet', 'koneksi internet', 'wireless internet'],
+  ['lift', 'elevator'],
+  ['mushola', 'musholla', 'mushollah', 'masjid', 'tempat ibadah'],
+  ['dapur', 'kitchen', 'kitchen set', 'pantry'],
+  ['carport', 'kanopi mobil'],
+  ['taman', 'garden', 'taman hijau'],
+];
+
 class FacilityMasterController {
 
   /* ──────────────────────────────────────────────────────────────────────────
@@ -77,17 +110,62 @@ class FacilityMasterController {
     return new Date().toISOString().split('T')[0]; // YYYY-MM-DD
   }
 
+  /* ── Anti-redundancy helpers ─────────────────────────────────────────────── */
+
+  /**
+   * Normalisasi nama fasilitas untuk perbandingan:
+   *   huruf kecil → tanda baca jadi spasi → spasi ganda dirapikan → trim.
+   * "Parkir  Mobil!" → "parkir mobil"  |  "A/C" → "a c"
+   */
+  static #normalizeName(name) {
+    return String(name || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  /**
+   * Kunci kanonik: jika nama (ternormalisasi) ada di salah satu grup sinonim,
+   * kembalikan istilah kanonik grup tsb; jika tidak, kembalikan nama ternormalisasi.
+   * Dua nama yang menghasilkan kunci sama dianggap fasilitas yang sama.
+   */
+  static #canonicalKey(name) {
+    const norm = FacilityMasterController.#normalizeName(name);
+    for (const group of FACILITY_SYNONYM_GROUPS) {
+      if (group.includes(norm)) return group[0];
+    }
+    return norm;
+  }
+
+  /**
+   * Cari fasilitas aktif (status ≠ 3) yang duplikat/sinonim dengan `name`.
+   * @param {string} name             Nama yang akan dicek
+   * @param {string|null} excludeId   facility_id yang dikecualikan (untuk update)
+   * @returns {Promise<Facility|null>} Fasilitas existing yang bentrok, atau null
+   */
+  static async #findRedundant(name, excludeId = null) {
+    const targetKey = FacilityMasterController.#canonicalKey(name);
+    if (!targetKey) return null;
+
+    const where = { status: { [Op.ne]: 3 } };
+    if (excludeId) where.facility_id = { [Op.ne]: excludeId };
+
+    const existing = await Facility.findAll({ where, attributes: ['facility_id', 'name'] });
+    return existing.find(f => FacilityMasterController.#canonicalKey(f.name) === targetKey) || null;
+  }
+
   /* ──────────────────────────────────────────────────────────────────────────
      INSERT
   ────────────────────────────────────────────────────────────────────────── */
 
   /**
    * POST /api/facility/insert
-   * Body: { name, description?, icon?, category?, sort_order? }
+   * Body: { name, description?, icon? }
    * Auth: verifyToken (req.user.userId = user_id pembuat)
    */
   static async insertDataFacility(req, res) {
-    const { name, description, icon, category, sort_order } = req.body;
+    const { name, description, icon } = req.body;
     const createdBy = req.user?.userId || null;
 
     if (!name || !String(name).trim()) {
@@ -99,33 +177,26 @@ class FacilityMasterController {
     }
 
     try {
-      const existingName = await Facility.findOne({
-        where: {
-          name:   { [Op.like]: String(name).trim() },
-          status: { [Op.ne]: 3 }
-        }
-      });
-      if (existingName) {
-        return sendError(res, HTTP.CONFLICT, null, `Fasilitas "${String(name).trim()}" sudah ada`);
+      // Anti-redundancy: tolak nama yang sama (beda kapital/spasi) ATAU sinonim
+      const redundant = await FacilityMasterController.#findRedundant(name);
+      if (redundant) {
+        return sendError(
+          res, HTTP.CONFLICT, null,
+          `Fasilitas "${String(name).trim()}" sudah ada atau serupa dengan "${redundant.name}". Gunakan fasilitas yang sudah ada untuk menghindari data duplikat.`
+        );
       }
 
       const totalFacilities = await Facility.count();
       const facilityId      = FacilityMasterController.#makeFacilityId(name, totalFacilities).toUpperCase();
 
-      const sortOrderValue = sort_order !== undefined && sort_order !== null && sort_order !== ''
-        ? parseInt(sort_order, 10) || 0
-        : 0;
-
       const newFacility = await Facility.create({
-        facility_id:  facilityId,
-        name:         String(name).trim(),
-        description:  description ? String(description).trim() : null,
+        facility_id:  facilityId.toUpperCase(),
+        name:         String(name).trim().toUpperCase(),
+        description:  description ? String(description).trim().toUpperCase() : null,
         icon:         icon        ? String(icon).trim()        : null,
-        category:     category    ? String(category).trim()    : null,
-        sort_order:   sortOrderValue,
         status:       1,
         created_date: FacilityMasterController.#todayDate(),
-        created_by:   createdBy,
+        created_by:   createdBy.toUpperCase(),
         updated_date: null,
         updated_by:   null
       });
@@ -139,8 +210,6 @@ class FacilityMasterController {
           name:         newFacility.name,
           description:  newFacility.description,
           icon:         newFacility.icon,
-          category:     newFacility.category,
-          sort_order:   newFacility.sort_order,
           status:       newFacility.status,
           created_date: newFacility.created_date,
           created_by:   newFacility.created_by
@@ -159,12 +228,12 @@ class FacilityMasterController {
 
   /**
    * PUT /api/facility/update/:facility_id
-   * Body: { name, description?, icon?, category?, sort_order? }
+   * Body: { name, description?, icon? }
    * Auth: verifyToken
    */
   static async updateDataFacility(req, res) {
     const { facility_id } = req.params;
-    const { name, description, icon, category, sort_order } = req.body;
+    const { name, description, icon } = req.body;
     const updatedBy = req.user?.userId || null;
 
     if (!facility_id) {
@@ -185,27 +254,18 @@ class FacilityMasterController {
         return sendError(res, HTTP.NOT_FOUND, null, 'Fasilitas tidak ditemukan');
       }
 
-      const duplicateName = await Facility.findOne({
-        where: {
-          name:        { [Op.like]: String(name).trim() },
-          facility_id: { [Op.ne]: facility_id },
-          status:      { [Op.ne]: 3 }
-        }
-      });
-      if (duplicateName) {
-        return sendError(res, HTTP.CONFLICT, null, `Nama fasilitas "${String(name).trim()}" sudah dipakai oleh fasilitas lain`);
+      const redundant = await FacilityMasterController.#findRedundant(name, facility_id);
+      if (redundant) {
+        return sendError(
+          res, HTTP.CONFLICT, null,
+          `Nama "${String(name).trim()}" duplikat/serupa dengan fasilitas "${redundant.name}". Pilih nama lain yang berbeda makna.`
+        );
       }
-
-      const sortOrderValue = sort_order !== undefined && sort_order !== null && sort_order !== ''
-        ? parseInt(sort_order, 10) || 0
-        : facility.sort_order;
 
       await facility.update({
         name:         String(name).trim(),
         description:  description !== undefined ? (description ? String(description).trim() : null) : facility.description,
         icon:         icon        !== undefined ? (icon        ? String(icon).trim()        : null) : facility.icon,
-        category:     category    !== undefined ? (category    ? String(category).trim()    : null) : facility.category,
-        sort_order:   sortOrderValue,
         updated_date: FacilityMasterController.#todayDate(),
         updated_by:   updatedBy
       });
@@ -222,8 +282,6 @@ class FacilityMasterController {
           name:         facility.name,
           description:  facility.description,
           icon:         facility.icon,
-          category:     facility.category,
-          sort_order:   facility.sort_order,
           status:       facility.status,
           created_date: facility.created_date,
           created_by:   facility.created_by,
@@ -245,7 +303,7 @@ class FacilityMasterController {
   ────────────────────────────────────────────────────────────────────────── */
 
   /**
-   * GET /api/facility/list?page=1&search=&category=
+   * GET /api/facility/list?page=1&search=
    * Menampilkan fasilitas status 1 dan 2 (exclude deleted/status=3)
    * Auth: verifyToken
    */
@@ -256,20 +314,16 @@ class FacilityMasterController {
       const offset   = (page - 1) * pageSize;
 
       const search   = req.query.search   ? String(req.query.search).trim()   : '';
-      const category = req.query.category ? String(req.query.category).trim() : '';
 
       const where = { status: { [Op.ne]: 3 } };
 
       if (search) {
         where.name = { [Op.like]: `%${search}%` };
       }
-      if (category) {
-        where.category = { [Op.like]: `%${category}%` };
-      }
 
       const { count, rows } = await Facility.findAndCountAll({
         where,
-        order:  [['sort_order', 'ASC'], ['name', 'ASC']],
+        order:  [['name', 'ASC']],
         limit:  pageSize,
         offset
       });
@@ -283,8 +337,6 @@ class FacilityMasterController {
         name:         f.name,
         description:  f.description,
         icon:         f.icon,
-        category:     f.category,
-        sort_order:   f.sort_order,
         status:       f.status,
         status_label: f.status === 1 ? 'Aktif' : 'Disabled',
         created_date: f.created_date,
@@ -337,8 +389,6 @@ class FacilityMasterController {
           name:            facility.name,
           description:     facility.description,
           icon:            facility.icon,
-          category:        facility.category,
-          sort_order:      facility.sort_order,
           status:          facility.status,
           status_label:    facility.status === 1 ? 'Aktif' : 'Disabled',
           created_date:    facility.created_date,
@@ -434,36 +484,6 @@ class FacilityMasterController {
     } catch (error) {
       console.error('[FACILITY DELETE ERROR]', error.message);
       return sendError(res, HTTP.INTERNAL_SERVER_ERROR, null, 'Gagal menghapus fasilitas');
-    }
-  }
-
-  /* ──────────────────────────────────────────────────────────────────────────
-     KATEGORI LIST (untuk dropdown filter)
-  ────────────────────────────────────────────────────────────────────────── */
-
-  /**
-   * GET /api/facility/categories
-   * Daftar kategori unik yang ada di data fasilitas.
-   * Auth: verifyToken
-   */
-  static async getCategories(req, res) {
-    try {
-      const rows = await Facility.findAll({
-        where: {
-          status:   { [Op.ne]: 3 },
-          category: { [Op.ne]: null }
-        },
-        attributes: ['category'],
-        group:      ['category'],
-        order:      [['category', 'ASC']]
-      });
-
-      const categories = rows.map(r => r.category).filter(Boolean);
-      return sendSuccess(res, HTTP.OK, { categories }, 'Kategori fasilitas berhasil dimuat');
-
-    } catch (error) {
-      console.error('[FACILITY CATEGORIES ERROR]', error.message);
-      return sendError(res, HTTP.INTERNAL_SERVER_ERROR, null, 'Gagal memuat kategori');
     }
   }
 }

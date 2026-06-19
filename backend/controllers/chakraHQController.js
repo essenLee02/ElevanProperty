@@ -10,18 +10,26 @@
  *   - Kirim balasan pakai ChakraHQ API dengan token milik agent itu sendiri
  *
  * DETECTION LOGIC:
- *   ChakraHQ mengirim webhook dengan format:
- *     - incoming : body.type === 'incoming' / body.event === 'message' / body.phone + body.message
- *     - status   : body.type === 'status' / body.event === 'status'
+ *   ChakraHQ memakai format Meta WhatsApp Cloud API. Webhook bisa datang sebagai:
+ *     - Meta pass-through : { object, entry:[{ changes:[{ value:{ messages, contacts, metadata } }] }] }
+ *     - Chakra MessagePayload : { wabaId, messageId, externalId, message:{...}, contacts:[...] }
+ *     - Legacy/simple (fallback defensif) : { phone/pengirim, pesan/message }
  *
  * ENDPOINT UTAMA:
- *   POST /api/chakrahq/webhook  ← set ini di ChakraHQ Dashboard → Chatbot → Webhook URL
+ *   POST /api/chakrahq/webhook  ← set ini di ChakraHQ Dashboard → Chat Settings → Webhook URL
  *
- * API REFERENCE:
- *   Base URL : https://api.chakrahq.com/v1/ext/
+ * API REFERENCE (https://apidocs.chakrahq.com):
+ *   Base URL : https://api.chakrahq.com/v1/ext
  *   Auth     : Authorization: Bearer {chakra_hq_token}
- *   Send msg : POST /v1/ext/message/send-text
- *   List chat: POST /v1/ext/chat
+ *   Send text: POST /v1/ext/plugin/whatsapp/{pluginId}/api/{apiVersion}/{phoneNumberId}/messages
+ *              Body: { messaging_product:"whatsapp", to, type:"text", text:{ body } }
+ *              (session message — hanya boleh dalam 24 jam setelah customer kirim pesan)
+ *   List chat: POST /v1/ext/chat   Body: { orderField, limit, page }
+ *
+ * KONFIGURASI SEND (.env — per nomor WA yang terhubung):
+ *   CHAKRAHQ_PLUGIN_ID        = UUID plugin WhatsApp (WhatsApp Setup → ⋮ → Copy Plugin Id)
+ *   CHAKRAHQ_API_VERSION      = vXX.0 (default v21.0)
+ *   CHAKRAHQ_PHONE_NUMBER_ID  = Meta phone number id (WhatsApp Setup → ⚙ kolom phone number)
  */
 
 'use strict';
@@ -55,13 +63,33 @@ function normalizePhone(phone) {
 }
 
 /**
- * Deteksi jenis event dari payload ChakraHQ.
- *
- * ChakraHQ bisa mengirim format:
- *   - { type: 'incoming', phone, message, name, messageId }
- *   - { event: 'message',  data: { phone, message, name } }
- *   - { phone, message }  ← format sederhana
- *   - { type: 'status', ... } atau { event: 'status', ... }
+ * Ambil teks dari objek message Meta WhatsApp (text / button / interactive reply).
+ */
+function extractMetaText(m) {
+  if (!m || typeof m !== 'object') return '';
+  if (m.text && m.text.body) return m.text.body;
+  if (m.button && m.button.text) return m.button.text;
+  if (m.interactive) {
+    return (m.interactive.button_reply && m.interactive.button_reply.title)
+        || (m.interactive.list_reply   && m.interactive.list_reply.title)
+        || '';
+  }
+  if (typeof m.body === 'string') return m.body;
+  return '';
+}
+
+/**
+ * Ambil "value" dari webhook Meta pass-through (entry[].changes[].value).
+ */
+function getMetaValue(body) {
+  return body
+    && Array.isArray(body.entry) && body.entry[0]
+    && Array.isArray(body.entry[0].changes) && body.entry[0].changes[0]
+    && body.entry[0].changes[0].value;
+}
+
+/**
+ * Deteksi jenis event dari payload ChakraHQ (format Meta WhatsApp Cloud API).
  *
  * @param {object} body - req.body dari webhook ChakraHQ
  * @returns {'incoming'|'status'|'unknown'}
@@ -69,30 +97,79 @@ function normalizePhone(phone) {
 function detectEventType(body) {
   if (!body || typeof body !== 'object') return 'unknown';
 
-  // Format eksplisit dengan field type/event
+  // ── Meta pass-through webhook ──
+  const metaValue = getMetaValue(body);
+  if (metaValue) {
+    if (Array.isArray(metaValue.statuses) && metaValue.statuses.length) return 'status';
+    if (Array.isArray(metaValue.messages) && metaValue.messages.length) return 'incoming';
+  }
+
+  // ── Chakra MessagePayload (message = objek WhatsApp, bukan string) ──
+  if (body.message && typeof body.message === 'object' && (body.contacts || body.messageId)) {
+    if (body.deliveryStatus || body.direction === 'OUTBOUND') return 'status';
+    return 'incoming';
+  }
+
+  // ── Format eksplisit type/event ──
   if (body.type === 'incoming' || body.event === 'message')  return 'incoming';
   if (body.type === 'status'   || body.event === 'status')   return 'status';
   if (body.type === 'read'     || body.event === 'read')     return 'status';
   if (body.type === 'sent'     || body.event === 'sent')     return 'status';
 
-  // Format fallback: ada phone + message → incoming
-  const phone = body.phone || body.from || body.sender || body.waId || '';
-  const msg   = body.message || body.text || body.body || (body.data && body.data.message) || '';
-  if (phone && msg !== undefined) return 'incoming';
+  // ── Legacy/simple (fallback defensif) ──
+  const phone = body.phone || body.pengirim || body.sender || body.from || body.waId || '';
+  const msg   = body.pesan || body.message || body.text || body.body || (body.data && body.data.message) || '';
+  if (phone && typeof msg === 'string' && msg.trim().length > 0) return 'incoming';
 
   return 'unknown';
 }
 
 /**
- * Ekstrak field standar dari bermacam-macam format payload ChakraHQ.
+ * Ekstrak field standar dari payload ChakraHQ.
+ *
+ * Mendukung 3 format (urut prioritas):
+ *   A. Meta pass-through  : entry[].changes[].value.{messages,contacts,metadata}
+ *   B. Chakra MessagePayload : { message:{...}, contacts:[...], messageId }
+ *   C. Legacy/simple      : { phone/pengirim, pesan/message } (defensif)
+ *
+ * @returns {{phone, name, message, msgId, devicePhone}}
  */
 function extractFields(body) {
+  // ── Format A: Meta pass-through ──
+  const metaValue = getMetaValue(body);
+  if (metaValue && Array.isArray(metaValue.messages) && metaValue.messages.length) {
+    const m       = metaValue.messages[0];
+    const contact = (Array.isArray(metaValue.contacts) && metaValue.contacts[0]) || {};
+    const meta    = metaValue.metadata || {};
+    return {
+      phone      : m.from || contact.wa_id || '',
+      name       : (contact.profile && contact.profile.name) || 'Customer',
+      message    : String(extractMetaText(m)).trim(),
+      msgId      : m.id || `chakra_${Date.now()}`,
+      devicePhone: meta.display_phone_number || meta.phone_number_id || ''
+    };
+  }
+
+  // ── Format B: Chakra MessagePayload ──
+  if (body.message && typeof body.message === 'object') {
+    const m       = body.message;
+    const contact = (Array.isArray(body.contacts) && body.contacts[0]) || {};
+    return {
+      phone      : m.from || contact.wa_id || '',
+      name       : (contact.profile && contact.profile.name) || contact.name || 'Customer',
+      message    : String(extractMetaText(m)).trim(),
+      msgId      : body.messageId || body.externalId || m.id || `chakra_${Date.now()}`,
+      devicePhone: body.displayPhoneNumber || body.phoneNumberId || ''
+    };
+  }
+
+  // ── Format C: Legacy/simple (defensif) ──
   const data    = body.data || body;
-  const phone   = data.phone   || data.from   || data.sender || data.waId   || body.phone   || body.sender || '';
-  const name    = data.name    || data.pushname || data.contact || body.name || 'Customer';
-  const message = data.message || data.text    || data.body  || body.message || body.text   || '';
-  const msgId   = data.messageId || data.id    || body.messageId || body.id  || `chakra_${Date.now()}`;
-  // devicePhone: nomor WA agent yang menerima (dipakai untuk match token di DB)
+  const phone   = data.phone   || data.from   || data.sender || data.waId   || data.pengirim
+              || body.phone   || body.sender  || body.pengirim || '';
+  const name    = data.pushname || data.name    || data.contact || body.pushname || body.name || 'Customer';
+  const message = data.pesan || body.pesan || data.message || body.message || data.text || body.text || data.body || body.body || '';
+  const msgId   = data.messageId || data.id || body.messageId || body.id || data.inboxid || body.inboxid || `chakra_${Date.now()}`;
   const devicePhone = data.devicePhone || data.device || body.devicePhone || body.device || '';
 
   return { phone, name, message: String(message).trim(), msgId, devicePhone };
@@ -138,13 +215,41 @@ async function findAgentByDevice(devicePhone) {
 ══════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * Kirim pesan WhatsApp menggunakan Access Token ChakraHQ milik agent.
+ * Bangun konfigurasi & URL endpoint kirim pesan ChakraHQ.
  *
- * @param {string} targetPhone  - Nomor tujuan (customer), format 628xxx
- * @param {string} message      - Isi pesan teks
- * @param {string} agentToken   - Token dari users.chakra_hq_token
+ * Endpoint resmi (session message):
+ *   POST /v1/ext/plugin/whatsapp/{pluginId}/api/{apiVersion}/{phoneNumberId}/messages
+ *
+ * pluginId & phoneNumberId terikat ke nomor WA yang terhubung — saat ini diambil
+ * dari .env (single connected number). `overrides` disediakan agar nanti bisa
+ * di-source per-agent dari DB tanpa mengubah signature.
  */
-async function sendViaChakraHQ(targetPhone, message, agentToken) {
+function resolveSendConfig(overrides = {}) {
+  const pluginId      = overrides.pluginId      || process.env.CHAKRAHQ_PLUGIN_ID        || '';
+  const phoneNumberId = overrides.phoneNumberId || process.env.CHAKRAHQ_PHONE_NUMBER_ID  || '';
+  const apiVersion    = overrides.apiVersion    || process.env.CHAKRAHQ_API_VERSION      || 'v21.0';
+  return { pluginId: String(pluginId).trim(), phoneNumberId: String(phoneNumberId).trim(), apiVersion: String(apiVersion).trim() };
+}
+
+function buildSendUrl({ pluginId, apiVersion, phoneNumberId }) {
+  return `${CHAKRA_BASE_URL}/plugin/whatsapp/${pluginId}/api/${apiVersion}/${phoneNumberId}/messages`;
+}
+
+/**
+ * Kirim pesan WhatsApp (session message) menggunakan Access Token ChakraHQ milik agent.
+ *
+ * Body (format Meta WhatsApp Cloud API):
+ *   { messaging_product:"whatsapp", to:"628xxx", type:"text", text:{ body:"..." } }
+ *
+ * Catatan: session message hanya boleh dikirim dalam jendela 24 jam setelah
+ * customer terakhir mengirim pesan. Di luar itu wajib pakai template message.
+ *
+ * @param {string} targetPhone - Nomor tujuan (customer), format 628xxx tanpa '+'
+ * @param {string} message     - Isi pesan teks
+ * @param {string} agentToken  - Token dari users.chakra_hq_token
+ * @param {object} [sendCfg]   - Override { pluginId, apiVersion, phoneNumberId }
+ */
+async function sendViaChakraHQ(targetPhone, message, agentToken, sendCfg = {}) {
   const target     = normalizePhone(targetPhone);
   const timeout    = parseInt(process.env.CHAKRAHQ_TIMEOUT_MS    || '30000', 10);
   const maxRetries = parseInt(process.env.CHAKRAHQ_RETRY_COUNT   || '3',     10);
@@ -152,16 +257,26 @@ async function sendViaChakraHQ(targetPhone, message, agentToken) {
 
   const RETRYABLE = new Set(['ETIMEDOUT', 'ECONNREFUSED', 'ECONNRESET', 'ENOTFOUND', 'ENETUNREACH', 'ECONNABORTED']);
 
+  const cfg = resolveSendConfig(sendCfg);
+  if (!cfg.pluginId || !cfg.phoneNumberId) {
+    throw new Error('ChakraHQ send config tidak lengkap — set CHAKRAHQ_PLUGIN_ID & CHAKRAHQ_PHONE_NUMBER_ID di .env (lihat WhatsApp Setup di dashboard)');
+  }
+
+  const url = buildSendUrl(cfg);
   const payload = {
-    phone  : target,
-    message: String(message).trim()
+    messaging_product: 'whatsapp',
+    to               : target,
+    type             : 'text',
+    text             : { body: String(message).trim() }
   };
+
+  console.log(`[CHAKRAHQ SEND] → ${maskPhone(target)} | plugin: ${cfg.pluginId.substring(0, 8)}… | pnid: ${cfg.phoneNumberId} | len: ${payload.text.body.length}`);
 
   let lastError;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const response = await axios.post(
-        `${CHAKRA_BASE_URL}/message/send-text`,
+        url,
         payload,
         {
           headers: {
@@ -172,10 +287,12 @@ async function sendViaChakraHQ(targetPhone, message, agentToken) {
         }
       );
 
-      // ChakraHQ mengembalikan status error di body
-      if (response.data && response.data.status === false) {
-        const reason = response.data.message || response.data.error || 'ChakraHQ: gagal kirim';
-        throw new Error(reason);
+      console.log(`[CHAKRAHQ SEND] API response (${response.status}):`, JSON.stringify(response.data).substring(0, 200));
+
+      // Sukses Meta API → ada array "messages". Jika ada "error" → gagal.
+      if (response.data && response.data.error) {
+        const reason = response.data.error.message || response.data.error || 'ChakraHQ: gagal kirim';
+        throw new Error(`ChakraHQ API error: ${reason}`);
       }
 
       if (attempt > 1) {
@@ -185,6 +302,31 @@ async function sendViaChakraHQ(targetPhone, message, agentToken) {
 
     } catch (err) {
       lastError = err;
+
+      // Log detail error untuk debugging
+      const httpStatus = err.response?.status;
+      const httpBody   = JSON.stringify(err.response?.data || {}).substring(0, 200);
+      if (httpStatus) {
+        console.error(`[CHAKRAHQ SEND] HTTP ${httpStatus} error: ${httpBody}`);
+      }
+
+      // 404 — pluginId / phoneNumberId / apiVersion salah, JANGAN retry
+      if (httpStatus === 404) {
+        console.error('[CHAKRAHQ SEND] ❌ 404 Not Found — cek CHAKRAHQ_PLUGIN_ID / CHAKRAHQ_PHONE_NUMBER_ID / CHAKRAHQ_API_VERSION di .env');
+        break;
+      }
+
+      // 402 Payment Required — plan ChakraHQ perlu upgrade, JANGAN retry
+      if (httpStatus === 402) {
+        console.error('[CHAKRAHQ SEND] ❌ 402 Payment Required — Plan ChakraHQ perlu di-upgrade');
+        break;
+      }
+
+      // 401/403 — token salah/expired
+      if (httpStatus === 401 || httpStatus === 403) {
+        console.error(`[CHAKRAHQ SEND] ❌ ${httpStatus} Auth error — cek chakra_hq_token di profile agent`);
+        break;
+      }
 
       const isRetryable = RETRYABLE.has(err.code) ||
         (err.code === 'ECONNABORTED' && /timeout/i.test(err.message));
@@ -315,6 +457,7 @@ async function processIncomingMessage(fields, agent) {
   let chakraSent  = false;
   let chakraError = null;
 
+  let sendHint = null;
   try {
     await sendViaChakraHQ(sender, aiResult.reply, agent.chakra_hq_token);
     chakraSent = true;
@@ -327,13 +470,21 @@ async function processIncomingMessage(fields, agent) {
     });
   } catch (err) {
     chakraError = err.message;
+    if (/402|payment required/i.test(err.message))  sendHint = '402 Payment Required — upgrade plan ChakraHQ';
+    else if (/404/.test(err.message))               sendHint = '404 — cek CHAKRAHQ_PLUGIN_ID / CHAKRAHQ_PHONE_NUMBER_ID di .env';
+    else if (/send config tidak lengkap/i.test(err.message)) sendHint = 'Set CHAKRAHQ_PLUGIN_ID & CHAKRAHQ_PHONE_NUMBER_ID di .env';
+    else if (/401|403|auth/i.test(err.message))     sendHint = 'Auth — cek chakra_hq_token agent';
     safeLog('CHAKRAHQ_REPLY_SEND_FAILED', { sessionId: session.id, agent: agent.name, error: err.message }, 'error');
   }
 
   // ── Log terminal ──────────────────────────────────────────────────────
   if (isTerminalActive('CHAKRAHQ')) {
     const D          = '═'.repeat(80);
-    const sendStatus = chakraSent ? `✅ Terkirim` : `❌ Gagal: ${sanitizeLog(chakraError, 80)}`;
+    const sendStatus = chakraSent
+      ? `✅ Terkirim`
+      : sendHint
+        ? `❌ ${sendHint}`
+        : `❌ Gagal: ${sanitizeLog(chakraError, 80)}`;
     const safeReply  = String(aiResult.reply || '')
       .replace(/\x1B\[[0-9;]*[mGKHFABCDJsulnhr]/g, '')
       .replace(/\x00/g, '');
@@ -376,6 +527,7 @@ class FonnteChakraHQController {
   ───────────────────────────────────────────────────────────────────── */
   static async handleInboundMessage(req, res) {
     const body = req.body || {};
+    const fields = extractFields(body);
 
     console.log('\n╔══════════ CHAKRAHQ WEBHOOK MASUK ══════════╗');
     console.log(`║ Time  : ${new Date().toISOString().padEnd(33)} ║`);
@@ -383,13 +535,10 @@ class FonnteChakraHQController {
     console.log('╚════════════════════════════════════════════╝');
 
     if (isTerminalActive('CHAKRAHQ')) {
-      const fields = extractFields(body);
-      if (fields.message) {
-        console.log(`[CHAKRAHQ] 📩 From   : ${maskPhone(fields.phone)} (${maskName(fields.name)})`);
-        console.log(`[CHAKRAHQ] 💬 Message: ${sanitizeLog(fields.message, 200)}`);
-      }
+      console.log(`[CHAKRAHQ] 📩 From   : ${maskPhone(fields.phone)} (${maskName(fields.name)})`);
+      console.log(`[CHAKRAHQ] 💬 Message: ${sanitizeLog(fields.message, 200)}`);
     }
-    console.log('[CHAKRAHQ RAW]', JSON.stringify(body).substring(0, 300));
+    console.log('[CHAKRAHQ RAW]', JSON.stringify(body).substring(0, 400));
 
     const eventType = detectEventType(body);
     console.log(`[CHAKRAHQ EVENT] Type: ${eventType}`);
@@ -698,19 +847,47 @@ class FonnteChakraHQController {
       const tokenStr  = `Bearer ${String(target.chakra_hq_token).trim()}`;
       const results   = {};
 
-      // Test list chats (endpoint yang sudah diketahui dari API docs)
+      // Test 1: List chats
       try {
         const r = await axios.post(
           `${CHAKRA_BASE_URL}/chat`,
           { orderField: 'createdAt', limit: 1, page: 1 },
           { headers: { Authorization: tokenStr, 'Content-Type': 'application/json' }, timeout: 8000 }
         );
-        results.list_chat = { status: r.status, preview: JSON.stringify(r.data).substring(0, 300) };
+        results.list_chat = { status: r.status, ok: true, preview: JSON.stringify(r.data).substring(0, 300) };
       } catch (err) {
-        results.list_chat = { status: err?.response?.status || 'error', error: err.message };
+        results.list_chat = { status: err?.response?.status || 'error', ok: false, error: err.message, body: JSON.stringify(err?.response?.data || {}) };
       }
 
-      return res.json({ success: true, agent: target.name, results });
+      // Test 2: Send test ke nomor agent sendiri (loopback) — butuh config lengkap
+      const cfg = resolveSendConfig();
+      if (!cfg.pluginId || !cfg.phoneNumberId) {
+        results.send_test = {
+          ok    : false,
+          status: 'skipped',
+          error : 'CHAKRAHQ_PLUGIN_ID / CHAKRAHQ_PHONE_NUMBER_ID belum di-set di .env'
+        };
+      } else if (target.phone) {
+        try {
+          const r = await axios.post(
+            buildSendUrl(cfg),
+            { messaging_product: 'whatsapp', to: normalizePhone(target.phone), type: 'text', text: { body: '[TEST] Elevan Property ChakraHQ check-api' } },
+            { headers: { Authorization: tokenStr, 'Content-Type': 'application/json' }, timeout: 8000 }
+          );
+          results.send_test = { status: r.status, ok: true, preview: JSON.stringify(r.data).substring(0, 300) };
+        } catch (err) {
+          results.send_test = { status: err?.response?.status || 'error', ok: false, error: err.message, body: JSON.stringify(err?.response?.data || {}) };
+        }
+      }
+
+      return res.json({
+        success  : true,
+        agent    : target.name,
+        phone    : target.phone,
+        hasToken : !!(target.chakra_hq_token),
+        sendConfig: { hasPluginId: !!resolveSendConfig().pluginId, hasPhoneNumberId: !!resolveSendConfig().phoneNumberId, apiVersion: resolveSendConfig().apiVersion },
+        results
+      });
     } catch (err) {
       return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }

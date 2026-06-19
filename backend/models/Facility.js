@@ -35,18 +35,6 @@ const Facility = sequelize.define('Facility', {
     defaultValue: null,
     comment: 'Icon identifier, mis. emoji atau CSS class (fa-wifi, 🏊, dll.)'
   },
-  category: {
-    type: DataTypes.STRING(50),
-    allowNull: true,
-    defaultValue: null,
-    comment: 'Kategori fasilitas, mis. Keamanan, Kenyamanan, Aksesibilitas, Rekreasi'
-  },
-  sort_order: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    defaultValue: 0,
-    comment: 'Urutan tampil fasilitas (ascending). 0 = default'
-  },
   status: {
     type: DataTypes.INTEGER(1),
     allowNull: false,
@@ -81,8 +69,6 @@ const Facility = sequelize.define('Facility', {
   indexes: [
     { fields: ['facility_id'] },
     { fields: ['status'] },
-    { fields: ['category'] },
-    { fields: ['sort_order'] },
     { fields: ['name'] }
   ]
 });
