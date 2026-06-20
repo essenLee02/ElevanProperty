@@ -1,10 +1,10 @@
-# 09 — Property-Type Playbooks (12 Types × Sewa/Beli)
+# 10 — Property-Type Playbooks (12 Types × Sewa/Beli)
 
 Distilled from the 12 source skill files (House, Apartment, Hotel, Villa, Boarding House,
 Shophouse, Office, Warehouse, Store, Mansion, Kondotel, Other). Each type lists its **frame**,
 the **slot order** for sewa & beli, **skip** rules, a **budget anchor**, and one condensed
 dialog that shows the type's *distinctive* questions. Shared mechanics (budget two-option,
-date normalization, summary brief, C1–C7 conditions) live in `SKILL.md` and doc 10 — not
+date normalization, summary brief, C1–C7 conditions) live in `SKILL.md` and doc 13 — not
 repeated here.
 
 **Legend:** `Loc`=location, `Bud`=budget two-option anchor, `Date`=move-in/check-in/target,

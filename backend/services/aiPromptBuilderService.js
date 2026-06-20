@@ -1,5 +1,5 @@
 const { loadProjectSkillPrompt } = require('./skillPromptService');
-const { detectBudget, detectFacilities } = require('./propertyRecommendationService');
+const { detectBudget, detectFacilities, stripCommercialUsePhrases, detectUseCase, isNonResidentialUse } = require('./propertyRecommendationService');
 const { parseCustomerDate, isDontKnowDateAnswer, WAITING_THE_UPDATE } = require('../utils/customerDateParser');
 
 /* ─── Qualification State Extractor ────────────────────────────────────────── */
@@ -43,7 +43,8 @@ function extractQualificationState(history = [], currentMessage = '') {
     financing       : null,   // Q_KPR  (beli only): cash | KPR | kombinasi
     kprDetails      : null,   // Q_KPR-a (beli + KPR): bank & DP
     propertyCondition: null,  // Q_COND (beli residensial): baru/ready | second | inden
-    useCase         : null,   // beli: own-use | investment
+    useCase         : null,   // own-use | investasi | ibadah | kantor/usaha | liburan
+    rentOutIntent   : false,  // investasi yang akan disewakan (kos/kontrakan) → tanya target penyewa
     aiAskedQ2b      : false,  // true when AI already asked Q2b — show ⏭️, NEVER repeat
   };
 
@@ -91,7 +92,9 @@ function extractQualificationState(history = [], currentMessage = '') {
     // Word-boundary aware detectors — all 12 building types, priority order matters:
     // kondotel before hotel/apartment, mansion/rumah mewah before rumah, store after shophouse.
     const typeOfP0 = (txt) => {
-      const w = (txt || '').toLowerCase();
+      // Strip commercial use-phrases ("dipakai kantor"/"buat usaha") so a residential
+      // property used commercially isn't read as a type switch (→ reset).
+      const w = stripCommercialUsePhrases((txt || '').toLowerCase());
       if (/\bkondotel\b|\bcondotel\b/.test(w))                             return 'kondotel';
       if (/\bmansion\b|\brumah\s+mewah\b/.test(w))                        return 'mansion';
       if (/\bvill?a\b/.test(w))                                            return 'villa';
@@ -183,19 +186,22 @@ function extractQualificationState(history = [], currentMessage = '') {
 
     // Building type (primary) — all 12 types, detection-order: most specific first.
     // kondotel before hotel/apartment; mansion/rumah mewah before rumah; store after shophouse.
+    // Strip USE-phrases first so "rumah utk bangun kos", "ruko buat ibadah",
+    // "dipakai sebagai kantor" don't flip the type to the USE word.
     if (!state.buildingType) {
-      if (/\bkondotel\b|\bcondotel\b/.test(text))                          state.buildingType = 'kondotel';
-      else if (/\bmansion\b|\brumah\s+mewah\b/.test(text))               state.buildingType = 'mansion';
-      else if (/\bvill?a\b/.test(text))                                    state.buildingType = 'villa';
-      else if (/\bapartemen\b|\bapartment\b/.test(text))                   state.buildingType = 'apartment';
-      else if (/\bhotel\b|\bpenginapan\b/.test(text))                     state.buildingType = 'hotel';
-      else if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(text))      state.buildingType = 'boarding_house';
-      else if (/\bruko\b|\brukan\b/.test(text))                           state.buildingType = 'shophouse';
-      else if (/\btoko\b|\bkios\b|\bwarung\b|\bretail\b/.test(text))     state.buildingType = 'store';
-      else if (/\bkantor\b/.test(text))                                   state.buildingType = 'office';
-      else if (/\bgudang\b/.test(text))                                   state.buildingType = 'warehouse';
-      else if (/\brumah\b(?!\s+(?:makan|sakit|tangga|ibadah|duka|produksi|tahanan|susun|potong|kos))|\bhouse\b|\bkontrakan\b/.test(text))           state.buildingType = 'house';
-      else if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(text)) state.buildingType = 'others';
+      const tt = stripCommercialUsePhrases(text);
+      if (/\bkondotel\b|\bcondotel\b/.test(tt))                          state.buildingType = 'kondotel';
+      else if (/\bmansion\b|\brumah\s+mewah\b/.test(tt))               state.buildingType = 'mansion';
+      else if (/\bvill?a\b/.test(tt))                                    state.buildingType = 'villa';
+      else if (/\bapartemen\b|\bapartment\b/.test(tt))                   state.buildingType = 'apartment';
+      else if (/\bhotel\b|\bpenginapan\b/.test(tt))                     state.buildingType = 'hotel';
+      else if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(tt))      state.buildingType = 'boarding_house';
+      else if (/\bruko\b|\brukan\b/.test(tt))                           state.buildingType = 'shophouse';
+      else if (/\btoko\b|\bkios\b|\bwarung\b|\bretail\b/.test(tt))     state.buildingType = 'store';
+      else if (/\bkantor\b/.test(tt))                                   state.buildingType = 'office';
+      else if (/\bgudang\b/.test(tt))                                   state.buildingType = 'warehouse';
+      else if (/\brumah\b(?!\s+(?:makan|sakit|tangga|ibadah|duka|produksi|tahanan|susun|potong|kos))|\bhouse\b|\bkontrakan\b/.test(tt))           state.buildingType = 'house';
+      else if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(tt)) state.buildingType = 'others';
     }
 
     // Fallback types — "kalau/jika tidak/enggak ada [type] ... [type] saja"
@@ -314,6 +320,24 @@ function extractQualificationState(history = [], currentMessage = '') {
       }
     }
 
+    // ── Use-case (semua tipe transaksi) — menentukan apakah Q4 "tinggal bersama
+    //    siapa" relevan. Hanya hunian-sendiri yang perlu Q4. Ibadah, kantor/usaha,
+    //    investasi (disewakan/warung/kos/didiamkan), dan liburan/dinas TIDAK perlu.
+    //    Cth: rumah dibeli utk investasi → tidak ditinggali → jangan tanya penghuni.
+    if (!state.useCase) {
+      const uc = detectUseCase(raw);
+      if (uc === 'ibadah')          state.useCase = 'ibadah (non-hunian)';
+      else if (uc === 'kantor')     state.useCase = 'kantor (non-hunian)';
+      else if (uc === 'usaha')      state.useCase = 'usaha (non-hunian)';
+      else if (uc === 'investasi')  state.useCase = 'investasi';
+      else if (uc === 'liburan')    state.useCase = 'liburan/menginap sementara';
+    }
+    // Rent-out intent → for investment, the relevant question is the TARGET TENANT
+    // (not "tinggal bersama siapa"). Held-as-asset / warung / ibadah have neither.
+    if (!state.rentOutIntent && /\b(disewakan|sewakan|disewain|dikontrakkan|dikontrakan|kos[\s-]?kosan|kontrakan|kontrakkan|bangun\s+kos)\b/.test(text)) {
+      state.rentOutIntent = true;
+    }
+
     // Q8 — Move-in / check-in / target date — deterministic 35-rule parser.
     // 'ok'                → store normalized "DD Bulan YYYY" (year rollover, DD/MM vs
     //                        MM/DD disambiguation, bare month → tanggal 1, dll).
@@ -350,10 +374,10 @@ function extractQualificationState(history = [], currentMessage = '') {
         else if (/\b(second|bekas)\b/.test(text))                 state.propertyCondition = 'second';
         else if (/\binden\b/.test(text))                          state.propertyCondition = 'inden';
       }
-      // Use-case — investasi vs huni/pakai sendiri (menentukan framing Q4)
-      if (!state.useCase) {
-        if (/\binvest(asi)?\b|\bdisewakan\b|\buntuk sewa\b/.test(text))                 state.useCase = 'investasi';
-        else if (/\b(ditempati|tinggal|huni|pakai|usaha|operasional)\s+sendiri\b/.test(text)) state.useCase = 'huni/pakai sendiri';
+      // Use-case (beli) — fallback ke huni-sendiri bila customer eksplisit menyebutnya.
+      // (Kategori non-hunian — investasi/ibadah/kantor/usaha — sudah ditangkap umum di atas.)
+      if (!state.useCase && /\b(ditempati|tinggal|huni|pakai|operasional)\s+sendiri\b/.test(text)) {
+        state.useCase = 'huni/pakai sendiri';
       }
     }
 
@@ -553,9 +577,11 @@ function extractQualificationState(history = [], currentMessage = '') {
       state.kprDetails       = null;
       state.propertyCondition = null;
       state.useCase          = null;
+      state.rentOutIntent    = false;
 
       // Re-populate ONLY what the current message explicitly states — all 12 types.
-      const cur = (currentMessage || '').toLowerCase().trim();
+      // Strip commercial use-phrases ("dipakai kantor") so they don't set a wrong type.
+      const cur = stripCommercialUsePhrases((currentMessage || '').toLowerCase().trim());
       if      (/\bkondotel\b|\bcondotel\b/.test(cur))                          state.buildingType = 'kondotel';
       else if (/\bmansion\b|\brumah\s+mewah\b/.test(cur))                    state.buildingType = 'mansion';
       else if (/\bvill?a\b/.test(cur))                                         state.buildingType = 'villa';
@@ -592,7 +618,7 @@ function extractQualificationState(history = [], currentMessage = '') {
 
     const histType = histMsgs.reduce((t, msg) => {
       if (t) return t;
-      const w = (msg.message || '').toLowerCase();
+      const w = stripCommercialUsePhrases((msg.message || '').toLowerCase());
       if (/\bkondotel\b|\bcondotel\b/.test(w))                             return 'kondotel';
       if (/\bmansion\b|\brumah\s+mewah\b/.test(w))                        return 'mansion';
       if (/\bvill?a\b/.test(w))                                            return 'villa';
@@ -616,7 +642,9 @@ function extractQualificationState(history = [], currentMessage = '') {
       return null;
     }, null);
 
-    const cur = (currentMessage || '').toLowerCase().trim();
+    // Strip commercial use-phrases so "dipakai kantor"/"buat usaha" doesn't read as
+    // a type switch (house→office) and reset the search.
+    const cur = stripCommercialUsePhrases((currentMessage || '').toLowerCase().trim());
     let curType = null;
     if      (/\bkondotel\b|\bcondotel\b/.test(cur))                          curType = 'kondotel';
     else if (/\bmansion\b|\brumah\s+mewah\b/.test(cur))                    curType = 'mansion';
@@ -670,6 +698,7 @@ function extractQualificationState(history = [], currentMessage = '') {
       state.kprDetails       = null;
       state.propertyCondition = null;
       state.useCase          = null;
+      state.rentOutIntent    = false;
       state.fallbackTypes    = [];
     }
   }
@@ -766,12 +795,24 @@ function findNextQuestion(state) {
     return { q: 'Q8', hint: 'Rencananya masuk atau pindah bulan apa? 📅' };
   }
 
-  // Q4 — Penghuni (skip: commercial + hotel/kondotel booking — jumlah orang ditanya via Q14 tipe kamar)
-  if (!state.household && !isCommercial && !isBooking) {
-    if (!isSewa && state.useCase === 'investasi')
-      return { q: 'Q4', hint: 'Untuk investasi: targetnya nanti disewakan ke siapa — karyawan, mahasiswa, keluarga, atau expat? Biar saya carikan tipe yang paling laku 🛏️' };
+  // Q4 — Penghuni. HANYA relevan untuk hunian yang akan DITINGGALI sendiri.
+  //   Skip bila: tipe komersial, booking hotel/kondotel (Q14 tipe kamar),
+  //   ATAU use-case non-hunian (ibadah / kantor / usaha / investasi-didiamkan).
+  //   Kekecualian: investasi yang akan DISEWAKAN (kos/kontrakan) → tanya TARGET
+  //   PENYEWA (bukan "tinggal bersama siapa"). Investasi tanpa niat sewa (didiamkan
+  //   sbg aset / warung / cafe) → tidak ditanya sama sekali.
+  const useNonResidential =
+    /^(ibadah|kantor|usaha)/.test(state.useCase || '') ||
+    (state.useCase === 'investasi' && !state.rentOutIntent);
+  if (!state.household && !isCommercial && !isBooking && !useNonResidential) {
+    if (!isSewa && state.useCase === 'investasi' && state.rentOutIntent)
+      return { q: 'Q4', hint: 'Untuk investasi sewa: target penyewanya nanti siapa — karyawan, mahasiswa, keluarga, atau expat? Biar saya carikan tipe yang paling laku 🛏️' };
+    // Liburan/dinas sementara → bukan penghuni tetap; tanya KAPASITAS (jumlah tamu
+    // yang menginap) supaya bisa pilih villa/unit dgn jumlah kamar yang pas.
+    if (/^liburan/.test(state.useCase || ''))
+      return { q: 'Q4', hint: 'Nanti akan menginap berapa orang, Kak? Biar saya carikan yang pas jumlah kamarnya 🛏️' };
     if (!isSewa)
-      return { q: 'Q4', hint: 'Nanti akan ditempati bersama siapa saja? Biar pas jumlah kamarnya 🛏️ (Jika untuk investasi: tanyakan target penyewanya)' };
+      return { q: 'Q4', hint: 'Nanti akan ditempati bersama siapa saja? Biar pas jumlah kamarnya 🛏️' };
     return { q: 'Q4', hint: 'Nanti akan tinggal bersama siapa saja? Biar saya bisa carikan yang pas jumlah kamarnya 🛏️' };
   }
 
@@ -957,7 +998,10 @@ function buildQualificationStateBlock(state) {
         ? `⏭️ Riwayat pencarian [Q2b]: Sudah ditanyakan — customer tidak menjawab langsung. ⛔ JANGAN tanya ulang. Lanjut ke Q berikutnya.`
         : `❓ Riwayat pencarian [Q2b]: BELUM DITANYAKAN`,
     row('Budget            [Q3]', state.budget),
-    row('Penghuni          [Q4]', state.household),
+    row('Penghuni          [Q4]', state.household
+      || (/^(ibadah|kantor|usaha)/.test(state.useCase || '') ? `N/A — ${state.useCase} (jangan tanya penghuni)`
+        : (state.useCase === 'investasi' && !state.rentOutIntent) ? 'N/A — investasi/didiamkan (jangan tanya penghuni)'
+        : null)),
     row('Red flags         [Q5]', state.redFlags),
     row('Patokan lokasi    [Q6]', state.anchorPoint),
     row('Area alternatif   [Q7]', state.alternativeAreas),

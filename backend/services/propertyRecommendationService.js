@@ -160,6 +160,74 @@ function stripAmbiguousRumah(text) {
 }
 
 /**
+ * Remove "use-case" phrases where a property is bought/rented to be USED AS another
+ * type — e.g. a house bought "untuk dipakai kantor" / "digunakan sebagai kantor" /
+ * "buat usaha" (software house, UMKM). The trailing type word there is a USE, not a
+ * request to change the property type, so it must not trigger type detection (which
+ * would flip house→office and reset the whole search). The established type is kept;
+ * the commercial use is captured separately (see detectCommercialUse).
+ */
+const _USE_LEAD = '(?:untuk|buat|dipakai|dipake|digunakan|dijadikan|jadikan|jadiin|jadi|sebagai|bangun|dibangun|membangun|bikin|dibikin|dibuat|buka|membuka|dibuka)';
+const _USE_TYPE = '(?:kantor|perkantoran|usaha|bisnis|umkm|startup|software\\s*house|softwarehouse|co[\\s-]?working|coworking|workshop|office|toko|ruko|gudang|warehouse|store|klinik|salon|cafe|kafe|resto|restoran|restaurant|warung|kos[\\s-]?kosan|kontrakan|kontrakkan|kost|kos|studio|ibadah|masjid|mushola|musholla|gereja|pura|vihara)';
+function stripCommercialUsePhrases(text) {
+  return text.replace(new RegExp(`\\b${_USE_LEAD}\\s+(?:${_USE_LEAD}\\s+)?${_USE_TYPE}\\b`, 'gi'), '');
+}
+
+/**
+ * Detect that the customer intends to USE the property commercially (as an office /
+ * business). Returns 'kantor' | 'usaha' | '' . Kept for backward compatibility.
+ */
+function detectCommercialUse(text = '') {
+  const t = normalizeText(text);
+  if (new RegExp(`\\b${_USE_LEAD}\\s+(?:${_USE_LEAD}\\s+)?(kantor|perkantoran|office|software\\s*house|softwarehouse|co[\\s-]?working|coworking|startup|workshop)\\b`, 'i').test(t))
+    return 'kantor';
+  if (new RegExp(`\\b${_USE_LEAD}\\s+(?:${_USE_LEAD}\\s+)?(usaha|bisnis|umkm|toko|ruko|store|klinik|salon)\\b`, 'i').test(t))
+    return 'usaha';
+  return '';
+}
+
+/**
+ * Detect the property USE-CASE so the flow can decide whether the "who will live
+ * there?" (occupants) question even applies. The occupants/bedrooms question is ONLY
+ * relevant for residential own-living use. Returns one of:
+ *   'ibadah'    — worship (masjid, gereja, mushola, pengajian, …)
+ *   'investasi' — investment / rent-out / income (disewakan, warung, cafe, kos,
+ *                 kontrakan, didiamkan sebagai aset, yield, ROI)
+ *   'kantor'    — office / commercial (software house, UMKM, coworking, …)
+ *   'usaha'     — other business (toko, salon, klinik, …)
+ *   'liburan'   — vacation / temporary stay (liburan, dinas, staycation, honeymoon)
+ *   ''          — unknown → assume residential
+ */
+function detectUseCase(text = '') {
+  const t = normalizeText(text);
+  if (/\b(ibadah|tempat\s+ibadah|rumah\s+ibadah|masjid|mushola|musholla|surau|langgar|gereja|kapel|pura|vihara|klenteng|kelenteng|sinagoga|pengajian|kebaktian|misa|sembahyang|rumah\s+doa|tpa|tpq|madrasah)\b/.test(t))
+    return 'ibadah';
+  if (/\b(investasi|investment|invest|disewakan|sewakan|disewain|dikontrakkan|dikontrakan|jualan|warung|kafe|cafe|resto|restoran|restaurant|kos[\s-]?kosan|bangun\s+kos|kontrakan|kontrakkan|didiamkan|didiemin|dibiarkan|aset|asset|yield|roi|capital\s+gain|passive\s+income|flipping|disewa\s*kan|usaha\s+sewa|rental\s+income)\b/.test(t))
+    return 'investasi';
+  const comm = detectCommercialUse(t);
+  if (comm) return comm;
+  if (/\b(liburan|berlibur|vacation|holiday|staycation|wisata|honeymoon|bulan\s+madu|dinas|perjalanan\s+dinas|business\s+trip|sementara|transit|short\s*stay|workation)\b/.test(t))
+    return 'liburan';
+  return '';
+}
+
+const _NON_RESIDENTIAL_USES = new Set(['ibadah', 'investasi', 'kantor', 'usaha']);
+/** True when the property is NOT for own-living → skip the occupants question. */
+function isNonResidentialUse(text = '') {
+  return _NON_RESIDENTIAL_USES.has(detectUseCase(text));
+}
+/** Human-readable label for the use-case (for summaries). */
+function useCaseLabel(use = '') {
+  return ({
+    ibadah   : 'Untuk ibadah (non-hunian)',
+    investasi: 'Untuk investasi (non-hunian)',
+    kantor   : 'Untuk kantor/usaha (non-hunian)',
+    usaha    : 'Untuk usaha/komersial (non-hunian)',
+    liburan  : 'Untuk liburan/menginap sementara',
+  })[use] || '';
+}
+
+/**
  * Word-bounded keyword match.
  * Multi-word keywords (contain space) → simple substring (already unambiguous).
  * Single-word keywords → require word boundary so "kosongan" ≠ "kos",
@@ -176,9 +244,10 @@ function includesAnyWordBounded(text, words = []) {
 
 function detectBuildingType(message = '') {
   const text = normalizeText(message);
-  // Strip "dekat X" anchors AND ambiguous "rumah makan/sakit/…" so neither pollutes
-  // building-type detection (a restaurant anchor must not become type=house).
-  const textForType = stripAmbiguousRumah(stripNearPhrases(text));
+  // Strip "dekat X" anchors, ambiguous "rumah makan/…", AND commercial use-phrases
+  // ("dipakai kantor", "buat usaha") so none pollutes building-type detection
+  // (a restaurant anchor must not become house; a house used as office stays house).
+  const textForType = stripCommercialUsePhrases(stripAmbiguousRumah(stripNearPhrases(text)));
   return Object.entries(PROPERTY_TYPES).find(([, keywords]) => includesAnyWordBounded(textForType, keywords))?.[0] || '';
 }
 
@@ -1089,6 +1158,11 @@ module.exports = {
   findWithExpandedBudget,
   detectBudget,
   detectFacilities,
+  stripCommercialUsePhrases,
+  detectCommercialUse,
+  detectUseCase,
+  isNonResidentialUse,
+  useCaseLabel,
   parsePropertyPrice,
   budgetMatches,
   propertyMatchesCoreVisibleRequest,

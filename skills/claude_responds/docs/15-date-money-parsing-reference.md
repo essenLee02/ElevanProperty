@@ -1,4 +1,4 @@
-# 12 — Date & Money Parsing Reference
+# 15 — Date & Money Parsing Reference
 
 The server parses customer date and budget inputs deterministically before the AI sees them.
 The results appear as canonical strings inside the **QUALIFICATION STATE** block injected in every prompt.
@@ -150,7 +150,7 @@ AI       : Siap! Budget 700K–1.2jt/bulan, Kak?
 - `814 juta-915K` → Rp 915.000 - Rp 814.000.000
 
 **USD → × Rp 18.000:**
-- `30USD-20` → Rp 360.000 - Rp 540.000 *(20 also in USD)*
+- `30USD-20` → Rp 360.000 - Rp 540.000 *(20 inherits USD → 20 × 18.000)*
 
 **Counts and durations are NOT budget:**
 ```

@@ -109,7 +109,13 @@ assert('apartemen beli → Q_COND dulu',       findNextQuestion({ ...beliBase, b
 assert('mansion beli → Q14 multi-generasi',  findNextQuestion({ ...beliBase, buildingType: 'mansion', financing: 'cash', propertyCondition: 'baru/ready', furnishing: 'semi' }).hint.includes('multi-generasi'), true);
 assert('kondotel beli → Q14 ROI',            findNextQuestion({ ...beliBase, buildingType: 'kondotel', financing: 'cash' }).hint.includes('ROI'), true);
 assert('beli Q8 wording = target beli',      findNextQuestion({ buildingType: 'house', transactionType: 'sale', location: 'Surabaya', searchHistory: 'y', budget: '1M' }).hint.includes('target'), true);
-assert('beli Q4 investasi → target penyewa', findNextQuestion({ ...beliBase, household: null, useCase: 'investasi' }).hint.includes('disewakan ke siapa'), true);
+// Investasi yang akan DISEWAKAN (kos/kontrakan) → tanya target penyewa (bukan "tinggal bersama siapa").
+assert('beli Q4 investasi+sewa → target penyewa', findNextQuestion({ ...beliBase, household: null, useCase: 'investasi', rentOutIntent: true }).hint.includes('target penyewa'), true);
+// Investasi tanpa niat sewa (didiamkan sbg aset) → JANGAN tanya penghuni; skip Q4.
+assert('beli Q4 investasi didiamkan → skip Q4', findNextQuestion({ ...beliBase, household: null, useCase: 'investasi', rentOutIntent: false }).q !== 'Q4', true);
+// Use-case non-hunian (kantor/usaha/ibadah) → skip Q4 sepenuhnya.
+assert('beli Q4 kantor → skip Q4',            findNextQuestion({ ...beliBase, household: null, useCase: 'kantor (non-hunian)' }).q !== 'Q4', true);
+assert('beli Q4 ibadah → skip Q4',            findNextQuestion({ ...beliBase, household: null, useCase: 'ibadah (non-hunian)' }).q !== 'Q4', true);
 
 console.log('\n── Group 5: Q8 klarifikasi (rule 25/35) via findNextQuestion ──');
 const sewaBase = { buildingType: 'house', transactionType: 'rent', location: 'Surabaya', searchHistory: 'y', budget: '5jt' };

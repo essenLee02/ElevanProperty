@@ -183,6 +183,10 @@ Q4   Household           "Nanti akan tinggal bersama siapa saja?
      (never ask rooms)    Biar saya bisa carikan yang pas jumlah kamarnya 🛏️"
      Infers: bedrooms + decision maker (spouse/parents = joint).
      Short answers valid: "sendiri", "sama istri", "berdua" → acknowledge + proceed.
+     ⚠️ USE-CASE GATE — only ask when the property will be LIVED IN. SKIP for
+     non-hunian: investasi (didiamkan/dijual lagi), usaha/kantor, ibadah. For
+     investasi-sewa (kos/kontrakan) ask TARGET PENYEWA instead. For liburan/dinas
+     ask CAPACITY ("menginap berapa orang"). Full table in doc 09 §Q4.
 
 Q5   Red flags           "Ada yang pasti tidak cocok? Misalnya hadap barat,
      Skip if in Q2b.     dekat jalan ramai, gang sempit, atau rumah tua?"
@@ -331,20 +335,37 @@ Extended types (Kavling, Tanah, Resort, Loft, Penthouse, Studio) → `others`.
 
 ## 10. Document Index
 
+Docs are concatenated in numeric order (`01` → `15`). Three layers, read top-to-bottom:
+
+**Layer A — Core behavior (always applies)**
+
 | File | Topic |
 |------|-------|
-| `docs/01-core-role-scope-style.md` | Role, types, bilingual, style |
-| `docs/02-property-intent-terminology-data.md` | Keyword detection, 2-condition logic |
-| `docs/03-catalog-matching-recommendations.md` | Strict type, location fallback, budget expansion |
-| `docs/04-history-memory-context.md` | Context continuation, Q4 household, reset rules |
-| `docs/05-multilingual-provider-sync.md` | Language rules, FORCED REPLY LANGUAGE |
-| `docs/06-response-format-templates-quality.md` | WhatsApp format, emojis, templates |
-| `docs/07-offtopic-clarification-negotiation-escalation.md` | Off-topic guard, escalation |
-| `docs/08-rumah123-live-data.md` | Rumah123 live listings, Apify |
-| `docs/09-qualification-flow.md` | Full Q1–Q12, skip logic, state injector, 35 date rules |
-| `docs/10-property-type-conversation-patterns.md` | Per-type Q14 slots, 24-combination matrix, BELI flow |
-| `docs/11-intent-detection-diagnosis-response.md` | Intent detection & diagnosis |
-| `docs/12-house-v2-pilot.md` | **House v2 pilot** — unnamed assistant, motivation + financing readiness, handoff + internal [BRIEF_READY] (house only) |
+| `docs/01-core-role-scope-style.md` | Role, scope, supported types, bilingual style |
+| `docs/02-property-intent-terminology-data.md` | Keyword detection, 2-condition property-intent logic |
+| `docs/03-catalog-matching-recommendations.md` | Strict type matching, location fallback, budget expansion |
+| `docs/04-history-memory-context.md` | Context continuation & accumulation, type-change reset |
+| `docs/05-multilingual-provider-sync.md` | Language rules, `FORCED REPLY LANGUAGE`, provider sync |
+| `docs/06-response-format-templates-quality.md` | WhatsApp formatting, emojis, reply templates |
+| `docs/07-offtopic-clarification-negotiation-escalation.md` | Off-topic guard, clarification, negotiation, escalation |
+| `docs/08-rumah123-live-data.md` | Rumah123 live listings via Apify |
+
+**Layer B — Qualification engine (Mode OFF flow)**
+
+| File | Topic |
+|------|-------|
+| `docs/09-qualification-flow.md` | Master Q1–Q12 flow, skip logic, state injector, **use-case gating** (Q4 occupants only for own-living; investasi/usaha/ibadah skip it) |
+| `docs/10-property-type-playbooks.md` | 12 types × sewa/beli — frame, slot order, skip rules, budget anchor per type |
+| `docs/11-property-type-conversation-patterns.md` | Per-type Q14 slots, 24-combination matrix, BELI/KPR branch |
+| `docs/12-house-v2-pilot.md` | **House v2 pilot** (house only) — unnamed agent-representative qualifier, motivation + financing readiness, visible summary + internal `[BRIEF_READY]` |
+
+**Layer C — Diagnosis & reference**
+
+| File | Topic |
+|------|-------|
+| `docs/13-customer-conditions-and-tone.md` | Tone adaptation per customer state, C1–C7 conditions (*how* to ask) |
+| `docs/14-intent-detection-diagnosis-response.md` | Type/transaction disambiguation, ambiguity resolution, topic-change focus |
+| `docs/15-date-money-parsing-reference.md` | Deterministic date (35 rules) + money parsing — copy canonical state strings verbatim |
 
 ---
 

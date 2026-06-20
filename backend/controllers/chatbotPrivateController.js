@@ -19,6 +19,11 @@ const { findOrCreateSession,
 const { buildRecommendationContextForLLM,
         extractPropertyFilters,
         getVisibleMatchesFromAlternatives,
+        stripCommercialUsePhrases,
+        detectCommercialUse,
+        detectUseCase,
+        isNonResidentialUse,
+        useCaseLabel,
         searchProperties }                    = require('../services/propertyRecommendationService');
 const { getRumah123Listings,
         mapBuildingTypeToApify,
@@ -1145,7 +1150,9 @@ class ConversationQualifier {
 
     // Word-boundary type / tx detectors (used by both boundaries below).
     const _typeOfP0 = (txt) => {
-      const w = (txt || '').toLowerCase();
+      // Strip commercial use-phrases ("dipakai kantor", "buat usaha") so a house
+      // used as an office isn't read as a type switch house→office.
+      const w = stripCommercialUsePhrases((txt || '').toLowerCase());
       if (/\bvill?a\b/.test(w))                                              return 'villa';
       if (/\bapartemen\b|\bapartment\b/.test(w))                             return 'apartment';
       if (/\bmansion\b|\brumah mewah\b/.test(w))                            return 'mansion';
@@ -1245,7 +1252,9 @@ class ConversationQualifier {
     // Uses activeHistory so we only detect type changes WITHIN the current
     // search session, not between the current and a pre-summary session.
     const histCustMsgs = activeHistory.filter(m => m.role === 'user' || m.role === 'customer');
-    const histCustJoined = histCustMsgs.map(m => (m.message || '').toLowerCase()).join(' ');
+    // Strip commercial use-phrases ("dipakai kantor", "buat usaha") so a house used
+    // as an office isn't mis-read as a type change house→office (which would reset).
+    const histCustJoined = stripCommercialUsePhrases(histCustMsgs.map(m => (m.message || '').toLowerCase()).join(' '));
     let histBuildingType = null;
     if      (/\bvill?a\b/.test(histCustJoined))                                             histBuildingType = 'villa';
     else if (/\bapartemen\b|\bapartment\b/.test(histCustJoined))                            histBuildingType = 'apartment';
@@ -1260,7 +1269,7 @@ class ConversationQualifier {
     else if (/\btoko\b|\bretail\b/.test(histCustJoined))                                  histBuildingType = 'store';
     else if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(histCustJoined)) histBuildingType = 'others';
 
-    const curMsgLower = (userMessage || '').toLowerCase();
+    const curMsgLower = stripCommercialUsePhrases((userMessage || '').toLowerCase());
     let curBuildingType = null;
     if      (/\bvill?a\b/.test(curMsgLower))                                             curBuildingType = 'villa';
     else if (/\bapartemen\b|\bapartment\b/.test(curMsgLower))                            curBuildingType = 'apartment';
@@ -1436,7 +1445,16 @@ class ConversationQualifier {
         'family', 'wife', 'husband', 'children', 'parents', 'alone', 'partner',
         'couple', 'anak-anak', 'ortu', 'rombongan', 'grup', 'group', 'gathering',
         'reuni', 'arisan',
-      ]) || /\b\d{1,3}\s*(orang|pax|people|tamu|peserta)\b/.test(custText),
+      ]) || /\b\d{1,3}\s*(orang|pax|people|tamu|peserta)\b/.test(custText)
+        || isNonResidentialUse(custText),   // non-hunian (kantor/usaha/investasi/ibadah) = penghuni N/A
+
+      /* ── Use-case properti: rumah/ruko/villa dipakai untuk selain ditinggali —
+       *    ibadah, investasi (disewakan/warung/kos/didiamkan), kantor/usaha, atau
+       *    liburan/dinas. Bukan ganti tipe — hanya catatan penggunaan. Dipakai
+       *    untuk MELEWATI pertanyaan "tinggal bersama siapa" bila non-hunian. ── */
+      useCase: detectUseCase(custText) || null,
+      isNonResidential: isNonResidentialUse(custText),
+      commercialUse: detectCommercialUse(custText) || null,
       // NOTE: bare 'sudah'/'pernah' removed — they false-matched "kontrakan sudah
       // habis" (a motivation phrase) as a search-history answer. Require the
       // specific "sudah lihat / pernah lihat / sudah survey" phrasings instead.
@@ -2616,6 +2634,11 @@ class ConversationQualifier {
   }
 
   static #extractHouseholdSummary(custText) {
+    // Non-residential / temporary use (worship, investment, office/business, or a
+    // vacation/temporary stay) — not a residential occupancy, so show the USE instead
+    // of a bedroom-oriented label. We never asked "tinggal bersama siapa" here.
+    const use = detectUseCase(custText);
+    if (use) return useCaseLabel(use);
     const childM = custText.match(/(\d+)\s*anak/);
     if (childM) return `Keluarga dengan ${childM[1]} anak`;
     // Explicit headcount of any size (e.g. "15 orang") — a group (≥6) is flagged.

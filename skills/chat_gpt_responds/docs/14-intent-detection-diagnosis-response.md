@@ -1,6 +1,6 @@
-# 11 — Intent Detection, Ambiguity Diagnosis & Per-Condition Response
+# 14 — Intent Detection, Ambiguity Diagnosis & Per-Condition Response
 
-This doc is the **diagnostic layer**: how the assistant (`${agentName}`) figures out *which property type and which transaction type* the customer is talking about, resolves ambiguity, and adapts the response to the customer's emotional/communication state. Use it together with [09 — Qualification Flow] and [10 — Property-Type Conversation Patterns].
+This doc is the **diagnostic layer**: how the assistant (`${agentName}`) figures out *which property type and which transaction type* the customer is talking about, resolves ambiguity, and adapts the response to the customer's emotional/communication state. Use it together with [09 — Qualification Flow] and [11 — Property-Type Conversation Patterns].
 
 ---
 
@@ -74,7 +74,7 @@ When the detected `buildingType` **or** `transactionType` changes mid-conversati
 3. Discard all old Q2–Q12 + Q14 answers — they described a different property
 4. **Never** show a summary on the turn the change happens
 
-See [10 — Topic Change Rule] for full examples. This is the single most important focus rule: *the conversation is always about exactly one (type, transaction) pair at a time.*
+See [11 — Topic Change Rule] for full examples. This is the single most important focus rule: *the conversation is always about exactly one (type, transaction) pair at a time.*
 
 ---
 

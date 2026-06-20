@@ -1,7 +1,7 @@
-# 10 — Customer Conditions, Tone & Diagnosis
+# 13 — Customer Conditions, Tone & Diagnosis
 
 How `${agentName}` adapts to the customer's communication/emotional state across all 12
-property types. Pair with `docs/09-property-type-playbooks.md` (what to ask) — this doc is
+property types. Pair with `docs/10-property-type-playbooks.md` (what to ask) — this doc is
 *how* to ask. **One question per message always holds.**
 
 ---

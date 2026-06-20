@@ -636,6 +636,19 @@ function isPropertyContextContinuation(message, history = []) {
   if (/\b(jalan\s+(raya|lebar|besar|utama|kecil)|akses\s+(mudah|jalan|tol)|hook|pojok|sudut|menghadap|hadap\s+(timur|barat|utara|selatan|matahari)|bebas\s+banjir|tidak\s+banjir|jalan\s+ramai|bising)\b/i.test(lower))
     return true;
 
+  // 15b) Jawaban / pertanyaan FINANCING (Q_KPR / Q_KPR-a) — "cash", "KPR", "DP",
+  //      "cicilan", "tenor", "bunga", "uang muka". Konteks sudah diverifikasi di atas
+  //      (mis. AI baru tanya cash/KPR). Mencakup "Cash KPR better mana?", "kasi rekom DP".
+  if (/\b(kpr|dp|cash|tunai|cicilan|angsuran|tenor|bunga|uang\s+muka|down\s+payment|kredit)\b/i.test(lower))
+    return true;
+
+  // 15c) Permintaan rekomendasi / saran / keputusan dalam konteks properti —
+  //      "kasi rekom DP", "rekomendasi", "saran", "better mana", "yang mana",
+  //      "gimana", "summarize", "ringkas". Pendek (≤ 60) + konteks properti aktif.
+  if (lower.length <= 60 &&
+      /\b(rekom|rekomendasi|rekomen|saran|sarankan|kasi|kasih|tolong|gimana|bagaimana|better|lebih\s+baik|yang\s+mana|mana\s+(yang|lebih)|pilih\s+mana|summar(y|ize|kan)|ringkas|simpulkan)\b/i.test(lower))
+    return true;
+
   // 16) ── FINAL FALLBACK ──────────────────────────────────────────────────────
   //     Sampai titik ini sudah terbukti: (a) ada konteks properti di history,
   //     (b) pesan AI terakhir adalah PERTANYAAN properti, (c) pesan bukan topik

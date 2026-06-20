@@ -151,6 +151,113 @@ console.log('\n── Group 7: deep-flow answers when property TYPE has scrolled
   ok('no context + no recent Q → rejected', isPropertyContextContinuation('Saya mau full furnished', [A('halo'), C('hai')]) === false);
 }
 
+console.log('\n── Group 8: financing follow-ups & recommendation requests (Q_KPR/Q_KPR-a) ──');
+{
+  const { isPropertyContextContinuation } = require('../utils/propertyKeywordFilter');
+  const A = (m) => ({ role: 'ai', message: m });
+  const C = (m) => ({ role: 'customer', message: m });
+  const kprQ = [
+    A('Tinggal bersama siapa? 🛏️'), C('keluarga'),
+    A('Untuk pembeliannya, rencana pakai KPR atau cash, Kak?'), C('Cash KPR better mana?'),
+    A('Untuk KPR-nya, sudah sempat cek atau ajukan ke bank, atau masih rencana, Kak? DP-nya kira-kira berapa persen?'),
+  ];
+  ok('"kasi rekom DP" passes',        isPropertyContextContinuation('kasi rekom DP', kprQ) === true);
+  ok('"Cash KPR better mana?" passes',isPropertyContextContinuation('Cash KPR better mana?', kprQ) === true);
+  ok('"summarize pls" passes',        isPropertyContextContinuation('summarize pls', kprQ) === true);
+  ok('"DP 20 persen" passes',         isPropertyContextContinuation('DP 20 persen', kprQ) === true);
+  ok('"cash aja" passes',             isPropertyContextContinuation('cash aja', kprQ) === true);
+  // guards
+  ok('"kasi makan dulu ya" rejected', isPropertyContextContinuation('kasi makan dulu ya', kprQ) === false);
+  ok('no context → "kasi rekom DP" rejected', isPropertyContextContinuation('kasi rekom DP', [A('halo'), C('hai')]) === false);
+}
+
+console.log('\n── Group 9: house used as office (commercial use ≠ type change) ──');
+{
+  const svc = require('../services/propertyRecommendationService');
+  const { extractQualificationState } = require('../services/aiPromptBuilderService');
+  const C = (m) => ({ role: 'customer', message: m });
+  const A = (m) => ({ role: 'ai', message: m });
+  // Use-phrases must NOT be detected as a type
+  ok('"digunakan sebagai kantor" → no type', svc.detectBuildingType('Utk digunakan sebagai kantor') === '');
+  ok('"yang buat usaha" → no type',          svc.detectBuildingType('mau yang buat usaha') === '');
+  ok('"rumah ini buat usaha" → house (rumah wins, use stripped)', svc.detectBuildingType('rumah ini buat usaha') === 'house');
+  ok('detectCommercialUse → kantor',         svc.detectCommercialUse('Utk digunakan sebagai kantor') === 'kantor');
+  ok('detectCommercialUse → usaha',          svc.detectCommercialUse('mau dipakai untuk usaha UMKM') === 'usaha');
+  // Genuine office request still works
+  ok('"mau sewa kantor di sudirman" → office', svc.detectBuildingType('mau sewa kantor di sudirman') === 'office');
+  ok('"cari ruko untuk kantor" → shophouse (ruko wins)', svc.extractPropertyFilters('cari ruko untuk kantor', []).buildingType === 'shophouse');
+
+  // Full flow: house-for-office must NOT reset the house search
+  const hist = [
+    C('Rumah utk dibeli'), A('apa yang membuat cari sekarang?'),
+    C('Investasi'), A('sudah lihat beberapa rumah?'),
+    C('Belum'), A('Nanti akan ditinggali bersama siapa saja, Kak? 🛏️'),
+  ];
+  const last = 'Utk digunakan sebagai kantor';
+  const f = svc.extractPropertyFilters(last, hist);
+  ok('filters stay house (no reset)', f.buildingType === 'house');
+  const st = extractQualificationState(hist, last);
+  ok('state stays house, not office',  st.buildingType === 'house');
+  ok('state typeChanged = false',      st.typeChangedFromHistory === false);
+}
+
+console.log('\n── Group 10: use-case decides whether "tinggal bersama siapa" is asked ──');
+{
+  const svc = require('../services/propertyRecommendationService');
+  const { extractQualificationState, findNextQuestion } = require('../services/aiPromptBuilderService');
+  const C = (m) => ({ role: 'customer', message: m });
+  const A = (m) => ({ role: 'ai', message: m });
+
+  // detectUseCase categories
+  ok('"untuk investasi" → investasi',        svc.detectUseCase('beli rumah untuk investasi') === 'investasi');
+  ok('"didiamkan sbg aset" → investasi',     svc.detectUseCase('mau didiamkan saja sebagai aset') === 'investasi');
+  ok('"buka warung" → investasi',            svc.detectUseCase('rumahnya mau buka warung makan') === 'investasi');
+  ok('"untuk tempat ibadah" → ibadah',       svc.detectUseCase('disewa untuk tempat ibadah') === 'ibadah');
+  ok('"buat mushola" → ibadah',              svc.detectUseCase('mau buat mushola') === 'ibadah');
+  ok('"untuk liburan" → liburan',            svc.detectUseCase('villa untuk liburan keluarga') === 'liburan');
+  ok('"dinas sementara" → liburan',          svc.detectUseCase('buat dinas kerja sementara') === 'liburan');
+  ok('"dipakai kantor" → kantor',            svc.detectUseCase('dipakai sebagai kantor') === 'kantor');
+  ok('residential "sama keluarga" → ""',     svc.detectUseCase('mau ditinggali sama keluarga') === '');
+
+  ok('isNonResidentialUse(investasi)=true',  svc.isNonResidentialUse('untuk investasi') === true);
+  ok('isNonResidentialUse(ibadah)=true',     svc.isNonResidentialUse('untuk tempat ibadah') === true);
+  ok('isNonResidentialUse(liburan)=false',   svc.isNonResidentialUse('untuk liburan') === false); // liburan masih ada tamu (Q14)
+  ok('isNonResidentialUse(keluarga)=false',  svc.isNonResidentialUse('sama keluarga') === false);
+
+  // build-kos must NOT flip the bought house's type, but DOES set investasi + rent-out
+  ok('"rumah utk bangun kos" → house', svc.detectBuildingType('beli rumah untuk bangun kos') === 'house');
+  ok('"dibangun kos-kosan" stripped → house',
+    extractQualificationState([C('Beli rumah di malang'), A('kenapa?')], 'mau dibangun kos-kosan').buildingType === 'house');
+
+  // Flow: beli rumah + motivasi investasi → JANGAN tanya "tinggal bersama siapa"
+  const invHist = [
+    C('Beli rumah di darmo 2M'), A('Boleh tahu apa yang membuat Kak cari rumah sekarang?'),
+  ];
+  const invSt = extractQualificationState(invHist, 'Untuk investasi');
+  ok('investasi → useCase set',           invSt.useCase === 'investasi');
+  ok('investasi (didiamkan) → not asking Q4 occupants', (function(){
+    const n = findNextQuestion(invSt); return !(n && n.q === 'Q4' && /tinggal bersama|ditempati bersama/.test(n.hint || ''));
+  })());
+
+  // Flow: sewa ruko untuk ibadah → JANGAN tanya penghuni, tipe tetap ruko
+  const ibHist = [ C('Sewa ruko di surabaya'), A('untuk apa rencananya?') ];
+  const ibSt = extractQualificationState(ibHist, 'untuk tempat ibadah');
+  ok('ibadah → tipe tetap shophouse',     ibSt.buildingType === 'shophouse');
+  ok('ibadah → useCase non-hunian',       /ibadah/.test(ibSt.useCase || ''));
+
+  // Flow: sewa villa untuk LIBURAN → TETAP tanya kapasitas, framing "menginap berapa orang"
+  const libHist = [
+    C('Sewa villa di batu buat liburan'), A('Sudah lihat berapa villa?'), C('Belum pernah'),
+    A('Di Batu kisaran 2jt dan 8jt/malam, mana mendekati?'), C('sekitar 3jt/malam'),
+    A('Ada yang pasti tidak cocok? 🚫'), C('nggak ada'),
+    A('Rencananya check-in bulan apa? 📅'), C('Juli 2026'),
+  ];
+  const libSt = extractQualificationState(libHist, 'Juli 2026');
+  const libNext = findNextQuestion(libSt);
+  ok('liburan → tetap tanya penghuni (Q4)',      libNext && libNext.q === 'Q4');
+  ok('liburan → framing kapasitas "menginap"',   libNext && /menginap berapa orang/.test(libNext.hint || ''));
+}
+
 console.log('\n═══════════════════════════════════');
 console.log(`RESULT: ${pass}/${pass + fail} passed ${fail === 0 ? '✅ ALL PASS' : '❌ FAILURES'}`);
 console.log('═══════════════════════════════════');

@@ -202,7 +202,7 @@ number viewed → `search_stage`.
 "Di [area] ada yang di kisaran [LOW] dan ada yang lebih di [HIGH].
  Kira-kira yang mana lebih mendekati rencana Kak?"
 ```
-Use realistic local anchors for the area (see doc 10 anchor table). Do **not** quote a specific unit.
+Use realistic local anchors for the area (see doc 11 anchor table). Do **not** quote a specific unit.
 
 **Q6 — Occupants (infer bedrooms, never ask room count directly):**
 ```
@@ -210,6 +210,14 @@ Use realistic local anchors for the area (see doc 10 anchor table). Do **not** q
  Biar saya bisa catat jumlah kamar yang pas."
 ```
 Inference: `sendiri=1BR · berdua=1–2BR · +1 anak=2–3BR · +2 anak=3–4BR · keluarga besar=4–5BR`.
+
+> **SKIP Q6 when the house won't be lived in.** If QM motivation = **investasi**
+> (didiamkan sbg aset / dijual lagi), or the house will be used for **usaha/kantor**
+> (warung, software house, UMKM), **ibadah**, or *dibangun* kos/kontrakan — the buyer
+> won't live there, so do NOT ask "ditinggali bersama siapa". Skip straight to **QF
+> (financing)**. For investasi-sewa (kos/kontrakan) you may instead ask the **target
+> penyewa** (karyawan/mahasiswa/keluarga/expat). Catat use-case; JANGAN ganti tipe
+> rumah → kantor/kos. (Mirror of the doc 09 §Q4 use-case gate, backend-enforced.)
 
 **QF — Financing readiness (the part that ranks the lead):**
 ```

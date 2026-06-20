@@ -1,4 +1,4 @@
-# 12 — Date & Money Parsing Reference
+# 15 — Date & Money Parsing Reference
 
 The server parses customer date and budget inputs deterministically before the AI sees them.
 The results appear as canonical strings inside the **QUALIFICATION STATE** block injected in every prompt.
