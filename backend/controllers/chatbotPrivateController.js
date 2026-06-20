@@ -1338,7 +1338,7 @@ class ConversationQualifier {
         'furnished', 'semi-furnished', 'semifurnished', 'unfurnished',
         'kosongan', 'full furnish', 'sudah ada furnitur', 'mau yang kosong',
         'perabot', 'furniture', 'furnish',
-      ]),
+      ]) || /\b(semi|full)\b/i.test(custText) || /\bkosong\b/i.test(custText),
 
       /* ── Q_FAC: Facilities/amenities (WAJIB ditanyakan untuk transaksi SEWA) ──
        * Captured via filters.facilities (detectFacilities accumulates across the
@@ -1381,7 +1381,12 @@ class ConversationQualifier {
         'investasi', 'invest', 'disewakan', 'pensiun', 'menikah', 'nikah', 'kerja baru',
         'relokasi', 'butuh rumah', 'numpang', 'pisah', 'cerai', 'growing family',
         'relocation', 'lease ending', 'moving',
-      ]),
+        // Penugasan kerja / tinggal sementara / liburan = alasan (motivasi) yang sah
+        'dinas', 'perjalanan dinas', 'tugas', 'ditugaskan', 'penugasan', 'pindah kerja',
+        'pindah tugas', 'kerja sementara', 'kerja sebentar', 'sementara', 'proyek',
+        'kuliah', 'study', 'liburan', 'berlibur', 'vacation', 'holiday', 'staycation',
+        'wisata', 'honeymoon', 'bulan madu', 'business trip', 'work trip', 'kerja di',
+      ]) || !!detectUseCase(custText),   // menyebut PENGGUNAAN (investasi/usaha/ibadah/liburan/dinas) = motivasi terjawab
       aiAskedMotivation: this.#has(aiText, [
         'apa yang membuat', 'apa yang bikin cari', 'kenapa cari', 'mulai cari rumah sekarang',
         'why now', 'what made you', 'apa yang bikin kak cari',
@@ -1527,7 +1532,8 @@ class ConversationQualifier {
         '1 tahun', '2 tahun', '3 tahun', '6 bulan', 'setahun', 'dua tahun',
         'tiga tahun', 'per tahun', '/tahun', 'satu tahun', 'yearly',
         '1 year', '2 years', '3 years', '6 months',
-      ]),
+        'seminggu', 'sebulan', 'semalam',
+      ]) || /\b\d+\s*(hari|minggu|bulan|tahun|day|week|month|year)s?\b/i.test(custText),
       aiAskedLeaseDuration: this.#has(aiText, [
         'sewa untuk berapa lama', 'berapa tahun', 'durasi sewa', 'lease duration',
         'how long', 'berapa lama',
@@ -2512,7 +2518,10 @@ class ConversationQualifier {
         source: 'stated', // location always stated
       },
       budget: {
-        value : filters.budget?.text || 'UNKNOWN',
+        // Append the rental period basis the customer stated ("/2 minggu", "/bulan").
+        value : filters.budget?.text
+          ? filters.budget.text + ConversationQualifier.#budgetPeriodSuffix(custText)
+          : 'UNKNOWN',
         source: wasStated(custText, ['juta', 'ribu', 'miliar', 'jt', 'm ', 'rb', 'budget', 'harga'])
           ? 'stated' : 'inferred',
       },
@@ -2609,16 +2618,51 @@ class ConversationQualifier {
     const MONTH_ID = 'januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember';
     const MONTH_EN = 'january|february|march|april|may|june|july|august|september|october|november|december';
     // \\b word boundaries prevent "indomaret" from matching "maret", etc.
-    const DATE_RE  = new RegExp(`(\\d{1,2}\\s+)?\\b(${MONTH_ID}|${MONTH_EN})\\b(\\s+\\d{4})?`, 'i');
+    const DATE_RE  = new RegExp(`(\\d{1,2})?\\s*\\b(${MONTH_ID}|${MONTH_EN})\\b(?:\\s+(\\d{4}))?`, 'i');
     const dm = custText.match(DATE_RE);
     if (dm) {
-      // Capitalize the month name: "7 juli 2026" → "7 Juli 2026"
-      return this.#capitalizeDate(dm[0].trim());
+      const day   = dm[1] ? dm[1].trim() : '';
+      const month = dm[2];
+      // Append inferred year when the customer omitted it ("3 September" → "3 September 2026").
+      const year  = dm[3] ? dm[3] : String(this.#inferYear(month, day));
+      return this.#capitalizeDate(`${day ? day + ' ' : ''}${month} ${year}`.trim());
     }
     if (/bulan depan|next month/.test(custText)) return 'Bulan depan';
     if (/bulan ini|this month/.test(custText))   return 'Bulan ini';
     if (/secepatnya|asap|segera/.test(custText)) return 'Secepatnya (urgent)';
     return 'UNKNOWN';
+  }
+
+  /** Infer the year for a bare "DD Month" date: this year if still upcoming, else next year. */
+  static #inferYear(monthName, day) {
+    const MONTHS = {
+      januari: 0, februari: 1, maret: 2, april: 3, mei: 4, juni: 5, juli: 6,
+      agustus: 7, september: 8, oktober: 9, november: 10, desember: 11,
+      january: 0, february: 1, march: 2, may: 4, june: 5, july: 6,
+      august: 7, october: 9, december: 11, // april/september/november share ID spelling
+    };
+    const now = new Date();
+    const mi  = MONTHS[String(monthName).toLowerCase()];
+    if (mi == null) return now.getFullYear();
+    const d         = day ? parseInt(day, 10) : 1;
+    const candidate = new Date(now.getFullYear(), mi, d);
+    const today     = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return candidate < today ? now.getFullYear() + 1 : now.getFullYear();
+  }
+
+  /**
+   * Rental period basis for the budget, e.g. "/2 minggu", "/bulan", "/malam".
+   * Anchored on "/" or "per" so it picks the BUDGET period ("2-4 juta/2 minggu")
+   * and NOT a lease-duration phrase ("sewa selama 2 minggu"). '' if none stated.
+   */
+  static #budgetPeriodSuffix(custText) {
+    const UNIT = 'hari|minggu|bulan|tahun|malam|day|week|month|year|night|seminggu|sebulan|setahun|semalam';
+    const m = custText.match(new RegExp(`\\/\\s*(\\d+\\s*)?(${UNIT})\\b`, 'i'))
+           || custText.match(new RegExp(`\\bper\\s+(\\d+\\s*)?(${UNIT})\\b`, 'i'));
+    if (!m) return '';
+    const n    = m[1] ? m[1].trim() + ' ' : '';
+    const unit = m[2].toLowerCase().replace(/^se/, ''); // seminggu → minggu
+    return `/${n}${unit}`;
   }
 
   static #extractDecisionMaker(custText, profile) {
@@ -2658,9 +2702,9 @@ class ConversationQualifier {
   }
 
   static #extractFurnishing(custText) {
-    if (/full\s*furnish|fully furnished/.test(custText))  return 'Full furnished';
-    if (/semi\s*furnish|semi-furnished/.test(custText))   return 'Semi furnished';
-    if (/kosongan|unfurnished|kosong/.test(custText))     return 'Kosongan';
+    if (/full\s*furnish|fully furnished|\bfull\b/.test(custText))  return 'Full furnished';
+    if (/semi\s*furnish|semi-furnished|\bsemi\b/.test(custText))   return 'Semi-furnished';
+    if (/kosongan|unfurnished|\bkosong\b/.test(custText))          return 'Kosongan';
     return 'Disebutkan';
   }
 

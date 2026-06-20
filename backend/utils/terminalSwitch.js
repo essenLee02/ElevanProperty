@@ -5,16 +5,16 @@
  * Dikontrol via .env: MASSEGE_TERMINAL=FONNTE
  *
  * Nilai yang didukung (satu atau lebih, pisah koma):
- *   FONNTE   → fonnteChatController tampil di terminal
- *   DIALOG   → dialogChatController tampil di terminal
- *   WATI     → watiChatController tampil di terminal
- *   CHAKRAHQ → chakraHQController tampil di terminal
+ *   FONNTE      → fonnteChatController tampil di terminal
+ *   DIALOG      → dialogChatController tampil di terminal
+ *   TIMELINESAI → timelinesAIChatController tampil di terminal
+ *   CHAKRAHQ    → chakraHQController tampil di terminal
  *
  * Contoh:
- *   MASSEGE_TERMINAL=FONNTE                      → hanya Fonnte tampil
- *   MASSEGE_TERMINAL=FONNTE,DIALOG               → Fonnte dan Dialog tampil
- *   MASSEGE_TERMINAL=FONNTE,DIALOG,WATI          → Fonnte, Dialog, WATI tampil
- *   MASSEGE_TERMINAL=FONNTE,DIALOG,WATI,CHAKRAHQ → semua tampil
+ *   MASSEGE_TERMINAL=TIMELINESAI                        → hanya TimelinesAI tampil
+ *   MASSEGE_TERMINAL=FONNTE,DIALOG                      → Fonnte dan Dialog tampil
+ *   MASSEGE_TERMINAL=FONNTE,DIALOG,TIMELINESAI          → Fonnte, Dialog, TimelinesAI tampil
+ *   MASSEGE_TERMINAL=FONNTE,DIALOG,TIMELINESAI,CHAKRAHQ → semua tampil
  */
 
 'use strict';
@@ -22,7 +22,7 @@
 /**
  * Cek apakah platform ini aktif untuk tampil di terminal.
  *
- * @param {'FONNTE'|'DIALOG'|'WATI'|'CHAKRAHQ'} platform
+ * @param {'FONNTE'|'DIALOG'|'TIMELINESAI'|'CHAKRAHQ'} platform
  * @returns {boolean}
  */
 function isTerminalActive(platform) {

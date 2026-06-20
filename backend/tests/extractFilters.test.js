@@ -296,6 +296,54 @@ console.log('\n── Group 11: daily-life small talk must NOT be treated as pro
   ok('"deket rumah makan" kept (landmark)', isPropertyContextContinuation('deket rumah makan', hist) === true);
 }
 
+console.log('\n── Group 12: motivation/duration answers must pass the gate ──');
+{
+  const { isPropertyContextContinuation } = require('../utils/propertyKeywordFilter');
+  const C = (m) => ({ role: 'customer', message: m });
+  const A = (m) => ({ role: 'ai', message: m });
+  // AI just asked the QM motivation question
+  const hist = [
+    C('Mau cari rumah'),
+    A('Untuk rumahnya, rencananya mau beli atau sewa, Kak? 🏠'),
+    C('sewa rumah di surabaya'),
+    A('Boleh tahu, apa yang membuat Kak mulai cari rumah sekarang? Misalnya mau pindah, keluarga nambah, pindah kerja, atau untuk investasi?'),
+  ];
+  const keep = (m) => isPropertyContextContinuation(m, hist) === true;
+  ok('"Saya ada kerja dinas sebentar selama 2 Minggu" kept', keep('Saya ada kerja dinas sebentar selama 2 Minggu'));
+  ok('"kerja dinas" kept',          keep('kerja dinas'));
+  ok('"buat liburan" kept',         keep('buat liburan'));
+  ok('"mau pindah kerja" kept',     keep('mau pindah kerja'));
+  ok('"2 minggu" kept (duration)',  keep('2 minggu'));
+  ok('"10 hari" kept (duration)',   keep('10 hari'));
+  // Guard: a genuinely off-topic reply after the same question is still dropped
+  ok('"lagi makan bakso dulu" dropped', isPropertyContextContinuation('lagi makan bakso dulu', hist) === false);
+}
+
+console.log('\n── Group 13: Q5/Q6 location preference w/ cafe/resto (not a food order) ──');
+{
+  const { isPropertyContextContinuation } = require('../utils/propertyKeywordFilter');
+  const C = (m) => ({ role: 'customer', message: m });
+  const A = (m) => ({ role: 'ai', message: m });
+  const q5 = [
+    C('sewa rumah di surabaya'),
+    A('Ada yang pasti Kak hindari? Misalnya rawan banjir, hadap barat, gang sempit, atau dekat jalan terlalu ramai? 🚫'),
+  ];
+  const keep = (m) => isPropertyContextContinuation(m, q5) === true;
+  // The reported drop — preference + amenity vicinity (cafe/resto/warung as landmark)
+  ok('"jalan lebar, strategis, banyak cafe, resto dan warung" kept', keep('Saya mau jalan lebar, access strategis, banyak cafe, resto dan warung.'));
+  ok('"yang banyak cafenya" kept',        keep('yang banyak cafenya'));
+  ok('"dekat mall dan kampus" kept',      keep('dekat mall dan kampus'));
+  ok('"akses strategis" kept',            keep('akses strategis aja'));
+  ok('"yang tenang tidak bising" kept',   keep('yang tenang tidak bising'));
+  // Guards: real food/off-topic still dropped even with cafe/resto words
+  ok('"lagi ngopi di cafe" dropped',      isPropertyContextContinuation('lagi ngopi di cafe', q5) === false);
+  ok('"pesan nasi goreng dong" dropped',  isPropertyContextContinuation('pesan nasi goreng dong', q5) === false);
+  // Guard: bare preference with NO property context still rejected
+  const noCtx = [A('halo'), C('hai')];
+  ok('"jalan raya lebar" no-context dropped', isPropertyContextContinuation('Saya mau jalan raya lebar', noCtx) === false);
+  ok('"banyak cafe dan resto" no-context dropped', isPropertyContextContinuation('banyak cafe dan resto', noCtx) === false);
+}
+
 console.log('\n═══════════════════════════════════');
 console.log(`RESULT: ${pass}/${pass + fail} passed ${fail === 0 ? '✅ ALL PASS' : '❌ FAILURES'}`);
 console.log('═══════════════════════════════════');

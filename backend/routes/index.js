@@ -47,7 +47,7 @@ const fonnteWebhookController    = require('../controllers/fonnteWebhookControll
 const logController              = require('../controllers/logController');
 const rumah123Controller         = require('../controllers/rumah123Controller');
 const whatsappInboundController  = require('../controllers/whatsappInboundController');
-const watiChatController         = require('../controllers/watiChatController');
+const timelinesAIChatController  = require('../controllers/timelinesAIChatController');
 const fonnteChatController       = require('../controllers/fonnteChatController');
 const dialogChatController       = require('../controllers/dialogChatController');
 const chakraHQController         = require('../controllers/chakraHQController');
@@ -126,9 +126,9 @@ router.post('/fonnte-chat/webhook',      webhookLimiter, fonnteChatController.ha
 router.post('/fonnte-chat/chaining',     webhookLimiter, fonnteChatController.handleChainingWebhook);
 router.post('/fonnte-chat/webhook-raw',  webhookLimiter, fonnteChatController.webhookRawCatcher);
 
-// WATI webhook (public)
-router.post('/wati/webhook',             webhookLimiter, watiChatController.handleInboundMessage);
-router.post('/wati/webhook-raw',         webhookLimiter, watiChatController.webhookRawCatcher);
+// TimelinesAI webhook (public)
+router.post('/timelinesai/webhook',      webhookLimiter, timelinesAIChatController.handleInboundMessage);
+router.post('/timelinesai/webhook-raw',  webhookLimiter, timelinesAIChatController.webhookRawCatcher);
 
 // 360dialog webhook (public)
 router.post('/dialog-chat/webhook',      webhookLimiter, dialogChatController.handleInboundMessage);
@@ -155,13 +155,14 @@ router.post('/fonnte-chat/poller-start',          verifyToken, fonnteChatControl
 router.post('/fonnte-chat/poller-stop',           verifyToken, fonnteChatController.stopPoller);
 router.get('/fonnte-chat/check-fonnte-api',       verifyToken, fonnteChatController.checkFonnteApi);
 
-// WATI admin endpoints
-router.post('/wati/simulate',                     verifyToken, watiChatController.simulateInboundMessage);
-router.get('/wati/debug-info',                    verifyToken, watiChatController.getDebugInfo);
-router.get('/wati/agents/list',                   verifyToken, watiChatController.getRegisteredAgents);
-router.get('/wati/agent-chats/:agentName',        verifyToken, watiChatController.getAgentChats);
-router.get('/wati/chat-history/:sessionId',       verifyToken, watiChatController.getChatHistory);
-router.get('/wati/status',                        verifyToken, watiChatController.getWatiStatus);
+// TimelinesAI admin endpoints
+router.post('/timelinesai/simulate',              verifyToken, timelinesAIChatController.simulateInboundMessage);
+router.get('/timelinesai/debug-info',             verifyToken, timelinesAIChatController.getDebugInfo);
+router.get('/timelinesai/agents',                 verifyToken, timelinesAIChatController.getRegisteredAgents);
+router.get('/timelinesai/agent-chats/:agentName', verifyToken, timelinesAIChatController.getAgentChats);
+router.get('/timelinesai/chat-history/:sessionId',verifyToken, timelinesAIChatController.getChatHistory);
+router.get('/timelinesai/status',                 verifyToken, timelinesAIChatController.getStatus);
+router.get('/timelinesai/check-api',              verifyToken, timelinesAIChatController.checkTimelinesApi);
 
 // ChakraHQ admin endpoints (butuh login)
 router.post('/chakrahq/simulate',                      verifyToken, chakraHQController.simulateInboundMessage);

@@ -84,6 +84,17 @@ Rules for the visible summary:
 - Never invent a value. "Deket [kota]" is the **Lokasi**, not a Patokan — if no real landmark was
   given, Patokan = ✗.
 - Signature is dynamic (`${agentName}` / `${appName}`) — never hardcode "LEO FELIX"/"Elevan Property".
+- **Field accuracy (do not lose what the customer said):**
+  - *Furnitur*: a bare answer "semi"/"full"/"kosong" IS the furnishing → show `Semi-furnished` /
+    `Full furnished` / `Kosongan`, never `(Belum ditanyakan)`.
+  - *Masuk*: always include the **year** — "3 September" → `3 September 2026` (this year if the date
+    is still upcoming, otherwise next year).
+  - *Fasilitas*: list **every** item the customer named — appliances/furniture count too
+    (AC, kitchen set, lemari, kasur, kulkas, mesin cuci, TV, sofa, kompor…). Do not collapse the
+    list to one or two items.
+  - *Budget*: keep the rental **period** the customer stated — "2-4 juta/2 minggu" →
+    `Rp 2.000.000 - Rp 4.000.000/2 minggu` (the "/period" basis, taken from "/…" or "per …",
+    NOT from the lease-duration phrase "sewa selama …").
 
 **(B) Internal [BRIEF_READY]** — emitted for the agent/back-end only (not part of the customer text).
 Every field tagged `stated | inferred | unknown`.
@@ -178,6 +189,15 @@ location or motivation) — but greet only once.
  pindah kerja, atau untuk investasi?"
 ```
 Extract: urgency, life-event, and often a financing contingency ("mau jual rumah dulu").
+
+> **SKIP QM if the reason was already volunteered.** Customers often state *why* inside an
+> earlier message — do NOT re-ask. Treat as already-answered when the chat contains a
+> life-event / use / temporary-stay reason, e.g.: pindah, mutasi, relokasi, kontrak habis,
+> keluarga nambah, anak sekolah, menikah, pensiun, **investasi**, **usaha/kantor**, **ibadah**,
+> **kerja dinas / perjalanan dinas / ditugaskan / pindah kerja / kerja sementara**, **liburan**.
+> Example: *"sewa rumah di Surabaya, mau kerja dinas sebentar, butuh 2 minggu"* → motivation
+> (dinas) **and** duration (2 minggu) are already given → go straight to the next unanswered
+> slot (search history / budget), never ask "apa yang membuat Kak mulai cari rumah sekarang?".
 
 > **Server-side gate (CRITICAL):** A QM answer like *"Saya pindahan karena ada pindahan kerja,
 > sekalian mau menetap di Jakarta"* contains **no property-type keyword**, so `hasPropertyKeyword`

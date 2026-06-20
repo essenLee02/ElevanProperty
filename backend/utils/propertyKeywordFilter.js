@@ -501,8 +501,15 @@ function isPropertyContextContinuation(message, history = []) {
   // properti, tapi jelas jawaban atas "apa yang membuat Kak mulai cari rumah?".
   // Contoh valid yang harus LOLOS (sebelumnya ter-drop karena > 70 char):
   //   "Saya pindahan karena ada pindahan kerja, sekalian mau menetap di Jakarta"
-  const isMotivationAnswer  = /\b(pindah|pindahan|mutasi|relokasi|relocat|kontrak\s+(habis|abis)|ngontrak|keluarga\s+(nambah|bertambah)|nambah\s+anak|anak\s+(masuk|sekolah)|sekolah\s+anak|investasi|invest|disewakan|pensiun|menikah|nikah|kerja\s+baru|pindah\s+kerja|mutasi\s+kerja|menetap|growing\s+family|relocation|moving|job\s+(relocat|transfer))\b/i.test(lower);
-  const hasPropertyContent  = hasPropertyFacility || isLandmarkAnswer || isMotivationAnswer;
+  const isMotivationAnswer  = /\b(pindah|pindahan|mutasi|relokasi|relocat|kontrak\s+(habis|abis)|ngontrak|keluarga\s+(nambah|bertambah)|nambah\s+anak|anak\s+(masuk|sekolah)|sekolah\s+anak|investasi|invest|disewakan|pensiun|menikah|nikah|kerja\s+baru|pindah\s+kerja|mutasi\s+kerja|menetap|growing\s+family|relocation|moving|job\s+(relocat|transfer)|dinas|perjalanan\s+dinas|ditugaskan|penugasan|tugas\s+(kerja|dinas|kantor)|kerja\s+(dinas|sementara|sebentar)|pindah\s+tugas|liburan|berlibur|vacation|holiday|staycation|wisata|honeymoon|bulan\s+madu|business\s+trip|work\s+trip|workation)\b/i.test(lower);
+  // Jawaban preferensi Q5/Q6 (red-flags / lokasi): jalan, akses, orientasi, suasana.
+  // Contoh: "Saya mau jalan lebar, access strategis", "yang tenang tidak bising".
+  const isPreferenceAnswer  = /\b(jalan\s+(raya|lebar|besar|utama|kecil)|akses|access|strategis|hook|pojok|sudut|menghadap|hadap\s+(timur|barat|utara|selatan|matahari)|bebas\s+banjir|tidak\s+banjir|rawan\s+banjir|jalan\s+ramai|bising|tenang|sepi|aman|nyaman|asri|sejuk)\b/i.test(lower);
+  // Preferensi LINGKUNGAN/amenity di sekitar (positif): "banyak cafe, resto dan warung",
+  // "dekat mall/kampus/pasar". Kata kuliner di sini = patokan lokasi, BUKAN pesan makanan.
+  const isAmenityVicinity   = /\b(banyak|dekat|deket|near|area|kawasan|lingkungan|sekitar|deketan|berdekatan|akses\s+ke)\b/i.test(lower) &&
+                              /\b(cafe|kafe|resto|restoran|restaurant|warung|warteg|mall|plaza|kampus|sekolah|universitas|pasar|minimarket|indomaret|alfamart|rumah\s+sakit|stasiun|halte|terminal|tol|gym|taman|kantor)\b/i.test(lower);
+  const hasPropertyContent  = hasPropertyFacility || isLandmarkAnswer || isMotivationAnswer || isPreferenceAnswer || isAmenityVicinity;
 
   // Pesan pendek (≤ 70 karakter) → proses normal
   // Pesan medium (71–200) dengan konten properti → masih bisa jawaban Q2b/Q5/Q6
@@ -511,8 +518,9 @@ function isPropertyContextContinuation(message, history = []) {
   if (lower.length > 200) return false;
 
   // ── Cek apakah pesan memperkenalkan topik NON-PROPERTY yang jelas ───────
-  // Skip jika sudah terdeteksi sebagai landmark/facility answer
-  if (!isLandmarkAnswer && !hasPropertyFacility) {
+  // Skip jika pesan sudah punya konten properti (landmark/fasilitas/motivasi/preferensi/
+  // amenity sekitar) — mis. "banyak cafe, resto dan warung" = patokan lokasi, bukan kuliner.
+  if (!hasPropertyContent) {
     const CLEAR_NON_PROPERTY = [
       /\b(makanan|minuman|kuliner|restoran|cafe|kafe|masak|resep|menu|makan|bakso|mie|nasi|ayam|sate|soto|jajan|ngopi|kopi|camilan|gorengan|warteg)\b/,
       /\b(kendaraan|mobil|motor|sepeda|tiket|travel|wisata|hotel liburan|penginapan wisata)\b/,
@@ -537,16 +545,16 @@ function isPropertyContextContinuation(message, history = []) {
   // tapi pesan AI belum tersimpan → hasPropertyCtx = false → tanpa fix ini,
   // "1 tahun" difilter sebagai "bukan query properti".
   if (recentHistory.length >= 2) {
-    // Durasi sewa singkat — jawaban Q10 ("1 tahun", "6 bulan", "2 bulan", "3 months")
-    if (/^\d+\s*(tahun|year|bulan|month)s?$/.test(lower.trim())) return true;
+    // Durasi sewa singkat — jawaban Q10 ("1 tahun", "6 bulan", "2 minggu", "10 hari", "3 months")
+    if (/^\d+\s*(hari|minggu|bulan|tahun|day|week|month|year)s?$/.test(lower.trim())) return true;
 
-    // Fasilitas / patokan lokasi (Q_FAC / Q6) — konten properti yang kuat.
-    // AMAN walau kata TIPE properti (villa/rumah/dll) sudah keluar dari window 6 pesan
-    // terakhir di percakapan panjang — yang membuat hasPropertyCtx di bawah jadi false
-    // dan men-drop jawaban yang valid. Contoh:
+    // Fasilitas / patokan lokasi / motivasi (Q_FAC / Q6 / QM) — konten properti yang KUAT
+    // & TIDAK ambigu, jadi aman dilewatkan tanpa cek konteks (mis. saat pesan AI belum
+    // tersimpan / kata TIPE sudah keluar window). Contoh:
     //   "AC, kolam renang, kids zone, gym.. deket restoran/rumah makan"
-    // Percakapan sudah berjalan (≥2 pesan) → ini pasti lanjutan kualifikasi.
-    if (hasPropertyContent) return true;
+    // Catatan: preferensi/amenity (jalan lebar, banyak cafe) SENGAJA tidak di sini —
+    // sinyalnya lebih lemah, jadi diverifikasi via konteks dulu (pattern 15a di bawah).
+    if (hasPropertyFacility || isLandmarkAnswer || isMotivationAnswer) return true;
   }
 
   // Context = a property keyword in recent history OR (crucially) the LAST AI message
@@ -569,7 +577,7 @@ function isPropertyContextContinuation(message, history = []) {
   // Jawaban tipe transaksi murni (satu kata / frasa pendek)
   if (/^(sewa|beli|jual|beli\s+aja|mau\s+sewa|mau\s+beli|untuk\s+sewa|untuk\s+beli|rent|buy|purchase)$/.test(lower.trim())) return true;
   // Durasi sewa singkat — juga cek di sini (setelah hasPropertyCtx) untuk kelengkapan
-  if (/^\d+\s*(tahun|year|bulan|month)s?$/.test(lower.trim())) return true;
+  if (/^\d+\s*(hari|minggu|bulan|tahun|day|week|month|year)s?$/.test(lower.trim())) return true;
   // Harga dengan satuan — jawaban Q3 ("2-4 juta/seminggu", "5 jt per bulan")
   if (/\b\d[\d.,]*\s*(juta|ribu|miliar|rb|jt)\b/i.test(lower)) return true;
   // Q2b answer fast-path: "Saya belum pernah lihat", "sudah lihat 3", "belum pernah survey",
@@ -627,8 +635,8 @@ function isPropertyContextContinuation(message, history = []) {
   if (/\b(202[4-9]|203[0-9])\b/.test(lower))
     return true;
 
-  // 8) Durasi sewa singkat (jawaban Q10)
-  if (/\b(\d+\s*(tahun|year|bulan|month)s?)\b/i.test(lower))
+  // 8) Durasi sewa singkat (jawaban Q10) — termasuk minggu/hari
+  if (/\b(\d+\s*(hari|minggu|bulan|tahun|day|week|month|year)s?)\b/i.test(lower))
     return true;
 
   // 9) Jawaban komposisi keluarga / rumah tangga (Q4 — "tinggal bersama siapa?")
@@ -677,6 +685,12 @@ function isPropertyContextContinuation(message, history = []) {
   // 15) Jawaban preferensi jalan/akses/orientasi (Q5 red-flags / Q6) —
   //     "jalan raya lebar", "akses mudah", "hook/pojok", "hadap timur", "menghadap".
   if (/\b(jalan\s+(raya|lebar|besar|utama|kecil)|akses\s+(mudah|jalan|tol)|hook|pojok|sudut|menghadap|hadap\s+(timur|barat|utara|selatan|matahari)|bebas\s+banjir|tidak\s+banjir|jalan\s+ramai|bising)\b/i.test(lower))
+    return true;
+
+  // 15a) Preferensi lokasi/lingkungan (Q5/Q6) — strategis/akses, suasana (tenang/asri),
+  //      atau amenity di sekitar ("banyak cafe, resto dan warung", "dekat mall/kampus").
+  //      Konteks properti sudah diverifikasi di atas → aman. (Komputasi di awal fungsi.)
+  if (isPreferenceAnswer || isAmenityVicinity)
     return true;
 
   // 15b) Jawaban / pertanyaan FINANCING (Q_KPR / Q_KPR-a) — "cash", "KPR", "DP",

@@ -119,7 +119,7 @@ console.log('\n── Group 5: visible house SUMMARY (✓ answered / ✗ belum d
   ok('✓ Lokasi: Surabaya',              /✓ Lokasi: \*Surabaya\*/.test(out));
   ok('✓ Masuk: 19 Agustus 2026',        /✓ Masuk: \*19 Agustus 2026\*/.test(out));
   ok('✓ Furnitur: Full furnished',      /✓ Furnitur: \*Full furnished\*/.test(out));
-  ok('✓ Budget normalized',             /✓ Budget: \*Rp 9\.000\.000 - Rp 10\.000\.000\*/.test(out));
+  ok('✓ Budget normalized + period',    /✓ Budget: \*Rp 9\.000\.000 - Rp 10\.000\.000\/tahun\*/.test(out));
   ok('✗ Fasilitas belum ditanyakan',    /✗ Fasilitas: \*\(Belum ditanyakan\)\*/.test(out));
   ok('✗ Patokan belum ditanyakan',      /✗ Patokan lokasi: \*\(Belum ditanyakan\)\*/.test(out));
   ok('no garbage anchor (city leak)',   !/deket surabaya saya mau/i.test(out));
@@ -140,6 +140,65 @@ console.log('\n── Group 6: group-size household ("N orang") detection ──
   // Small household still works
   const sf = extractPropertyFilters('sendiri saja', []);
   ok('sendiri → household', CQ.buildProfile([], 'sendiri saja', sf).hasHouseholdInfo === true);
+}
+
+console.log('\n── Group 7: motivation already volunteered → do NOT re-ask QM ──');
+{
+  const C = (m) => ({ role: 'customer', message: m });
+  const A = (m) => ({ role: 'ai', message: m });
+  const hist = [
+    C('Mau cari rumah'),
+    A('Halo Kak, saya asisten dari LEO FELIX (Elevan Property). Untuk rumahnya, rencananya mau beli atau sewa, Kak? 🏠'),
+  ];
+  // "kerja dinas sebentar … sewa selama 2 minggu" — motivation + duration sudah disebut
+  const last = 'Saya rencana sewa rumah di surabaya, mau kerja dinas sebentar di Surabaya. Saya butuh sewa selama 2 minggu';
+  const f = extractPropertyFilters(last, hist);
+  const p = CQ.buildProfile(hist, last, f);
+  ok('hasMotivation true (kerja dinas)', p.hasMotivation === true);
+  ok('hasLeaseDuration true (2 minggu)', p.hasLeaseDuration === true);
+  const nq = CQ.getNextQuestionHousePilot(p, 'id', null, 'LEO FELIX', 'Elevan Property') || '';
+  ok('NEXT does NOT re-ask motivation', !/apa yang membuat|mulai cari rumah sekarang/i.test(nq));
+
+  // Other motivation phrasings recognized
+  for (const m of ['mau pindah kerja ke jakarta', 'buat liburan keluarga', 'rumah buat investasi', 'lagi ditugaskan dinas']) {
+    const pf = CQ.buildProfile([], m, extractPropertyFilters(m, []));
+    ok(`hasMotivation true: ${JSON.stringify(m)}`, pf.hasMotivation === true);
+  }
+  // Duration phrasings (weeks/days/months) recognized
+  for (const m of ['sewa 2 minggu', 'butuh 10 hari', 'selama 3 bulan', '1 tahun']) {
+    const pf = CQ.buildProfile([], m, extractPropertyFilters(m, []));
+    ok(`hasLeaseDuration true: ${JSON.stringify(m)}`, pf.hasLeaseDuration === true);
+  }
+}
+
+console.log('\n── Group 8: summary brief field accuracy (full dinas transcript) ──');
+{
+  const C = (m) => ({ role: 'customer', message: m });
+  const A = (m) => ({ role: 'ai', message: m });
+  const hist = [
+    C('Mau cari rumah'), A('beli atau sewa?'),
+    C('Saya rencana sewa rumah di surabaya, mau kerja dinas sebentar. Saya butuh sewa selama 2 minggu'), A('apa yang membuat cari sekarang?'),
+    C('Saya ada kerja dinas sebentar selama 2 Minggu'), A('sudah lihat beberapa rumah?'),
+    C('Belum pernah lihat, cuma cari badget 2-4 juta/2 minggu'), A('ditinggali bersama siapa?'),
+    C('Saya sendirian saja'), A('masuk bulan apa?'),
+    C('Rencana 3 September ini'), A('perlu koordinasi?'),
+    C('Enggak perlu koordinasi, saya minta listing saja'), A('ada yang dihindari?'),
+    C('Saya mau jalan lebar, access strategis. Dekat dengan banyak cafe, resto dan warung.'), A('area lain?'),
+    C('Saya maunya di surabaya saja'), A('furnitur prefer apa?'),
+    C('semi'), A('ada fasilitas tertentu?'),
+  ];
+  const last = 'Iya.. Mau AC, kitchen set, lemari, kasur dan kulkas';
+  const f = extractPropertyFilters(last, hist);
+  const p = CQ.buildProfile(hist, last, f);
+  const brief = CQ.buildAgentBrief(p, f, hist, last);
+  ok('Masuk has year (3 September 2026)', brief.moveInDate.value === '3 September 2026');
+  ok('Furnitur = Semi-furnished (bare "semi")', brief.furnishing.value === 'Semi-furnished');
+  ok('Budget appends period /2 minggu', /\/2\s*minggu$/.test(brief.budget.value));
+  ok('Facilities keep all items', ['AC','Lemari','Kasur','Kulkas'].every(x => brief.facilities.value.includes(x)));
+  ok('Facilities keep kitchen set', /Kitchen set/i.test(brief.facilities.value));
+  // detectFacilities directly
+  const fac = extractPropertyFilters('Mau AC, kitchen set, lemari, kasur dan kulkas', []).facilities;
+  ok('detectFacilities captures lemari/kasur/kulkas', ['Lemari','Kasur','Kulkas'].every(x => fac.includes(x)));
 }
 
 console.log('\n═══════════════════════════════════');

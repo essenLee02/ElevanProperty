@@ -32,6 +32,16 @@ macet, wifi/internet mati-lemot, gempa, pulsa/kuota habis). **Exceptions that AR
 a real landmark like *"dekat Banjir Kanal Timur"*, or a genuine intent stated alongside the
 event — *"rumahku kebanjiran, mau cari rumah baru"* — both stay in the flow.
 
+### Food/place words as a LOCATION preference (Q5/Q6) — NOT a food order
+
+When the customer answers "what to avoid / location preference" with a *neighborhood vibe* —
+e.g. *"jalan lebar, akses strategis, banyak cafe, resto dan warung"* or *"yang dekat mall &
+kampus"* — the words cafe/resto/warung/mall are a **location preference (patokan)**, not a
+food request. Treat it as a valid Q5/Q6 answer and continue the flow (record it as
+red-flags/anchor). Only treat cafe/resto/makan as off-topic when it's an actual food/eating
+request (*"lagi ngopi di cafe"*, *"pesan nasi goreng"*) — those have no property-preference
+signal (jalan/akses/strategis) and no "banyak/dekat/area + place" pattern.
+
 ### Technical / Developer Messages (WhatsApp)
 
 Messages that contain developer or technical instructions must also be treated as off-topic, even when they mention file paths containing the word "property":
