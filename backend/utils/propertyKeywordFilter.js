@@ -119,6 +119,26 @@ const ACTION_WORDS = [
   'list', 'info', 'information', 'details',
 ];
 
+// Kata aksi PENDEK/ambigu yang sering muncul sebagai SUBSTRING di dalam kata lain.
+// Wajib word-boundary agar tidak salah-match. Contoh bug nyata:
+//   "list"  ⊂ "listrik"   → "rumahku mati listrik" PALSU terdeteksi sbg query properti
+//   "get"   ⊂ "budget"/"target"   ·  "rent" ⊂ "parent"/"current"  ·  "ada" ⊂ "kepada"/"pada"
+//   "ready" ⊂ "already"   ·  "cost" ⊂ "costume"   ·  "lease" ⊂ "please"   ·  "show" ⊂ "shower"
+const ACTION_WORDS_STRICT_BOUNDARY = new Set([
+  // English short words yang bisa nyangkut di kata Indonesia/Inggris lain
+  'get', 'rent', 'cost', 'show', 'info', 'edit', 'sell', 'buy', 'want', 'need',
+  'lease', 'ready', 'price', 'unit', 'list', 'find', 'search', 'rental', 'available',
+  // Indonesian
+  'ada', 'dp',
+]);
+
+function matchesActionWord(lower, action) {
+  if (ACTION_WORDS_STRICT_BOUNDARY.has(action)) {
+    return new RegExp(`\\b${action.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(lower);
+  }
+  return lower.includes(action);
+}
+
 /* ══════════════════════════════════════════════════════════════════════════════
    3. KATA KUNCI MANDIRI — Tidak ambigu, selalu properti, tidak perlu kondisi lain
 ══════════════════════════════════════════════════════════════════════════════ */
@@ -202,7 +222,7 @@ function hasPropertyType(lower) {
  * @returns {boolean}
  */
 function hasActionWord(lower) {
-  return ACTION_WORDS.some(action => lower.includes(action));
+  return ACTION_WORDS.some(action => matchesActionWord(lower, action));
 }
 
 /**
@@ -413,6 +433,24 @@ const PROPERTY_QUESTION_PATTERNS = [
   /kpr\s+atau\s+cash/, /cash\s+atau\s+kpr/, /mortgage.*or.*cash/, /cash.*or.*mortgage/,
 ];
 
+// Obrolan harian / kondisi sehari-hari (mati listrik, banjir, macet, wifi mati, dll).
+// Ini BUKAN query properti meski kebetulan menyebut "rumah" atau kata yang juga dipakai
+// sebagai fasilitas/patokan ("wifi", "di jalan"). Dicek TANPA SYARAT (mengabaikan sinyal
+// fasilitas/landmark yang kebetulan ada) supaya AI tidak menjawab obrolan pribadi dengan
+// pertanyaan kualifikasi. Contoh nyata: "Rumahku barusan mati listrik".
+// Catatan: 'banjir' dikecualikan jika diikuti "kanal" (Banjir Kanal = nama tempat asli).
+const DAILY_LIFE_OFFTOPIC = [
+  /\b(mati\s+listrik|listrik\s+(mati|padam)|pemadaman|\bpln\b|byar\s*pet|mati\s+lampu|lampu\s+(mati|padam))\b/,
+  /\b(wifi\s+(mati|lemot|lambat|lelet)|internet\s+(mati|lemot|lambat|down)|sinyal\s+(jelek|hilang|ilang|lemah)|pulsa\s+habis|kuota\s+habis)\b/,
+  /\b(macet|kemacetan|gempa|longsor|kebakaran|kebanjiran|badai|angin\s+kencang)\b/,
+  /\bbanjir\b(?!\s*kanal)/,
+];
+
+/** Pesan adalah obrolan harian non-properti (mati listrik, banjir, macet, dll)? */
+function isDailyLifeOffTopic(lower) {
+  return DAILY_LIFE_OFFTOPIC.some(p => p.test(lower));
+}
+
 /** Apakah salah satu dari ≤2 pesan AI terakhir adalah pertanyaan properti? */
 function hasRecentPropertyQuestionIn(recentHistory) {
   const lastAI = (recentHistory || [])
@@ -446,6 +484,11 @@ function isPropertyContextContinuation(message, history = []) {
   if (!Array.isArray(history) || history.length === 0) return false;
 
   const lower = message.toLowerCase().trim();
+
+  // ── Obrolan harian non-properti → tolak SEGERA (sebelum cek fasilitas/landmark) ──
+  // Frasa seperti "mati listrik", "wifi mati", "macet", "rumahku banjir" adalah
+  // obrolan pribadi, bukan jawaban kualifikasi — walau menyebut "rumah"/"wifi"/"di jalan".
+  if (isDailyLifeOffTopic(lower)) return false;
 
   // ── Deteksi konten properti sebelum cek panjang ───────────────────────────
   // Jawaban Q2b ("Sudah lihat berapa properti?") dan Q5/Q6 bisa panjang dan

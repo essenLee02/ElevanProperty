@@ -258,6 +258,44 @@ console.log('\n── Group 10: use-case decides whether "tinggal bersama siapa"
   ok('liburan → framing kapasitas "menginap"',   libNext && /menginap berapa orang/.test(libNext.hint || ''));
 }
 
+console.log('\n── Group 11: daily-life small talk must NOT be treated as property ──');
+{
+  const { hasPropertyKeyword, isPropertyContextContinuation } = require('../utils/propertyKeywordFilter');
+  const C = (m) => ({ role: 'customer', message: m });
+  const A = (m) => ({ role: 'ai', message: m });
+  // qualification active (recent property question in history)
+  const hist = [
+    C('mau cari kos di surabaya'), A('rencananya sewa atau beli?'),
+    A('Di Surabaya ada Kos di kisaran 3jt dan 14jt/bulan. Kira-kira yang mana lebih sesuai dengan rencana Anda?'),
+  ];
+  const gate = (m) => hasPropertyKeyword(m) || isPropertyContextContinuation(m, hist);
+
+  // The reported bug: "list" ⊂ "listrik" made hasPropertyKeyword true
+  ok('"Rumahku brusan mati listrik" → not a keyword', hasPropertyKeyword('Rumahku brusan mati listrik') === false);
+  ok('"rumah mati listrik" gate → dropped',  gate('Rumahku brusan mati listrik') === false);
+  ok('"sini msih mati listrik" → dropped',   gate('Sini msih mati listrik') === false);
+  ok('"listrik padam" → dropped',            gate('listrik padam') === false);
+  ok('"rumahku banjir" → dropped',           gate('rumahku banjir') === false);
+  ok('"macet banget di jalan" → dropped',    gate('macet banget di jalan') === false);
+  ok('"wifi mati nih" → dropped',            gate('wifi mati nih') === false);
+  ok('"internet lemot banget" → dropped',    gate('internet lemot banget') === false);
+
+  // Action words that collide as substrings no longer false-match (strict boundary)
+  ok('"get"⊂target, "rent"⊂parenting → no kw',
+    hasPropertyKeyword('rumahku targetnya buat parenting') === false);
+  ok('"ready"⊂already → no kw',
+    hasPropertyKeyword('rumahku sudah selesai already') === false);
+  ok('"ada"⊂kepada → no kw',
+    hasPropertyKeyword('rumahku kuberikan kepada adik') === false);
+
+  // Genuine property messages + landmark still pass
+  ok('"list properti dong" still kept (list as word)', hasPropertyKeyword('list properti dong') === true);
+  ok('"dekat banjir kanal timur" kept (real landmark)', isPropertyContextContinuation('dekat banjir kanal timur', hist) === true);
+  ok('"rumahku kebanjiran mau cari rumah baru" kept (real intent)', gate('rumahku kebanjiran mau cari rumah baru') === true);
+  ok('"ada wifi sama kolam renang" kept (facility)', isPropertyContextContinuation('ada wifi sama kolam renang', hist) === true);
+  ok('"deket rumah makan" kept (landmark)', isPropertyContextContinuation('deket rumah makan', hist) === true);
+}
+
 console.log('\n═══════════════════════════════════');
 console.log(`RESULT: ${pass}/${pass + fail} passed ${fail === 0 ? '✅ ALL PASS' : '❌ FAILURES'}`);
 console.log('═══════════════════════════════════');

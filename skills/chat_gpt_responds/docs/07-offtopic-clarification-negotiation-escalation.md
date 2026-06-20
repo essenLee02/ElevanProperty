@@ -15,6 +15,23 @@ Reply: Maaf, saya hanya dapat membantu pertanyaan seputar jual, beli, atau sewa 
 Off-topic topics: food, culinary, weather, tourism, sports, politics, education,
 music, movies, crypto, stocks, general unrelated questions.
 
+### Daily-life small talk (even when it mentions "rumah")
+
+Casual chatter about everyday events is **not** a property query — do NOT answer it with a
+qualification question (budget anchor, "sewa atau beli?", etc.), even if a qualification is
+already in progress and the message contains the word *rumah* or a facility word.
+
+```
+User:  Rumahku barusan mati listrik
+       (also: "wifi mati nih", "macet banget di jalan", "rumahku kebanjiran", "sinyal jelek")
+Reply: (small empathetic acknowledgement OR no property reply at all — never a budget/anchor question)
+```
+
+These are gated server-side (`isDailyLifeOffTopic`: mati listrik/lampu, banjir/kebanjiran,
+macet, wifi/internet mati-lemot, gempa, pulsa/kuota habis). **Exceptions that ARE property:**
+a real landmark like *"dekat Banjir Kanal Timur"*, or a genuine intent stated alongside the
+event — *"rumahku kebanjiran, mau cari rumah baru"* — both stay in the flow.
+
 ### Technical / Developer Messages (WhatsApp)
 
 Messages that contain developer or technical instructions must also be treated as off-topic, even when they mention file paths containing the word "property":
