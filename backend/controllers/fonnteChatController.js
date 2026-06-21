@@ -28,7 +28,7 @@ const { hasPropertyKeyword,
         isPropertyContextContinuation } = require('../utils/propertyKeywordFilter');
 const { generateWhatsAppAIReply }       = require('../services/whatsappAIService');
 const { getConversationHistory }        = require('../services/sessionService');
-const { sanitizeLog, maskPhone, maskName } = require('../utils/whatsappUtils');
+const { sanitizeLog, maskPhone, maskName, appendSentViaTag } = require('../utils/whatsappUtils');
 
 /* ══════════════════════════════════════════════════════════════════════════════
    BAGIAN 0 — MESSAGE-ID DEDUP CACHE
@@ -150,7 +150,7 @@ async function sendViaFonnte(targetPhone, message, agentToken) {
 
   const params = new URLSearchParams();
   params.append('target',      target);
-  params.append('message',     String(message).trim());
+  params.append('message',     appendSentViaTag(String(message).trim()));
   params.append('countryCode', '0');
 
   let lastError;

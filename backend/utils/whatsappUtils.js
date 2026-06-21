@@ -218,10 +218,11 @@ function logTerminalSummary({
 }
 
 /**
- * Log ringkas untuk pesan non-properti (disimpan ke DB tapi AI skip).
+ * Log ringkas untuk pesan non-properti (gate-before-save: TIDAK disimpan ke DB, AI skip).
+ * Format identik dengan blok skip inline fonnteChatController.
  *
  * @param {object} params
- * @param {'FONNTE'|'WATI'|'DIALOG'} params.platform
+ * @param {'FONNTE'|'TIMELINESAI'|'DIALOG'|'CHAKRAHQ'} params.platform
  * @param {string}  params.tag
  * @param {object}  params.agent   - { name, phone }
  * @param {string}  params.customerPhone
@@ -244,9 +245,26 @@ function logTerminalSkip({ platform, tag, agent, customerPhone, customerName, ts
   console.log(`${safeTag}    Customer : ${maskPhone(customerPhone)} (${maskName(customerName)})`);
   console.log(`${safeTag}    Time     : ${ts}`);
   console.log(`${safeTag}    Message  : ${safeMsg}`);
-  console.log(`${safeTag}    Status   : 📥 Disimpan ke DB, AI skip`);
+  console.log(`${safeTag}    Status   : ⏭️  Tidak disimpan ke DB, AI skip (bukan query properti)`);
   console.log(D);
   console.log('');
+}
+
+/**
+ * Tambahkan footer "> _Sent via <AI_PRIMARY_TAG>_" ke pesan keluar.
+ * Diatur via .env: AI_PRIMARY_TAG (mis. propmatches.netlify.app). Jika kosong → tanpa footer.
+ * Footer pakai format WhatsApp blockquote (>) + italic (_..._). Idempotent (tidak dobel).
+ *
+ * @param {string} message
+ * @returns {string}
+ */
+function appendSentViaTag(message) {
+  const tag = String(process.env.AI_PRIMARY_TAG || '').trim();
+  const body = String(message == null ? '' : message).replace(/\s+$/, '');
+  if (!tag) return body;
+  const escaped = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (new RegExp(`sent\\s+via\\s+${escaped}`, 'i').test(body)) return body; // sudah ada → jangan dobel
+  return `${body}\n\n> _Sent via ${tag}_`;
 }
 
 module.exports = {
@@ -259,4 +277,5 @@ module.exports = {
   sanitizeLog,
   maskPhone,
   maskName,
+  appendSentViaTag,
 };

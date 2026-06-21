@@ -56,13 +56,15 @@ const { hasPropertyKeyword,
         isPropertyContextContinuation }  = require('../utils/propertyKeywordFilter');
 const { generateWhatsAppAIReply }        = require('../services/whatsappAIService');
 const { getConversationHistory }         = require('../services/sessionService');
-const { isAlreadyProcessed, markProcessed } = require('../utils/messageDedup');
+const { isAlreadyProcessed, markProcessed,
+        isContentAlreadyProcessed, markContentProcessed } = require('../utils/messageDedup');
 const {
   normalizePhone,
   findOrCreateSession,
   saveMessage,
   logTerminalSummary,
   logTerminalSkip,
+  appendSentViaTag,
 } = require('../utils/whatsappUtils');
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -177,7 +179,7 @@ async function sendViaDialog(targetPhone, messageText, agentToken) {
     recipient_type    : 'individual',
     to                : target,
     type              : 'text',
-    text              : { body: String(messageText).trim() }
+    text              : { body: appendSentViaTag(String(messageText).trim()) }
   };
 
   const response = await axios.post(`${baseUrl}/v1/messages`, body, {
@@ -234,30 +236,10 @@ async function registerWebhook(agentToken, agentUserId, webhookUrl) {
 
 /* ══════════════════════════════════════════════════════════════════════════════
    SECTION 7 — TERMINAL LOGGER
-   logTerminalSummary & logTerminalSkip diimport dari whatsappUtils.
-   logIncomingMessage (raw preview) & logStatusUpdate tetap lokal karena
-   spesifik untuk format 360dialog.
+   Terminal chat mengikuti fonnteChatController: raw webhook banner (handleInboundMessage)
+   → blok SKIP (logTerminalSkip) ATAU blok REPLY (logTerminalSummary) dari whatsappUtils.
+   Tidak ada pre-log per pesan (seperti Fonnte). logStatusUpdate tetap lokal.
 ══════════════════════════════════════════════════════════════════════════════ */
-
-function logIncomingMessage(agentName, agentPhone, senderPhone, senderName, messageText, msgType, timestamp) {
-  const { isTerminalActive } = require('../utils/terminalSwitch');
-  if (!isTerminalActive('DIALOG')) return;
-
-  const divider = '─'.repeat(62);
-  const ts      = timestamp
-    ? new Date(Number(timestamp) * 1000).toISOString()
-    : new Date().toISOString();
-
-  console.log('');
-  console.log(divider);
-  console.log(`[360DIALOG] Agent    : ${agentName} - ${agentPhone || 'N/A'}`);
-  console.log(`            Customer : ${senderPhone} (${senderName})`);
-  console.log(`            Time     : ${ts}`);
-  console.log(`            Type     : ${msgType}`);
-  console.log(`            Message  : ${String(messageText || '(media/non-teks)').substring(0, 100)}`);
-  console.log(divider);
-  console.log('');
-}
 
 function logStatusUpdate(recipientId, status, msgId) {
   const { isTerminalActive } = require('../utils/terminalSwitch');
@@ -292,33 +274,30 @@ async function processIncomingMessage(msg, contacts, agent) {
     ? String(msg.text?.body || '').trim()
     : `[${msgType}]`;  // non-teks: [image], [audio], [video], dll
 
-  // ── Terminal log ─────────────────────────────────────────────────────────
-  logIncomingMessage(
-    agent?.name  || 'UNASSIGNED',
-    agent?.phone || 'N/A',
-    senderPhone,
-    senderName,
-    messageText,
-    msgType,
-    msgTimestamp
-  );
-
-  // ── Jika tidak ada agent atau bukan teks → skip ──────────────────────────
+  // ── Jika tidak ada agent atau bukan teks → skip (silent, seperti Fonnte) ──
+  // (Raw payload sudah di-log di handleInboundMessage; tidak ada pre-log per pesan.)
   if (!agent) {
     console.warn('[360DIALOG] Tidak ada agent ditemukan untuk pesan ini');
     return;
   }
   if (msgType !== 'text' || !messageText || messageText.startsWith('[')) {
-    console.log(`[360DIALOG] Tipe pesan ${msgType} — skip AI reply`);
-    return;
+    return; // media/non-teks → skip diam-diam (sama dengan Fonnte: `if (!message) return`)
   }
 
-  // ── Dedup guard (idempotent against 360dialog webhook retries) ───────────
+  // ── Dedup layer 1: stable message-ID (360dialog webhook retries) ─────────
   if (isAlreadyProcessed(messageId)) {
-    console.log(`[360DIALOG DEDUP] ⚠️  Pesan sudah diproses, skip: ${messageId}`);
+    console.log(`[360DIALOG DEDUP] ⚠️  Pesan sudah diproses (ID), skip: ${messageId}`);
     return;
   }
   markProcessed(messageId);
+
+  // ── Dedup layer 2: content-based (sender+teks dalam 90s), sama dengan Fonnte ──
+  const normSenderDup = normalizePhone(senderPhone);
+  if (isContentAlreadyProcessed(normSenderDup, messageText)) {
+    console.log(`[360DIALOG DEDUP] ⚠️  Konten sama dari ${normSenderDup} dalam 90s, skip.`);
+    return;
+  }
+  markContentProcessed(normSenderDup, messageText);
 
   const ts = msgTimestamp
     ? new Date(Number(msgTimestamp) * 1000).toISOString()

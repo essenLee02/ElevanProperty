@@ -42,7 +42,7 @@ const { hasPropertyKeyword,
         isPropertyContextContinuation } = require('../utils/propertyKeywordFilter');
 const { generateWhatsAppAIReply }       = require('../services/whatsappAIService');
 const { getConversationHistory }        = require('../services/sessionService');
-const { sanitizeLog, maskPhone, maskName } = require('../utils/whatsappUtils');
+const { sanitizeLog, maskPhone, maskName, appendSentViaTag } = require('../utils/whatsappUtils');
 
 const { isAlreadyProcessed: _isAlreadyProcessed,
         markProcessed:      _markProcessed,
@@ -267,7 +267,7 @@ async function sendViaChakraHQ(targetPhone, message, agentToken, sendCfg = {}) {
     messaging_product: 'whatsapp',
     to               : target,
     type             : 'text',
-    text             : { body: String(message).trim() }
+    text             : { body: appendSentViaTag(String(message).trim()) }
   };
 
   console.log(`[CHAKRAHQ SEND] → ${maskPhone(target)} | plugin: ${cfg.pluginId.substring(0, 8)}… | pnid: ${cfg.phoneNumberId} | len: ${payload.text.body.length}`);
@@ -493,18 +493,18 @@ async function processIncomingMessage(fields, agent) {
     console.log(D);
     console.log(`[CHAKRAHQ] ⬇  PESAN PROPERTI MASUK & DIBALAS`);
     console.log(D);
-    console.log(`[CHAKRAHQ] Agent    : ${sanitizeLog(agent.name, 60)} (${maskPhone(agent.phone)})`);
-    console.log(`[CHAKRAHQ] Customer : ${maskPhone(sender)} (${maskName(name)})`);
-    console.log(`[CHAKRAHQ] Time     : ${ts}`);
-    console.log(`[CHAKRAHQ] Message  : ${sanitizeLog(message, 300)}`);
-    console.log(`[CHAKRAHQ] Context  : ${sanitizeLog(ctxSource, 60)}`);
-    console.log(`[CHAKRAHQ] AI       : ${sanitizeLog(aiResult.provider, 40)}`);
+    console.log(`Agent    : ${sanitizeLog(agent.name, 60)} (${maskPhone(agent.phone)})`);
+    console.log(`Customer : ${maskPhone(sender)} (${maskName(name)})`);
+    console.log(`Time     : ${ts}`);
+    console.log(`Message  : ${sanitizeLog(message, 300)}`);
+    console.log(`Context  : ${sanitizeLog(ctxSource, 60)}`);
+    console.log(`AI       : ${sanitizeLog(aiResult.provider, 40)}`);
     console.log(D);
-    console.log('[CHAKRAHQ] RESPONSE:');
+    console.log('RESPONSE:');
     console.log(D);
     console.log(safeReply);
     console.log(D);
-    console.log(`[CHAKRAHQ] Send Status: ${sendStatus}`);
+    console.log(`Send Status: ${sendStatus}`);
     console.log(D);
     console.log('');
   }

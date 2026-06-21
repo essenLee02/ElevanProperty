@@ -42,7 +42,7 @@ const { hasPropertyKeyword,
         isPropertyContextContinuation } = require('../utils/propertyKeywordFilter');
 const { generateWhatsAppAIReply }       = require('../services/whatsappAIService');
 const { getConversationHistory }        = require('../services/sessionService');
-const { sanitizeLog, maskPhone, maskName } = require('../utils/whatsappUtils');
+const { sanitizeLog, maskPhone, maskName, appendSentViaTag } = require('../utils/whatsappUtils');
 
 /* ══════════════════════════════════════════════════════════════════════════════
    BAGIAN 0 — MESSAGE-ID DEDUP CACHE
@@ -232,7 +232,7 @@ async function sendViaTimelinesAI(targetPhone, message) {
     try {
       const response = await axios.post(
         `${apiBase()}/messages`,
-        { phone, text: String(message).trim() },
+        { phone, text: appendSentViaTag(String(message).trim()) },
         {
           headers : {
             'Authorization' : `Bearer ${apiKey}`,
