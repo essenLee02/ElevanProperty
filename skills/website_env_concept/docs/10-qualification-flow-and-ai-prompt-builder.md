@@ -1,4 +1,4 @@
-# 17. Q1–Q12 Qualification Flow & AI Prompt Builder
+# 10. Q1–Q12 Qualification Flow & AI Prompt Builder
 
 ## Purpose
 
@@ -337,5 +337,5 @@ long flows). "belum pernah lihat" = hard Q2b-answered → never re-ask. Multi-ty
 **8. Summary humanizes type** (`apartment` → "Apartemen"), includes `✓ Fasilitas` & `✓ Budget`, and
 uses the dynamic `${agentName}` / `${appName}` signature (never hardcode names).
 
-All of this runs identically across Fonnte / WATI / 360dialog via the shared `whatsappAIService` —
-see `docs/16-multi-agent-whatsapp-architecture.md` (Unified Inbound Processing Pipeline).
+All of this runs identically across Fonnte / ChakraHQ / TimelinesAI via the shared `whatsappAIService` —
+see `09-whatsapp-terminal-multiagent.md` (multi-agent pipeline).

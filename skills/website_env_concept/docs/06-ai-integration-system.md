@@ -1,4 +1,4 @@
-# 05. AI Integration System
+# 06. AI Integration System
 
 ## 3-Layer Fallback Architecture
 
@@ -31,7 +31,7 @@ RESPOND_CATALOG_RUN=OFF              # OFF = Q1-Q12 mode; ON = catalog mode
 
 ## WhatsApp AI Service (`whatsappAIService.js`)
 
-Unified entry point for all 3 WhatsApp platforms (Fonnte, WATI, 360dialog).
+Unified entry point for all WhatsApp platforms (Fonnte, ChakraHQ, TimelinesAI).
 
 ### Main Function: `generateWhatsAppAIReply(params)`
 

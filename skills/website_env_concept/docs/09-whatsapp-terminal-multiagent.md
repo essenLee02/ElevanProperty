@@ -1,9 +1,11 @@
-# 13. WhatsApp Terminal Multi-Agent
-## (fonnteChatController · watiChatController · dialogChatController)
+# 09. WhatsApp Terminal Multi-Agent
+## (fonnteChatController · chakraHQController · timelinesAIChatController)
 
-> Tiga controller yang menangani pesan WhatsApp masuk dari platform berbeda.
-> Semua menggunakan **keyword filter + context continuation** agar hanya merespons
-> pesan terkait properti — termasuk jawaban singkat lanjutan percakapan.
+> Tiga controller yang menangani pesan WhatsApp masuk dari platform berbeda
+> (**Fonnte, ChakraHQ, TimelinesAI**). Semua menggunakan **keyword filter +
+> context continuation** agar hanya merespons pesan terkait properti — termasuk
+> jawaban singkat lanjutan percakapan. Pipeline AI-nya identik (whatsappAIService).
+> (WATI/360dialog = legacy, tidak lagi dipakai sebagai terminal platform.)
 
 ---
 
@@ -12,7 +14,7 @@
 ```
 Customer kirim WA
         ↓
-Platform (Fonnte / WATI / 360dialog)
+Platform (Fonnte / ChakraHQ / TimelinesAI)
         ↓ webhook
 NGROK → backend POST / atau POST /api/[platform]/webhook
         ↓
@@ -43,7 +45,7 @@ generateWhatsAppAIReply({ session, message, agentName })
         ↓
 Simpan AI reply ke DB
         ↓
-Kirim balasan via platform API (Fonnte/WATI/360dialog)
+Kirim balasan via platform API (Fonnte / ChakraHQ / TimelinesAI)
         ↓
 LOG RINGKASAN TERMINAL (full response, tidak truncated)
 ```
@@ -126,11 +128,11 @@ if (!isPropertyQuery && !isContinuation) {
 
 ```env
 # backend/.env
-MASSEGE_TERMINAL=FONNTE           # Hanya Fonnte log ke terminal
-MASSEGE_TERMINAL=DIALOG           # Hanya 360dialog log ke terminal
-MASSEGE_TERMINAL=WATI             # Hanya WATI log ke terminal
-MASSEGE_TERMINAL=FONNTE,DIALOG    # Fonnte + Dialog (multi)
-MASSEGE_TERMINAL=FONNTE,DIALOG,WATI  # Semua
+MASSEGE_TERMINAL=FONNTE                       # Hanya Fonnte log ke terminal
+MASSEGE_TERMINAL=CHAKRAHQ                      # Hanya ChakraHQ
+MASSEGE_TERMINAL=TIMELINESAI                   # Hanya TimelinesAI
+MASSEGE_TERMINAL=FONNTE,CHAKRAHQ              # Fonnte + ChakraHQ (multi)
+MASSEGE_TERMINAL=FONNTE,CHAKRAHQ,TIMELINESAI # Semua
 ```
 
 `MASSEGE_TERMINAL` hanya mengontrol tampilan terminal. Semua platform tetap memproses dan simpan ke DB.
@@ -178,12 +180,14 @@ Send Status: ✅ Terkirim
 
 ```javascript
 app.post('/', (req, res) => {
-  const active = (process.env.MASSEGE_TERMINAL || 'FONNTE').split(',')[0].trim();
-  if (active === 'FONNTE') return FonnteChatController.handleInboundMessage(req, res);
-  if (active === 'DIALOG') return DialogChatController.handleInboundMessage(req, res);
-  if (active === 'WATI')   return WatiChatController.handleInboundMessage(req, res);
+  const active = (process.env.MASSEGE_TERMINAL || 'FONNTE').toUpperCase().split(',')[0].trim();
+  if (active === 'FONNTE')      return FonnteChatController.handleInboundMessage(req, res);
+  if (active === 'TIMELINESAI') return TimelinesAIChatController.handleInboundMessage(req, res);
+  if (active === 'CHAKRAHQ')    return ChakraHQController.handleInboundMessage(req, res);
 });
 ```
+> Root `POST /` memakai **nilai pertama** `MASSEGE_TERMINAL` untuk routing webhook
+> tanpa-path. Tiap platform juga punya endpoint sendiri (`/api/chakrahq/webhook`, dst.).
 
 ---
 
@@ -284,66 +288,49 @@ POST /api/fonnte-chat/poller-stop
 
 ---
 
-## Controller 2 — watiChatController
+## Controller 2 — chakraHQController
 
-**File:** `backend/controllers/watiChatController.js`
-**Endpoint:** `POST /api/wati/webhook`
-**Status:** ⚠️ Code ready — WA channel belum connect
+**File:** `backend/controllers/chakraHQController.js`
+**Endpoint:** `POST /api/chakrahq/webhook` (+ `POST /` bila `MASSEGE_TERMINAL` diawali CHAKRAHQ)
+**Format:** Meta WhatsApp Cloud API (bukan format flat ala Fonnte).
 
-### Env
-```env
-WATI_API_TOKEN = [dari WATI Dashboard]
-WATI_API_URL   = https://live.wati.io/[account_id]/api/v1
+### Inbound (webhook)
+`extractFields()` mendukung 3 bentuk payload:
+- **Meta pass-through**: `entry[].changes[].value.{messages,contacts,metadata}`
+- **Chakra MessagePayload**: `{ message:{...}, contacts:[{wa_id, profile.name}], messageId }`
+- **Legacy/simple** (fallback defensif): `{ phone/pengirim, pesan/message }`
+
+Teks di `message.text.body`; pengirim `message.from`/`contacts[0].wa_id`.
+
+### Send (session message — hanya dalam 24 jam setelah pesan customer)
 ```
-
-### Perbedaan WATI vs Fonnte
-- **WATI**: 1 nomor WA bisnis → routing by `assignedTo` field
-- **Fonnte**: Setiap agent punya nomor WA sendiri → routing by device phone
+POST https://api.chakrahq.com/v1/ext/plugin/whatsapp/{pluginId}/api/{apiVersion}/{phoneNumberId}/messages
+Authorization: Bearer {chakra_hq_token}   ← per-agent (users.chakra_hq_token)
+Body: { messaging_product:"whatsapp", to, type:"text", text:{ body } }
+```
+Konfigurasi `.env`: `CHAKRAHQ_PLUGIN_ID`, `CHAKRAHQ_PHONE_NUMBER_ID`,
+`CHAKRAHQ_API_VERSION` (lihat WhatsApp Setup di dashboard ChakraHQ).
 
 ### API Endpoints
 ```
-POST /api/wati/webhook
-GET  /api/wati/status
-GET  /api/wati/agents/list
-GET  /api/wati/agent-chats/:agentName
-GET  /api/wati/chat-history/:sessionId
+POST /api/chakrahq/webhook
+POST /api/chakrahq/simulate
+GET  /api/chakrahq/status
+GET  /api/chakrahq/agents
+GET  /api/chakrahq/check-api
 ```
 
 ---
 
-## Controller 3 — dialogChatController (360dialog)
+## Controller 3 — timelinesAIChatController
 
-**File:** `backend/controllers/dialogChatController.js`
-**Endpoint:** `POST /api/dialog-chat/webhook`
-**Status:** ✅ Code ready — dialog360_token belum diisi di DB
+**File:** `backend/controllers/timelinesAIChatController.js`
+**Endpoint:** `POST /api/timelinesai/webhook` (+ `POST /` bila `MASSEGE_TERMINAL` diawali TIMELINESAI)
+**Env:** `TIMELINESAI_API_KEY`
 
-### Env
-```env
-DIALOG360_SANDBOX=true
-DIALOG360_WEBHOOK_BASE_URL=https://xxxx.ngrok-free.app
-```
-
-### Setup Sandbox
-```
-1. Kirim "START" ke +551146733492 via WA → dapat API key
-2. Simpan ke DB:
-   UPDATE users SET dialog360_token='[KEY]' WHERE id=[id];
-3. Daftarkan webhook:
-   POST /api/dialog-chat/setup-webhook
-   Body: { "agentId": "[user_id]" }
-4. Header X-Agent-Id dikirim Fonnte per request → backend identifikasi agent
-```
-
-### API Endpoints
-```
-POST /api/dialog-chat/webhook
-POST /api/dialog-chat/setup-webhook
-POST /api/dialog-chat/simulate
-GET  /api/dialog-chat/status
-GET  /api/dialog-chat/agents
-GET  /api/dialog-chat/agent-chats/:name
-GET  /api/dialog-chat/chat-history/:id
-```
+TimelinesAI mengelola satu/lebih nomor WA; controller mengikuti pipeline yang
+sama (extract fields → match agent → `generateWhatsAppAIReply` → kirim balasan).
+Detail field/endpoint spesifik: lihat `timelinesAIChatController.js`.
 
 ---
 
@@ -352,9 +339,9 @@ GET  /api/dialog-chat/chat-history/:id
 ```javascript
 // backend/utils/terminalSwitch.js
 isTerminalActive('FONNTE')  // → boolean
-isTerminalActive('DIALOG')
-isTerminalActive('WATI')
-getActiveTerminals()        // → ['FONNTE'] | ['FONNTE','DIALOG'] | ...
+isTerminalActive('CHAKRAHQ')
+isTerminalActive('TIMELINESAI')
+getActiveTerminals()        // → ['FONNTE'] | ['FONNTE','CHAKRAHQ','TIMELINESAI'] | ...
 
 // backend/services/sessionService.js
 getConversationHistory(sessionId, limit)  // Used untuk context continuation check

@@ -1,4 +1,4 @@
-# 01. Authentication & Agent Management
+# 04. Authentication & Agent Management
 
 ## JWT Strategy (2-Tier Token)
 

@@ -1,4 +1,4 @@
-# 14. Private Agent — WhatsApp Response Format
+# 11. Private Agent — WhatsApp Response Format
 
 > File ini khusus mendokumentasikan `ResponseBuilderWhatsApp` dan
 > `generateResponseForTerminalMassege()` — format response Private Agent

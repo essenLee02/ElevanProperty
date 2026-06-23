@@ -1,4 +1,4 @@
-# 15. External Integrations — S3, Email, and Others
+# 14. External Integrations — S3, Email, and Others
 
 **Complete guide for AWS S3, Email service, Analytics, and other external integrations.**
 

@@ -11,8 +11,8 @@
 | Fallback AI | Claude (Anthropic claude-haiku-4-5-20251001) |
 | Last-resort AI | chatbotPrivateController (local, no external API) |
 | WhatsApp (primary) | Fonnte — multi-agent, each agent has own token |
-| WhatsApp (alt) | WATI (watiChatController) |
-| WhatsApp (alt) | 360dialog (dialogChatController) |
+| WhatsApp (alt) | ChakraHQ (chakraHQController — Meta WhatsApp Cloud format) |
+| WhatsApp (alt) | TimelinesAI (timelinesAIChatController) |
 | Live property data | Rumah123 via Apify scraper |
 | Static property data | JSON flat file (`backend/asset/json_data/`) |
 | Google Sheets | Contact form logging (non-blocking) |
@@ -27,7 +27,7 @@ Elevan_Property/
 │   │   ├── chatbotController.js          ← Website floating chatbot
 │   │   ├── chatbotPrivateController.js   ← Private agent (OOP, 4 classes + WhatsApp classes)
 │   │   ├── contactController.js
-│   │   ├── dialogChatController.js       ← 360dialog multi-agent webhook
+│   │   ├── chakraHQController.js         ← ChakraHQ multi-agent webhook (Meta WA Cloud format)
 │   │   ├── facilityMasterController.js   ← Facility CRUD (protected)
 │   │   ├── fonnteChatController.js       ← Fonnte multi-agent webhook (MAIN WA handler)
 │   │   ├── fonnteWebhookController.js    ← Legacy Fonnte webhook
@@ -38,7 +38,9 @@ Elevan_Property/
 │   │   ├── refreshTokenController.js
 │   │   ├── registerController.js
 │   │   ├── rumah123Controller.js
-│   │   ├── watiChatController.js         ← WATI multi-agent webhook
+│   │   ├── timelinesAIChatController.js  ← TimelinesAI multi-agent webhook
+│   │   ├── watiChatController.js         ← WATI multi-agent webhook (legacy)
+│   │   ├── dialogChatController.js       ← 360dialog webhook (legacy, off terminal routing)
 │   │   └── whatsappInboundController.js  ← Legacy WA inbound (log-only)
 │   ├── services/
 │   │   ├── aiPromptBuilderService.js     ← Q1-Q12 extraction + WhatsApp prompt builder
@@ -150,11 +152,11 @@ Customer → Agent's WhatsApp number
     → sendViaFonnte(customer, reply, agent.fonnte_token)
 ```
 
-### WATI / 360dialog Multi-Agent WhatsApp
+### ChakraHQ / TimelinesAI Multi-Agent WhatsApp
 ```
 Same flow as Fonnte but via:
-  POST /api/wati/webhook → watiChatController
-  POST /api/dialog-chat/webhook → dialogChatController
+  POST /api/chakrahq/webhook   → chakraHQController   (Meta WhatsApp Cloud format)
+  POST /api/timelinesai/webhook → timelinesAIChatController
 Terminal display controlled by MASSEGE_TERMINAL env var.
 ```
 
@@ -188,9 +190,9 @@ Logout:   DELETE /api/auth/logout → clear DB refresh_token + clear cookie
                                │
               ┌────────────────┼────────────────┐
               ▼                ▼                ▼
-       Fonnte webhook    WATI webhook    360dialog webhook
-       /fonnte-chat/     /wati/          /dialog-chat/
-       webhook           webhook         webhook
+       Fonnte webhook    ChakraHQ webhook   TimelinesAI webhook
+       /fonnte-chat/     /chakrahq/         /timelinesai/
+       webhook           webhook            webhook
               │                │                │
               └────────────────┼────────────────┘
                                ▼
@@ -230,7 +232,7 @@ CLAUDE_MAX_TOKENS=1200
 
 # WhatsApp
 FONNTE_TOKEN=...                   # global token for contact form notifications
-MASSEGE_TERMINAL=FONNTE            # which platform shows in terminal (FONNTE,WATI,DIALOG)
+MASSEGE_TERMINAL=FONNTE            # which platform shows in terminal (FONNTE,CHAKRAHQ,TIMELINESAI)
 
 # WhatsApp AI Mode
 RESPOND_CATALOG_RUN=OFF            # OFF=Q1-Q12 qualification; ON=catalog listing

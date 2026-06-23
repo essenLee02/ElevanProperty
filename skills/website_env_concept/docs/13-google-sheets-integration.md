@@ -1,4 +1,4 @@
-# 14. Google Sheets Integration — Complete Guide
+# 13. Google Sheets Integration — Complete Guide
 
 **Complete integration guide for Google Sheets API with contact form submissions, non-blocking operations, and production setup.**
 

@@ -44,7 +44,7 @@ frontend/src/
 | Rumah123 | `Rumah123View.vue` | `rumah123Controller.js` | ✅ Live |
 | Auth (Login/Register) | `LoginView`, `RegisterView` | `loginController`, `registerController` | ✅ Live |
 | Profile | `ProfileView.vue` | `profileController.js` | ✅ Live |
-| WATI Chat | *(terminal only, no UI)* | `watiChatController.js` | ⚠️ Channel pending |
+| WhatsApp Chat | *(terminal only, no UI)* | `fonnteChatController` / `chakraHQController` / `timelinesAIChatController` | ✅ |
 
 ---
 
@@ -278,6 +278,38 @@ Response: {
 
 ---
 
+## Module: Facility Master (`FacilityListView.vue` + `FacilityMasterView.vue`)
+
+Halaman master fasilitas (AC, Kolam Renang, CCTV, dll). **Requires auth.**
+Field master fasilitas: `name`, `description`, `icon`, `status` (1=aktif, 2=disabled,
+3=deleted). **Tanpa** kolom kategori / urutan tampil (sudah dihapus).
+
+| View | Fungsi |
+|---|---|
+| `FacilityListView.vue` | Daftar fasilitas status 1 & 2. Tabel + pagination dibangun lewat `window.tableModal()` / `loadModalPagination()` (Function_Path). Tombol: Edit → halaman update; Disable → toggle status 1↔2; Delete → soft-delete (status 3). |
+| `FacilityMasterView.vue` | Form tambah/edit. Insert → `POST /api/facility/insert`; Update → `PUT /api/facility/update/:facility_id`. |
+
+API (`facilityApi.js`, semua via interceptor `api.js`):
+`GET /api/facility/list` · `GET /api/facility/detail/:id` · `POST /api/facility/insert`
+· `PUT /api/facility/update/:id` · `PATCH /api/facility/toggle-status/:id`
+· `DELETE /api/facility/delete/:id`.
+
+**Anti-redundancy (server):** insert/update menolak nama duplikat *dan* sinonim
+(mis. gym/gym club, cctv/kamera pengawas, kolam renang/swimming pool) via
+normalisasi nama + `FACILITY_SYNONYM_GROUPS` di `facilityMasterController.js`.
+
+---
+
+## Global Vendor Assets (App.vue)
+
+`src/App.vue` memuat SEKALI (semua view dapat akses, tanpa import ulang):
+Bootstrap 5.3.8, jQuery 4.0.0, Font Awesome 7.2.0, dan **Function_Path**
+(`tableModal`, `loadModalPagination`, `sendMessageBox`, `ajaxHit`) dari
+`public/assets/`. List view baru cukup duplikat `FacilityListView` dan ganti
+`TABLE_HEADERS`/`TABLE_CHUNKS`/`ACTION_*` + endpoint — markup tabel tak ditulis ulang.
+
+---
+
 ## Build / Deploy
 
 ```bash
@@ -327,8 +359,8 @@ Tidak ada tampilan UI di website. Interaksi terjadi di WhatsApp customer ↔ age
 | Controller | Platform | Endpoint | Status |
 |---|---|---|---|
 | `fonnteChatController.js` | Fonnte | `POST /api/fonnte-chat/webhook` | ✅ Working |
-| `watiChatController.js` | WATI | `POST /api/wati/webhook` | ⚠️ Code ready |
-| `dialogChatController.js` | 360dialog | `POST /api/dialog-chat/webhook` | ⚠️ Token belum diisi |
+| `chakraHQController.js` | ChakraHQ | `POST /api/chakrahq/webhook` | ✅ Webhook ready |
+| `timelinesAIChatController.js` | TimelinesAI | `POST /api/timelinesai/webhook` | ✅ |
 
 ### Alur Singkat
 
@@ -345,8 +377,8 @@ Balas ke customer dengan property recommendations + agent footer
 ### MASSEGE_TERMINAL Control
 
 ```env
-MASSEGE_TERMINAL=FONNTE           # Hanya Fonnte log ke terminal
-MASSEGE_TERMINAL=FONNTE,WATI,DIALOG  # Semua platform
+MASSEGE_TERMINAL=FONNTE                       # Hanya Fonnte log ke terminal
+MASSEGE_TERMINAL=FONNTE,CHAKRAHQ,TIMELINESAI  # Semua platform aktif
 ```
 
 ### Context-Aware Continuation (Juni 2026)
