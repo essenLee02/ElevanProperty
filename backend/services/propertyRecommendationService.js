@@ -292,6 +292,7 @@ function detectLocation(message = '') {
 const _FACILITY_MAP = [
   ['Kids zone',      ['kids zone', 'kids club', 'kid zone', 'kods zone', 'area bermain anak', 'playground', 'kidzone']],
   ['Gym',            ['gym', 'fitness', 'fitnes']],
+  ['Yoga',           ['yoga', 'tempat yoga', 'studio yoga', 'ruang yoga']],
   ['Kolam renang',   ['kolam renang', 'swimming pool', 'pool', 'kolam']],
   ['Keamanan 24 jam',['security', 'keamanan 24', 'keamanan', 'satpam', 'cctv', '24 jam', 'one gate', 'one-gate']],
   ['AC',             ['ac', 'air conditioner']],

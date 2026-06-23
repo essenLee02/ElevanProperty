@@ -1033,6 +1033,10 @@ class ResponseBuilderWhatsApp {
     lines.push(row(isId ? 'Fasilitas' : 'Facilities',       brief.facilities));
     lines.push(row(isId ? 'Budget' : 'Budget',              brief.budget));
     lines.push(row(isId ? 'Patokan lokasi' : 'Anchor',      brief.anchorPoint));
+    // Preferensi positif & hal yang dihindari — hanya tampil bila customer menyebutnya
+    // (opsional, jadi tidak ditandai ✗ "Belum ditanyakan" saat kosong).
+    if (known(brief.preferences)) lines.push(`✓ ${isId ? 'Preferensi' : 'Preferences'}: *${brief.preferences.value}*`);
+    if (known(brief.redFlags))    lines.push(`✓ ${isId ? 'Hindari' : 'Avoid'}: *${brief.redFlags.value}*`);
 
     const priorityBadge = {
       HIGH      : isId ? '📋 Prioritas Tinggi'   : '📋 High Priority',
@@ -2580,6 +2584,12 @@ class ConversationQualifier {
           : 'UNKNOWN',
         source: profile.hasRedFlags ? 'stated' : 'UNKNOWN',
       },
+      preferences: {
+        // Preferensi POSITIF lingkungan/suasana (sejuk, rindang, asri, tenang, dll).
+        // Beda dari redFlags (yang dihindari) — ini yang DIINGINKAN customer.
+        value : this.#extractPreferences(custText),
+        source: this.#extractPreferences(custText) !== 'UNKNOWN' ? 'stated' : 'UNKNOWN',
+      },
       anchorPoint: {
         // Prefer qualState.anchorPoint (Phase 2 — exact full customer reply to Q6,
         // e.g. "deket indomaret, cafe dan ubaya"). The raw #extractAnchorPoint fallback
@@ -2702,9 +2712,11 @@ class ConversationQualifier {
   }
 
   static #extractFurnishing(custText) {
-    if (/full\s*furnish|fully furnished|\bfull\b/.test(custText))  return 'Full furnished';
-    if (/semi\s*furnish|semi-furnished|\bsemi\b/.test(custText))   return 'Semi-furnished';
-    if (/kosongan|unfurnished|\bkosong\b/.test(custText))          return 'Kosongan';
+    // Semua varian jawaban customer untuk "semi" dianggap sama:
+    //   "semi", "Semi", "semi-furnished", "semi-furnish", "semi furnish" → "Semi furnished".
+    if (/full\s*furnish|fully\s*furnished|\bfull\b/.test(custText))            return 'Full furnished';
+    if (/semi[\s-]*furnish(?:ed)?|\bsemi\b/.test(custText))                    return 'Semi furnished';
+    if (/kosongan|unfurnished|tanpa\s+perabot|\bkosong\b/.test(custText))      return 'Kosongan';
     return 'Disebutkan';
   }
 
@@ -2738,6 +2750,21 @@ class ConversationQualifier {
     // Return 'UNKNOWN' (not 'Disebutkan') so the brief suppresses the "Hindari"
     // line when no specific red flag pattern is matched from the customer text.
     return flags.length ? flags.join(', ') : 'UNKNOWN';
+  }
+
+  /**
+   * Preferensi POSITIF lingkungan/suasana yang DIINGINKAN customer (Q5/Q6).
+   * Mis. "lokasinya sejuk dan rindang banyak pepohonan" → "Sejuk & rindang".
+   * Dipakai agar keinginan customer tidak hilang dari summary (≠ redFlags).
+   */
+  static #extractPreferences(custText) {
+    const prefs = [];
+    if (/\b(sejuk|adem|rindang|pepohonan|pohon|hijau|teduh|asri)\b/.test(custText)) prefs.push('Lingkungan sejuk & asri');
+    if (/\b(tenang|sepi|tidak\s+bising|tidak\s+ramai|jauh\s+dari\s+keramaian)\b/.test(custText)) prefs.push('Suasana tenang');
+    if (/\b(strategis|akses\s+(mudah|gampang)|dekat\s+(tol|jalan\s+(raya|utama)))\b/.test(custText)) prefs.push('Lokasi strategis');
+    if (/\b(jalan\s+(raya\s+)?(lebar|besar|luas))\b/.test(custText)) prefs.push('Jalan lebar');
+    if (/\b(aman|keamanan\s+baik|lingkungan\s+aman)\b/.test(custText)) prefs.push('Lingkungan aman');
+    return prefs.length ? prefs.join(', ') : 'UNKNOWN';
   }
 
   static #extractAnchorPoint(custText) {

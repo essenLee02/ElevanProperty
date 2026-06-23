@@ -192,7 +192,7 @@ console.log('\n── Group 8: summary brief field accuracy (full dinas transcri
   const p = CQ.buildProfile(hist, last, f);
   const brief = CQ.buildAgentBrief(p, f, hist, last);
   ok('Masuk has year (3 September 2026)', brief.moveInDate.value === '3 September 2026');
-  ok('Furnitur = Semi-furnished (bare "semi")', brief.furnishing.value === 'Semi-furnished');
+  ok('Furnitur = Semi furnished (bare "semi")', brief.furnishing.value === 'Semi furnished');
   ok('Budget appends period /2 minggu', /\/2\s*minggu$/.test(brief.budget.value));
   ok('Facilities keep all items', ['AC','Lemari','Kasur','Kulkas'].every(x => brief.facilities.value.includes(x)));
   ok('Facilities keep kitchen set', /Kitchen set/i.test(brief.facilities.value));

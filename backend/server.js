@@ -54,7 +54,7 @@ app.get('/', (req, res) => {
 app.use('/json_data', express.static(path.join(__dirname, 'asset/json_data')));
 
 // ─── Root POST handler — untuk webhook platform yang tidak menyertakan path ──
-// Fonnte / Dialog / TimelinesAI kadang dikonfigurasi hanya ke base URL (tanpa /api/...)
+// Fonnte / TimelinesAI kadang dikonfigurasi hanya ke base URL (tanpa /api/...)
 // Handler ini meneruskan ke controller yang aktif sesuai MASSEGE_TERMINAL di .env
 //
 // Contoh: Fonnte Dashboard webhook = https://ngrok-url/  (tanpa path)
@@ -71,11 +71,6 @@ app.post('/', (req, res) => {
     return FonnteChatController.handleInboundMessage(req, res);
   }
 
-  if (active === 'DIALOG') {
-    const DialogChatController = require('./controllers/dialogChatController');
-    return DialogChatController.handleInboundMessage(req, res);
-  }
-
   if (active === 'TIMELINESAI') {
     const TimelinesAIChatController = require('./controllers/timelinesAIChatController');
     return TimelinesAIChatController.handleInboundMessage(req, res);
@@ -89,7 +84,7 @@ app.post('/', (req, res) => {
   // Fallback jika MASSEGE_TERMINAL tidak dikenali
   return res.status(process.env.HTTP_OK).json({
     success : true,
-    message : 'Webhook diterima. Set MASSEGE_TERMINAL=FONNTE|DIALOG|TIMELINESAI|CHAKRAHQ di .env untuk routing.'
+    message : 'Webhook diterima. Set MASSEGE_TERMINAL=FONNTE|TIMELINESAI|CHAKRAHQ di .env untuk routing.'
   });
 });
 

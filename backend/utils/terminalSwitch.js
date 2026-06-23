@@ -6,15 +6,13 @@
  *
  * Nilai yang didukung (satu atau lebih, pisah koma):
  *   FONNTE      → fonnteChatController tampil di terminal
- *   DIALOG      → dialogChatController tampil di terminal
  *   TIMELINESAI → timelinesAIChatController tampil di terminal
  *   CHAKRAHQ    → chakraHQController tampil di terminal
  *
  * Contoh:
- *   MASSEGE_TERMINAL=TIMELINESAI                        → hanya TimelinesAI tampil
- *   MASSEGE_TERMINAL=FONNTE,DIALOG                      → Fonnte dan Dialog tampil
- *   MASSEGE_TERMINAL=FONNTE,DIALOG,TIMELINESAI          → Fonnte, Dialog, TimelinesAI tampil
- *   MASSEGE_TERMINAL=FONNTE,DIALOG,TIMELINESAI,CHAKRAHQ → semua tampil
+ *   MASSEGE_TERMINAL=TIMELINESAI                  → hanya TimelinesAI tampil
+ *   MASSEGE_TERMINAL=FONNTE,TIMELINESAI           → Fonnte dan TimelinesAI tampil
+ *   MASSEGE_TERMINAL=FONNTE,TIMELINESAI,CHAKRAHQ  → semua tampil
  */
 
 'use strict';
@@ -22,7 +20,7 @@
 /**
  * Cek apakah platform ini aktif untuk tampil di terminal.
  *
- * @param {'FONNTE'|'DIALOG'|'TIMELINESAI'|'CHAKRAHQ'} platform
+ * @param {'FONNTE'|'TIMELINESAI'|'CHAKRAHQ'} platform
  * @returns {boolean}
  */
 function isTerminalActive(platform) {

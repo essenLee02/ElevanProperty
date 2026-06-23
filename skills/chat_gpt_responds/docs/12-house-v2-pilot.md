@@ -67,6 +67,8 @@ Baik, semua sudah saya catat! 📝 📋 [Prioritas Tinggi|Normal|Data Belum Leng
 ✗ Fasilitas: *(Belum ditanyakan)*                ← ✓ + daftar amenities jika ditanya/disebut
 ✓ Budget: *[Rp X - Rp Y]*
 ✗ Patokan lokasi: *(Belum ditanyakan)*           ← ✓ + nilai jika ditanya/disebut
+✓ Preferensi: *[suasana yg DIINGINKAN, mis. sejuk & asri, tenang]*  ← OPSIONAL, hanya bila disebut
+✓ Hindari: *[hal yg dihindari, mis. Tidak mau banjir]*              ← OPSIONAL, hanya bila disebut
 
 Saya akan segera menghubungi Anda dengan rekomendasi properti yang paling sesuai! 🏠
 
