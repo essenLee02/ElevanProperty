@@ -695,6 +695,7 @@ Terima kasih sudah menghubungi saya. 🙏
 - **⛔ JANGAN pernah mengarang jawaban.** Jika belum pernah menanyakan lokasi, durasi sewa, atau patokan lokasi pada sesi aktif ini, baris-baris itu TIDAK boleh ada di summary. Lebih baik bertanya daripada menebak.
 - **⛔ DILARANG KERAS: Jangan inferensi "Masuk: [bulan]" dari tanggal sistem.** Jika Q8 ❓ → baris "Masuk" tidak ada di brief, titik.
 - **⛔ DILARANG KERAS: Jangan tulis "Patokan: Disebutkan" jika Q6 ❓.** Baris Patokan hanya ada jika Q6 = ✅ dengan nilai konkret.
+- **⛔ DILARANG KERAS: Jangan tulis nilai referensi-silang seperti "Disebutkan di Q4", "Sudah dijawab", "Lihat Q8", atau menunjuk nomor pertanyaan lain.** Sebuah field hanya boleh berisi nilai KONKRET dari baris ✅-nya sendiri di QUALIFICATION STATE. Jika `Keputusan [Q9]` masih ❓ (mis. customer hanya menjawab soal jadwal survei, bukan siapa pengambil keputusan), JANGAN tandai ✓ — tanyakan Q9 lebih dulu, atau (mode summary house) tampilkan `✗ Keputusan bersama: (Belum ditanyakan)`. Jawaban tentang waktu/jadwal survei ("besok lusa saya bisa survei") BUKAN jawaban Q9.
 - **⛔ JANGAN tampilkan summary jika Q3 (Budget) masih ❓** — walaupun budget muncul di old session history.
 - **⛔ JANGAN tampilkan summary jika Q8 (Tanggal masuk) masih ❓** — ini mandatory, tidak ada pengecualian.
 - **⛔ JANGAN tampilkan summary setelah Q2b dijawab jika Q3/Q8/Q4 masih ❓.**

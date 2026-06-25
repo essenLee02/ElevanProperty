@@ -443,18 +443,27 @@ function extractQualificationState(history = [], currentMessage = '') {
       const resp = custResp;
       const lo   = resp.toLowerCase();
 
-      // Guard: if the customer's answer looks like a move-in date (month name,
-      // "tahun depan", year number, "bulan depan") do NOT store it as a decision
-      // maker — the customer likely answered the wrong question or the bot mis-
-      // classified their move-in date answer as a Q9 trigger.
+      // Sinyal OTORITAS KEPUTUSAN — kata yang benar-benar menunjuk siapa yang
+      // memutuskan (sendiri vs koordinasi, dengan siapa). Hanya jika salah satu ada,
+      // jawaban boleh dianggap menjawab Q9.
+      const DECISION_SIGNAL_RE = /\b(sendiri|sendirian|seorang diri|solo|mandiri|langsung|keputusan|memutuskan|putuskan|tentukan|decide|koordinasi|konfirmasi|diskusi|izin|minta\s+izin|istri|suami|pasangan|keluarga|orang\s*tua|orangtua|ayah|ibu|parents|bos|atasan|partner)\b/i;
+
+      // Guard: jawaban yang sebenarnya tentang TANGGAL atau JADWAL/SURVEI — bukan siapa
+      // pengambil keputusan — TIDAK boleh mengisi decisionMaker. Customer sering menjawab
+      // Q9 dengan kesediaan/waktu survei ("mau survei, besok lusa saya bisa") atau tanggal
+      // masuk; itu menjawab logistik viewing, BUKAN otoritas keputusan. Biarkan Q9 tetap ❓
+      // agar AI menanyakan otoritas keputusan dengan jelas (jangan mengarang nilai).
       const MONTH_ID_RE = /\b(januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)\b/i;
       const MONTH_EN_RE = /\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/i;
-      const DATE_ANSWER_RE = /\b(tahun\s+depan|bulan\s+depan|next\s+year|next\s+month|20\d{2})\b/i;
-      if (MONTH_ID_RE.test(lo) || MONTH_EN_RE.test(lo) || DATE_ANSWER_RE.test(lo)) {
-        // Looks like a date answer — skip Q9 capture, do not pollute decisionMaker
+      const DATE_ANSWER_RE = /\b(tahun\s+depan|bulan\s+depan|minggu\s+depan|next\s+(year|month|week)|besok|lusa|hari\s+ini|sekarang|nanti|secepatnya|20\d{2}|\d{1,2}\s*(hari|minggu|bulan))\b/i;
+      const SCHEDULING_ONLY_RE = /\b(survei|survey|viewing|lihat|liat|kunjung|datang|jadwal|jadwalkan|cek\s+lokasi|mampir)\b/i;
+
+      if ((MONTH_ID_RE.test(lo) || MONTH_EN_RE.test(lo) || DATE_ANSWER_RE.test(lo) || SCHEDULING_ONLY_RE.test(lo)) &&
+          !DECISION_SIGNAL_RE.test(lo)) {
+        // Jawaban tanggal/jadwal/survei tanpa sinyal keputusan → JANGAN simpan. Q9 ❓.
       } else if (/\b(saya|aku)\b.{0,40}\b(ambil keputusan|yang memutuskan|yang putuskan|yang tentukan|yang decide)\b/i.test(lo) ||
           /\b(ambil keputusan|yang memutuskan|saya sendiri)\b/i.test(lo) ||
-          /\btidak perlu koordinasi\b|\bnggak perlu koordinasi\b|\blangsung bisa (viewing|jadwal)\b/i.test(lo)) {
+          /\btidak perlu koordinasi\b|\b(nggak|ngga|gak|ga|tdk|tidak)\s+perlu koordinasi\b|\btanpa koordinasi\b|\blangsung\s+(bisa|aja|saja|jadwal\w*|viewing|survei|survey|book\w*)\b|\bbisa langsung\b/i.test(lo)) {
         state.decisionMaker = 'Mandiri';
       } else if (/\b(koordinasi|konfirmasi|tanya|izin).{0,40}(istri|suami|pasangan)\b/i.test(lo) ||
                  /\b(istri|suami|pasangan).{0,20}(harus|perlu|dulu)\b/i.test(lo)) {
@@ -466,9 +475,12 @@ function extractQualificationState(history = [], currentMessage = '') {
       } else if (/\b(sendiri|sendirian|seorang diri|solo)\b/i.test(lo)) {
         // Customer explicitly said "sendiri" in response to Q9 — normalize to "Sendirian"
         state.decisionMaker = 'Sendirian';
-      } else {
+      } else if (DECISION_SIGNAL_RE.test(lo)) {
+        // Ada sinyal keputusan tapi tak match pola spesifik → simpan apa adanya.
         state.decisionMaker = resp;
       }
+      // else: tidak ada sinyal keputusan sama sekali → biarkan null (Q9 tetap ❓,
+      // AI akan menanyakannya; JANGAN tangkap jawaban yang tak relevan).
     }
     // Q10 — lease duration
     // Skip if customer answers with a date instead of a duration (e.g. "26 Juni 2026" → misunderstood question)
