@@ -7,13 +7,10 @@
 
 require('dotenv').config();
 const sequelize = require('../config/database');
-const User = require('../models/User');
-const ChatSession = require('../models/ChatSession');
-const ChatMessage = require('../models/ChatMessage');
-const Contact = require('../models/Contact');
-const Property = require('../models/Property');
-const WhatsAppInbound = require('../models/WhatsAppInbound');
-const Log = require('../models/Log');
+// Load the models barrel so EVERY model registers on the sequelize instance
+// (User, ChatSession, ChatMessage, Contact, Property, WhatsAppInbound, Log,
+//  Facility, Country, Province, City) — otherwise sync() skips unloaded models.
+require('../models');
 
 const syncDatabase = async () => {
   try {

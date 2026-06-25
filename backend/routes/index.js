@@ -60,6 +60,9 @@ const profileController          = require('../controllers/profileController');
 
 // Master data controllers
 const facilityMasterController   = require('../controllers/facilityMasterController');
+const countryMasterController    = require('../controllers/countryMasterController');
+const provinceMasterController   = require('../controllers/provinceMasterController');
+const cityMasterController       = require('../controllers/cityMasterController');
 
 const { verifyToken, requirePrivilege } = require('../middleware/verifyToken');
 
@@ -210,5 +213,40 @@ router.post('/facility/insert',                     verifyToken, facilityMasterC
 router.put('/facility/update/:facility_id',         verifyToken, facilityMasterController.updateDataFacility);
 router.patch('/facility/toggle-status/:facility_id',verifyToken, facilityMasterController.toggleStatusFacility);
 router.delete('/facility/delete/:facility_id',      verifyToken, facilityMasterController.deleteFacility);
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   MASTER DATA — COUNTRY (Butuh login)
+══════════════════════════════════════════════════════════════════════════════ */
+
+router.get('/country/options',                      verifyToken, countryMasterController.getCountryOptions);
+router.get('/country/list',                         verifyToken, countryMasterController.showDataCountry);
+router.get('/country/detail/:country_id',           verifyToken, countryMasterController.getDetailCountry);
+router.post('/country/insert',                      verifyToken, countryMasterController.insertDataCountry);
+router.put('/country/update/:country_id',           verifyToken, countryMasterController.updateDataCountry);
+router.patch('/country/toggle-status/:country_id',  verifyToken, countryMasterController.toggleStatusCountry);
+router.delete('/country/delete/:country_id',        verifyToken, countryMasterController.deleteCountry);
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   MASTER DATA — PROVINCE (Butuh login)
+══════════════════════════════════════════════════════════════════════════════ */
+
+router.get('/province/options',                     verifyToken, provinceMasterController.getProvinceOptions);
+router.get('/province/list',                        verifyToken, provinceMasterController.showDataProvince);
+router.get('/province/detail/:province_id',         verifyToken, provinceMasterController.getDetailProvince);
+router.post('/province/insert',                     verifyToken, provinceMasterController.insertDataProvince);
+router.put('/province/update/:province_id',         verifyToken, provinceMasterController.updateDataProvince);
+router.patch('/province/toggle-status/:province_id',verifyToken, provinceMasterController.toggleStatusProvince);
+router.delete('/province/delete/:province_id',      verifyToken, provinceMasterController.deleteProvince);
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   MASTER DATA — CITY (Butuh login)
+══════════════════════════════════════════════════════════════════════════════ */
+
+router.get('/city/list',                            verifyToken, cityMasterController.showDataCity);
+router.get('/city/detail/:city_id',                 verifyToken, cityMasterController.getDetailCity);
+router.post('/city/insert',                         verifyToken, cityMasterController.insertDataCity);
+router.put('/city/update/:city_id',                 verifyToken, cityMasterController.updateDataCity);
+router.patch('/city/toggle-status/:city_id',        verifyToken, cityMasterController.toggleStatusCity);
+router.delete('/city/delete/:city_id',              verifyToken, cityMasterController.deleteCity);
 
 module.exports = router;

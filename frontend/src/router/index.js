@@ -8,8 +8,14 @@ import Rumah123View from '../views/Rumah123View.vue'
 import LoginView from '../views/LoginView.vue'
 import RegisterView from '../views/RegisterView.vue'
 import ProfileView from '../views/ProfileView.vue'
-import FacilityListView from '../views/FacilityListView.vue'
-import FacilityMasterView from '../views/FacilityMasterView.vue'
+import FacilityListView from '../views/Facility/FacilityListView.vue'
+import FacilityMasterView from '../views/Facility/FacilityMasterView.vue'
+import CountryListView from '../views/Country/CountryListView.vue'
+import CountryMasterView from '../views/Country/CountryMasterView.vue'
+import ProvinceListView from '../views/Province/ProvinceListView.vue'
+import ProvinceMasterView from '../views/Province/ProvinceMasterView.vue'
+import CityListView from '../views/City/CityListView.vue'
+import CityMasterView from '../views/City/CityMasterView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -69,6 +75,63 @@ const router = createRouter({
       path: '/facility/edit/:facility_id',
       name: 'facility-edit',
       component: FacilityMasterView,
+      meta: { layout: 'auth', requiresAuth: true }
+    },
+    // Master Data — Country
+    {
+      path: '/country',
+      name: 'country-list',
+      component: CountryListView,
+      meta: { layout: 'auth', requiresAuth: true }
+    },
+    {
+      path: '/country/add',
+      name: 'country-add',
+      component: CountryMasterView,
+      meta: { layout: 'auth', requiresAuth: true }
+    },
+    {
+      path: '/country/edit/:country_id',
+      name: 'country-edit',
+      component: CountryMasterView,
+      meta: { layout: 'auth', requiresAuth: true }
+    },
+    // Master Data — Province
+    {
+      path: '/province',
+      name: 'province-list',
+      component: ProvinceListView,
+      meta: { layout: 'auth', requiresAuth: true }
+    },
+    {
+      path: '/province/add',
+      name: 'province-add',
+      component: ProvinceMasterView,
+      meta: { layout: 'auth', requiresAuth: true }
+    },
+    {
+      path: '/province/edit/:province_id',
+      name: 'province-edit',
+      component: ProvinceMasterView,
+      meta: { layout: 'auth', requiresAuth: true }
+    },
+    // Master Data — City
+    {
+      path: '/city',
+      name: 'city-list',
+      component: CityListView,
+      meta: { layout: 'auth', requiresAuth: true }
+    },
+    {
+      path: '/city/add',
+      name: 'city-add',
+      component: CityMasterView,
+      meta: { layout: 'auth', requiresAuth: true }
+    },
+    {
+      path: '/city/edit/:city_id',
+      name: 'city-edit',
+      component: CityMasterView,
       meta: { layout: 'auth', requiresAuth: true }
     }
   ]

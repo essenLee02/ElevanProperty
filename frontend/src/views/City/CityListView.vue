@@ -1,28 +1,44 @@
 <template>
-  <section class="facility-list-section">
+  <section class="master-list-section">
     <div class="container">
 
       <!-- Header -->
       <div class="page-header">
         <div class="page-header-left">
-          <h2>Master Fasilitas</h2>
-          <p>Kelola daftar fasilitas yang tersedia untuk properti</p>
+          <h2>Master Kota</h2>
+          <p>Kelola daftar kota yang terhubung ke provinsi dan negara</p>
         </div>
-        <router-link to="/facility/add" class="btn-add">
-          + Tambah Fasilitas
+        <router-link to="/city/add" class="btn-add">
+          + Tambah Kota
         </router-link>
       </div>
 
-      <!-- Search -->
+      <!-- Filter -->
       <div class="filter-bar">
         <div class="search-wrapper">
           <input
             v-model="search"
             type="text"
-            placeholder="Cari nama fasilitas..."
+            placeholder="Cari nama kota..."
             class="search-input"
             @input="onSearchInput"
           />
+        </div>
+        <div class="select-wrapper">
+          <select v-model="filterCountry" class="filter-select" @change="onCountryFilterChange">
+            <option value="">Semua Negara</option>
+            <option v-for="c in countryOptions" :key="c.country_id" :value="c.country_id">
+              {{ c.name }}
+            </option>
+          </select>
+        </div>
+        <div class="select-wrapper">
+          <select v-model="filterProvince" class="filter-select" @change="loadData(1)">
+            <option value="">Semua Provinsi</option>
+            <option v-for="p in provinceOptions" :key="p.province_id" :value="p.province_id">
+              {{ p.name }}
+            </option>
+          </select>
         </div>
       </div>
 
@@ -35,20 +51,20 @@
       <!-- Loading -->
       <div v-if="isLoading" class="loading-state">
         <div class="spinner-lg"></div>
-        <p>Memuat data fasilitas...</p>
+        <p>Memuat data kota...</p>
       </div>
 
       <template v-else>
         <!-- Table (dibangun oleh window.tableModal — Function_Path) -->
-        <div v-if="facilities.length > 0" ref="tableHost" class="cf-table-host"
+        <div v-if="cities.length > 0" ref="tableHost" class="cf-table-host"
           v-html="tableHtml">
         </div>
 
         <!-- Empty state -->
         <div v-else class="empty-state">
-          <div class="empty-icon">📋</div>
-          <p>Belum ada fasilitas yang terdaftar</p>
-          <router-link to="/facility/add" class="btn-add-empty">+ Tambah Fasilitas Pertama</router-link>
+          <div class="empty-icon">🏙️</div>
+          <p>Belum ada kota yang terdaftar</p>
+          <router-link to="/city/add" class="btn-add-empty">+ Tambah Kota Pertama</router-link>
         </div>
 
         <!-- Pagination (dibangun oleh window.loadModalPagination — Function_Path) -->
@@ -84,22 +100,28 @@
   import { useRouter } from 'vue-router';
   import { toast } from 'vue3-toastify';
   import {
-    getFacilityList,
-    toggleFacilityStatus,
-    deleteFacility
-  } from '../services/facilityApi';
+    getCityList,
+    toggleCityStatus,
+    deleteCity
+  } from '../../services/cityApi';
+  import { getCountryOptions } from '../../services/countryApi';
+  import { getProvinceOptions } from '../../services/provinceApi';
 
   const router = useRouter();
 
   /* ── State ──────────────────────────────────────────────────────── */
-  const facilities    = ref([]);
-  const isLoading     = ref(false);
-  const actionLoading = ref(null);
-  const search        = ref('');
-  const fnReady       = ref(false);        // true setelah Function_Path siap
-  const tableHost     = ref(null);
-  const pagerHost     = ref(null);
-  let   searchTimer   = null;
+  const cities          = ref([]);
+  const countryOptions  = ref([]);
+  const provinceOptions = ref([]);
+  const isLoading       = ref(false);
+  const actionLoading   = ref(null);
+  const search          = ref('');
+  const filterCountry   = ref('');
+  const filterProvince  = ref('');
+  const fnReady         = ref(false);        // true setelah Function_Path siap
+  const tableHost       = ref(null);
+  const pagerHost       = ref(null);
+  let   searchTimer     = null;
 
   const pagination = reactive({
     total: 0, page: 1, pageSize: 10, totalPages: 0, hasNextPage: false, hasPrevPage: false
@@ -113,20 +135,19 @@
   });
 
   /* ── Konfigurasi tabel (CookieFast) ──────────────────────────────────────────
-    Untuk membuat list view baru, cukup DUPLIKAT komponen ini dan ganti 4 baris
-    di bawah + endpoint API-nya — markup tabel & pagination tidak perlu ditulis
-    ulang karena dibangun oleh window.tableModal()/loadModalPagination().
+    Kolom "Provinsi"/"Negara" mengambil nama hasil join backend
+    (field province_name & country_name).
   ──────────────────────────────────────────────────────────────────────────── */
-  const TABLE_HEADERS = ['Nama Fasilitas', 'Status'];  // judul kolom
-  const TABLE_CHUNKS  = ['name', 'status'];            // key data per kolom
-  const ACTION_TYPES  = ['update', 'block', 'delete'];         // tombol aksi
-  const ACTION_PARAMS = ['facility_id'];                       // param tombol (→ value)
+  const TABLE_HEADERS = ['Provinsi', 'Negara', 'Nama Kota', 'Status'];        // judul kolom
+  const TABLE_CHUNKS  = ['province_name', 'country_name', 'name', 'status'];  // key data per kolom
+  const ACTION_TYPES  = ['update', 'block', 'delete'];                        // tombol aksi
+  const ACTION_PARAMS = ['city_id'];                                          // param tombol (→ value)
 
   /* ── HTML hasil function builder (reaktif terhadap data/pagination) ── */
   const tableHtml = computed(() => {
-    if (!fnReady.value || facilities.value.length === 0) return '';
+    if (!fnReady.value || cities.value.length === 0) return '';
     return window.tableModal(
-      TABLE_HEADERS, TABLE_CHUNKS, facilities.value,
+      TABLE_HEADERS, TABLE_CHUNKS, cities.value,
       true, ACTION_TYPES, ACTION_PARAMS
     );
   });
@@ -144,27 +165,52 @@
   const clearAlert  = () => { alert.type = ''; alert.message = ''; };
   const openModal   = (opts) => Object.assign(modal, { show: true, loading: false, ...opts });
   const closeModal  = () => { if (!modal.loading) modal.show = false; };
-  const findByCode  = (code) => facilities.value.find(f => f.facility_id === code) || null;
+  const findByCode  = (code) => cities.value.find(c => String(c.city_id) === String(code)) || null;
+
+  /* ── Load options (negara & provinsi) untuk filter ──────────────── */
+  const loadCountryOptions = async () => {
+    try {
+      const result = await getCountryOptions();
+      if (result?.isSuccess === 1) countryOptions.value = result.data.response.countries || [];
+    } catch (_) { /* non-fatal */ }
+  };
+
+  const loadProvinceOptions = async () => {
+    try {
+      const result = await getProvinceOptions(filterCountry.value || null);
+      if (result?.isSuccess === 1) provinceOptions.value = result.data.response.provinces || [];
+    } catch (_) { /* non-fatal */ }
+  };
+
+  const onCountryFilterChange = async () => {
+    filterProvince.value = '';            // reset provinsi saat negara berubah
+    await loadProvinceOptions();
+    loadData(1);
+  };
 
   /* ── Data loading ───────────────────────────────────────────────── */
   const loadData = async (page = 1) => {
     isLoading.value = true;
     clearAlert();
     try {
-      const result = await getFacilityList({ page, search: search.value });
+      const result = await getCityList({
+        page,
+        search:      search.value,
+        country_id:  filterCountry.value  || undefined,
+        province_id: filterProvince.value || undefined
+      });
       if (result?.isSuccess === 1) {
-        facilities.value = result.data.response.facilities || [];
+        cities.value = result.data.response.cities || [];
         Object.assign(pagination, result.data.response.pagination || {});
       } else {
         setAlert('danger', result?.data?.message || 'Gagal memuat data');
       }
     } catch (err) {
-      if (err?.response?.status === 401) return; // interceptor redirect ke /login
-      setAlert('danger', err?.response?.data?.data?.message || err?.message || 'Gagal memuat data fasilitas');
+      if (err?.response?.status === 401) return;
+      setAlert('danger', err?.response?.data?.data?.message || err?.message || 'Gagal memuat data kota');
     } finally {
       isLoading.value = false;
     }
-    // host di-render ulang tiap load (v-if/loading) → re-bind delegation (idempotent)
     await nextTick();
     bindTableEvents();
     bindPagerEvents();
@@ -176,19 +222,19 @@
   };
 
   /* ── Aksi: toggle status (block/unblock) ────────────────────────── */
-  const handleToggleStatus = (facility) => {
-    const isActive = facility.status === 1;
+  const handleToggleStatus = (city) => {
+    const isActive = city.status === 1;
     openModal({
       icon:         isActive ? '🚫' : '✅',
-      title:        isActive ? 'Nonaktifkan Fasilitas?' : 'Aktifkan Fasilitas?',
-      desc:         `Fasilitas "${facility.name}" akan diubah menjadi ${isActive ? 'Disabled' : 'Aktif'}.`,
+      title:        isActive ? 'Nonaktifkan Kota?' : 'Aktifkan Kota?',
+      desc:         `Kota "${city.name}" akan diubah menjadi ${isActive ? 'Disabled' : 'Aktif'}.`,
       confirmText:  isActive ? 'Ya, Disable' : 'Ya, Aktifkan',
       confirmClass: isActive ? 'btn-confirm-danger' : 'btn-confirm-success',
       onConfirm:    async () => {
         modal.loading = true;
-        actionLoading.value = facility.facility_id;
+        actionLoading.value = city.city_id;
         try {
-          const result = await toggleFacilityStatus(facility.facility_id);
+          const result = await toggleCityStatus(city.city_id);
           if (result?.isSuccess === 1) {
             toast.success(result.data.message || 'Status berhasil diubah');
             await loadData(pagination.page);
@@ -207,28 +253,28 @@
   };
 
   /* ── Aksi: delete (soft delete → status 3) ──────────────────────── */
-  const handleDelete = (facility) => {
+  const handleDelete = (city) => {
     openModal({
       icon:         '🗑️',
-      title:        'Hapus Fasilitas?',
-      desc:         `Fasilitas "${facility.name}" akan dihapus. Tindakan ini tidak dapat dibatalkan.`,
+      title:        'Hapus Kota?',
+      desc:         `Kota "${city.name}" akan dihapus. Tindakan ini tidak dapat dibatalkan.`,
       confirmText:  'Ya, Hapus',
       confirmClass: 'btn-confirm-danger',
       onConfirm:    async () => {
         modal.loading = true;
-        actionLoading.value = facility.facility_id;
+        actionLoading.value = city.city_id;
         try {
-          const result = await deleteFacility(facility.facility_id);
+          const result = await deleteCity(city.city_id);
           if (result?.isSuccess === 1) {
-            toast.success(result.data.message || 'Fasilitas berhasil dihapus');
-            const newPage = facilities.value.length === 1 && pagination.page > 1
+            toast.success(result.data.message || 'Kota berhasil dihapus');
+            const newPage = cities.value.length === 1 && pagination.page > 1
               ? pagination.page - 1 : pagination.page;
             await loadData(newPage);
           } else {
-            toast.error(result?.data?.message || 'Gagal menghapus fasilitas');
+            toast.error(result?.data?.message || 'Gagal menghapus kota');
           }
         } catch (err) {
-          toast.error(err?.response?.data?.data?.message || 'Gagal menghapus fasilitas');
+          toast.error(err?.response?.data?.data?.message || 'Gagal menghapus kota');
         } finally {
           modal.loading = false;
           modal.show = false;
@@ -238,28 +284,23 @@
     });
   };
 
-  /* ── Jembatan event: tombol HTML (dari tableModal) → handler Vue ──────────────
-    tableModal me-render <button name="btnUpdate|btnBlock|btnDelete" value="...">.
-    Kita pakai event-delegation jQuery pada host element yang stabil, sehingga
-    tetap bekerja walau v-html mengganti isi tabel saat data berubah.
-  ──────────────────────────────────────────────────────────────────────────── */
+  /* ── Jembatan event: tombol HTML (dari tableModal) → handler Vue ── */
   const bindTableEvents = () => {
     const $ = window.jQuery;
     if (!$ || !tableHost.value) return;
 
     $(tableHost.value)
-      .off('.cfFacility')
-      .on('click.cfFacility', 'button[name="btnUpdate"]', function () {
-        router.push(`/facility/edit/${$(this).val()}`);
+      .off('.cfCity')
+      .on('click.cfCity', 'button[name="btnUpdate"]', function () {
+        router.push(`/city/edit/${$(this).val()}`);
       })
-      .on('click.cfFacility', 'button[name="btnDelete"]', function () {
-        const f = findByCode($(this).val());
-        if (f) handleDelete(f);
+      .on('click.cfCity', 'button[name="btnDelete"]', function () {
+        const c = findByCode($(this).val());
+        if (c) handleDelete(c);
       })
-      .on('click.cfFacility', 'button[name="btnBlock"]', function () {
-        // value = facility_id + status (status 1 digit di belakang) → buang 1 char terakhir
-        const f = findByCode(String($(this).val()).slice(0, -1));
-        if (f) handleToggleStatus(f);
+      .on('click.cfCity', 'button[name="btnBlock"]', function () {
+        const c = findByCode(String($(this).val()).slice(0, -1));
+        if (c) handleToggleStatus(c);
       });
   };
 
@@ -268,8 +309,8 @@
     if (!$ || !pagerHost.value) return;
 
     $(pagerHost.value)
-      .off('.cfFacility')
-      .on('click.cfFacility', 'a.page-link[data-page]', function (e) {
+      .off('.cfCity')
+      .on('click.cfCity', 'a.page-link[data-page]', function (e) {
         e.preventDefault();
         const p = parseInt($(this).attr('data-page'), 10);
         if (p >= 1 && p <= pagination.totalPages && p !== pagination.page) loadData(p);
@@ -287,34 +328,28 @@
   onMounted(async () => {
     await waitForFunctions();
     fnReady.value = true;
-    await loadData(1);   // loadData sudah mem-bind event setelah render
+    await loadCountryOptions();
+    await loadProvinceOptions();
+    await loadData(1);
   });
 
   onBeforeUnmount(() => {
     const $ = window.jQuery;
     if (!$) return;
-    if (tableHost.value) $(tableHost.value).off('.cfFacility');
-    if (pagerHost.value) $(pagerHost.value).off('.cfFacility');
+    if (tableHost.value) $(tableHost.value).off('.cfCity');
+    if (pagerHost.value) $(pagerHost.value).off('.cfCity');
   });
 </script>
 
 <style scoped>
-.facility-list-section {
+.master-list-section {
   min-height: calc(100vh - 80px);
   padding: 36px 0 60px;
   background: #f5f7fa;
 }
 
 /* ── Header ─────────────────────────────────────────────────────── */
-.page-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: 24px;
-  flex-wrap: wrap;
-  gap: 16px;
-}
-
+.page-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 16px; }
 .page-header-left h2 { font-size: 24px; font-weight: 700; color: #2d3748; margin: 0 0 4px; }
 .page-header-left p  { font-size: 14px; color: #718096; margin: 0; }
 
@@ -333,11 +368,12 @@
 }
 .btn-add:hover { opacity: 0.9; color: white; }
 
-/* ── Search ─────────────────────────────────────────────────────── */
+/* ── Filter ─────────────────────────────────────────────────────── */
 .filter-bar { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
-.search-wrapper { flex: 1; min-width: 200px; }
+.search-wrapper { flex: 1; min-width: 180px; }
+.select-wrapper { min-width: 180px; }
 
-.search-input {
+.search-input, .filter-select {
   width: 100%;
   padding: 10px 14px;
   font-size: 14px;
@@ -346,19 +382,12 @@
   outline: none;
   box-sizing: border-box;
   transition: border-color 0.2s;
+  background: white;
 }
-.search-input:focus { border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15); }
+.search-input:focus, .filter-select:focus { border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15); }
 
 /* ── Alert ──────────────────────────────────────────────────────── */
-.alert {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  border-radius: 8px;
-  margin-bottom: 16px;
-  font-size: 14px;
-}
+.alert { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; }
 .alert-danger  { background: #fed7d7; color: #742a2a; border: 1px solid #feb2b2; }
 .alert-success { background: #c6f6d5; color: #22543d; border: 1px solid #9ae6b4; }
 .alert-warning { background: #fefcbf; color: #744210; border: 1px solid #faf089; }
@@ -366,28 +395,12 @@
 .alert-close:hover { opacity: 1; }
 
 /* ── CookieFast table/pager host ────────────────────────────────── */
-.cf-table-host {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.07);
-  overflow: hidden;
-}
+.cf-table-host { background: white; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.07); overflow: hidden; }
 .cf-pager-host { margin-top: 16px; }
 
-/* Table override — v-html content needs :deep() */
-.cf-table-host :deep(.table-responsive) {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-}
+.cf-table-host :deep(.table-responsive) { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.cf-table-host :deep(.table) { font-size: 14px; color: #4a5568; border-collapse: collapse !important; margin: 0 !important; }
 
-.cf-table-host :deep(.table) {
-  font-size: 14px;
-  color: #4a5568;
-  border-collapse: collapse !important;
-  margin: 0 !important;
-}
-
-/* Header */
 .cf-table-host :deep(.table thead th) {
   background: #f8fafc !important;
   font-size: 11.5px;
@@ -400,54 +413,18 @@
   border-bottom: 2px solid #e2e8f0 !important;
   white-space: nowrap;
 }
+.cf-table-host :deep(.table tbody td) { padding: 12px 16px; border: none !important; border-bottom: 1px solid #f0f4f8 !important; vertical-align: middle; }
+.cf-table-host :deep(.table tbody tr:last-child td) { border-bottom: none !important; }
+.cf-table-host :deep(.table-hover tbody tr:hover td) { background: #f7f9fc !important; }
+.cf-table-host :deep(.table-striped > tbody > tr:nth-of-type(odd) > *) { background-color: transparent !important; }
 
-/* Body rows */
-.cf-table-host :deep(.table tbody td) {
-  padding: 12px 16px;
-  border: none !important;
-  border-bottom: 1px solid #f0f4f8 !important;
-  vertical-align: middle;
-}
-.cf-table-host :deep(.table tbody tr:last-child td) {
-  border-bottom: none !important;
-}
-.cf-table-host :deep(.table-hover tbody tr:hover td) {
-  background: #f7f9fc !important;
-}
-.cf-table-host :deep(.table-striped > tbody > tr:nth-of-type(odd) > *) {
-  background-color: transparent !important;
-}
-
-/* Status badge → pill */
-.cf-table-host :deep(.badge) {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 4px 10px;
-  border-radius: 20px;
-  letter-spacing: 0.02em;
-}
-.cf-table-host :deep(.badge.bg-success) {
-  background: #c6f6d5 !important;
-  color: #22543d !important;
-}
-.cf-table-host :deep(.badge.bg-warning) {
-  background: #fefcbf !important;
-  color: #744210 !important;
-}
-.cf-table-host :deep(.badge.bg-danger) {
-  background: #fed7d7 !important;
-  color: #742a2a !important;
-}
+.cf-table-host :deep(.badge) { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 20px; letter-spacing: 0.02em; }
+.cf-table-host :deep(.badge.bg-success) { background: #c6f6d5 !important; color: #22543d !important; }
+.cf-table-host :deep(.badge.bg-warning) { background: #fefcbf !important; color: #744210 !important; }
+.cf-table-host :deep(.badge.bg-danger)  { background: #fed7d7 !important; color: #742a2a !important; }
 
 /* ── Loading / Empty ────────────────────────────────────────────── */
-.loading-state, .empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 60px 20px;
-  color: #718096;
-  gap: 12px;
-}
+.loading-state, .empty-state { display: flex; flex-direction: column; align-items: center; padding: 60px 20px; color: #718096; gap: 12px; }
 .empty-icon { font-size: 48px; }
 .empty-state p { margin: 0; font-size: 15px; }
 
@@ -465,49 +442,23 @@
 }
 .btn-add-empty:hover { opacity: 0.9; color: white; }
 
-.spinner-lg {
-  width: 40px; height: 40px;
-  border: 3px solid #e2e8f0; border-top-color: #667eea;
-  border-radius: 50%; animation: spin 0.7s linear infinite;
-}
-.spinner-sm {
-  display: inline-block; width: 14px; height: 14px;
-  border: 2px solid rgba(255,255,255,0.4); border-top-color: currentColor;
-  border-radius: 50%; animation: spin 0.7s linear infinite;
-}
+.spinner-lg { width: 40px; height: 40px; border: 3px solid #e2e8f0; border-top-color: #667eea; border-radius: 50%; animation: spin 0.7s linear infinite; }
+.spinner-sm { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.4); border-top-color: currentColor; border-radius: 50%; animation: spin 0.7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ── Modal ──────────────────────────────────────────────────────── */
-.modal-overlay {
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,0.45);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 9999; padding: 16px;
-}
-.modal-box {
-  background: white; border-radius: 16px; padding: 36px 32px;
-  max-width: 420px; width: 100%; text-align: center;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.2); animation: modalIn 0.2s ease;
-}
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 9999; padding: 16px; }
+.modal-box { background: white; border-radius: 16px; padding: 36px 32px; max-width: 420px; width: 100%; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.2); animation: modalIn 0.2s ease; }
 @keyframes modalIn { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }
 .modal-icon  { font-size: 48px; margin-bottom: 12px; }
 .modal-title { font-size: 20px; font-weight: 700; color: #2d3748; margin: 0 0 10px; }
 .modal-desc  { font-size: 14px; color: #718096; margin: 0 0 24px; line-height: 1.6; }
 .modal-actions { display: flex; gap: 10px; justify-content: center; }
 
-.btn-modal-cancel {
-  padding: 10px 24px; border: 1px solid #e2e8f0; background: white; color: #4a5568;
-  border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;
-  transition: all 0.15s; min-width: 100px;
-}
+.btn-modal-cancel { padding: 10px 24px; border: 1px solid #e2e8f0; background: white; color: #4a5568; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s; min-width: 100px; }
 .btn-modal-cancel:hover:not(:disabled) { background: #f7fafc; }
 .btn-modal-cancel:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.btn-modal-confirm {
-  padding: 10px 24px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600;
-  cursor: pointer; transition: all 0.15s; min-width: 100px;
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: white;
-}
+.btn-modal-confirm { padding: 10px 24px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s; min-width: 100px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: white; }
 .btn-modal-confirm:disabled { opacity: 0.6; cursor: not-allowed; }
 .btn-confirm-danger  { background: #e53e3e; }
 .btn-confirm-danger:hover:not(:disabled) { background: #c53030; }
@@ -516,27 +467,9 @@
 
 /* ── Responsive ─────────────────────────────────────────────────── */
 @media (max-width: 768px) {
-  .facility-list-section { padding: 24px 0 40px; }
+  .master-list-section { padding: 24px 0 40px; }
   .modal-box { padding: 28px 20px; }
-
   .cf-table-host :deep(.table thead th),
-  .cf-table-host :deep(.table tbody td) {
-    padding: 10px 12px;
-    font-size: 13px;
-  }
-}
-
-@media (max-width: 480px) {
-  .cf-table-host :deep(.btnUpdate),
-  .cf-table-host :deep(.btnBlock),
-  .cf-table-host :deep(.btnDelete) {
-    width: 30px !important;
-    height: 30px !important;
-    min-width: 30px !important;
-    font-size: 11px !important;
-  }
-  .cf-table-host :deep(td > div.d-flex > .col-12) {
-    gap: 4px !important;
-  }
+  .cf-table-host :deep(.table tbody td) { padding: 10px 12px; font-size: 13px; }
 }
 </style>

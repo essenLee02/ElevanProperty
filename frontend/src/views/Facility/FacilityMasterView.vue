@@ -214,7 +214,7 @@ import {
   updateFacility,
   toggleFacilityStatus,
   deleteFacility
-} from '../services/facilityApi';
+} from '../../services/facilityApi';
 
 const route  = useRoute();
 const router = useRouter();
