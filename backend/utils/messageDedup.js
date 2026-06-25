@@ -2,7 +2,7 @@
  * messageDedup.js
  *
  * In-memory message-ID dedup guard shared by all WhatsApp controllers
- * (Fonnte, WATI, 360dialog). Prevents double-processing when a platform
+ * (Fonnte, ChakraHQ, TimelinesAI). Prevents double-processing when a platform
  * retries a webhook delivery.
  *
  * Keyed by the platform's stable message id → epoch ms. TTL = 10 minutes,

@@ -161,22 +161,6 @@ async function ensureRequiredDatabaseColumns() {
     }
   }
 
-  // ─── Tambah kolom dialog360_token ke tabel users (jika belum ada) ──────
-  try {
-    const usersTable = await queryInterface.describeTable('users');
-    if (usersTable && !usersTable.dialog360_token) {
-      await queryInterface.addColumn('users', 'dialog360_token', {
-        type     : DataTypes.STRING(200),
-        allowNull: true,
-        after    : 'fonnte_token'
-      });
-      console.log('Database migration completed: added users.dialog360_token column');
-    }
-  } catch (error) {
-    if (!String(error.message || '').toLowerCase().includes('no description found')) {
-      console.warn('Users schema check warning (dialog360_token):', error.message);
-    }
-  }
 }
 
 sequelize.sync()

@@ -19,7 +19,7 @@
  *   - "rumah" dalam konteks bukan properti
  *     "rumah makan", "rumah sakit" → dikecualikan ❌
  *
- * Digunakan oleh: fonnteChatController, watiChatController, dialogChatController
+ * Digunakan oleh: fonnteChatController, chakraHQController, timelinesAIChatController
  */
 
 'use strict';

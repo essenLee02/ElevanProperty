@@ -345,6 +345,7 @@ async function processIncomingMessage(body, agent) {
       console.log(D);
       console.log(`[TIMELINESAI] ⬇  PESAN MASUK (bukan query properti — tidak dibalas)`);
       console.log(`[TIMELINESAI]    Agent    : ${sanitizeLog(agent.name, 60)} (${maskPhone(agent.phone)})`);
+      console.log(`[TIMELINESAI]    Owner    : User ${sanitizeLog(agent.user_id || '-', 40)}`);
       console.log(`[TIMELINESAI]    Customer : ${maskPhone(sender)} (${maskName(name)})`);
       console.log(`[TIMELINESAI]    Time     : ${ts}`);
       console.log(`[TIMELINESAI]    Message  : ${sanitizeLog(message, 120)}`);
@@ -358,6 +359,7 @@ async function processIncomingMessage(body, agent) {
   // ── Simpan pesan customer ke DB (hanya untuk query properti / lanjutan) ─
   await ChatMessage.create({
     chatSessionId : session.id,
+    user_id       : agent.user_id,
     role          : 'customer',
     message,
     channel       : 'whatsapp',
@@ -388,6 +390,7 @@ async function processIncomingMessage(body, agent) {
   // ── Simpan AI reply ─────────────────────────────────────────────────
   await ChatMessage.create({
     chatSessionId : session.id,
+    user_id       : agent.user_id,
     role          : 'ai',
     message       : aiResult.reply,
     channel       : 'whatsapp',
@@ -427,6 +430,7 @@ async function processIncomingMessage(body, agent) {
     console.log(`[TIMELINESAI] ⬇  PESAN PROPERTI MASUK & DIBALAS`);
     console.log(D);
     console.log(`Agent    : ${sanitizeLog(agent.name, 60)} (${maskPhone(agent.phone)})`);
+    console.log(`Owner    : User ${sanitizeLog(agent.user_id || '-', 40)}`);
     console.log(`Customer : ${maskPhone(sender)} (${maskName(name)})`);
     console.log(`Time     : ${ts}`);
     console.log(`Message  : ${sanitizeLog(message, 300)}`);

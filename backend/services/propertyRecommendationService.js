@@ -536,7 +536,7 @@ function detectBudget(message = '') {
  *   - Setiap jawaban kualifikasi diterapkan tepat pada field-nya
  */
 // Role pesan customer bisa berbeda tergantung controller yang menyimpan:
-//   fonnteChatController / watiChatController / dialogChatController → 'customer'
+//   fonnteChatController / chakraHQController / timelinesAIChatController → 'customer'
 //   sessionService.saveUserMessage (website chatbot)               → 'user'
 // Keduanya harus diikutsertakan dalam ekstraksi history.
 const CUSTOMER_ROLES = new Set(['user', 'customer']);

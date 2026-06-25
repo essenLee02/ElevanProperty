@@ -24,7 +24,7 @@ const sequelize = require('../config/database');
  */
 const User = sequelize.define('User', {
   user_id: {
-    type: DataTypes.STRING,
+    type: DataTypes.STRING(50),
     allowNull: false,
     unique: true
   },
@@ -56,26 +56,6 @@ const User = sequelize.define('User', {
     allowNull: true,
     defaultValue: null
   },
-  updated_date: {
-    type: DataTypes.DATE,
-    allowNull: true,
-    defaultValue: null
-  },
-  update_by: {
-    type: DataTypes.STRING,
-    allowNull: true,
-    defaultValue: null
-  },
-  created_date: {
-    type: DataTypes.DATE,
-    allowNull: true,
-    defaultValue: null
-  },
-  created_by: {
-    type: DataTypes.STRING,
-    allowNull: true,
-    defaultValue: null
-  },
   status: {
     type: DataTypes.INTEGER(1),
     allowNull: false,
@@ -92,17 +72,31 @@ const User = sequelize.define('User', {
     defaultValue: null,
     comment: 'Fonnte token milik agent (untuk kirim WA via Fonnte)'
   },
-  dialog360_token: {
-    type: DataTypes.STRING(200),
-    allowNull: true,
-    defaultValue: null,
-    comment: '360dialog API key milik agent (D360-API-KEY header). Dapat dari sandbox: kirim START ke +551146733492'
-  },
   chakra_hq_token: {
     type: DataTypes.STRING(2000),
     allowNull: true,
     defaultValue: null,
     comment: 'ChakraHQ Access Token milik agent (Bearer token untuk API ChakraHQ)'
+  },
+  created_date: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    defaultValue: null
+  },
+  created_by: {
+    type: DataTypes.STRING(50),
+    allowNull: true,
+    defaultValue: null
+  },
+  updated_date: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    defaultValue: null
+  },
+  update_by: {
+    type: DataTypes.STRING(50),
+    allowNull: true,
+    defaultValue: null
   }
 }, {
   tableName: 'users',
@@ -111,7 +105,7 @@ const User = sequelize.define('User', {
     { fields: ['user_id'] },
     { fields: ['username'] },
     { fields: ['status'] },
-    { fields: ['privilege', 'status'] },  // For agent lookup queries (WATI)
+    { fields: ['privilege', 'status'] },
     { fields: ['phone'] }                  // For phone matching in AgentLookup
   ]
 });

@@ -10,14 +10,21 @@
  * Logic:
  * 1. Ambil access_token dari header Authorization (Bearer <token>)
  * 2. Verifikasi JWT pakai ACCESS_TOKEN_SECRET
- * 3. Kalau valid, tempel info user ke req.user (userId, userName, username, privilege)
- * 4. Kalau invalid/expired → 401
+ *    - Valid           → tempel info user ke req.user → next()
+ *    - Expired         → 401 (frontend akan silent-refresh via GET /auth/refresh
+ *                         lalu mengulang request dengan access token baru)
+ *    - Signature salah → 401 (kemungkinan token dipalsukan — JANGAN fallback)
+ * 3. Tidak ada access_token tapi ada cookie refresh_token valid DAN refresh_token
+ *    masih TERSIMPAN di DB (user belum logout) → izinkan (jendela singkat saat
+ *    frontend sedang me-refresh). Kalau refresh_token sudah dihapus dari DB
+ *    (user sudah logout) → 401, supaya token tidak terus dipakai.
  *
- * Fallback: kalau access_token tidak ada tapi refresh_token cookie masih valid,
- * akan tetap di-allow (frontend lagi proses refresh) - mengikuti pola mom_logistic.
+ * Catatan keamanan: access token dibuat berumur pendek dan dirotasi terus lewat
+ * /auth/refresh. Sumber kebenaran "masih login" adalah kolom users.refresh_token.
  */
 
 const jwt = require('jsonwebtoken');
+const { User } = require('../models');
 const { HTTP } = require('../utils/httpStatus');
 const { sendError } = require('../utils/responseFormat');
 
@@ -30,7 +37,19 @@ function getRefreshCookieName() {
   return cleanEnv(process.env.COOKIE_REFRESH_TOKEN, 'Elevan_Refresh_Token');
 }
 
-exports.verifyToken = (req, res, next) => {
+/**
+ * Bangun req.user dari payload JWT yang sudah terverifikasi.
+ */
+function attachUser(req, decoded) {
+  req.user = {
+    userId:    decoded.userId,
+    userName:  decoded.userName,
+    username:  decoded.username,
+    privilege: decoded.privilege
+  };
+}
+
+exports.verifyToken = async (req, res, next) => {
   const authHeader  = req.headers['authorization'];
   const accessToken = authHeader && authHeader.split(' ')[1];
 
@@ -42,45 +61,57 @@ exports.verifyToken = (req, res, next) => {
       'Konfigurasi JWT belum lengkap di .env');
   }
 
-  // 1. Coba verifikasi access_token dari header dulu
+  // 1. Verifikasi access_token dari header Bearer
   if (accessToken) {
-    return jwt.verify(accessToken, accessSecret, (errToken, decoded) => {
-      if (errToken) {
-        return sendError(res, HTTP.UNAUTHORIZED, null,
-          'Access token tidak valid atau expired');
-      }
-      req.user = {
-        userId:    decoded.userId,
-        userName:  decoded.userName,
-        username:  decoded.username,
-        privilege: decoded.privilege
-      };
+    try {
+      const decoded = jwt.verify(accessToken, accessSecret);
+      attachUser(req, decoded);
       return next();
-    });
+    } catch (errToken) {
+      // Expired → 401 supaya frontend silent-refresh lalu ulangi request.
+      // Signature/format salah → 401 juga (jangan fallback ke cookie demi keamanan).
+      const expired = errToken && errToken.name === 'TokenExpiredError';
+      return sendError(res, HTTP.UNAUTHORIZED, null,
+        expired ? 'Access token expired' : 'Access token tidak valid');
+    }
   }
 
-  // 2. Fallback: refresh_token cookie (frontend lagi mau refresh)
-  const refreshCookieName = getRefreshCookieName();
+  // 2. Tidak ada access_token → fallback ke cookie refresh_token (jendela refresh)
+  const refreshCookieName      = getRefreshCookieName();
   const refreshTokenFromCookie = req.cookies ? req.cookies[refreshCookieName] : null;
 
-  if (refreshTokenFromCookie) {
-    return jwt.verify(refreshTokenFromCookie, refreshSecret, (errToken, decoded) => {
-      if (errToken) {
-        return sendError(res, HTTP.UNAUTHORIZED, null,
-          'Refresh token tidak valid atau expired');
-      }
-      req.user = {
-        userId:    decoded.userId,
-        userName:  decoded.userName,
-        username:  decoded.username,
-        privilege: decoded.privilege
-      };
-      return next();
-    });
+  if (!refreshTokenFromCookie) {
+    return sendError(res, HTTP.UNAUTHORIZED, null,
+      'Belum login, silakan login terlebih dahulu');
   }
 
-  return sendError(res, HTTP.UNAUTHORIZED, null,
-    'Belum login, silakan login terlebih dahulu');
+  let decoded;
+  try {
+    decoded = jwt.verify(refreshTokenFromCookie, refreshSecret);
+  } catch (errToken) {
+    return sendError(res, HTTP.UNAUTHORIZED, null,
+      'Sesi berakhir, silakan login ulang');
+  }
+
+  // Pastikan refresh_token MASIH aktif di DB (user belum logout) & akun aktif.
+  // Ini menutup celah: cookie yang masih tersisa setelah logout tidak boleh lolos.
+  try {
+    const user = await User.findOne({
+      where:      { refresh_token: refreshTokenFromCookie },
+      attributes: ['user_id', 'status']
+    });
+
+    if (!user || user.status !== 1) {
+      return sendError(res, HTTP.UNAUTHORIZED, null,
+        'Sesi sudah tidak berlaku, silakan login ulang');
+    }
+
+    attachUser(req, decoded);
+    return next();
+  } catch (dbErr) {
+    return sendError(res, HTTP.INTERNAL_SERVER_ERROR, null,
+      'Gagal memverifikasi sesi: ' + (dbErr.message || 'Unknown error'));
+  }
 };
 
 /**

@@ -2,7 +2,7 @@
  * whatsappUtils.js
  *
  * Shared utility functions untuk semua WhatsApp platform controllers.
- * (Fonnte, WATI, 360dialog)
+ * (Fonnte, ChakraHQ, TimelinesAI)
  *
  * Menghilangkan duplikasi kode di tiga controller dengan menyediakan:
  *  - normalizePhone / isValidPhone
@@ -16,6 +16,7 @@
 
 const { ChatSession, ChatMessage } = require('../models');
 const { isTerminalActive }         = require('./terminalSwitch');
+const { redactSecrets }            = require('./secretRedactor');
 
 /* ════════════════════════════════════════════════════════════════════
    PHONE UTILITIES
@@ -55,7 +56,7 @@ function isValidPhone(phone) {
  * Find or create a ChatSession untuk customer.
  *
  * Source format: `{platform}_{agentSlug}`
- * Contoh: 'wati_leo_felix', 'dialog360_natasha'
+ * Contoh: 'fonnte_leo_felix', 'chakrahq_natasha', 'timelinesai_budi'
  *
  * @param {object} params
  * @param {string} params.customerPhone - Nomor telepon customer (raw)
@@ -97,11 +98,13 @@ async function findOrCreateSession({ customerPhone, customerName, agentName, pla
  * @param {'customer'|'ai'}   role
  * @param {string}             message
  * @param {object}             [metadata={}]  - Field tambahan (JSON)
+ * @param {string|null}        [userId=null]  - users.user_id pemilik chat (agent)
  * @returns {Promise<ChatMessage>}
  */
-async function saveMessage(session, role, message, metadata = {}) {
+async function saveMessage(session, role, message, metadata = {}, userId = null) {
   return ChatMessage.create({
     chatSessionId : session.id,
+    user_id       : userId,
     role,
     message,
     channel       : 'whatsapp',
@@ -126,7 +129,7 @@ async function saveMessage(session, role, message, metadata = {}) {
  * @returns {string}      - String aman untuk console.log()
  */
 function sanitizeLog(str, maxLen = 400) {
-  return String(str || '')
+  return redactSecrets(String(str || ''))                // SECURITY: sensor API key/token dulu
     .replace(/\x1B\[[0-9;]*[mGKHFABCDJsulnhr]/g, '')  // strip ANSI escape codes
     .replace(/[\r\n\t]/g, ' ')                          // flatten newlines (prevent log injection)
     .replace(/\x00/g, '')                               // strip null bytes
@@ -162,12 +165,9 @@ function maskName(name) {
 /**
  * Log terminal lengkap setelah pesan properti dibalas AI.
  *
- * Format ini persis sama dengan yang ada di fonnteChatController.js
- * (sebagai referensi implementasi). Dipakai oleh WATI & 360dialog juga.
- *
  * @param {object} params
- * @param {'FONNTE'|'WATI'|'DIALOG'} params.platform   - Key untuk isTerminalActive()
- * @param {string}  params.tag         - Prefix label, misal '[WATI]'
+ * @param {'FONNTE'|'CHAKRAHQ'|'TIMELINESAI'} params.platform   - Key untuk isTerminalActive()
+ * @param {string}  params.tag         - Prefix label, misal '[FONNTE]'
  * @param {object}  params.agent       - { name, phone }
  * @param {string}  params.customerPhone
  * @param {string}  params.customerName
@@ -193,15 +193,18 @@ function logTerminalSummary({
   const safeMessage     = sanitizeLog(message, 300);
   const safeCtx         = sanitizeLog(ctxSource, 60);
   const safeProvider    = sanitizeLog(aiProvider, 40);
-  // aiReply dibolehkan multi-line (isi AI) tapi tetap strip ANSI/null
-  const safeReply       = String(aiReply || '').replace(/\x1B\[[0-9;]*[mGKHFABCDJsulnhr]/g, '').replace(/\x00/g, '');
+  // aiReply dibolehkan multi-line (isi AI) tapi tetap sensor rahasia + strip ANSI/null
+  const safeReply       = redactSecrets(String(aiReply || '')).replace(/\x1B\[[0-9;]*[mGKHFABCDJsulnhr]/g, '').replace(/\x00/g, '');
   const safeSendStatus  = sanitizeLog(sendStatus, 60);
+
+  const safeOwner = sanitizeLog(agent.user_id || '-', 40);
 
   console.log('');
   console.log(D);
   console.log(`${sanitizeLog(tag, 20)} ⬇  PESAN PROPERTI MASUK & DIBALAS`);
   console.log(D);
   console.log(`Agent    : ${safeAgentName} (${safeAgentPhone})`);
+  console.log(`Owner    : User ${safeOwner}`);
   console.log(`Customer : ${safeCustomer}`);
   console.log(`Time     : ${ts}`);
   console.log(`Message  : ${safeMessage}`);
@@ -222,7 +225,7 @@ function logTerminalSummary({
  * Format identik dengan blok skip inline fonnteChatController.
  *
  * @param {object} params
- * @param {'FONNTE'|'TIMELINESAI'|'DIALOG'|'CHAKRAHQ'} params.platform
+ * @param {'FONNTE'|'TIMELINESAI'|'CHAKRAHQ'} params.platform
  * @param {string}  params.tag
  * @param {object}  params.agent   - { name, phone }
  * @param {string}  params.customerPhone
@@ -242,6 +245,7 @@ function logTerminalSkip({ platform, tag, agent, customerPhone, customerName, ts
   console.log(D);
   console.log(`${safeTag} ⬇  PESAN MASUK (bukan query properti — tidak dibalas)`);
   console.log(`${safeTag}    Agent    : ${safeName} (${maskPhone(agent.phone)})`);
+  console.log(`${safeTag}    Owner    : User ${sanitizeLog(agent.user_id || '-', 40)}`);
   console.log(`${safeTag}    Customer : ${maskPhone(customerPhone)} (${maskName(customerName)})`);
   console.log(`${safeTag}    Time     : ${ts}`);
   console.log(`${safeTag}    Message  : ${safeMsg}`);

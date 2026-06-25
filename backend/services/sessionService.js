@@ -12,7 +12,7 @@ function normalizeLocation(value = '') {
 }
 
 function resolveLocationAndSource(locationOrSource = '', sourceMaybe = '') {
-  const knownSources = ['website_chatbot', 'contact_form', 'whatsapp_fonnte', 'whatsapp'];
+  const knownSources = ['website_chatbot', 'contact_form', 'whatsapp_fonnte', 'whatsapp', 'whatsapp_chakrahq', 'whatsapp_timelinesai'];
   const third = String(locationOrSource || '').trim();
   const fourth = String(sourceMaybe || '').trim();
 
@@ -87,9 +87,10 @@ async function getConversationHistory(sessionId, limit = 12) {
   }));
 }
 
-async function saveUserMessage(sessionId, message, channel = 'website_chatbot', metadata = null) {
+async function saveUserMessage(sessionId, message, channel = 'website_chatbot', metadata = null, userId = null) {
   return ChatMessage.create({
     chatSessionId: sessionId,
+    user_id: userId,
     role: 'user',
     message,
     channel,
@@ -97,9 +98,10 @@ async function saveUserMessage(sessionId, message, channel = 'website_chatbot', 
   });
 }
 
-async function saveAssistantMessage(sessionId, message, channel = 'website_chatbot', metadata = null) {
+async function saveAssistantMessage(sessionId, message, channel = 'website_chatbot', metadata = null, userId = null) {
   return ChatMessage.create({
     chatSessionId: sessionId,
+    user_id: userId,
     role: 'assistant',
     message,
     channel,

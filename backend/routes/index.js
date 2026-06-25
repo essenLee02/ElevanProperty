@@ -49,7 +49,6 @@ const rumah123Controller         = require('../controllers/rumah123Controller');
 const whatsappInboundController  = require('../controllers/whatsappInboundController');
 const timelinesAIChatController  = require('../controllers/timelinesAIChatController');
 const fonnteChatController       = require('../controllers/fonnteChatController');
-const dialogChatController       = require('../controllers/dialogChatController');
 const chakraHQController         = require('../controllers/chakraHQController');
 
 // Auth controllers
@@ -114,7 +113,7 @@ router.put('/profile/update-agent',  verifyToken, profileController.updateDataAg
 
 /* ══════════════════════════════════════════════════════════════════════════════
    WEBHOOK ROUTES — Public tapi rate-limited
-   (Dikirim dari platform eksternal: Fonnte, WATI, 360dialog)
+   (Dikirim dari platform eksternal: Fonnte, ChakraHQ, TimelinesAI)
 ══════════════════════════════════════════════════════════════════════════════ */
 
 // Fonnte legacy webhook
@@ -132,10 +131,6 @@ router.post('/fonnte-chat/webhook-raw',  webhookLimiter, fonnteChatController.we
 // TimelinesAI webhook (public)
 router.post('/timelinesai/webhook',      webhookLimiter, timelinesAIChatController.handleInboundMessage);
 router.post('/timelinesai/webhook-raw',  webhookLimiter, timelinesAIChatController.webhookRawCatcher);
-
-// 360dialog webhook (public)
-router.post('/dialog-chat/webhook',      webhookLimiter, dialogChatController.handleInboundMessage);
-router.post('/dialog-chat/webhook-raw',  webhookLimiter, dialogChatController.webhookRawCatcher);
 
 // ChakraHQ webhook (public)
 router.post('/chakrahq/webhook',         webhookLimiter, chakraHQController.handleInboundMessage);
@@ -175,15 +170,6 @@ router.get('/chakrahq/agent-chats/:agentName',         verifyToken, chakraHQCont
 router.get('/chakrahq/chat-history/:sessionId',        verifyToken, chakraHQController.getChatHistory);
 router.get('/chakrahq/status',                         verifyToken, chakraHQController.getChakraStatus);
 router.get('/chakrahq/check-api',                      verifyToken, chakraHQController.checkChakraApi);
-
-// 360dialog admin endpoints
-router.post('/dialog-chat/setup-webhook',              verifyToken, dialogChatController.setupWebhook);
-router.post('/dialog-chat/simulate',                   verifyToken, dialogChatController.simulateInboundMessage);
-router.get('/dialog-chat/debug-info',                  verifyToken, dialogChatController.getDebugInfo);
-router.get('/dialog-chat/status',                      verifyToken, dialogChatController.getDialogStatus);
-router.get('/dialog-chat/agents',                      verifyToken, dialogChatController.getAgentsWithDialog);
-router.get('/dialog-chat/agent-chats/:agentName',      verifyToken, dialogChatController.getAgentChats);
-router.get('/dialog-chat/chat-history/:sessionId',     verifyToken, dialogChatController.getChatHistory);
 
 /* ══════════════════════════════════════════════════════════════════════════════
    UTILITY ROUTES

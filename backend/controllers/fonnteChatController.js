@@ -33,7 +33,7 @@ const { sanitizeLog, maskPhone, maskName, appendSentViaTag } = require('../utils
 /* ══════════════════════════════════════════════════════════════════════════════
    BAGIAN 0 — MESSAGE-ID DEDUP CACHE
    Prevents double-processing when Fonnte retries a webhook delivery.
-   Shared with WATI & 360dialog via utils/messageDedup.js (stable IDs only;
+   Shared with ChakraHQ & TimelinesAI via utils/messageDedup.js (stable IDs only;
    synthetic fonnte_<timestamp> IDs are ignored automatically).
 ══════════════════════════════════════════════════════════════════════════════ */
 
@@ -211,7 +211,7 @@ async function sendViaFonnte(targetPhone, message, agentToken) {
  * @param {string} propertyCtx  - Konteks properti (dari Rumah123 atau flat JSON)
  */
 // ✅ UPDATED: generateAIReply removed — now using whatsappAIService.generateWhatsAppAIReply
-// This centralizes AI logic across all WhatsApp platforms (Fonnte, WATI, 360dialog)
+// This centralizes AI logic across all WhatsApp platforms (Fonnte, ChakraHQ, TimelinesAI)
 
 /* ══════════════════════════════════════════════════════════════════════════════
    BAGIAN 5 — PROSES PESAN MASUK (background)
@@ -297,6 +297,7 @@ async function processIncomingMessage(body, agent) {
       console.log(D);
       console.log(`[FONNTE] ⬇  PESAN MASUK (bukan query properti — tidak dibalas)`);
       console.log(`[FONNTE]    Agent    : ${sanitizeLog(agent.name, 60)} (${maskPhone(agent.phone)})`);
+      console.log(`[FONNTE]    Owner    : User ${sanitizeLog(agent.user_id || '-', 40)}`);
       console.log(`[FONNTE]    Customer : ${maskPhone(sender)} (${maskName(name)})`);
       console.log(`[FONNTE]    Time     : ${ts}`);
       console.log(`[FONNTE]    Message  : ${sanitizeLog(message, 120)}`);
@@ -310,6 +311,7 @@ async function processIncomingMessage(body, agent) {
   // ── Simpan pesan customer ke DB (hanya untuk query properti / lanjutan) ─
   await ChatMessage.create({
     chatSessionId : session.id,
+    user_id       : agent.user_id,
     role          : 'customer',
     message,
     channel       : 'whatsapp',
@@ -342,6 +344,7 @@ async function processIncomingMessage(body, agent) {
   // ── Simpan AI reply ─────────────────────────────────────────────────
   await ChatMessage.create({
     chatSessionId : session.id,
+    user_id       : agent.user_id,
     role          : 'ai',
     message       : aiResult.reply,
     channel       : 'whatsapp',
@@ -382,6 +385,7 @@ async function processIncomingMessage(body, agent) {
     console.log(`[FONNTE] ⬇  PESAN PROPERTI MASUK & DIBALAS`);
     console.log(D);
     console.log(`Agent    : ${sanitizeLog(agent.name, 60)} (${maskPhone(agent.phone)})`);
+    console.log(`Owner    : User ${sanitizeLog(agent.user_id || '-', 40)}`);
     console.log(`Customer : ${maskPhone(sender)} (${maskName(name)})`);
     console.log(`Time     : ${ts}`);
     console.log(`Message  : ${sanitizeLog(message, 300)}`);
@@ -542,7 +546,7 @@ class FonnteChatController {
       }
 
       await ChatMessage.create({
-        chatSessionId: session.id, role: 'customer', message, channel: 'whatsapp',
+        chatSessionId: session.id, user_id: agent.user_id, role: 'customer', message, channel: 'whatsapp',
         metadata: JSON.stringify({ platform: 'fonnte_chaining' })
       });
 
@@ -554,7 +558,7 @@ class FonnteChatController {
       aiReply = result.reply;
 
       await ChatMessage.create({
-        chatSessionId: session.id, role: 'ai', message: aiReply, channel: 'whatsapp',
+        chatSessionId: session.id, user_id: agent.user_id, role: 'ai', message: aiReply, channel: 'whatsapp',
         metadata: JSON.stringify({ aiProvider: result.provider })
       });
 

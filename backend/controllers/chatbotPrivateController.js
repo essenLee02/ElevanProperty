@@ -718,7 +718,7 @@ class ResponseBuilder {
 }
 
 // ─── ResponseBuilderWhatsApp ──────────────────────────────────────────────────
-// Format khusus untuk WhatsApp terminal message (Fonnte, WATI, 360dialog)
+// Format khusus untuk WhatsApp terminal message (Fonnte, ChakraHQ, TimelinesAI)
 // Dengan property images, agent name, dan bolder formatting untuk readability
 
 class ResponseBuilderWhatsApp {
@@ -3131,7 +3131,7 @@ class ChatbotPrivateService {
   }
 
   /**
-   * Generate response untuk WhatsApp terminal message (Fonnte, WATI, 360dialog).
+   * Generate response untuk WhatsApp terminal message (Fonnte, ChakraHQ, TimelinesAI).
    * Menggunakan ResponseBuilderWhatsApp (format WhatsApp dengan images + agent name).
    *
    * @param {object} params
@@ -3144,7 +3144,7 @@ class ChatbotPrivateService {
    * @returns {Promise<{reply, source, controller, fallbackUsed, ...}>}
    */
   /**
-   * Generate response untuk WhatsApp terminal message (Fonnte, WATI, 360dialog).
+   * Generate response untuk WhatsApp terminal message (Fonnte, ChakraHQ, TimelinesAI).
    *
    * QUALIFICATION FLOW (sebelum tampil listing):
    *   Implements CUSTOMER (RENTER/BUYER) FLOW Q0–Q12.
@@ -3682,8 +3682,8 @@ module.exports.generatePrivateTerminalMassege  = (params)  => ChatbotPrivateServ
 module.exports.generatePrivateContactReply     = (payload) => ChatbotPrivateService.generateContactFormReply(payload);
 
 /**
- * Generate private WhatsApp reply (used by watiChatController as fallback)
- * Simplified version for WhatsApp with agent name
+ * Generate private WhatsApp reply for WhatsApp controllers (Fonnte, ChakraHQ, TimelinesAI).
+ * Simplified version with agent name.
  */
 module.exports.generatePrivateWhatsappReply = (payload) => {
   const { name, phone, message, agentName = 'Property Consultant' } = payload;
