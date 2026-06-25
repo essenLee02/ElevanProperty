@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Jun 25, 2026 at 11:59 AM
+-- Generation Time: Jun 25, 2026 at 12:11 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.1.25
 
@@ -38,6 +38,20 @@ CREATE TABLE `chat_messages` (
   `createdAt` datetime NOT NULL,
   `updatedAt` datetime NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `chat_messages`
+--
+
+INSERT INTO `chat_messages` (`id`, `chatSessionId`, `user_id`, `role`, `message`, `channel`, `metadata`, `createdAt`, `updatedAt`) VALUES
+(1, 25, 'LFGKT49002', 'customer', 'Hi... Saya mau cari rumah di Surabaya, saya butuh sewa rumah selama 3 tahun.', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"22ea6d03-c876-46f0-9715-720bf5d78e11\",\"platform\":\"timelinesai\"}', '2026-06-25 10:06:37', '2026-06-25 10:06:37'),
+(2, 25, 'LFGKT49002', 'ai', 'Boleh tahu, apa yang membuat Kak mulai cari rumah sekarang? Misalnya mau pindah, keluarga nambah, pindah kerja, atau untuk investasi?', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"flat_json\"}', '2026-06-25 10:06:37', '2026-06-25 10:06:37'),
+(3, 25, 'LFGKT49002', 'customer', 'Saya ada pindahan kerja', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"54776d94-a1ae-4134-844c-10cbad86f8dc\",\"platform\":\"timelinesai\"}', '2026-06-25 10:07:16', '2026-06-25 10:07:16'),
+(4, 25, 'LFGKT49002', 'ai', 'Sebelumnya sudah sempat lihat beberapa rumah, Kak? Kalau sudah, biasanya apa yang bikin belum cocok?', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"flat_json\"}', '2026-06-25 10:07:16', '2026-06-25 10:07:16'),
+(5, 25, 'LFGKT49002', 'customer', 'Saya belum pernah lihat-lihat rumah yang disewakan, namun saya cari rumah yang asri, dingin dan tidak banjir.', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"75fc837f-9498-4dc4-83f9-63ff97af81d8\",\"platform\":\"timelinesai\"}', '2026-06-25 10:08:12', '2026-06-25 10:08:12'),
+(6, 25, 'LFGKT49002', 'ai', 'Di *Surabaya* ada yang di kisaran *2–5 juta/bln* dan ada yang lebih di *10–25 juta/bln*. Kira-kira yang mana lebih mendekati rencana Kak? 💰', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"flat_json\"}', '2026-06-25 10:08:12', '2026-06-25 10:08:12'),
+(7, 25, 'LFGKT49002', 'customer', 'Saya Bakan pindah tahun depan, Kak', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"87950c3b-9bea-4654-a8ed-3eb9967956e7\",\"platform\":\"timelinesai\"}', '2026-06-25 10:08:27', '2026-06-25 10:08:27'),
+(8, 25, 'LFGKT49002', 'ai', 'Kalau nanti ada yang cocok, langsung bisa jadwalkan survey, atau perlu koordinasi dulu dengan keluarga, Kak?', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"flat_json\"}', '2026-06-25 10:08:27', '2026-06-25 10:08:27');
 
 -- --------------------------------------------------------
 
@@ -516,7 +530,7 @@ ALTER TABLE `whatsapp_inbound_messages`
 -- AUTO_INCREMENT for table `chat_messages`
 --
 ALTER TABLE `chat_messages`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
 
 --
 -- AUTO_INCREMENT for table `chat_sessions`

@@ -165,6 +165,12 @@ const STANDALONE_KEYWORDS = [
   // Pertanyaan spesifik properti
   'berapa kamar', 'berapa lantai', 'luas bangunan', 'luas tanah',
   'fasilitas perumahan', 'akses tol', 'dekat sekolah', 'dekat mall',
+  // Site visit / jadwal kunjungan — selalu konteks properti
+  'jadwal viewing', 'jadwal survey', 'jadwal survei', 'jadwal kunjungan',
+  'bisa viewing', 'bisa survey', 'bisa survei',
+  'kapan viewing', 'kapan survey', 'kapan survei',
+  'mau viewing', 'mau survey', 'mau survei',
+  'site visit', 'open house',
 ];
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -414,8 +420,9 @@ const PROPERTY_QUESTION_PATTERNS = [
   /area.*lain.*oke/, /area.*lain.*pertimbangkan/, /besides\s+\S.{0,30}(area|city)/,
   /other\s+(area|city|location)/,
   // ── Q9 decision maker ───────────────────────────────────────────────────────
-  /jadwalkan\s+viewing/, /perlu\s+koordinasi/, /koordinasi\s+dulu/, /keluarga\s+lain/,
-  /schedule\s+(a\s+)?viewing/, /check\s+with\s+(family|spouse|partner)/,
+  /jadwalkan\s+(viewing|survey|survei|kunjungan)/, /perlu\s+koordinasi/, /koordinasi\s+dulu/, /keluarga\s+lain/,
+  /schedule\s+(a\s+)?(viewing|survey|visit)/, /check\s+with\s+(family|spouse|partner)/,
+  /langsung\s+bisa\s+jadwalkan/, /langsung\s+jadwalkan/,
   // ── Q12 apartment tower / floor ─────────────────────────────────────────────
   /tower\s+atau\s+lantai/, /preferensi\s+tower/, /lantai\s+(rendah|tinggi|tertentu|berapa)/,
   /tower\s+or\s+floor/, /floor\s+(prefer|choice)/,
@@ -507,6 +514,16 @@ function isPropertyContextContinuation(message, history = []) {
   // berisi fasilitas / landmark. Contoh valid yang harus LOLOS:
   //   "saya ingin ada fasilitas gym dan kolam renangnya, lalu dekat dengan PTC"
   //   "hadap timur, tidak mau dekat jalan tol, ada taman bermain untuk anak"
+  // Permintaan jadwal kunjungan / viewing / survey — selalu konteks properti.
+  // Dua tier:
+  //   (a) Kata-kata sangat spesifik properti → cukup sendirian
+  //   (b) Kata umum (survey/survei/jadwal) → perlu pasangan sinyal properti/timing
+  // Contoh: "Boleh.. kapan saya bisa viewing?", "kapan bisa survei?", "jadwal site visit"
+  const isSchedulingRequest =
+    /\b(viewing|site\s+visit|open\s+house|lihat\s+unit|lihat\s+rumah|lihat\s+properti)\b/i.test(lower)
+    || (/\b(survey|survei)\b/i.test(lower) && /\b(kapan|jadwal|bisa|mau|boleh|properti|rumah|unit)\b/i.test(lower))
+    || (/\b(jadwalkan|jadwal\s+kunjungan)\b/i.test(lower) && /\b(properti|rumah|unit|viewing|survey|survei)\b/i.test(lower));
+
   const hasPropertyFacility = /\b(fasilitas|gym|fitness|kolam\s*renang|kolam|renang|parkir|garasi|carport|taman|playground|play\s*ground|kids?\s*zone|kids?\s*club|keamanan|cctv|ac|wifi|internet|lift|elevator|rooftop|balkon|balcony|view|pemandangan|clubhouse|sport|olahraga|water\s*heater|mushola|jogging)\b/i.test(lower);
   const isLandmarkAnswer    = /\b(dekat|deket|near|close\s+to|di\s+jalan|di\s+sekitar|samping|next\s+to|beside|sebelah)\b/i.test(lower);
   // Jawaban QM (motivation / why now — house pilot). Frasa life-event ini bukan kata
@@ -534,7 +551,7 @@ function isPropertyContextContinuation(message, history = []) {
   // char saat customer merinci ("semi furnished, pokok ada peralatan dapur, lemari,
   // ranjang"). Kosakata furnitur tidak ada di hasPropertyFacility, jadi perlu sendiri.
   const hasFurnishingAnswer = /\b(furnished|unfurnished|furnish|furnitur|furniture|semi[\s-]?furnish\w*|full[\s-]?furnish\w*|fully[\s-]?furnish\w*|kosongan|perabot(?:an)?|peralatan\s+(dapur|rumah|masak|elektronik)|lemari|ranjang|kasur|tempat\s+tidur|spring\s*bed|springbed|sofa|kompor|kulkas|mesin\s+cuci|dispenser|kitchen\s+set|wardrobe)\b/i.test(lower);
-  const hasPropertyContent  = hasPropertyFacility || isLandmarkAnswer || isMotivationAnswer || isPreferenceAnswer || isAmenityVicinity;
+  const hasPropertyContent  = hasPropertyFacility || isLandmarkAnswer || isMotivationAnswer || isPreferenceAnswer || isAmenityVicinity || isSchedulingRequest;
   // Sinyal jawaban kualifikasi yang KUAT (budget/nego Q3, furnishing Q11) cukup untuk
   // MELEWATI batas panjang 70-char, tapi SENGAJA tidak melewati screening
   // CLEAR_NON_PROPERTY di bawah — supaya "beli laptop 10 juta" tetap tersaring.
@@ -577,13 +594,12 @@ function isPropertyContextContinuation(message, history = []) {
     // Durasi sewa singkat — jawaban Q10 ("1 tahun", "6 bulan", "2 minggu", "10 hari", "3 months")
     if (/^\d+\s*(hari|minggu|bulan|tahun|day|week|month|year)s?$/.test(lower.trim())) return true;
 
-    // Fasilitas / patokan lokasi / motivasi (Q_FAC / Q6 / QM) — konten properti yang KUAT
-    // & TIDAK ambigu, jadi aman dilewatkan tanpa cek konteks (mis. saat pesan AI belum
-    // tersimpan / kata TIPE sudah keluar window). Contoh:
-    //   "AC, kolam renang, kids zone, gym.. deket restoran/rumah makan"
+    // Fasilitas / patokan lokasi / motivasi / scheduling — konten properti KUAT & tidak
+    // ambigu, aman dilewatkan tanpa cek konteks (mis. saat pesan AI belum tersimpan /
+    // kata TIPE sudah keluar window).
     // Catatan: preferensi/amenity (jalan lebar, banyak cafe) SENGAJA tidak di sini —
-    // sinyalnya lebih lemah, jadi diverifikasi via konteks dulu (pattern 15a di bawah).
-    if (hasPropertyFacility || isLandmarkAnswer || isMotivationAnswer) return true;
+    // sinyalnya lebih lemah, diverifikasi via konteks dulu (pattern 15a di bawah).
+    if (hasPropertyFacility || isLandmarkAnswer || isMotivationAnswer || isSchedulingRequest) return true;
   }
 
   // Context = a property keyword in recent history OR (crucially) the LAST AI message
@@ -732,6 +748,13 @@ function isPropertyContextContinuation(message, history = []) {
   //        "cari yg bisa ditawar", "negotiable". Konteks properti sudah diverifikasi
   //        di atas. Sering menyertai jawaban budget Q3 ("9-10 juta, tolong yg nego").
   if (hasNegotiationCue)
+    return true;
+
+  // 15b-3) Permintaan/persetujuan SCHEDULING — "Boleh.. kapan saya bisa viewing?",
+  //        "kapan bisa survey?", "jadwal kunjungan", "mau viewing", "bisa survei".
+  //        isSchedulingRequest sudah dihitung di atas sebagai fast-path (sebelum
+  //        hasPropertyCtx), tapi sengaja diulangi di sini sebagai safety net.
+  if (isSchedulingRequest)
     return true;
 
   // 15c) Permintaan rekomendasi / saran / keputusan dalam konteks properti —
