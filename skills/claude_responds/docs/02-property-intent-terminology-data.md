@@ -60,7 +60,8 @@ Acknowledge, explain limitation, redirect to rent/sale, or escalate.
 | kos, kost, kosan, indekos, boarding house | boarding_house |
 | hotel, motel, penginapan | hotel |
 | villa, vila, resort | villa |
-| ruko, rukan, shophouse, toko, store | shophouse |
+| ruko, rukan, shophouse | shophouse |
+| toko, pertokoan, kios, store, retail space | store |
 | kantor, office, perkantoran | office |
 | gudang, warehouse, pergudangan | warehouse |
 | kavling, tanah, lahan, lot, land | others |

@@ -522,12 +522,28 @@ function isPropertyContextContinuation(message, history = []) {
   // "dekat mall/kampus/pasar". Kata kuliner di sini = patokan lokasi, BUKAN pesan makanan.
   const isAmenityVicinity   = /\b(banyak|dekat|deket|near|area|kawasan|lingkungan|sekitar|deketan|berdekatan|akses\s+ke)\b/i.test(lower) &&
                               /\b(cafe|kafe|resto|restoran|restaurant|warung|warteg|mall|plaza|kampus|sekolah|universitas|pasar|minimarket|indomaret|alfamart|rumah\s+sakit|stasiun|halte|terminal|tol|gym|taman|kantor)\b/i.test(lower);
+  // Jawaban BUDGET (Q3) — angka + satuan mata uang, termasuk range "9-10 juta/bln",
+  // "Rp 2.000.000", "5jt per bulan". Ini sinyal properti yang KUAT: jawaban harga
+  // yang sah sering > 70 char saat customer menambah konteks ("...yg bisa dinego ya kak").
+  const hasBudgetAnswer     = /\b\d[\d.,]*\s*(?:-\s*\d[\d.,]*\s*)?(juta|jutaan|jt|ribu|rb|miliar|milyar)\b/i.test(lower)
+                              || /\brp\.?\s*\d/i.test(lower);
+  // Permintaan / preferensi NEGOSIASI harga — "bisa dinego", "nego dong", "minta yg
+  // nego", "negotiable", "bisa kurang harganya", "ditawar". Khas obrolan properti.
+  const hasNegotiationCue   = /\b(nego|dinego|dinegokan|dinegosiasi|negosiasi|negotiable|nawar|ditawar|menawar|tawar[\s-]?menawar|kurang\s+harganya|harga\s+bisa\s+kurang|bisa\s+kurang)\b/i.test(lower);
+  // Jawaban FURNISHING (Q11) — status perabotan + perabot/peralatan rumah. Sering > 70
+  // char saat customer merinci ("semi furnished, pokok ada peralatan dapur, lemari,
+  // ranjang"). Kosakata furnitur tidak ada di hasPropertyFacility, jadi perlu sendiri.
+  const hasFurnishingAnswer = /\b(furnished|unfurnished|furnish|furnitur|furniture|semi[\s-]?furnish\w*|full[\s-]?furnish\w*|fully[\s-]?furnish\w*|kosongan|perabot(?:an)?|peralatan\s+(dapur|rumah|masak|elektronik)|lemari|ranjang|kasur|tempat\s+tidur|spring\s*bed|springbed|sofa|kompor|kulkas|mesin\s+cuci|dispenser|kitchen\s+set|wardrobe)\b/i.test(lower);
   const hasPropertyContent  = hasPropertyFacility || isLandmarkAnswer || isMotivationAnswer || isPreferenceAnswer || isAmenityVicinity;
+  // Sinyal jawaban kualifikasi yang KUAT (budget/nego Q3, furnishing Q11) cukup untuk
+  // MELEWATI batas panjang 70-char, tapi SENGAJA tidak melewati screening
+  // CLEAR_NON_PROPERTY di bawah — supaya "beli laptop 10 juta" tetap tersaring.
+  const hasStrongAnswerCue  = hasBudgetAnswer || hasNegotiationCue || hasFurnishingAnswer;
 
   // Pesan pendek (≤ 70 karakter) → proses normal
-  // Pesan medium (71–200) dengan konten properti → masih bisa jawaban Q2b/Q5/Q6
+  // Pesan medium (71–200) dengan konten properti / sinyal budget-nego-furnishing → jawaban Q2b/Q3/Q5/Q6/Q11
   // Pesan sangat panjang (> 200) → selalu topik baru, bukan continuation
-  if (!hasPropertyContent && lower.length > 70) return false;
+  if (!hasPropertyContent && !hasStrongAnswerCue && lower.length > 70) return false;
   if (lower.length > 200) return false;
 
   // ── Cek apakah pesan memperkenalkan topik NON-PROPERTY yang jelas ───────
@@ -710,6 +726,12 @@ function isPropertyContextContinuation(message, history = []) {
   //      "cicilan", "tenor", "bunga", "uang muka". Konteks sudah diverifikasi di atas
   //      (mis. AI baru tanya cash/KPR). Mencakup "Cash KPR better mana?", "kasi rekom DP".
   if (/\b(kpr|dp|cash|tunai|cicilan|angsuran|tenor|bunga|uang\s+muka|down\s+payment|kredit)\b/i.test(lower))
+    return true;
+
+  // 15b-2) Permintaan / preferensi NEGOSIASI harga — "bisa dinego", "nego dong",
+  //        "cari yg bisa ditawar", "negotiable". Konteks properti sudah diverifikasi
+  //        di atas. Sering menyertai jawaban budget Q3 ("9-10 juta, tolong yg nego").
+  if (hasNegotiationCue)
     return true;
 
   // 15c) Permintaan rekomendasi / saran / keputusan dalam konteks properti —

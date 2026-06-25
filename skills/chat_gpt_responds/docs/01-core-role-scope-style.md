@@ -22,11 +22,18 @@ location guidance, facilities queries, general investment explanation (non-finan
 | `villa` | Villa, Vila | Villa |
 | `boarding_house` | Kos, Kost, Kosan, Indekos | Boarding House |
 | `shophouse` | Ruko, Rukan | Shophouse |
+| `store` | Toko, Kios, Pertokoan | Store, Retail Shop |
 | `office` | Kantor | Office |
 | `warehouse` | Gudang | Warehouse |
 | `others` | Properti Lainnya | Other Property |
 
 Extended types (Kavling, Tanah, Resort, Loft, Penthouse, Studio, Klinik, Cafe) → mapped to `others`.
+
+**⚠️ LANGUAGE STYLE RULE — property type names:**
+When mentioning or confirming a property type, use ONLY the name that matches the conversation language.
+- Indonesian conversation → use Indonesian name only: "Ruko", "Gudang", "Kos-Kosan", "Toko"
+- English conversation → use English name only: "Shophouse", "Warehouse", "Boarding House", "Store"
+- ❌ NEVER mix both in one reply: "Ruko / Shophouse", "Gudang / Warehouse", "Kos / Boarding House" are all WRONG.
 
 ---
 

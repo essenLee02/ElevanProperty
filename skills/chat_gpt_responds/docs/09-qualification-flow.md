@@ -493,6 +493,22 @@ When a customer answers Q11 with `"kosongan saja"`, `"tidak pakai furnish"`, or 
 
 The word "kosongan" (unfurnished) contains "kos" as a substring, but the server-side building-type detector now uses **word-boundary regex** (`\bkos\b`) to prevent this false positive. If you see the building type flip to kos after Q11, it is a bug — the customer is still searching for the original property type.
 
+**Detailed furnishing answers — capture the listed items, don't ignore them:**
+
+Customers often answer Q11 by naming the furniture/appliances they need, e.g.
+`"semi furnished aja, pokok ada peralatan dapur, lemari dan ranjang tidur"`.
+
+- ✅ Record furnishing = `Semi-furnished` (the stated state) **and** note the must-have items
+  as a preference/facility line — e.g. `Furnitur: Semi-furnished (wajib: peralatan dapur,
+  lemari, ranjang)`.
+- ✅ Acknowledge the specifics briefly so the customer feels heard
+  ("Oke, semi-furnished dengan dapur, lemari & ranjang ya 👍"), then ask the next ❓ question.
+- ❌ Do not reduce it to a bare `Semi-furnished` and drop the listed items — those items are
+  the customer's real requirement and must reach the agent brief.
+
+> These detailed replies often run past one short line. They are valid Q11 answers — never
+> treat a furnishing reply as off-topic just because it lists kitchen/bedroom items.
+
 ---
 
 ### Q_FAC — Facilities / Amenities *(rent only — WAJIB / MANDATORY for sewa)*

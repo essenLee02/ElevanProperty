@@ -986,13 +986,13 @@ function humanBuildingType(type = '') {
     villa: 'villa',
     house: 'rumah',
     apartment: 'apartemen',
-    boarding_house: 'kos / boarding house',
-    shophouse: 'ruko / shophouse',
+    boarding_house: 'kos-kosan',
+    shophouse: 'ruko',
     store: 'toko',
-    mansion: 'mansion / rumah mewah',
+    mansion: 'mansion',
     kondotel: 'kondotel',
-    office: 'kantor / office',
-    warehouse: 'gudang / warehouse',
+    office: 'kantor',
+    warehouse: 'gudang',
     others: 'properti lainnya'
   };
   return map[type] || type || 'properti';
