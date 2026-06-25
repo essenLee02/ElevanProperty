@@ -117,8 +117,8 @@
     di bawah + endpoint API-nya — markup tabel & pagination tidak perlu ditulis
     ulang karena dibangun oleh window.tableModal()/loadModalPagination().
   ──────────────────────────────────────────────────────────────────────────── */
-  const TABLE_HEADERS = ['Nama Fasilitas', 'Icon', 'Status'];  // judul kolom
-  const TABLE_CHUNKS  = ['name', 'icon', 'status'];            // key data per kolom
+  const TABLE_HEADERS = ['Nama Fasilitas', 'Status'];  // judul kolom
+  const TABLE_CHUNKS  = ['name', 'status'];            // key data per kolom
   const ACTION_TYPES  = ['update', 'block', 'delete'];         // tombol aksi
   const ACTION_PARAMS = ['facility_id'];                       // param tombol (→ value)
 
@@ -366,14 +366,78 @@
 .alert-close:hover { opacity: 1; }
 
 /* ── CookieFast table/pager host ────────────────────────────────── */
-/* Tabel & pagination distyle oleh Bootstrap (dimuat global di App.vue). */
 .cf-table-host {
   background: white;
   border-radius: 12px;
   box-shadow: 0 2px 12px rgba(0,0,0,0.07);
-  padding: 8px 12px;
+  overflow: hidden;
 }
 .cf-pager-host { margin-top: 16px; }
+
+/* Table override — v-html content needs :deep() */
+.cf-table-host :deep(.table-responsive) {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.cf-table-host :deep(.table) {
+  font-size: 14px;
+  color: #4a5568;
+  border-collapse: collapse !important;
+  margin: 0 !important;
+}
+
+/* Header */
+.cf-table-host :deep(.table thead th) {
+  background: #f8fafc !important;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #718096;
+  padding: 13px 16px;
+  border: none !important;
+  border-bottom: 2px solid #e2e8f0 !important;
+  white-space: nowrap;
+}
+
+/* Body rows */
+.cf-table-host :deep(.table tbody td) {
+  padding: 12px 16px;
+  border: none !important;
+  border-bottom: 1px solid #f0f4f8 !important;
+  vertical-align: middle;
+}
+.cf-table-host :deep(.table tbody tr:last-child td) {
+  border-bottom: none !important;
+}
+.cf-table-host :deep(.table-hover tbody tr:hover td) {
+  background: #f7f9fc !important;
+}
+.cf-table-host :deep(.table-striped > tbody > tr:nth-of-type(odd) > *) {
+  background-color: transparent !important;
+}
+
+/* Status badge → pill */
+.cf-table-host :deep(.badge) {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 20px;
+  letter-spacing: 0.02em;
+}
+.cf-table-host :deep(.badge.bg-success) {
+  background: #c6f6d5 !important;
+  color: #22543d !important;
+}
+.cf-table-host :deep(.badge.bg-warning) {
+  background: #fefcbf !important;
+  color: #744210 !important;
+}
+.cf-table-host :deep(.badge.bg-danger) {
+  background: #fed7d7 !important;
+  color: #742a2a !important;
+}
 
 /* ── Loading / Empty ────────────────────────────────────────────── */
 .loading-state, .empty-state {
@@ -454,5 +518,25 @@
 @media (max-width: 768px) {
   .facility-list-section { padding: 24px 0 40px; }
   .modal-box { padding: 28px 20px; }
+
+  .cf-table-host :deep(.table thead th),
+  .cf-table-host :deep(.table tbody td) {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 480px) {
+  .cf-table-host :deep(.btnUpdate),
+  .cf-table-host :deep(.btnBlock),
+  .cf-table-host :deep(.btnDelete) {
+    width: 30px !important;
+    height: 30px !important;
+    min-width: 30px !important;
+    font-size: 11px !important;
+  }
+  .cf-table-host :deep(td > div.d-flex > .col-12) {
+    gap: 4px !important;
+  }
 }
 </style>

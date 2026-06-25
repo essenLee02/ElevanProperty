@@ -128,7 +128,7 @@ function tableModal(
         if (actionUseable && actionType.length && actionParameter.length &&
             (!row.status || row.status < 3 || ['O', 'L', 'C'].includes(row.status))) {
             tableParts.push(`
-                <td> <div class="d-flex justify-content-around row" ${actionType.length > 2 ? actionType.length > 3 ? 'style="width: 12rem;"' : 'style="width: 11rem;"' : ''}>
+                <td> <div class="d-flex justify-content-around row" ${actionType.length > 2 ? actionType.length > 3 ? 'style="width: 18rem;"' : 'style="width: 17rem;"' : ''}>
                 <div class="col-12">
             `);
             let actionValue = actionParameter.map(id => (row[id] || '').toString().trim()).join('|');
@@ -140,16 +140,16 @@ function tableModal(
                     tag: 'input',
                     extraAttr: selectedId && selectedCodes.includes(row[selectedId]) ? 'checked disabled' : '',
                 },
-                update: { class: 'btn btn-info text-white fas fa-edit', tag: 'button' },
+                update: { class: 'btn btn-info text-white fas fa-edit w-25', tag: 'button' },
                 block: {
-                    class: row.status == 1 ? 'btn btn-warning text-white fas fa-lock' : 'btn btn-warning text-white fas fa-unlock',
+                    class: row.status == 1 ? 'btn btn-warning text-white fas fa-lock w-25' : 'btn btn-warning text-white fas fa-unlock w-25',
                     tag: 'button',
                     extraValue: row.status
                 },
-                delete: { class: 'btn btn-danger text-white fas fa-trash', tag: 'button' },
-                choose: { class: 'btn btn-success text-white fas fa-download', tag: 'button' },
-                closed: isStatusOpen ? { class: 'btn btn-success text-white fas fa-check', tag: 'button' } : null,
-                cancel: isStatusOpen ? { class: 'btn btn-danger text-white fas fa-times', tag: 'button' } : null
+                delete: { class: 'btn btn-danger text-white fas fa-trash w-25', tag: 'button' },
+                choose: { class: 'btn btn-success text-white fas fa-download  w-25', tag: 'button' },
+                closed: isStatusOpen ? { class: 'btn btn-success text-white fas fa-check w-25', tag: 'button' } : null,
+                cancel: isStatusOpen ? { class: 'btn btn-danger text-white fas fa-times w-25', tag: 'button' } : null
             };
             // **Iterasi dan buat tombol hanya jika config tersedia**
             actionType.forEach(action => {

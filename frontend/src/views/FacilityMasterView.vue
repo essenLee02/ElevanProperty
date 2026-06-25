@@ -53,6 +53,7 @@
                   :disabled="isSubmitting"
                   maxlength="100"
                   required
+                  autocomplete="off"
                 />
                 <p class="field-hint">Maksimal 100 karakter</p>
               </div>
@@ -96,6 +97,7 @@
                   :disabled="isSubmitting"
                   maxlength="255"
                   rows="3"
+                  autocomplete="off"
                 ></textarea>
                 <p class="field-hint">Opsional. Maksimal 255 karakter. Sisa: {{ 255 - (form.description || '').length }}</p>
               </div>
@@ -133,16 +135,27 @@
                       {{ form.status === 1 ? 'Aktif' : 'Disabled' }}
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    class="btn-toggle-status"
-                    :class="form.status === 1 ? 'btn-toggle-disable' : 'btn-toggle-enable'"
-                    :disabled="isTogglingStatus"
-                    @click="handleToggleStatus"
-                  >
-                    <span v-if="isTogglingStatus" class="spinner-sm"></span>
-                    <span v-else>{{ form.status === 1 ? '🚫 Nonaktifkan' : '✅ Aktifkan' }}</span>
-                  </button>
+                  <div class="status-actions">
+                    <button
+                      type="button"
+                      class="btn-toggle-status"
+                      :class="form.status === 1 ? 'btn-toggle-disable' : 'btn-toggle-enable'"
+                      :disabled="isTogglingStatus || isDeleting"
+                      @click="handleToggleStatus"
+                    >
+                      <span v-if="isTogglingStatus" class="spinner-sm"></span>
+                      <span v-else>{{ form.status === 1 ? '🚫 Nonaktifkan' : '✅ Aktifkan' }}</span>
+                    </button>
+                    <button
+                      type="button"
+                      class="btn-delete-status"
+                      :disabled="isTogglingStatus || isDeleting"
+                      @click="openDeleteModal"
+                    >
+                      <span v-if="isDeleting" class="spinner-sm"></span>
+                      <span v-else>🗑️ Hapus</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -169,6 +182,25 @@
         </div>
       </div>
     </div>
+
+    <!-- Confirm Delete Modal -->
+    <div v-if="deleteModal.show" class="modal-overlay" @click.self="closeDeleteModal">
+      <div class="modal-box">
+        <div class="modal-icon">🗑️</div>
+        <h3 class="modal-title">Hapus Fasilitas?</h3>
+        <p class="modal-desc">
+          Fasilitas <strong>"{{ form.name }}"</strong> akan dihapus.
+          Tindakan ini tidak dapat dibatalkan.
+        </p>
+        <div class="modal-actions">
+          <button class="btn-modal-cancel" @click="closeDeleteModal" :disabled="isDeleting">Batal</button>
+          <button class="btn-modal-confirm btn-confirm-danger" @click="handleDelete" :disabled="isDeleting">
+            <span v-if="isDeleting" class="spinner-sm"></span>
+            <span v-else>Ya, Hapus</span>
+          </button>
+        </div>
+      </div>
+    </div>
   </section>
 </template>
 
@@ -180,7 +212,8 @@ import {
   getFacilityDetail,
   insertFacility,
   updateFacility,
-  toggleFacilityStatus
+  toggleFacilityStatus,
+  deleteFacility
 } from '../services/facilityApi';
 
 const route  = useRoute();
@@ -194,6 +227,9 @@ const isEditMode  = computed(() => !!facilityId.value);
 const isLoadingDetail  = ref(false);
 const isSubmitting     = ref(false);
 const isTogglingStatus = ref(false);
+const isDeleting       = ref(false);
+
+const deleteModal = reactive({ show: false });
 
 const form = reactive({
   facility_id:     '',
@@ -364,6 +400,29 @@ const handleToggleStatus = async () => {
     toast.error(err?.response?.data?.data?.message || 'Gagal mengubah status');
   } finally {
     isTogglingStatus.value = false;
+  }
+};
+
+/* ── Soft delete (status → 3) dari halaman edit ─────────────────── */
+const openDeleteModal  = () => { deleteModal.show = true; };
+const closeDeleteModal = () => { if (!isDeleting.value) deleteModal.show = false; };
+
+const handleDelete = async () => {
+  isDeleting.value = true;
+  try {
+    const result = await deleteFacility(facilityId.value);
+    if (result?.isSuccess === 1) {
+      toast.success(result.data.message || 'Fasilitas berhasil dihapus');
+      deleteModal.show = false;
+      router.push('/facility');
+    } else {
+      toast.error(result?.data?.message || 'Gagal menghapus fasilitas');
+    }
+  } catch (err) {
+    if (err?.response?.status === 401) return; // interceptor handle redirect
+    toast.error(err?.response?.data?.data?.message || 'Gagal menghapus fasilitas');
+  } finally {
+    isDeleting.value = false;
   }
 };
 
@@ -706,6 +765,111 @@ onMounted(() => {
 
 .btn-toggle-enable  { background: #c6f6d5; color: #22543d; }
 .btn-toggle-enable:hover:not(:disabled)  { background: #9ae6b4; }
+
+.status-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn-delete-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid #feb2b2;
+  background: white;
+  color: #c53030;
+  transition: all 0.15s;
+  justify-content: center;
+}
+
+.btn-delete-status:hover:not(:disabled) { background: #fff5f5; border-color: #fc8181; }
+.btn-delete-status:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* ── Confirm Delete Modal ───────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.modal-box {
+  background: white;
+  border-radius: 14px;
+  padding: 28px 26px;
+  max-width: 400px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+}
+
+.modal-icon { font-size: 40px; margin-bottom: 10px; }
+
+.modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #2d3748;
+  margin: 0 0 8px;
+}
+
+.modal-desc {
+  font-size: 14px;
+  color: #718096;
+  margin: 0 0 22px;
+  line-height: 1.5;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.btn-modal-cancel {
+  padding: 10px 24px;
+  border: 1px solid #e2e8f0;
+  background: white;
+  color: #4a5568;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-modal-cancel:hover:not(:disabled) { background: #f7fafc; }
+.btn-modal-cancel:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-modal-confirm {
+  padding: 10px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  min-width: 100px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: white;
+}
+
+.btn-modal-confirm:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn-confirm-danger { background: #e53e3e; }
+.btn-confirm-danger:hover:not(:disabled) { background: #c53030; }
 
 /* ── Form actions ───────────────────────────────────────────────── */
 .form-actions {
