@@ -457,7 +457,7 @@ EN: How long are you planning to rent? ⏱️ (a duration, not a date — e.g. 6
 **Duration vs date guard (server-side):** Q10 asks for a **duration** ("6 bulan", "1 tahun"), not a calendar date. If the customer answers with a date ("26 Juni 2026"), the server does **not** store it as the lease duration — Q10 stays ❓ and is re-asked with the clarified hint above. The AI must never put a date or an unrelated phrase in `Durasi sewa`.
 
 **Q10 Summary display rule:**
-Only include `✓ Durasi sewa:` in the summary brief if the customer explicitly stated a specific duration (e.g., `1 tahun`, `6 bulan`, `2 tahun`).
+Only include `✓ Durasi:` in the summary brief if the customer explicitly stated a specific duration. Valid for **ALL units** — `10 hari`, `2 minggu`, `6 bulan`, `1 tahun`, `2 tahun` — not just years. A short-stay weekly/daily rental ("butuh sewa 2 minggu") must show `✓ Durasi: *2 minggu*`.
 
 **FORBIDDEN:** Writing `✓ Durasi sewa: *Disebutkan*` or any vague placeholder when no specific duration was given. If Q10 was not answered with a specific value, omit the line entirely.
 
@@ -675,13 +675,15 @@ Baik, permintaan utama Anda sudah saya catat, sebagai berikut 📝 🔥
 ✓ Rencana: *[nilai dari Q1 tx]* — HANYA jika ✅
 ✓ Tipe: *[nilai dari building type]* — HANYA jika ✅
 ✓ Lokasi: *[nilai dari Q2]* — HANYA jika ✅
-✓ Budget: *[nilai dari Q3]* (terkonfirmasi nanti) — HANYA jika ✅
+✓ Budget: *[nilai dari Q3 — angka + satuan uang]* (terkonfirmasi nanti) — HANYA jika ✅
+✓ Durasi: *[nilai dari Q10 — mis. "2 minggu", "6 bulan", "1 tahun"]* — HANYA jika ✅ (sewa)
 ✓ Masuk: *[nilai dari Q8]* — HANYA jika ✅
 ✓ Keputusan bersama: *[nilai dari Q9]* — HANYA jika ✅
 ✓ Furnitur: *[nilai dari Q11]* — HANYA jika ✅
 ✓ Fasilitas: *[amenities yang diminta customer — mis. "Kids zone, Gym, Kolam renang"; gabung dengan koma]* — HANYA jika ✅
 ✓ Patokan: *[nilai dari Q6 — nilai PERSIS dari QUALIFICATION STATE]* — HANYA jika ✅
 ✓ Area alternatif: *[nilai dari Q7]* — HANYA jika ✅
+✓ Viewing: *[preferensi Q9 — mis. "Butuh lihat katalog saja" / "Mau dijadwalkan viewing"]* — HANYA jika customer menyebutnya
 
 Saya akan segera menghubungi Anda dengan rekomendasi properti yang paling sesuai! 🏠 Apabila ada pertanyaan lagi, silahkan hubungi saya kembali.
 Terima kasih sudah menghubungi saya. 🙏
@@ -696,6 +698,9 @@ Terima kasih sudah menghubungi saya. 🙏
 - **⛔ DILARANG KERAS: Jangan inferensi "Masuk: [bulan]" dari tanggal sistem.** Jika Q8 ❓ → baris "Masuk" tidak ada di brief, titik.
 - **⛔ DILARANG KERAS: Jangan tulis "Patokan: Disebutkan" jika Q6 ❓.** Baris Patokan hanya ada jika Q6 = ✅ dengan nilai konkret.
 - **⛔ DILARANG KERAS: Jangan tulis nilai referensi-silang seperti "Disebutkan di Q4", "Sudah dijawab", "Lihat Q8", atau menunjuk nomor pertanyaan lain.** Sebuah field hanya boleh berisi nilai KONKRET dari baris ✅-nya sendiri di QUALIFICATION STATE. Jika `Keputusan [Q9]` masih ❓ (mis. customer hanya menjawab soal jadwal survei, bukan siapa pengambil keputusan), JANGAN tandai ✓ — tanyakan Q9 lebih dulu, atau (mode summary house) tampilkan `✗ Keputusan bersama: (Belum ditanyakan)`. Jawaban tentang waktu/jadwal survei ("besok lusa saya bisa survei") BUKAN jawaban Q9.
+- **⛔ Budget BUKAN nomor lantai/tower.** Jawaban Q12 seperti "lantai 15-20", "lt 27", "tower 3" adalah preferensi lantai — JANGAN pernah ditulis sebagai `✓ Budget: 15-20`. Budget hanya angka dengan satuan UANG (juta/ribu/miliar/Rp). Jika customer sudah memberi budget asli sebelumnya (mis. "1-1.6 juta/minggu"), pertahankan nilai itu — jangan timpa dengan angka lantai.
+- **✓ Durasi (Q10) mencakup SEMUA satuan**, bukan hanya tahun: "2 minggu", "10 hari", "6 bulan", "1 tahun" semuanya valid. Jika customer menyebut durasi di awal ("butuh sewa 2 minggu") walau belum ditanya Q10, tetap catat di `✓ Durasi`.
+- **✓ Viewing (Q9)**: jika customer minta langsung lihat katalog tanpa survei ("mau lihat katalognya aja, gak ada waktu survei") → `✓ Viewing: *Butuh lihat katalog saja*`. Jika minta dijadwalkan → `✓ Viewing: *Mau dijadwalkan viewing*`. Jika tidak disebut → omit.
 - **⛔ JANGAN tampilkan summary jika Q3 (Budget) masih ❓** — walaupun budget muncul di old session history.
 - **⛔ JANGAN tampilkan summary jika Q8 (Tanggal masuk) masih ❓** — ini mandatory, tidak ada pengecualian.
 - **⛔ JANGAN tampilkan summary setelah Q2b dijawab jika Q3/Q8/Q4 masih ❓.**
