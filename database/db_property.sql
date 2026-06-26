@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Waktu pembuatan: 26 Jun 2026 pada 16.36
+-- Waktu pembuatan: 26 Jun 2026 pada 16.51
 -- Versi server: 10.4.32-MariaDB
 -- Versi PHP: 8.1.25
 
@@ -926,7 +926,14 @@ INSERT INTO `logs` (`id`, `action`, `details`, `level`, `createdAt`, `updatedAt`
 (56, 'PAGE_VIEW', 'Navigated from /city/add to /country', 'info', '2026-06-26 14:13:46', '2026-06-26 14:13:46'),
 (57, 'PAGE_VIEW', 'Navigated from /country to /rumah123', 'info', '2026-06-26 14:13:47', '2026-06-26 14:13:47'),
 (58, 'PAGE_VIEW', 'Navigated from /rumah123 to /facility', 'info', '2026-06-26 14:14:03', '2026-06-26 14:14:03'),
-(59, 'PAGE_VIEW', 'Navigated from /facility to /city', 'info', '2026-06-26 14:14:09', '2026-06-26 14:14:09');
+(59, 'PAGE_VIEW', 'Navigated from /facility to /city', 'info', '2026-06-26 14:14:09', '2026-06-26 14:14:09'),
+(60, 'PAGE_VIEW', 'Navigated from / to /', 'info', '2026-06-26 14:50:18', '2026-06-26 14:50:18'),
+(61, 'PAGE_VIEW', 'Navigated from / to /country', 'info', '2026-06-26 14:50:21', '2026-06-26 14:50:21'),
+(62, 'PAGE_VIEW', 'Navigated from /country to /city', 'info', '2026-06-26 14:50:23', '2026-06-26 14:50:23'),
+(63, 'PAGE_VIEW', 'Navigated from /city to /city/edit/AIRODKY251', 'info', '2026-06-26 14:50:30', '2026-06-26 14:50:30'),
+(64, 'PAGE_VIEW', 'Navigated from /city/edit/AIRODKY251 to /city', 'info', '2026-06-26 14:50:32', '2026-06-26 14:50:32'),
+(65, 'PAGE_VIEW', 'Navigated from /city to /city/edit/ATAJF9I197', 'info', '2026-06-26 14:50:37', '2026-06-26 14:50:37'),
+(66, 'PAGE_VIEW', 'Navigated from /city/edit/ATAJF9I197 to /city', 'info', '2026-06-26 14:50:44', '2026-06-26 14:50:44');
 
 -- --------------------------------------------------------
 
@@ -1068,7 +1075,7 @@ CREATE TABLE `users` (
 
 INSERT INTO `users` (`id`, `user_id`, `name`, `birthdate`, `phone`, `username`, `password`, `refresh_token`, `updated_date`, `update_by`, `created_date`, `created_by`, `status`, `privilege`, `fonnte_token`, `kirimi_device_id`) VALUES
 (1, 'SA6EDRU001', 'NIGEL KUNCORO', '1998-05-04', '082233556796', 'nigel123', '$2b$10$Rld5zga/CswkKyQPgPi6GO./sa5.OuVwgApiGxbZmCRudUD9TNHD2', NULL, '2026-06-25 07:17:43', 'nigel123', '2026-05-22 03:26:55', 'Self-Register', 1, 'agent', 'm5HDmV4hAYRFBgTdkfDR', NULL),
-(2, 'LFGKT49002', 'LEO FELIX', '2000-05-25', '0881036588874', 'leon123', '$2b$10$cFCdDf7g5ZxzPWpLG0WQrOPWbdNGNVfAiWrtfts.f98cg2Ju3bRum', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJMRkdLVDQ5MDAyIiwidXNlck5hbWUiOiJMRU8gRkVMSVgiLCJ1c2VybmFtZSI6Imxlb24xMjMiLCJwcml2aWxlZ2UiOiJhZ2VudCIsImlhdCI6MTc4MjQ4MzM3NSwiZXhwIjoxNzgyNTY5Nzc1fQ.3NmU5lMa2rUDuMCzkTWyPxafzsQEr2nBy8qisEYdSGs', '2026-06-26 14:16:15', 'leon123', '2026-05-25 10:05:33', 'Self-Register', 1, 'agent', 'PiBSZQXu6HKWhKkEDu9e', 'D-3OCA6'),
+(2, 'LFGKT49002', 'LEO FELIX', '2000-05-25', '0881036588874', 'leon123', '$2b$10$cFCdDf7g5ZxzPWpLG0WQrOPWbdNGNVfAiWrtfts.f98cg2Ju3bRum', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJMRkdLVDQ5MDAyIiwidXNlck5hbWUiOiJMRU8gRkVMSVgiLCJ1c2VybmFtZSI6Imxlb24xMjMiLCJwcml2aWxlZ2UiOiJhZ2VudCIsImlhdCI6MTc4MjQ4NTQyMSwiZXhwIjoxNzgyNTcxODIxfQ.1f2Tb7JRBzBNwnWhYsbG9sjREATuCWBSX0T1T67_bi8', '2026-06-26 14:50:21', 'leon123', '2026-05-25 10:05:33', 'Self-Register', 1, 'agent', 'PiBSZQXu6HKWhKkEDu9e', 'D-3OCA6'),
 (3, 'CEMPL3Z003', 'CLARENCE MARIO', '1993-03-24', '0821-1136-7154', 'clarence123', '$2b$10$jvnn536K239gxQRcOqNIauJxZxTq9iBcJYLWDstvTItZGkAIsA07e', NULL, '2026-06-26 09:59:40', 'clarence123', '2026-05-26 01:56:29', 'Self-Register', 1, 'agent', NULL, NULL),
 (4, 'DTDE8RX004', 'DESY TALIM', '1995-08-27', '0821-1331-8191', 'desy54321', '$2b$10$ZCZK0Lzlenn2y1ni3gtITOdJs9GISQcG1eatRxh0PEBKk0BXwyhNq', NULL, '2026-06-26 13:57:22', 'desy54321', '2026-05-26 01:57:21', 'Self-Register', 1, 'agent', NULL, NULL),
 (5, 'ITJMESP005', 'IFAN TJANDRA', '2000-05-12', '+62881036588874', 'ifansiapa', '$2b$10$XK.IYefPk7hTE8hXNPJriOpueghFfkUH0.9m413E/PMBg2rESDmge', NULL, '2026-05-26 03:17:07', 'ifansiapa', '2026-05-26 01:58:48', 'Self-Register', 1, 'agent', NULL, NULL),
@@ -1252,7 +1259,7 @@ ALTER TABLE `facilities`
 -- AUTO_INCREMENT untuk tabel `logs`
 --
 ALTER TABLE `logs`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=60;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=67;
 
 --
 -- AUTO_INCREMENT untuk tabel `properties`
