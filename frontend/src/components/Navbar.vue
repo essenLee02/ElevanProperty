@@ -20,6 +20,9 @@
       <nav class="navbar-links d-none d-lg-flex" v-else>
         <router-link class="nav-link-elevan" active-class="active" to="/rumah123">Rumah123</router-link>
         <router-link class="nav-link-elevan" active-class="active" to="/facility">Fasilitas</router-link>
+        <router-link class="nav-link-elevan" active-class="active" to="/city">Kota</router-link>
+        <router-link class="nav-link-elevan" active-class="active" to="/province">Provinsi</router-link>
+        <router-link class="nav-link-elevan" active-class="active" to="/country">Negara</router-link>
       </nav>
 
       <!-- Actions -->
@@ -80,6 +83,42 @@
 
               <div class="dropdown-divider-item"></div>
 
+              <div class="dropdown-header-menu">
+                <span>Wilayah</span>
+              </div>
+
+              <router-link
+                to="/city"
+                class="dropdown-item-elevan"
+                @click="closeDropdown"
+                role="menuitem"
+              >
+                <i class="fa-solid fa-city item-icon"></i>
+                <span>Master Kota</span>
+              </router-link>
+
+              <router-link
+                to="/province"
+                class="dropdown-item-elevan"
+                @click="closeDropdown"
+                role="menuitem"
+              >
+                <i class="fa-solid fa-map item-icon"></i>
+                <span>Master Provinsi</span>
+              </router-link>
+
+              <router-link
+                to="/country"
+                class="dropdown-item-elevan"
+                @click="closeDropdown"
+                role="menuitem"
+              >
+                <i class="fa-solid fa-earth-asia item-icon"></i>
+                <span>Master Negara</span>
+              </router-link>
+
+              <div class="dropdown-divider-item"></div>
+
               <button
                 class="dropdown-item-elevan danger"
                 @click="handleLogout"
@@ -124,9 +163,12 @@
               <div style="font-size:.75rem;color:rgba(255,255,255,.55);">Agent</div>
             </div>
           </div>
-          <router-link class="mobile-nav-link" to="/rumah123" @click="closeMobileMenu">Rumah123</router-link>
-          <router-link class="mobile-nav-link" to="/facility" @click="closeMobileMenu">Master Fasilitas</router-link>
-          <router-link class="mobile-nav-link" to="/profile"  @click="closeMobileMenu">Profil Saya</router-link>
+          <router-link class="mobile-nav-link" to="/rumah123"  @click="closeMobileMenu">Rumah123</router-link>
+          <router-link class="mobile-nav-link" to="/facility"  @click="closeMobileMenu">Master Fasilitas</router-link>
+          <router-link class="mobile-nav-link" to="/city"      @click="closeMobileMenu">Master Kota</router-link>
+          <router-link class="mobile-nav-link" to="/province"  @click="closeMobileMenu">Master Provinsi</router-link>
+          <router-link class="mobile-nav-link" to="/country"   @click="closeMobileMenu">Master Negara</router-link>
+          <router-link class="mobile-nav-link" to="/profile"   @click="closeMobileMenu">Profil Saya</router-link>
           <div class="mobile-nav-divider"></div>
           <button class="mobile-nav-link danger" @click="handleLogout">Keluar</button>
         </template>

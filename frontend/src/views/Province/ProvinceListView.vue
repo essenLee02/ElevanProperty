@@ -126,8 +126,8 @@
   /* ── Konfigurasi tabel (CookieFast) ──────────────────────────────────────────
     Kolom "Negara" mengambil nama negara hasil join backend (field country_name).
   ──────────────────────────────────────────────────────────────────────────── */
-  const TABLE_HEADERS = ['Negara', 'Nama Provinsi', 'Status'];   // judul kolom
-  const TABLE_CHUNKS  = ['country_name', 'name', 'status'];      // key data per kolom
+  const TABLE_HEADERS = ['Nama Provinsi', 'Negara', 'Status'];   // judul kolom
+  const TABLE_CHUNKS  = ['name', 'country_name', 'status'];      // key data per kolom
   const ACTION_TYPES  = ['update', 'block', 'delete'];           // tombol aksi
   const ACTION_PARAMS = ['province_id'];                         // param tombol (→ value)
 
