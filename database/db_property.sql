@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Jun 26, 2026 at 11:13 AM
+-- Generation Time: Jun 26, 2026 at 11:52 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.1.25
 
@@ -222,7 +222,11 @@ INSERT INTO `chat_messages` (`id`, `chatSessionId`, `user_id`, `role`, `message`
 (175, 32, 'LFGKT49002', 'customer', '16:03, Mei', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1782464608913\",\"platform\":\"kirimi\"}', '2026-06-26 09:03:28', '2026-06-26 09:03:28'),
 (176, 32, 'LFGKT49002', 'ai', 'Boleh tahu, apa yang membuat Kak mulai cari rumah sekarang? Misalnya mau pindah, keluarga nambah, pindah kerja, atau untuk investasi?', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"flat_json\"}', '2026-06-26 09:03:29', '2026-06-26 09:03:29'),
 (177, 37, 'LFGKT49002', 'customer', 'Mau ke gulun bntar ko', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1782464636090\",\"platform\":\"kirimi\"}', '2026-06-26 09:03:56', '2026-06-26 09:03:56'),
-(178, 37, 'LFGKT49002', 'ai', 'Nanti akan ditinggali bersama siapa saja, Kak? Biar saya catat jumlah kamar yang pas 🛏️', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"flat_json\"}', '2026-06-26 09:03:56', '2026-06-26 09:03:56');
+(178, 37, 'LFGKT49002', 'ai', 'Nanti akan ditinggali bersama siapa saja, Kak? Biar saya catat jumlah kamar yang pas 🛏️', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"flat_json\"}', '2026-06-26 09:03:56', '2026-06-26 09:03:56'),
+(179, 37, 'LFGKT49002', 'customer', 'Pengen ngemil tpi ga ada yg menarik :-(', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1782465856190\",\"platform\":\"kirimi\"}', '2026-06-26 09:24:16', '2026-06-26 09:24:16'),
+(180, 37, 'LFGKT49002', 'ai', 'Nanti akan ditinggali bersama siapa saja, Kak? Biar saya catat jumlah kamar yang pas 🛏️', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"flat_json\"}', '2026-06-26 09:24:16', '2026-06-26 09:24:16'),
+(181, 37, 'LFGKT49002', 'customer', 'Endak besar rumahku', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1782467476028\",\"platform\":\"kirimi\"}', '2026-06-26 09:51:16', '2026-06-26 09:51:16'),
+(182, 37, 'LFGKT49002', 'ai', 'Nanti akan ditinggali bersama siapa saja, Kak? Biar saya catat jumlah kamar yang pas 🛏️', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"flat_json\"}', '2026-06-26 09:51:16', '2026-06-26 09:51:16');
 
 -- --------------------------------------------------------
 
@@ -412,6 +416,32 @@ CREATE TABLE `countries` (
   `updated_by` varchar(50) DEFAULT NULL COMMENT 'FK ke users.user_id — siapa yang terakhir mengubah'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Dumping data for table `countries`
+--
+
+INSERT INTO `countries` (`id`, `country_id`, `name`, `status`, `created_date`, `created_by`, `updated_date`, `updated_by`) VALUES
+(1, 'INDZSF4001', 'INDONESIA', 1, '2024-08-10', 'SA6EDRU001', NULL, NULL),
+(2, 'MALRP7G002', 'MALAYSIA', 1, '2024-08-10', 'SA6EDRU001', NULL, NULL),
+(3, 'FILPWX3003', 'FILIPINA', 1, '2024-08-10', 'SA6EDRU001', NULL, NULL),
+(4, 'AMRXKL6004', 'AMERIKA', 1, '2024-08-10', 'SA6EDRU001', NULL, NULL),
+(5, 'THAKBN8005', 'THAILAND', 1, '2024-08-10', 'SA6EDRU001', NULL, NULL),
+(6, 'BRZPOW3006', 'BRAZIL', 1, '2024-08-10', 'SA6EDRU001', NULL, NULL),
+(7, 'PRNCQF7007', 'PRANCIS', 1, '2024-08-10', 'SA6EDRU001', NULL, NULL),
+(8, 'PAPNZX4008', 'PAPUA NUGINI', 1, '2024-08-10', 'SA6EDRU001', NULL, NULL),
+(9, 'CANHMY5009', 'CANADA', 1, '2024-08-10', 'SA6EDRU001', NULL, NULL),
+(10, 'ENGQBT8010', 'ENGLAND', 1, '2024-08-10', 'SA6EDRU001', NULL, NULL),
+(11, 'NETHKS5011', 'NETHERLAND', 1, '2024-08-10', 'SA6EDRU001', NULL, NULL),
+(12, 'ARBVDE9012', 'ARAB', 1, '2024-08-10', 'SA6EDRU001', NULL, NULL),
+(13, 'AFGWRZ2013', 'AFGANISTAN', 1, '2024-08-10', 'SA6EDRU001', NULL, NULL),
+(14, 'ARGJMV6014', 'ARGENTINA', 1, '2024-08-10', 'SA6EDRU001', NULL, NULL),
+(15, 'INDQPN3015', 'INDIA', 1, '2024-08-10', 'SA6EDRU001', NULL, NULL),
+(16, 'IRANFX7016', 'IRAN', 1, '2024-08-10', 'SA6EDRU001', NULL, NULL),
+(17, 'IRAKTD9017', 'IRAK', 1, '2024-08-10', 'SA6EDRU001', NULL, NULL),
+(18, 'JAMBNK4018', 'JAMAIKA', 1, '2024-08-10', 'SA6EDRU001', NULL, NULL),
+(19, 'KORQTJ2019', 'SOUTH KOREA', 1, '2024-08-10', 'SA6EDRU001', NULL, NULL),
+(20, 'LBNRZQ8020', 'LIBANON', 1, '2024-08-10', 'SA6EDRU001', NULL, NULL);
+
 -- --------------------------------------------------------
 
 --
@@ -537,6 +567,30 @@ CREATE TABLE `provinces` (
   `updated_date` date DEFAULT NULL COMMENT 'Tanggal update terakhir',
   `updated_by` varchar(50) DEFAULT NULL COMMENT 'FK ke users.user_id — siapa yang terakhir mengubah'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `provinces`
+--
+
+INSERT INTO `provinces` (`id`, `province_id`, `country_id`, `name`, `status`, `created_date`, `created_by`, `updated_date`, `updated_by`) VALUES
+(1, 'JTMRXK9001', 'INDZSF4001', 'JAWA TIMUR', 1, '2024-08-12', 'SA6EDRU001', NULL, NULL),
+(2, 'JTGPLN4002', 'INDZSF4001', 'JAWA TENGAH', 1, '2024-08-12', 'SA6EDRU001', NULL, NULL),
+(3, 'BALHWZ7003', 'INDZSF4001', 'BALI', 1, '2024-08-12', 'SA6EDRU001', NULL, NULL),
+(4, 'BKKHCV2004', 'THAKBN8005', 'BANGKOK', 1, '2024-08-12', 'SA6EDRU001', NULL, NULL),
+(5, 'JOHRQM5005', 'MALRP7G002', 'JOHOR', 1, '2024-09-21', 'SA6EDRU001', NULL, NULL),
+(6, 'PNGFBT3006', 'MALRP7G002', 'PENANG', 1, '2024-09-21', 'SA6EDRU001', NULL, NULL),
+(7, 'CGNWDZ8007', 'THAKBN8005', 'CAGAYAN', 1, '2024-08-13', 'SA6EDRU001', NULL, NULL),
+(8, 'ILCPND6008', 'FILPWX3003', 'ILOCOS NORTE', 2, '2024-08-13', 'SA6EDRU001', NULL, NULL),
+(9, 'GYGNKV1009', 'KORQTJ2019', 'GYEONGGI', 1, '2024-08-13', 'SA6EDRU001', NULL, NULL),
+(10, 'GGSTNR4010', 'KORQTJ2019', 'GYEONGSANG UTARA', 1, '2024-08-13', 'SA6EDRU001', NULL, NULL),
+(11, 'JEJQWX9011', 'KORQTJ2019', 'JEJU', 1, '2024-08-13', 'SA6EDRU001', NULL, NULL),
+(12, 'ONTBZY6012', 'CANHMY5009', 'ONTARIO', 1, '2024-08-13', 'SA6EDRU001', NULL, NULL),
+(13, 'QBCHDM3013', 'CANHMY5009', 'QUEBEC', 3, '2024-08-13', 'SA6EDRU001', NULL, NULL),
+(14, 'DIYPLR7014', 'INDZSF4001', 'DAERAH ISTIMEWA JOGJAKARTA', 1, '2025-03-21', 'SA6EDRU001', NULL, NULL),
+(15, 'SRQHTV5015', 'ARBVDE9012', 'SYARQIYAH', 1, '2025-03-21', 'SA6EDRU001', NULL, NULL),
+(16, 'MKKWNF2016', 'ARBVDE9012', 'MAKKAH', 1, '2025-03-21', 'SA6EDRU001', NULL, NULL),
+(17, 'RYDVQM8017', 'ARBVDE9012', 'RIYADH', 1, '2025-03-21', 'SA6EDRU001', NULL, NULL),
+(18, 'MDNXKZ4018', 'ARBVDE9012', 'MADINAH', 1, '2025-03-21', 'SA6EDRU001', NULL, NULL);
 
 -- --------------------------------------------------------
 
@@ -717,7 +771,7 @@ ALTER TABLE `whatsapp_inbound_messages`
 -- AUTO_INCREMENT for table `chat_messages`
 --
 ALTER TABLE `chat_messages`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=179;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=183;
 
 --
 -- AUTO_INCREMENT for table `chat_sessions`
@@ -741,7 +795,7 @@ ALTER TABLE `contacts`
 -- AUTO_INCREMENT for table `countries`
 --
 ALTER TABLE `countries`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=21;
 
 --
 -- AUTO_INCREMENT for table `facilities`
@@ -765,7 +819,7 @@ ALTER TABLE `properties`
 -- AUTO_INCREMENT for table `provinces`
 --
 ALTER TABLE `provinces`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=19;
 
 --
 -- AUTO_INCREMENT for table `users`
