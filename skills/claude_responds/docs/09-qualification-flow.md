@@ -257,25 +257,41 @@ Q2b answers like "Saya belum pernah lihat", "belum pernah", "sudah lihat 3" cont
 
 **Fires when:** Budget unknown, location known.
 
-Show **two contrasting price anchors** for the requested type + area.
-The customer's reaction reveals their real budget — no direct figure needed.
+**Ask by CATEGORY (3 tiers), never by absolute price.** Do NOT show big absolute
+figures like "Rp 40.750.000.000 dan Rp 67.700.000.000" — it feels blunt. Offer the
+three tiers and let the customer choose; the server maps the tier to a reasonable
+price range for the summary.
 
 ```
-ID: Di *[area]* ada *[Tipe]* yang di kisaran *[LOW]* dan ada juga yang *[HIGH]*.
-    Kira-kira yang mana lebih sesuai dengan rencana Bapak/Ibu?
+ID: Untuk *[Tipe]* *[sewa/beli]* di *[area]*, Kak lebih prefer yang
+    *terjangkau*, *menengah*, atau *eksklusif*? 💰
 
-EN: In *[area]* I have *[Type]* options around *[LOW]* and others around *[HIGH]*.
-    Which range feels closer to your plans?
+EN: For *[Type]* *[to rent/to buy]* in *[area]*, would you prefer
+    *budget-friendly*, *mid-range*, or *exclusive*? 💰
 ```
 
-**If no price data available:**
-```
-ID: Untuk *[Tipe]* di *[area]* — apakah lebih prefer yang *terjangkau/ekonomis*
-    atau yang *menengah ke atas*? 💰
-```
+**The 3 budget tiers** (server resolves the concrete range per type × transaction):
 
-**Accepted affordability answers** (treat as budget=affordable, stop asking):
-`terjangkau`, `murah`, `yang paling murah`, `ekonomis`, `affordable`, `hemat`, `low budget`
+| Tier | Customer words | Meaning |
+|---|---|---|
+| **Terjangkau** | terjangkau, ekonomis, murah, hemat, standar bawah, affordable | entry-level / value |
+| **Menengah** | menengah, sedang, standar, menengah ke atas, kompetitif, mid-range | mid-market |
+| **Eksklusif** | eksklusif, mewah, premium, mahal, kelas atas, luxury | high-end |
+
+**Reasonable price bands per type × transaction** (server table `getBudgetTiers`; examples):
+
+| Type / Tx | Terjangkau | Menengah | Eksklusif |
+|---|---|---|---|
+| Rumah beli | Rp 300–800 jt | Rp 800 jt–2,5 M | Rp 2,5–10 M |
+| Rumah sewa | Rp 2–5 jt/bln | Rp 5–12 jt/bln | Rp 12–35 jt/bln |
+| Apartemen beli | Rp 300–700 jt | Rp 700 jt–2 M | Rp 2–8 M |
+| Villa sewa | Rp 1–3 jt/malam | Rp 3–8 jt/malam | Rp 8–25 jt/malam |
+| Kost sewa | Rp 500 rb–1,5 jt/bln | Rp 1,5–3 jt/bln | Rp 3–8 jt/bln |
+| Ruko beli | Rp 800 jt–2 M | Rp 2–5 M | Rp 5–20 M |
+
+**Customer may still answer freely** — a category (`terjangkau`/`menengah`/`eksklusif`/
+`mahal`/`murah`/`harga kompetitif`) OR a number/range (`2 juta`, `5jt`, `2-3juta/minggu`,
+`800-2m`, `700jt-1.2m`, `931 juta-1.4 miliar`, `800k-3juta`). All are COMPLETE budget answers.
 
 **⚠️ A numeric range or amount is a COMPLETE budget answer — register it and move on.**
 When the customer replies with a price (any of these forms), Q3 is ✅ — do **NOT** re-ask
@@ -284,13 +300,33 @@ the "terjangkau/ekonomis atau menengah ke atas?" fallback:
 | Customer says | Parsed budget |
 |---|---|
 | `2-4jt/bulan`, `2-4 juta per bulan`, `2 - 4 juta` | Rp 2.000.000 – Rp 4.000.000 / bulan |
-| `5 juta`, `sekitar 5jt`, `maksimal 5 juta` | Rp 5.000.000 |
+| `5 juta`, `sekitar 5jt` (absolut) | Rp 4.250.000 – Rp 5.750.000 (band ±15%) |
+| `maksimal 5 juta`, `di bawah 5jt` (plafon) | Rp 5.000.000 (batas atas saja) |
+| `Coba yang 40.750.000.000` (pilih anchor, absolut) | Rp 34.637.500.000 – Rp 46.862.500.000 (band ±15%) |
 | `500-800 ribu` | Rp 500.000 – Rp 800.000 |
 | `1-2 miliar` | Rp 1.000.000.000 – Rp 2.000.000.000 |
 
+**Absolute single price → ±15% band.** When the customer fires ONE exact price without a range
+(e.g. picks an anchor: "Coba yang 40.750.000.000", or says "5 juta"), the server builds a
+±15% range around it (`detectBudget` → `_budgetBand`): low = value × 0.85, high = value × 1.15.
+The summary `✓ Budget` shows that range. EXCEPTION — if the customer used a ceiling word
+(`maksimal`, `max`, `di bawah`, `kurang dari`) → keep it as an upper bound, no band.
+
+A bare full-IDR number like `40.750.000.000` or `1.600.000` (≥ 2 thousand-groups) is ALWAYS a
+budget answer — even without "juta"/"rp". Never skip it as "not a property query".
+
+**Category answer → summary shows category + reasonable range.** When the customer answers a
+TIER (`terjangkau`/`menengah`/`eksklusif`/`mahal`/`murah`/`kompetitif`) instead of a number,
+the server maps it to the reasonable price band for that property type × transaction and the
+summary shows both. Example (Rumah beli, customer said "menengah"):
+```
+✓ Budget: *Menengah (Rp 800.000.000 - Rp 2.500.000.000)*
+```
+Acknowledge briefly (`Oke, kategori menengah ya Kak 👍`) and move to the next ❓ question.
+
 The server parses ranges in full (`detectBudget`) and the QUALIFICATION STATE shows the
 captured value next to `Budget [Q3]: …`. If you see a budget value there, Q3 is answered —
-acknowledge it briefly (`Oke, budget 2–4 juta/bulan ya 👍`) and ask the next ❓ question.
+acknowledge it briefly (`Oke, budget sekitar Rp 34,6 M – Rp 46,8 M ya 👍`) and ask the next ❓ question.
 
 **⛔ FORBIDDEN:** asking the affordability fallback after the customer already gave a number.
 The customer in the loop case explicitly complained: *"Saya sudah jawab 2 - 4 juta per bulan…

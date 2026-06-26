@@ -1745,7 +1745,7 @@ class ConversationQualifier {
       aiAskedPropType   : this.#has(aiText, ['tipe properti', 'property type', 'jenis properti', 'rumah, apartemen']),
       aiAskedLocation   : this.#has(aiText, ['daerah', 'kota mana', 'which area', 'which city', 'lokasi mana']),
       aiAskedSearchHist : this.#has(aiText, ['sudah lihat berapa', 'how many properties', 'belum cocok', 'sudah survey']),
-      aiAskedBudget     : this.#has(aiText, ['kisaran', 'anggaran', 'budget', 'harga yang', 'price range', 'ribu, juta', 'thousand, million', 'maksudnya dalam', 'kira-kira yang mana', 'yang mana lebih sesuai']),
+      aiAskedBudget     : this.#has(aiText, ['kisaran', 'anggaran', 'budget', 'harga yang', 'price range', 'ribu, juta', 'thousand, million', 'maksudnya dalam', 'kira-kira yang mana', 'yang mana lebih sesuai', 'terjangkau', 'menengah', 'eksklusif', 'budget-friendly', 'mid-range', 'exclusive']),
       // True when customer text contains any number+unit that looks like a budget.
       // Guards Q3 from repeating even if filters.budget came back null (edge case).
       customerStatedBudget: /\b\d[\d.,]*\s*(?:juta|ribu|miliar|rb|jt)\b/i.test(custText),
@@ -1922,6 +1922,107 @@ class ConversationQualifier {
     return row[txKey] || null;
   }
 
+  /* ─── Public: 3-tier budget table (terjangkau / menengah / eksklusif) ────── */
+
+  /**
+   * Range harga WAJAR per tipe properti × transaksi × kategori budget.
+   * Dipakai untuk: (a) menjawab Q3 secara KATEGORI (bukan tembak angka absolut), dan
+   * (b) mengisi summary Budget saat customer hanya memilih kategori (terjangkau/
+   * menengah/eksklusif) — diberi perkiraan range harga yang masuk akal.
+   *
+   * Nilai disimpan sebagai [min, max] IDR + period ('month'|'night'|''), agar bisa
+   * diformat ke "Rp X - Rp Y /bln" tanpa duplikasi teks per bahasa.
+   *
+   * @returns {{terjangkau:number[], menengah:number[], eksklusif:number[], period:string}|null}
+   */
+  static getBudgetTiers(buildingType = '', transactionType = '') {
+    const type = (buildingType || '').toLowerCase();
+    const tx   = (transactionType || '').toLowerCase();
+    const txKey = (tx === 'rent') ? 'rent' : (tx === 'sale' || tx === 'purchase') ? 'sale' : null;
+    if (!txKey) return null;
+
+    const M = 1e6, B = 1e9, K = 1e3;
+    const TIERS = {
+      house: {
+        rent: { terjangkau: [2*M, 5*M],   menengah: [5*M, 12*M],   eksklusif: [12*M, 35*M],   period: 'month' },
+        sale: { terjangkau: [300*M, 800*M], menengah: [800*M, 2.5*B], eksklusif: [2.5*B, 10*B], period: '' },
+      },
+      apartment: {
+        rent: { terjangkau: [2*M, 5*M],   menengah: [5*M, 10*M],   eksklusif: [10*M, 30*M],   period: 'month' },
+        sale: { terjangkau: [300*M, 700*M], menengah: [700*M, 2*B], eksklusif: [2*B, 8*B], period: '' },
+      },
+      villa: {
+        rent: { terjangkau: [1*M, 3*M],   menengah: [3*M, 8*M],    eksklusif: [8*M, 25*M],    period: 'night' },
+        sale: { terjangkau: [1*B, 3*B],   menengah: [3*B, 8*B],    eksklusif: [8*B, 30*B],    period: '' },
+      },
+      hotel: {
+        rent: { terjangkau: [400*K, 800*K], menengah: [800*K, 2*M], eksklusif: [2*M, 8*M], period: 'night' },
+        sale: { terjangkau: [2*B, 5*B],   menengah: [5*B, 15*B],   eksklusif: [15*B, 50*B],   period: '' },
+      },
+      boarding_house: {
+        rent: { terjangkau: [500*K, 1.5*M], menengah: [1.5*M, 3*M], eksklusif: [3*M, 8*M], period: 'month' },
+        sale: { terjangkau: [800*M, 2*B], menengah: [2*B, 5*B],    eksklusif: [5*B, 15*B],    period: '' },
+      },
+      shophouse: {
+        rent: { terjangkau: [5*M, 15*M],  menengah: [15*M, 40*M],  eksklusif: [40*M, 150*M],  period: 'month' },
+        sale: { terjangkau: [800*M, 2*B], menengah: [2*B, 5*B],    eksklusif: [5*B, 20*B],    period: '' },
+      },
+      office: {
+        rent: { terjangkau: [5*M, 20*M],  menengah: [20*M, 60*M],  eksklusif: [60*M, 250*M],  period: 'month' },
+        sale: { terjangkau: [1*B, 3*B],   menengah: [3*B, 10*B],   eksklusif: [10*B, 40*B],   period: '' },
+      },
+      warehouse: {
+        rent: { terjangkau: [10*M, 30*M], menengah: [30*M, 80*M],  eksklusif: [80*M, 250*M],  period: 'month' },
+        sale: { terjangkau: [800*M, 2.5*B], menengah: [2.5*B, 7*B], eksklusif: [7*B, 25*B], period: '' },
+      },
+      store: {
+        rent: { terjangkau: [5*M, 15*M],  menengah: [15*M, 40*M],  eksklusif: [40*M, 150*M],  period: 'month' },
+        sale: { terjangkau: [500*M, 1.5*B], menengah: [1.5*B, 5*B], eksklusif: [5*B, 20*B], period: '' },
+      },
+      land: {
+        rent: { terjangkau: [50*M, 150*M], menengah: [150*M, 500*M], eksklusif: [500*M, 2*B], period: 'month' },
+        sale: { terjangkau: [300*M, 1*B], menengah: [1*B, 4*B],    eksklusif: [4*B, 20*B],    period: '' },
+      },
+      mansion: {
+        rent: { terjangkau: [5*M, 15*M],  menengah: [15*M, 50*M],  eksklusif: [50*M, 150*M],  period: 'month' },
+        sale: { terjangkau: [5*B, 15*B],  menengah: [15*B, 40*B],  eksklusif: [40*B, 150*B],  period: '' },
+      },
+      kondotel: {
+        rent: { terjangkau: [500*K, 1.5*M], menengah: [1.5*M, 3*M], eksklusif: [3*M, 8*M], period: 'night' },
+        sale: { terjangkau: [500*M, 900*M], menengah: [900*M, 1.5*B], eksklusif: [1.5*B, 4*B], period: '' },
+      },
+      others: {
+        rent: { terjangkau: [5*M, 20*M],  menengah: [20*M, 60*M],  eksklusif: [60*M, 200*M],  period: 'month' },
+        sale: { terjangkau: [500*M, 2*B], menengah: [2*B, 7*B],    eksklusif: [7*B, 25*B],    period: '' },
+      },
+    };
+
+    const row = TIERS[type] || TIERS.others;
+    return row[txKey] || TIERS.others[txKey] || null;
+  }
+
+  /** Format angka IDR penuh: 5000000 → "Rp 5.000.000". */
+  static #rpFull(n) {
+    if (!Number.isFinite(n)) return '';
+    return `Rp ${Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
+  }
+
+  /**
+   * Resolve KATEGORI budget (terjangkau/menengah/eksklusif) → string range harga wajar
+   * untuk tipe+transaksi tertentu, mis. "Rp 300.000.000 - Rp 800.000.000" atau
+   * "Rp 2.000.000 - Rp 5.000.000 /bln". Dipakai di summary saat customer jawab kategori.
+   *
+   * @returns {string|null}
+   */
+  static getBudgetRangeForTier(buildingType, transactionType, tierName, lang = 'id') {
+    const tiers = this.getBudgetTiers(buildingType, transactionType);
+    if (!tiers || !tiers[tierName]) return null;
+    const [min, max] = tiers[tierName];
+    const suffix = tiers.period === 'month' ? (lang === 'id' ? ' /bln' : ' /month')
+      : tiers.period === 'night' ? (lang === 'id' ? ' /malam' : ' /night') : '';
+    return `${this.#rpFull(min)} - ${this.#rpFull(max)}${suffix}`;
+  }
+
   /* ─── Public: readiness score ───────────────────────────────────────────── */
 
   /**
@@ -2033,21 +2134,18 @@ class ConversationQualifier {
         : `When you say *${rawMin}-${rawMax}* — do you mean *thousand*, *million*, or *billion*? 💰\n(Example: "${rawMin}-${rawMax} million")`;
     }
 
-    /* ── Q3: budget via two price anchors (NEVER a direct ask) ── */
-    // Skip if: budget in filters, AI already asked Q3, or customer already stated a number+unit amount.
-    // The customerStatedBudget guard prevents Q3 from looping when filters.budget is null
-    // for any reason (period mismatch, DB timing, edge case) but customer DID give a number.
+    /* ── Q3: budget via KATEGORI (terjangkau/menengah/eksklusif) — NEVER tembak angka ── */
+    // Hindari menyebut range harga absolut (mis. "Rp 40 M dan Rp 67 M") — kurang ramah.
+    // Tanyakan kategori; range konkret di-resolve di summary (getBudgetRangeForTier).
     if (!profile.budget && !profile.aiAskedBudget && !profile.customerStatedBudget && loc) {
-      // Use passed-in anchors first, then fall back to built-in type-specific table
-      const anchors = priceAnchors || ConversationQualifier.getBudgetAnchors(type, tx, lang);
-      if (anchors) {
-        return isId
-          ? `Di *${loc}* ada *${type ? PropertyFormatter.humanBuildingType(type, 'id') : 'properti'}* yang di kisaran *${anchors.low}* dan ada juga yang *${anchors.high}*. Kira-kira yang mana lebih sesuai dengan rencana Anda? 💰`
-          : `In *${loc}* I have *${type ? PropertyFormatter.humanBuildingType(type, 'en') : 'property'}* options around *${anchors.low}* and others around *${anchors.high}*. Which range feels closer to your plans? 💰`;
-      }
+      const typeHuman = type ? PropertyFormatter.humanBuildingType(type, isId ? 'id' : 'en') : (isId ? 'properti' : 'property');
+      const txWord = isId
+        ? (tx === 'rent' ? 'sewa' : tx === 'sale' ? 'beli' : '')
+        : (tx === 'rent' ? 'to rent' : tx === 'sale' ? 'to buy' : '');
+      const forType = isId ? `Untuk *${typeHuman}*${txWord ? ' ' + txWord : ''} di *${loc}*` : `For *${typeHuman}*${txWord ? ' ' + txWord : ''} in *${loc}*`;
       return isId
-        ? `Di *${loc}* saya punya pilihan dengan berbagai kisaran harga. Apakah Anda lebih prefer yang *terjangkau/ekonomis* atau yang *menengah ke atas*? 💰`
-        : `In *${loc}* I have options across different price ranges. Do you prefer something more *affordable/economy* or *mid-to-premium range*? 💰`;
+        ? `${forType}, Kak lebih prefer yang *terjangkau*, *menengah*, atau *eksklusif*? 💰`
+        : `${forType}, would you prefer *budget-friendly*, *mid-range*, or *exclusive*? 💰`;
     }
 
     /* ── Q8: move-in / target date (MANDATORY — never skipped) ──
@@ -2384,15 +2482,11 @@ class ConversationQualifier {
 
     /* ── Q5: Budget via two options (never direct) ── */
     if (!profile.budget && !profile.aiAskedBudget && !profile.customerStatedBudget && loc) {
-      const anchors = priceAnchors || ConversationQualifier.getBudgetAnchors('house', tx, lang);
-      if (anchors) {
-        return isId
-          ? `Di *${loc}* ada yang di kisaran *${anchors.low}* dan ada yang lebih di *${anchors.high}*. Kira-kira yang mana lebih mendekati rencana Kak? 💰`
-          : `In *${loc}* there are options around *${anchors.low}* and others higher at *${anchors.high}*. Which is closer to your plan, Kak? 💰`;
-      }
+      // KATEGORI, bukan tembak angka absolut (lebih ramah & sopan).
+      const txWord = isId ? (tx === 'rent' ? 'sewa' : 'beli') : (tx === 'rent' ? 'to rent' : 'to buy');
       return isId
-        ? `Untuk budget rumah di *${loc}*, Kak lebih prefer yang *terjangkau* atau yang *menengah ke atas*? 💰`
-        : `For your house budget in *${loc}*, do you prefer *affordable* or *mid-to-upper* range? 💰`;
+        ? `Untuk rumah ${txWord} di *${loc}*, Kak lebih prefer yang *terjangkau*, *menengah*, atau *eksklusif*? 💰`
+        : `For a house ${txWord} in *${loc}*, would you prefer *budget-friendly*, *mid-range*, or *exclusive*? 💰`;
     }
 
     /* ── Q6: Occupants → infer bedrooms (never ask rooms directly) ── */
@@ -2616,16 +2710,30 @@ class ConversationQualifier {
         value : filters.location || 'UNKNOWN',
         source: 'stated', // location always stated
       },
-      budget: {
-        // Append the rental period basis the customer stated ("/2 minggu", "/bulan").
-        // Skip budget yang AMBIGU (mis. "15-20" tanpa unit dari "lantai 15-20") —
-        // jangan tampilkan sebagai budget asli.
-        value : (filters.budget?.text && !filters.budget?.ambiguous)
-          ? filters.budget.text + ConversationQualifier.#budgetPeriodSuffix(custText)
-          : 'UNKNOWN',
-        source: wasStated(custText, ['juta', 'ribu', 'miliar', 'jt', 'm ', 'rb', 'budget', 'harga'])
-          ? 'stated' : 'inferred',
-      },
+      budget: (() => {
+        const b = filters.budget;
+        const TIER_LABEL = { terjangkau: 'Terjangkau', menengah: 'Menengah', eksklusif: 'Eksklusif', affordable: 'Terjangkau' };
+        // (a) Customer jawab KATEGORI (terjangkau/menengah/eksklusif) → tampilkan
+        //     kategori + perkiraan range harga wajar untuk tipe+transaksi tsb.
+        if (b && b.preference && TIER_LABEL[b.preference]) {
+          const tierKey = b.preference === 'affordable' ? 'terjangkau' : b.preference;
+          const range = ConversationQualifier.getBudgetRangeForTier(
+            filters.buildingType, filters.transactionType, tierKey, 'id'
+          );
+          return {
+            value : range ? `${TIER_LABEL[b.preference]} (${range})` : TIER_LABEL[b.preference],
+            source: 'stated',
+          };
+        }
+        // (b) Angka / range konkret. Skip yang AMBIGU ("15-20" dari "lantai 15-20").
+        return {
+          value : (b?.text && !b?.ambiguous)
+            ? b.text + ConversationQualifier.#budgetPeriodSuffix(custText)
+            : 'UNKNOWN',
+          source: wasStated(custText, ['juta', 'ribu', 'miliar', 'jt', 'm ', 'rb', 'budget', 'harga'])
+            ? 'stated' : 'inferred',
+        };
+      })(),
 
       // ─ Extended fields ─
       moveInDate: {

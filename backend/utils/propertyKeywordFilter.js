@@ -437,6 +437,9 @@ const PROPERTY_QUESTION_PATTERNS = [
   // Q3 — price anchor format: "ada ... yang di kisaran ... dan ada juga yang ... Kira-kira yang mana lebih sesuai?"
   /kira-kira\s+yang\s+mana/, /yang\s+mana\s+lebih\s+sesuai/, /ada\s+yang\s+di\s+kisaran/,
   /di\s+kisaran\s+\d/, /lebih\s+sesuai\s+dengan\s+rencana/, /sesuai\s+dengan\s+rencana\s+anda/,
+  // Q3 — KATEGORI budget: "...prefer yang terjangkau, menengah, atau eksklusif?"
+  /prefer\s+yang\s+(terjangkau|menengah|eksklusif)/, /terjangkau.*(menengah|eksklusif)/,
+  /menengah.*eksklusif/, /budget[\s-]*friendly.*(mid[\s-]*range|exclusive)/,
   // QM (house pilot) — motivation / why now: "Boleh tahu, apa yang membuat Kak mulai cari rumah sekarang?"
   /apa\s+yang\s+(membuat|bikin).*(cari|mulai)/, /mulai\s+cari\s+(rumah|properti)/,
   /what'?s?\s+prompting.*search/, /what\s+made\s+you/, /why.*looking.*now/,
@@ -573,7 +576,11 @@ function isPropertyContextContinuation(message, history = []) {
   // "Rp 2.000.000", "5jt per bulan". Ini sinyal properti yang KUAT: jawaban harga
   // yang sah sering > 70 char saat customer menambah konteks ("...yg bisa dinego ya kak").
   const hasBudgetAnswer     = /\b\d[\d.,]*\s*(?:-\s*\d[\d.,]*\s*)?(juta|jutaan|jt|ribu|rb|miliar|milyar)\b/i.test(lower)
-                              || /\brp\.?\s*\d/i.test(lower);
+                              || /\brp\.?\s*\d/i.test(lower)
+                              // Angka IDR penuh tanpa satuan: "40.750.000.000", "1.600.000",
+                              // "Coba yang 40.750.000.000" (≥2 grup ribuan = minimal jutaan).
+                              // Jawaban pilih anchor harga — customer ketik angka mentah.
+                              || /\b\d{1,3}(?:[.,]\d{3}){2,}\b/.test(lower);
   // Permintaan / preferensi NEGOSIASI harga — "bisa dinego", "nego dong", "minta yg
   // nego", "negotiable", "bisa kurang harganya", "ditawar". Khas obrolan properti.
   const hasNegotiationCue   = /\b(nego|dinego|dinegokan|dinegosiasi|negosiasi|negotiable|nawar|ditawar|menawar|tawar[\s-]?menawar|kurang\s+harganya|harga\s+bisa\s+kurang|bisa\s+kurang)\b/i.test(lower);
@@ -585,7 +592,10 @@ function isPropertyContextContinuation(message, history = []) {
   // Sinyal jawaban kualifikasi yang KUAT (budget/nego Q3, furnishing Q11) cukup untuk
   // MELEWATI batas panjang 70-char, tapi SENGAJA tidak melewati screening
   // CLEAR_NON_PROPERTY di bawah — supaya "beli laptop 10 juta" tetap tersaring.
-  const hasStrongAnswerCue  = hasBudgetAnswer || hasNegotiationCue || hasFurnishingAnswer;
+  // Jawaban KATEGORI budget (Q3): terjangkau / menengah / eksklusif / mahal / murah /
+  // kompetitif. Customer boleh jawab kategori daripada angka. Sinyal properti yang KUAT.
+  const hasBudgetCategory   = /\b(terjangkau|ekonomis|murah|termurah|hemat|menengah|sedang|standar|eksklusif|ekslusif|mewah|premium|luxur(y|ious)|mahal|kompetitif|competitive|low\s*budget|affordable|mid[\s-]*range|budget[\s-]*friendly|exclusive)\b/i.test(lower);
+  const hasStrongAnswerCue  = hasBudgetAnswer || hasNegotiationCue || hasFurnishingAnswer || hasBudgetCategory;
 
   // Pesan pendek (≤ 70 karakter) → proses normal
   // Pesan medium (71–200) dengan konten properti / sinyal budget-nego-furnishing → jawaban Q2b/Q3/Q5/Q6/Q11
@@ -661,6 +671,12 @@ function isPropertyContextContinuation(message, history = []) {
   if (/^\d+\s*(hari|minggu|bulan|tahun|day|week|month|year)s?$/.test(lower.trim())) return true;
   // Harga dengan satuan — jawaban Q3 ("2-4 juta/seminggu", "5 jt per bulan")
   if (/\b\d[\d.,]*\s*(juta|ribu|miliar|rb|jt)\b/i.test(lower)) return true;
+  // Angka IDR penuh tanpa satuan — jawaban pilih anchor harga ("Coba yang 40.750.000.000",
+  // "1.600.000"). ≥2 grup ribuan = minimal jutaan → pasti harga, bukan tanggal/jumlah kamar.
+  if (/\b\d{1,3}(?:[.,]\d{3}){2,}\b/.test(lower)) return true;
+  // Jawaban KATEGORI budget (Q3) — "terjangkau", "menengah", "eksklusif", "mahal", "murah",
+  // "harga kompetitif", "menengah ke atas". Customer jawab kategori, bukan angka.
+  if (hasBudgetCategory) return true;
   // Q2b answer fast-path: "Saya belum pernah lihat", "sudah lihat 3", "belum pernah survey",
   // "Belum pernah." (standalone — customer never searched before).
   // These are ALWAYS Q2b answers and must pass even before hasRecentPropertyQuestion check.

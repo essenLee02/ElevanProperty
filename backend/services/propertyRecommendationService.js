@@ -420,6 +420,35 @@ function _formatRpFull(n) {
   return `Rp ${Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
 }
 
+// Bangun rentang ±15% dari satu nilai budget ABSOLUT yang ditembak customer.
+// Contoh: "40.750.000.000" → Rp 34.637.500.000 - Rp 46.862.500.000.
+// Dipakai agar customer yang memberi 1 harga pasti (tanpa range) tetap punya
+// batas bawah & atas yang wajar untuk pencarian + summary.
+// Deteksi KATEGORI budget kualitatif dari jawaban customer.
+// Urutan cek: eksklusif → menengah → terjangkau (paling spesifik dulu agar
+// "menengah ke atas" tidak salah jadi eksklusif, dan "mahal" → eksklusif).
+// Mengembalikan 'terjangkau' | 'menengah' | 'eksklusif' | null.
+function _detectBudgetTier(text) {
+  const t = ' ' + String(text || '').toLowerCase() + ' ';
+  if (/\b(eksklusif|ekslusif|mewah|premium|luxur(y|ious)|high\s*end|elit|elite|kelas\s*atas|paling\s*(bagus|mahal|mewah)|termahal|sultan|the\s*best|mahal)\b/.test(t)) return 'eksklusif';
+  if (/\b(menengah|sedang|standar|standard|medium|mid(?:dle)?|menengah\s*ke\s*atas|lumayan|kompetitif|competitive|moderate)\b/.test(t)) return 'menengah';
+  if (/\b(terjangkau|ekonomis|murah|termurah|hemat|low\s*budget|affordable|cheap(?:est)?|economy|low\s*(cost|price)|paling\s*murah|standar\s*bawah|budget\s*friendly|seadanya)\b/.test(t)) return 'terjangkau';
+  return null;
+}
+
+const _BUDGET_BAND_PCT = 0.15;
+function _budgetBand(value, period) {
+  const lo = Math.round(value * (1 - _BUDGET_BAND_PCT));
+  const hi = Math.round(value * (1 + _BUDGET_BAND_PCT));
+  return {
+    text    : `${_formatRpFull(lo)} - ${_formatRpFull(hi)}`,
+    min     : lo,
+    max     : hi,
+    period,
+    absolute: Math.round(value),   // nilai asli yang ditembak customer (untuk referensi)
+  };
+}
+
 // Regex building blocks
 const _FULL_IDR_PAT = '\\d{1,3}(?:\\.\\d{3})+';
 const _BU = 'k|rb|ribu|jt|juta|m|miliar|milyar|t|triliun|trilion|thousand|million|billion|trillion';
@@ -452,6 +481,11 @@ function detectBudget(message = '') {
     /\b(lantai|lt|tower|menara|floor|lvl|level)\s*\d+(?:\s*(?:-|–|sampai|s\/d|hingga|ke)\s*\d+)?/gi,
     ' '
   );
+
+  // Apakah budget berupa PLAFON/CEILING ("maksimal 5jt", "di bawah 5jt", "max 5jt")?
+  // Jika ya → simpan sebagai batas atas saja. Jika TIDAK (customer tembak harga absolut,
+  // mis. "40.750.000.000" / "5 juta") → bangun rentang ±15% (lihat _budgetBand).
+  const isCeiling = /\b(maksimal|maksimum|max|di\s*bawah|dibawah|kurang\s*dari|gak?\s*lebih\s*dari|nggak\s*lebih\s*dari|tidak\s*lebih\s*dari|under|below|paling\s*mahal)\b/i.test(text);
 
   // ── Range match ──────────────────────────────────────────────────────────
   const rangeMatch = budgetText.match(_BUDGET_RANGE_RE);
@@ -507,7 +541,10 @@ function detectBudget(message = '') {
     const tok = _tokenizeBudget(prefixedMatch[1]);
     if (tok && tok.mult) {
       const value = Math.round(tok.raw * tok.mult);
-      return { text: _formatRpFull(value), min: null, max: value, period };
+      // Plafon ("maksimal 5jt") → batas atas. Absolut ("sekitar 5jt", "harga 5jt") → band ±15%.
+      return isCeiling
+        ? { text: _formatRpFull(value), min: null, max: value, period }
+        : _budgetBand(value, period);
     }
   }
 
@@ -521,17 +558,20 @@ function detectBudget(message = '') {
     const tok = _tokenizeBudget(unitReqMatch[1]);
     if (tok && tok.mult) {
       const value = Math.round(tok.raw * tok.mult);
-      return { text: _formatRpFull(value), min: null, max: value, period };
+      // Customer tembak 1 harga absolut (mis. "40.750.000.000", "5 juta") tanpa range →
+      // bangun rentang ±15%. Kalau "maksimal/di bawah" → batas atas saja.
+      return isCeiling
+        ? { text: _formatRpFull(value), min: null, max: value, period }
+        : _budgetBand(value, period);
     }
   }
 
-  // ── Affordable preference (no number) ────────────────────────────────────
-  const affordableWords = [
-    'terjangkau', 'murah', 'termurah', 'hemat', 'ekonomis', 'low budget',
-    'affordable', 'cheap', 'cheapest', 'economy', 'low cost', 'low price',
-  ];
-  if (affordableWords.some(w => text.includes(w))) {
-    return { text: 'affordable', min: null, max: null, period: '', preference: 'affordable' };
+  // ── Kategori budget kualitatif: terjangkau / menengah / eksklusif ─────────
+  // Customer boleh jawab kategori, bukan angka. Range harga konkret per tipe+tx
+  // di-resolve nanti di buildAgentBrief (butuh buildingType+transactionType).
+  const tier = _detectBudgetTier(text);
+  if (tier) {
+    return { text: tier, min: null, max: null, period, preference: tier };
   }
 
   return null;
@@ -667,7 +707,7 @@ function extractSingleMessageFilters(message = '') {
  *  - selain itu                                           → current || accumulated || null.
  */
 function _mergeBudget(current, accumulated) {
-  const isResolved = (b) => !!b && !b.ambiguous && (b.min != null || b.max != null || b.preference === 'affordable');
+  const isResolved = (b) => !!b && !b.ambiguous && (b.min != null || b.max != null || !!b.preference);
   if (isResolved(current)) return current;
   if (isResolved(accumulated) && (!current || current.ambiguous)) return accumulated;
   return current || accumulated || null;

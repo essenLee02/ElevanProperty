@@ -137,17 +137,17 @@
                 <p class="field-hint">Token API Fonnte pribadi Anda. Boleh dikosongkan.</p>
               </div>
 
-              <!-- ChakraHQ Token (opsional) -->
+              <!-- Kirimi Device ID (opsional) -->
               <div class="form-group">
-                <label for="chakraHqToken">ChakraHQ Token</label>
+                <label for="kirimiDeviceId">Kirimi Device ID</label>
                 <input
-                  id="chakraHqToken"
-                  v-model.trim="form.chakra_hq_token"
+                  id="kirimiDeviceId"
+                  v-model.trim="form.kirimi_device_id"
                   type="text"
-                  placeholder="Masukkan ChakraHQ Access Token (opsional)"
+                  placeholder="Masukkan Device ID Kirimi (mis. D-3OCA6, opsional)"
                   :disabled="isSubmitting"
                 />
-                <p class="field-hint">Bearer token API ChakraHQ pribadi Anda. Boleh dikosongkan.</p>
+                <p class="field-hint">Device ID dari dashboard Kirimi (mis. D-3OCA6). Boleh dikosongkan.</p>
               </div>
 
               <!-- Submit Button -->
@@ -190,7 +190,7 @@ const form = reactive({
   birthdate:      '',
   password:       '',
   fonnte_token:   '',
-  chakra_hq_token: ''
+  kirimi_device_id: ''
 });
 
 // Nilai awal (untuk deteksi perubahan — kecuali password)
@@ -199,7 +199,7 @@ const originalForm = reactive({
   phone:           '',
   birthdate:       '',
   fonnte_token:    '',
-  chakra_hq_token: ''
+  kirimi_device_id: ''
 });
 
 const alert       = reactive({ type: '', message: '' });
@@ -224,8 +224,8 @@ const hasChanges = computed(() => {
     form.name            !== originalForm.name            ||
     form.phone           !== originalForm.phone           ||
     form.birthdate       !== originalForm.birthdate       ||
-    form.fonnte_token    !== originalForm.fonnte_token    ||
-    form.chakra_hq_token !== originalForm.chakra_hq_token ||
+    form.fonnte_token     !== originalForm.fonnte_token     ||
+    form.kirimi_device_id !== originalForm.kirimi_device_id ||
     form.password.length > 0
   );
 });
@@ -253,16 +253,16 @@ const loadProfile = async () => {
       form.username   = user.username   || '';
       form.phone      = user.phone      || '';
       form.birthdate  = user.birthdate ? user.birthdate.split('T')[0] : '';
-      form.fonnte_token    = user.fonnte_token    || '';
-      form.chakra_hq_token = user.chakra_hq_token || '';
-      form.password        = '';
+      form.fonnte_token     = user.fonnte_token     || '';
+      form.kirimi_device_id = user.kirimi_device_id || '';
+      form.password         = '';
 
       // Simpan original (tidak termasuk password)
-      originalForm.name            = form.name;
-      originalForm.phone           = form.phone;
-      originalForm.birthdate       = form.birthdate;
-      originalForm.fonnte_token    = form.fonnte_token;
-      originalForm.chakra_hq_token = form.chakra_hq_token;
+      originalForm.name             = form.name;
+      originalForm.phone            = form.phone;
+      originalForm.birthdate        = form.birthdate;
+      originalForm.fonnte_token     = form.fonnte_token;
+      originalForm.kirimi_device_id = form.kirimi_device_id;
     } else {
       setAlert('danger', result?.data?.message || 'Gagal memuat profil');
       setTimeout(() => router.push('/login'), 2000);
@@ -311,8 +311,8 @@ const submitUpdate = async () => {
       phone:      form.phone,
       birthdate:  form.birthdate  || null,
       password:   form.password,
-      fonnte_token:    form.fonnte_token    || null,
-      chakra_hq_token: form.chakra_hq_token || null
+      fonnte_token:     form.fonnte_token     || null,
+      kirimi_device_id: form.kirimi_device_id || null
       // username TIDAK dikirim — backend mengabaikannya
     };
 
@@ -326,9 +326,9 @@ const submitUpdate = async () => {
       originalForm.name            = form.name;
       originalForm.phone           = form.phone;
       originalForm.birthdate       = form.birthdate;
-      originalForm.fonnte_token    = form.fonnte_token;
-      originalForm.chakra_hq_token = form.chakra_hq_token;
-      form.password                = '';
+      originalForm.fonnte_token     = form.fonnte_token;
+      originalForm.kirimi_device_id = form.kirimi_device_id;
+      form.password                 = '';
 
       setTimeout(() => clearAlert(), 3000);
     } else {
