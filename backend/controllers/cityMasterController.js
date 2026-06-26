@@ -243,11 +243,11 @@ class CityMasterController {
       }
 
       await city.update({
-        country_id:   country_id,
-        province_id:  province_id,
-        name:         String(name).trim(),
+        country_id:   country_id.toUpperCase(),
+        province_id:  province_id.toUpperCase(),
+        name:         String(name).trim().toUpperCase(),
         updated_date: CityMasterController.#todayDate(),
-        updated_by:   updatedBy
+        updated_by:   updatedBy.toUpperCase()
       });
 
       const creatorName  = await CityMasterController.#resolveUserName(city.created_by);
@@ -433,7 +433,7 @@ class CityMasterController {
       await city.update({
         status:       newStatus,
         updated_date: CityMasterController.#todayDate(),
-        updated_by:   updatedBy
+        updated_by:   updatedBy.toUpperCase()
       });
 
       console.log(`[CITY] 🔄 TOGGLE — ${city.city_id} | "${city.name}" | Status: ${label} | By: ${updatedBy}`);

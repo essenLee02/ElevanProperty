@@ -144,7 +144,7 @@ class ProvinceMasterController {
       const idProvince = ProvinceMasterController.#makeProvinceId(name, total).toUpperCase();
 
       const newProvince = await Province.create({
-        province_id:  idProvince,
+        province_id:  idProvince.toUpperCase(),
         country_id:   String(country_id).toUpperCase(),
         name:         String(name).trim().toUpperCase(),
         status:       1,
@@ -220,10 +220,10 @@ class ProvinceMasterController {
       }
 
       await province.update({
-        country_id:   country_id,
-        name:         String(name).trim(),
+        country_id:   country_id.toUpperCase(),
+        name:         String(name).trim().toUpperCase(),
         updated_date: ProvinceMasterController.#todayDate(),
-        updated_by:   updatedBy
+        updated_by:   updatedBy.toUpperCase()
       });
 
       const creatorName = await ProvinceMasterController.#resolveUserName(province.created_by);

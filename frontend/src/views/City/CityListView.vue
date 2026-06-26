@@ -138,8 +138,8 @@
     Kolom "Provinsi"/"Negara" mengambil nama hasil join backend
     (field province_name & country_name).
   ──────────────────────────────────────────────────────────────────────────── */
-  const TABLE_HEADERS = ['Provinsi', 'Negara', 'Nama Kota', 'Status'];        // judul kolom
-  const TABLE_CHUNKS  = ['province_name', 'country_name', 'name', 'status'];  // key data per kolom
+  const TABLE_HEADERS = ['Nama Kota', 'Provinsi', 'Negara', 'Status'];        // judul kolom
+  const TABLE_CHUNKS  = ['name', 'province_name', 'country_name', 'status'];  // key data per kolom
   const ACTION_TYPES  = ['update', 'block', 'delete'];                        // tombol aksi
   const ACTION_PARAMS = ['city_id'];                                          // param tombol (→ value)
 

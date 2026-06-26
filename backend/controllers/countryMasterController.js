@@ -123,7 +123,7 @@ class CountryMasterController {
       const idCountry = CountryMasterController.#makeCountryId(name, total).toUpperCase();
 
       const newCountry = await Country.create({
-        country_id:   idCountry,
+        country_id:   idCountry.toUpperCase(),
         name:         String(name).trim().toUpperCase(),
         status:       1,
         created_date: CountryMasterController.#todayDate(),
@@ -190,9 +190,9 @@ class CountryMasterController {
       }
 
       await country.update({
-        name:         String(name).trim(),
+        name:         String(name).trim().toUpperCase(),
         updated_date: CountryMasterController.#todayDate(),
-        updated_by:   updatedBy
+        updated_by:   updatedBy.toUpperCase()
       });
 
       const creatorName = await CountryMasterController.#resolveUserName(country.created_by);

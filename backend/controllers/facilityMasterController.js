@@ -263,7 +263,7 @@ class FacilityMasterController {
       }
 
       await facility.update({
-        name:         String(name).trim(),
+        name:         String(name).trim().toUpperCase(),
         description:  description !== undefined ? (description ? String(description).trim() : null) : facility.description,
         icon:         icon        !== undefined ? (icon        ? String(icon).trim()        : null) : facility.icon,
         updated_date: FacilityMasterController.#todayDate(),
