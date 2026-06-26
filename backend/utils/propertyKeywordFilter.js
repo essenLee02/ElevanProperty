@@ -19,7 +19,7 @@
  *   - "rumah" dalam konteks bukan properti
  *     "rumah makan", "rumah sakit" → dikecualikan ❌
  *
- * Digunakan oleh: fonnteChatController, chakraHQController, timelinesAIChatController
+ * Digunakan oleh: fonnteChatController, kirimiChatController, timelinesAIChatController
  */
 
 'use strict';
@@ -419,6 +419,10 @@ const PROPERTY_QUESTION_PATTERNS = [
   /selain\s+\S.{0,30}area\s+sekitar/, /area\s+sekitar\s+(yang|masih)/,
   /area.*lain.*oke/, /area.*lain.*pertimbangkan/, /besides\s+\S.{0,30}(area|city)/,
   /other\s+(area|city|location)/,
+  // real phrasing AI: "Selain lokasi Surabaya, apakah Anda mau pilihan lokasi lainnya?"
+  /selain\s+lokasi/, /pilihan\s+lokasi/, /lokasi\s+lain(nya)?/, /area\s+lain(nya)?/,
+  /wilayah\s+lain(nya)?/, /kota\s+lain(nya)?/, /daerah\s+lain(nya)?/,
+  /mau\s+pilihan\s+lain/, /pertimbangkan\s+lokasi\s+lain/, /lokasi\s+alternatif/,
   // ── Q9 decision maker ───────────────────────────────────────────────────────
   /jadwalkan\s+(viewing|survey|survei|kunjungan)/, /perlu\s+koordinasi/, /koordinasi\s+dulu/, /keluarga\s+lain/,
   /schedule\s+(a\s+)?(viewing|survey|visit)/, /check\s+with\s+(family|spouse|partner)/,
@@ -478,6 +482,32 @@ function hasRecentPropertyQuestionIn(recentHistory) {
   return lastAI.some(item =>
     PROPERTY_QUESTION_PATTERNS.some(p => p.test((item.message || '').toLowerCase()))
   );
+}
+
+/**
+ * Apakah percakapan JELAS sedang dalam alur kualifikasi properti (Q1–Q12)?
+ *
+ * Lebih robust daripada hasRecentPropertyQuestionIn / hasPropertyCtx untuk alur
+ * PANJANG: tidak bergantung pada kata TIPE (apartemen/villa/…) yang sudah keluar
+ * window, juga tidak bergantung pada frasa PERSIS pertanyaan AI terakhir. Cukup
+ * hitung berapa banyak pesan AI di SELURUH history yang berupa pertanyaan properti
+ * (PROPERTY_QUESTION_PATTERNS). ≥2 → percakapan sudah pasti in-flow, sehingga
+ * jawaban PENDEK apa pun ("Boleh..", "Terserah", "Ya kak") = lanjutan yang valid.
+ *
+ * @param {Array} history - [{role, message}] (boleh seluruh history, bukan window)
+ * @returns {boolean}
+ */
+function isInPropertyFlow(history) {
+  if (!Array.isArray(history)) return false;
+  let aiPropertyQuestions = 0;
+  for (const item of history) {
+    if (item.role !== 'ai' && item.role !== 'assistant') continue;
+    const msg = (item.message || '').toLowerCase();
+    if (PROPERTY_QUESTION_PATTERNS.some(p => p.test(msg))) {
+      if (++aiPropertyQuestions >= 2) return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -573,6 +603,7 @@ function isPropertyContextContinuation(message, history = []) {
       /\b(elektronik|laptop|hp|handphone|gadget|komputer|printer)\b/,
       /\b(pakaian|baju|sepatu|tas|fashion|belanja online)\b/,
       /\b(obat|dokter|sakit|rumah sakit|klinik kesehatan|apotik)\b/,
+      /\b(film|movie|bioskop|drakor|drama korea|anime|kartun|lagu|musik|music|konser|game|gaming|netflix|youtube|tiktok|medsos|sosmed|artis|selebriti|seleb|gosip)\b/,
     ];
     for (const pattern of CLEAR_NON_PROPERTY) {
       if (pattern.test(lower)) return false;
@@ -602,13 +633,18 @@ function isPropertyContextContinuation(message, history = []) {
     if (hasPropertyFacility || isLandmarkAnswer || isMotivationAnswer || isSchedulingRequest) return true;
   }
 
-  // Context = a property keyword in recent history OR (crucially) the LAST AI message
-  // being a property question. The latter keeps long flows alive: by the time the
-  // customer answers furnishing/budget/date, the property TYPE word has scrolled out
-  // of the window, so hasPropertyCtx alone would be false and the answer dropped.
-  const hasPropertyCtx        = recentHistory.some(item => hasPropertyKeyword(item.message || ''));
+  // Context (3 sinyal, salah satu cukup) — dirancang agar alur PANJANG tidak putus:
+  //  1. hasPropertyCtx     : ada kata properti di SELURUH history (bukan cuma window 6).
+  //     Penting karena kata TIPE (apartemen/villa) ada di awal & sering keluar window.
+  //  2. hasRecentPropertyQ : pesan AI terakhir = pertanyaan properti (frasa cocok).
+  //  3. inPropertyFlow     : ≥2 pesan AI di history adalah pertanyaan properti →
+  //     percakapan jelas in-flow walau frasa pertanyaan terakhir tak terdaftar &
+  //     kata TIPE sudah keluar window. Ini safety net untuk jawaban pendek malas
+  //     ("Boleh..", "Terserah") di tengah Q-flow.
+  const hasPropertyCtx        = history.some(item => hasPropertyKeyword(item.message || ''));
   const hasRecentPropertyQ    = hasRecentPropertyQuestionIn(recentHistory);
-  if (!hasPropertyCtx && !hasRecentPropertyQ) return false;
+  const inPropertyFlow        = isInPropertyFlow(history);
+  if (!hasPropertyCtx && !hasRecentPropertyQ && !inPropertyFlow) return false;
 
   // ── Fast path: Jawaban yang SANGAT jelas sebagai lanjutan — tidak perlu cek AI question ──
   // Ini menghindari race condition di mana AI message belum tersimpan ke DB.
@@ -653,11 +689,19 @@ function isPropertyContextContinuation(message, history = []) {
   }
   if (/\b(di\s+\w+)\b/.test(lower)) return true;  // "di jakarta", "di mana saja"
 
-  // 4) Jawaban singkat afirmatif / negatif dalam konteks
-  if (/^(ya|iya|ok|oke|siap|boleh|bisa|setuju|oke\s+dong|iya\s+dong|baik|baik\s+sekali|lanjut|kasih\s+list|tampilkan|rekomendasikan|show|lihat)$/.test(lower))
-    return true;
-  if (/^(tidak|belum|ga|gak|nggak|ngga|blum|blom|enggak|tidak\s+dulu|belum\s+ada|nanti)$/.test(lower))
-    return true;
+  // 4) Jawaban singkat afirmatif / negatif dalam konteks (toleran terhadap pesan MALAS)
+  // Tokenisasi: tanda baca → spasi, buang filler/vocative/intensifier ("kak", "dong",
+  // "deh", "sekali", dll.), lalu cek apakah SISA kata semuanya afirmasi / semuanya negasi.
+  // Mendukung "Boleh..", "boleh dong", "ya kak", "oke deh", "iya, boleh", "baik sekali",
+  // "gak dulu", "nanti aja" — TANPA salah-loloskan "boleh pesan pizza".
+  const _IGNORE  = new Set(['kak','ya','yah','iya','dong','deh','aja','saja','sih','kok','nih','loh','lah','banget','sekali','nya','ya,','dulu']);
+  const _AFFIRM  = new Set(['ya','iya','iyaa','ok','oke','okay','okai','sip','siap','boleh','bisa','mau','setuju','sepakat','baik','lanjut','gas','gaskan','yup','yoi','yes','show','lihat','tampilkan','rekomendasikan','silakan','silahkan']);
+  const _NEGATE  = new Set(['tidak','belum','ga','gak','nggak','ngga','blum','blom','enggak','engga','gamau','gakmau','nanti','skip','lewati','lewat','ada','usah','perlu']);
+  const _toks = lower.replace(/[.,!?…]+/gu, ' ').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+  const _core = _toks.filter(t => !_IGNORE.has(t));
+  if (_toks.length > 0 && _core.length === 0) return true;                              // murni filler: "oke deh", "ya kak"
+  if (_core.length > 0 && _core.every(t => _AFFIRM.has(t))) return true;                // "boleh", "iya boleh", "mau"
+  if (_core.length > 0 && _core.every(t => _NEGATE.has(t) || _AFFIRM.has(t))) return true; // "gak dulu", "belum ada"
 
   // 5) Jawaban spesifikasi properti (luas, kamar, furnishing, dll)
   if (/\b(furnished|unfurnished|kosong|semi|ac|wifi|parkir|garasi|kolam|renang)\b/.test(lower))

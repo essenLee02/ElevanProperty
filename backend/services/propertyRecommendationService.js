@@ -444,8 +444,17 @@ function detectBudget(message = '') {
     : /minggu|week|weekly|per minggu|\/minggu|seminggu/.test(text) ? 'week'
     : '';
 
+  // Buang konteks LANTAI/TOWER sebelum parsing angka budget. Tanpa ini, jawaban Q12
+  // "Antara lantai 15-20 aja" salah terbaca sebagai budget "15-20" dan menimpa budget
+  // asli (mis. "1-1.6 juta"). Mencakup: "lantai 15", "lt 27", "tower 3", "floor 15-20",
+  // "lantai 15 sampai 20", "lantai 15 - 20".
+  const budgetText = text.replace(
+    /\b(lantai|lt|tower|menara|floor|lvl|level)\s*\d+(?:\s*(?:-|–|sampai|s\/d|hingga|ke)\s*\d+)?/gi,
+    ' '
+  );
+
   // ── Range match ──────────────────────────────────────────────────────────
-  const rangeMatch = text.match(_BUDGET_RANGE_RE);
+  const rangeMatch = budgetText.match(_BUDGET_RANGE_RE);
   if (rangeMatch) {
     const lo = _tokenizeBudget(rangeMatch[1]);
     const hi = _tokenizeBudget(rangeMatch[2]);
@@ -491,7 +500,7 @@ function detectBudget(message = '') {
 
   // ── Single value: explicit budget prefix ─────────────────────────────────
   const _STOK = `(?:${_FULL_IDR_PAT}|\\d+(?:[.,]\\d+)?\\s*(?:${_BU})?)`;
-  const prefixedMatch = text.match(
+  const prefixedMatch = budgetText.match(
     new RegExp(`(?:budget|badget|harga|rp|idr|range|sekitar|maksimal|max)\\s*[:=]?\\s*(?:rp\\s*)?(${_STOK})`, 'i')
   );
   if (prefixedMatch) {
@@ -505,7 +514,7 @@ function detectBudget(message = '') {
   // ── Single value: monetary unit required (prevents matching bare dates/counts) ──
   // The (?![a-z]) after the unit stops "2 kali" → "2 k", "3 kamar" → "3 k",
   // "10 menit" → "10 m" etc. from being mis-read as a currency amount.
-  const unitReqMatch = text.match(
+  const unitReqMatch = budgetText.match(
     new RegExp(`(?:rp\\s*)?(${_FULL_IDR_PAT}|\\d+(?:[.,]\\d+)?\\s*(?:${_BU})(?![a-z]))`, 'i')
   );
   if (unitReqMatch) {
@@ -536,7 +545,7 @@ function detectBudget(message = '') {
  *   - Setiap jawaban kualifikasi diterapkan tepat pada field-nya
  */
 // Role pesan customer bisa berbeda tergantung controller yang menyimpan:
-//   fonnteChatController / chakraHQController / timelinesAIChatController → 'customer'
+//   fonnteChatController / kirimiChatController / timelinesAIChatController → 'customer'
 //   sessionService.saveUserMessage (website chatbot)               → 'user'
 // Keduanya harus diikutsertakan dalam ekstraksi history.
 const CUSTOMER_ROLES = new Set(['user', 'customer']);
@@ -647,6 +656,23 @@ function extractSingleMessageFilters(message = '') {
   };
 }
 
+/**
+ * Gabungkan budget current vs accumulated dengan PRIORITAS pada budget yang RESOLVED.
+ * Mencegah jawaban kemudian yang ambigu/tanpa unit (mis. "15-20" dari "lantai 15-20",
+ * atau angka telanjang) MENIMPA budget asli yang sudah jelas ("Rp 1jt - Rp 1.6jt").
+ *
+ * Aturan:
+ *  - current resolved (punya min/max & tidak ambiguous)  → pakai current (budget baru sah).
+ *  - current ambigu/null TAPI accumulated resolved        → pertahankan accumulated.
+ *  - selain itu                                           → current || accumulated || null.
+ */
+function _mergeBudget(current, accumulated) {
+  const isResolved = (b) => !!b && !b.ambiguous && (b.min != null || b.max != null || b.preference === 'affordable');
+  if (isResolved(current)) return current;
+  if (isResolved(accumulated) && (!current || current.ambiguous)) return accumulated;
+  return current || accumulated || null;
+}
+
 function extractPropertyFilters(message = '', history = []) {
   const current    = extractSingleMessageFilters(message);
   const accumulated = extractFromHistory(history);
@@ -670,7 +696,7 @@ function extractPropertyFilters(message = '', history = []) {
     buildingType:   current.buildingType    || accumulated.buildingType    || '',
     transactionType:current.transactionType || (typeChangedToNew ? '' : accumulated.transactionType) || '',
     location:       current.location        || accumulated.location        || '',
-    budget:         current.budget          || accumulated.budget          || null,
+    budget:         _mergeBudget(current.budget, accumulated.budget),
     facilities:     current.facilities?.length ? current.facilities : accumulated.facilities || [],
     fallbackTypes:  current.fallbackTypes   || accumulated.fallbackTypes   || []
   };

@@ -1,35 +1,42 @@
 /**
- * timelinesAIChatController.js
+ * kirimiChatController.js
  *
- * Multi-agent TimelinesAI WhatsApp handler.
+ * Multi-agent Kirimi WhatsApp handler.
  *
- * Dibuat agar KINERJANYA SAMA PERSIS dengan fonnteChatController.js — hanya arah
- * platform-nya yang berbeda:
- *   - fonnteChatController.js   → Fonnte  (https://api.fonnte.com)
- *   - timelinesAIChatController → TimelinesAI (https://app.timelines.ai/integrations/api)
+ * Dibuat agar KINERJANYA SAMA PERSIS dengan fonnteChatController.js dan
+ * timelinesAIChatController.js — hanya arah platform-nya yang berbeda:
+ *   - fonnteChatController.js     → Fonnte       (https://api.fonnte.com)
+ *   - timelinesAIChatController   → TimelinesAI  (https://app.timelines.ai/integrations/api)
+ *   - kirimiChatController        → Kirimi       (https://api.kirimi.id)
  *
- * ARSITEKTUR (identik dengan Fonnte):
+ * ARSITEKTUR (identik dengan Fonnte/TimelinesAI):
  *   - Webhook masuk → deteksi event → cari agent → return 200 DULU → proses AI di
  *     background (setImmediate) → dedup → gate properti → AI chain → kirim balasan →
  *     log terminal ringkasan.
  *
- * PERBEDAAN TEKNIS DENGAN FONNTE:
- *   - Fonnte      : token per-agent (kolom users.fonnte_token), kirim via api.fonnte.com/send
- *   - TimelinesAI : SATU shared API key (.env TIMELINESAI_API_KEY) Bearer auth,
- *                   kirim via POST /integrations/api/messages { phone:"+62…", text }.
- *   - Identifikasi agent: dari nomor WA terhubung di payload (whatsapp_account.phone)
- *     → dicocokkan ke kolom users.phone. Fallback: agent pertama.
+ * MODEL KREDENSIAL KIRIMI:
+ *   - user_code  : level AKUN  → .env KIRIMI_USER_CODE
+ *   - secret     : level AKUN  → .env KIRIMI_SECRET
+ *   - device_id  : per-AGENT   → kolom users.kirimi_device_id (mis. "D-3OCA6")
+ *   Satu akun Kirimi memiliki banyak device; tiap agent memegang satu device.
+ *   Identifikasi agent: dari device_id pada payload webhook → dicocokkan ke kolom
+ *   users.kirimi_device_id. Fallback: nomor WA agent, lalu agent pertama.
  *
- * KONTRAK WEBHOOK TIMELINESAI (incoming):
+ * KONTRAK WEBHOOK KIRIMI (incoming "Pesan Masuk" — type: "message"):
  *   {
- *     event_type:"message:received:new",
- *     chat:{ chat_id, phone, full_name, is_group, responsible_name, ... },
- *     whatsapp_account:{ phone, full_name, email },     // nomor agent yang terhubung
- *     message:{ text, direction:"received", message_uid, sender:{ phone, full_name }, ... }
+ *     type:"message", device_id:"D-3OCA6",
+ *     from:"628xxx", pushName:"Nama", message:"teks",
+ *     messageId:"...", fromMe:false, datetime_wib:"YYYY-MM-DD HH:mm:ss"
  *   }
+ *   Event lain (diabaikan): "message.sent", "message.ack", "message.failed",
+ *   "connection.connected", "connection.disconnected".
+ *
+ * SEND API (https://api.kirimi.id):
+ *   POST /v1/send-message
+ *   Body: { user_code, secret, device_id, phone:"628xxx", message, media_url? }
  *
  * ENDPOINT UTAMA:
- *   POST /api/timelinesai/webhook  ← set ini di TimelinesAI → Integrations → Webhooks
+ *   POST /api/kirimi/webhook  ← set ini di Kirimi Dashboard → Device → Webhook
  */
 
 'use strict';
@@ -46,8 +53,8 @@ const { sanitizeLog, maskPhone, maskName, appendSentViaTag } = require('../utils
 
 /* ══════════════════════════════════════════════════════════════════════════════
    BAGIAN 0 — MESSAGE-ID DEDUP CACHE
-   Mencegah double-processing saat TimelinesAI mengirim ulang webhook.
-   Shared dengan Fonnte/360dialog via utils/messageDedup.js (message_uid stabil).
+   Mencegah double-processing saat Kirimi mengirim ulang webhook.
+   Shared dengan Fonnte/TimelinesAI via utils/messageDedup.js (messageId stabil).
 ══════════════════════════════════════════════════════════════════════════════ */
 
 const { isAlreadyProcessed: _isAlreadyProcessed,
@@ -60,9 +67,9 @@ const { isAlreadyProcessed: _isAlreadyProcessed,
 ══════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * Normalisasi nomor telepon ke format 628xxxxxxxxx (untuk pencocokan agent).
- *   +62 881-036-588-874 → 62881036588874
- *   0881-036-588-874    → 62881036588874
+ * Normalisasi nomor telepon ke format 628xxxxxxxxx (untuk pencocokan & kirim).
+ *   +62 821-3311-936 → 628213311936
+ *   0821-3311-936    → 628213311936
  */
 function normalizePhone(phone) {
   return String(phone || '')
@@ -71,23 +78,21 @@ function normalizePhone(phone) {
     .replace(/[\s\-()]/g, '');
 }
 
-/** Nomor internasional untuk API TimelinesAI: "+62xxxxxxxxxx". */
-function toIntlPlus(phone) {
-  const digits = normalizePhone(phone);
-  return digits ? `+${digits}` : '';
+/** Base URL API Kirimi (boleh dioverride via env). */
+function apiBase() {
+  return String(process.env.KIRIMI_API_URL || 'https://api.kirimi.id').replace(/\/+$/, '');
 }
 
-/** Base URL API TimelinesAI (boleh dioverride via env). */
-function apiBase() {
-  return String(process.env.TIMELINESAI_API_URL || 'https://app.timelines.ai/integrations/api')
-    .replace(/\/+$/, '');
+/** Path endpoint kirim — default /v1/send-message, atau fast jika KIRIMI_SEND_FAST=true. */
+function sendPath() {
+  const fast = String(process.env.KIRIMI_SEND_FAST || '').toLowerCase() === 'true';
+  return fast ? '/v1/send-message-fast' : '/v1/send-message';
 }
 
 /**
  * Ambil nilai pertama yang ada dari beberapa kemungkinan path (dot-notation).
- * TimelinesAI memvariasikan bentuk payload: kadang FLAT (data.sender_phone) kadang
- * NESTED (message.sender.phone) tergantung versi/flavor event. Helper ini menelusuri
- * semua kemungkinan letak field tersebut.
+ * Kirimi/Baileys memvariasikan bentuk payload (kadang flat, kadang nested di
+ * `data.*` / `key.*`). Helper ini menelusuri semua kemungkinan letak field.
  */
 function pick(obj, paths) {
   for (const p of paths) {
@@ -98,29 +103,31 @@ function pick(obj, paths) {
 }
 
 /**
- * Deteksi jenis event dari payload TimelinesAI.
- * Paralel dengan detectEventType() milik Fonnte, tapi toleran terhadap penamaan
- * webhooks_v2: "chat:incoming:new" / "chat:outgoing:new" MAUPUN "message:received:new".
+ * Deteksi jenis event dari payload Kirimi.
+ * Paralel dengan detectEventType() milik Fonnte/TimelinesAI.
  *
- * @param {object} body - req.body dari webhook TimelinesAI
+ * @param {object} body - req.body dari webhook Kirimi
  * @returns {'incoming'|'send'|'message_status'|'unknown'}
  */
 function detectEventType(body) {
   if (!body || typeof body !== 'object') return 'unknown';
 
-  const evt = String(body.event_type || body.event || body.type || '').toLowerCase();
+  const evt = String(body.type || body.event || body.event_type || '').toLowerCase();
 
-  // incoming: "chat:incoming:new", "message:received:new", "message:received:text", dll.
-  if (evt.includes('incoming') || evt.includes('received')) return 'incoming';
-  // send/keluar: "chat:outgoing:new", "message:sent:new" → jangan dibalas (hindari loop)
-  if (evt.includes('outgoing') || evt.includes('sent'))     return 'send';
-  // status: delivered/read/status
-  if (evt.includes('status') || evt.includes('delivered') || evt.includes('read')) return 'message_status';
+  // status koneksi device → abaikan
+  if (evt.startsWith('connection')) return 'message_status';
+  // status pesan keluar (sent/ack/delivered/read/failed) → jangan dibalas (hindari loop)
+  if (evt.includes('sent') || evt.includes('ack') || evt.includes('delivered') ||
+      evt.includes('read') || evt.includes('failed') || evt.includes('status')) return 'send';
+  // pesan masuk
+  if (evt === 'message' || evt === 'message.received' ||
+      evt.includes('received') || evt.includes('incoming')) {
+    return 'incoming';
+  }
 
-  // Fallback via direction (kadang ada di message.direction / data.direction)
-  const dir = String(pick(body, ['message.direction', 'data.direction', 'direction'])).toLowerCase();
-  if (dir === 'received' || dir === 'inbound')  return 'incoming';
-  if (dir === 'sent'     || dir === 'outbound') return 'send';
+  // Fallback via flag arah (fromMe true = pesan kita sendiri → bukan incoming)
+  const fromMe = pick(body, ['fromMe', 'data.fromMe', 'key.fromMe', 'message.fromMe']);
+  if (fromMe === true || String(fromMe).toLowerCase() === 'true') return 'send';
 
   // Fallback terakhir: ada teks + pengirim → anggap incoming
   const x = extractMessage(body);
@@ -130,144 +137,177 @@ function detectEventType(body) {
 }
 
 /**
- * Ekstrak field penting dari payload webhook — defensif terhadap SEMUA variasi
- * bentuk TimelinesAI (flat `data.*`, nested `message.*` / `chat.*`, atau root-level).
+ * Ekstrak field penting dari payload webhook — defensif terhadap variasi bentuk
+ * Kirimi (flat root, nested `data.*`, atau `key.*`).
  * @param {object} body
  */
 function extractMessage(body = {}) {
   return {
-    sender      : pick(body, [
-      'data.sender_phone', 'message.sender.phone', 'data.sender.phone',
-      'data.phone', 'chat.phone', 'data.chat.phone', 'sender_phone', 'phone'
-    ]),
-    name        : pick(body, [
-      'data.sender_name', 'message.sender.full_name', 'data.sender.full_name',
-      'chat.full_name', 'data.chat.full_name', 'data.full_name', 'sender_name', 'full_name'
+    sender    : normalizePhoneFromJid(pick(body, [
+      'from', 'sender', 'phone', 'pengirim', 'sender_number', 'senderNumber',
+      'data.from', 'data.sender', 'data.phone', 'key.remoteJid', 'remoteJid'
+    ])),
+    name      : pick(body, [
+      'pushName', 'pushname', 'senderName', 'name', 'notify',
+      'data.pushName', 'data.name', 'contact.name'
     ]) || 'Customer',
-    message     : String(pick(body, [
-      'data.text', 'message.text', 'data.message', 'message.body', 'text', 'body'
+    message   : String(pick(body, [
+      'message', 'text', 'body', 'pesan', 'content', 'caption',
+      'data.message', 'data.text', 'data.body', 'message.text', 'message.body'
     ]) || '').trim(),
-    messageId   : pick(body, [
-      'data.message_uid', 'message.message_uid', 'data.message_id',
-      'message_uid', 'data.uid', 'message.id'
-    ]) || `timelinesai_${Date.now()}`,
-    accountPhone: pick(body, [
-      'whatsapp_account.phone', 'data.whatsapp_account.phone', 'message.recipient.phone',
-      'data.account_phone', 'data.connected_phone', 'account_phone'
-    ]),
-    isGroup     : !!pick(body, ['chat.is_group', 'data.is_group', 'data.chat.is_group', 'is_group']),
+    messageId : pick(body, [
+      'messageId', 'message_id', 'id', 'clientMsgId', 'key.id',
+      'data.messageId', 'data.id'
+    ]) || `kirimi_${Date.now()}`,
+    deviceId  : String(pick(body, [
+      'device_id', 'deviceId', 'device', 'data.device_id', 'data.deviceId'
+    ]) || '').trim(),
+    fromMe    : (() => {
+      const f = pick(body, ['fromMe', 'data.fromMe', 'key.fromMe', 'message.fromMe']);
+      return f === true || String(f).toLowerCase() === 'true';
+    })(),
   };
+}
+
+/**
+ * Bersihkan kemungkinan JID WhatsApp ("628xxx@s.whatsapp.net") menjadi nomor murni.
+ */
+function normalizePhoneFromJid(value) {
+  const raw = String(value || '').split('@')[0];
+  return normalizePhone(raw);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
    BAGIAN 2 — AGENT LOOKUP (dari database)
-   TimelinesAI pakai shared API key; agent diidentifikasi dari nomor WA terhubung.
+   Kirimi memakai device_id per-agent (kolom users.kirimi_device_id).
 ══════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * Ambil semua agent aktif dari database.
- * (Tidak ada filter token per-agent seperti Fonnte — TimelinesAI shared key.)
+ * Ambil semua agent aktif yang sudah punya kirimi_device_id di database.
  */
-async function getAllAgents() {
+async function getAllAgentsWithKirimi() {
   const agents = await User.findAll({
     where      : { privilege: 'agent', status: 1 },
-    attributes : ['id', 'user_id', 'name', 'phone', 'username'],
+    attributes : ['id', 'user_id', 'name', 'phone', 'username', 'kirimi_device_id'],
     order      : [['created_date', 'ASC']]
   });
-  return agents;
+  return agents.filter(a => a.kirimi_device_id && String(a.kirimi_device_id).trim().length > 2);
 }
 
 /**
- * Cari agent berdasarkan nomor WhatsApp terhubung (whatsapp_account.phone).
- * Dicocokkan dengan kolom users.phone setelah normalisasi (paralel findAgentByDevice).
+ * Cari agent berdasarkan device_id Kirimi pada payload (mis. "D-3OCA6").
+ * Dicocokkan dengan kolom users.kirimi_device_id (case-insensitive).
  *
- * @param {string} accountPhone - Nomor WA terhubung di TimelinesAI
+ * @param {string} deviceId
  * @returns {User|null}
  */
-async function findAgentByAccount(accountPhone) {
-  if (!accountPhone) return null;
+async function findAgentByDevice(deviceId) {
+  if (!deviceId) return null;
 
-  const normAcct = normalizePhone(accountPhone);
-  const agents   = await getAllAgents();
+  const target = String(deviceId).trim().toLowerCase();
+  const agents = await getAllAgentsWithKirimi();
 
   for (const agent of agents) {
-    if (agent.phone && normalizePhone(agent.phone) === normAcct) {
-      console.log(`[TIMELINESAI AGENT] ✅ Match: ${agent.name} (${agent.phone})`);
+    if (agent.kirimi_device_id && String(agent.kirimi_device_id).trim().toLowerCase() === target) {
+      console.log(`[KIRIMI AGENT] ✅ Match device: ${agent.name} (${agent.kirimi_device_id})`);
       return agent;
     }
   }
 
-  console.warn(`[TIMELINESAI AGENT] Tidak ada match untuk akun: ${accountPhone} (normalized: ${normAcct})`);
-  console.warn(`[TIMELINESAI AGENT] Agent terdaftar:`,
-    agents.map(a => `${a.name}: ${normalizePhone(a.phone || '')}`).join(', ')
+  console.warn(`[KIRIMI AGENT] Tidak ada match untuk device: ${deviceId}`);
+  console.warn(`[KIRIMI AGENT] Device terdaftar:`,
+    agents.map(a => `${a.name}: ${String(a.kirimi_device_id || '').trim()}`).join(', ')
   );
-
   return null;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
-   BAGIAN 3 — KIRIM PESAN via TIMELINESAI (shared Bearer key)
+   BAGIAN 3 — KIRIM PESAN via KIRIMI (akun user_code+secret, device per-agent)
 ══════════════════════════════════════════════════════════════════════════════ */
 
 /**
- * Kirim pesan WhatsApp via TimelinesAI Public API.
- * Struktur retry identik dengan sendViaFonnte (linear back-off, retry network error).
+ * Kirim pesan WhatsApp via Kirimi Public API.
+ * Struktur retry identik dengan sendViaFonnte / sendViaTimelinesAI.
  *
  * @param {string} targetPhone - Nomor tujuan (customer)
  * @param {string} message     - Isi pesan
+ * @param {string} deviceId    - users.kirimi_device_id milik agent
  */
-async function sendViaTimelinesAI(targetPhone, message) {
-  const apiKey = String(process.env.TIMELINESAI_API_KEY || '').trim();
-  if (!apiKey) throw new Error('TIMELINESAI_API_KEY belum di-set di .env');
+async function sendViaKirimi(targetPhone, message, deviceId) {
+  const userCode = String(process.env.KIRIMI_USER_CODE || '').trim();
+  const secret   = String(process.env.KIRIMI_SECRET    || '').trim();
+  if (!userCode || !secret) throw new Error('KIRIMI_USER_CODE / KIRIMI_SECRET belum di-set di .env');
+  if (!deviceId)            throw new Error('Agent belum punya kirimi_device_id di database');
 
-  const phone      = toIntlPlus(targetPhone);
-  const timeout    = parseInt(process.env.TIMELINESAI_TIMEOUT_MS    || '30000', 10);
-  const maxRetries = parseInt(process.env.TIMELINESAI_RETRY_COUNT   || '3',     10);
-  const retryDelay = parseInt(process.env.TIMELINESAI_RETRY_DELAY_MS || '3000', 10);
+  const phone      = normalizePhone(targetPhone);
+  const timeout    = parseInt(process.env.KIRIMI_TIMEOUT_MS    || '30000', 10);
+  const maxRetries = parseInt(process.env.KIRIMI_RETRY_COUNT   || '3',     10);
+  const retryDelay = parseInt(process.env.KIRIMI_RETRY_DELAY_MS || '3000', 10);
 
   const RETRYABLE = new Set(['ETIMEDOUT', 'ECONNREFUSED', 'ECONNRESET', 'ENOTFOUND', 'ENETUNREACH', 'ECONNABORTED']);
+
+  const url     = `${apiBase()}${sendPath()}`;
+  const payload = {
+    user_code : userCode,
+    secret,
+    device_id : String(deviceId).trim(),
+    phone,
+    message   : appendSentViaTag(String(message).trim())
+  };
+
+  console.log(`[KIRIMI SEND] → ${maskPhone(phone)} | device: ${payload.device_id} | len: ${payload.message.length}`);
 
   let lastError;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const response = await axios.post(
-        `${apiBase()}/messages`,
-        { phone, text: appendSentViaTag(String(message).trim()) },
-        {
-          headers : {
-            'Authorization' : `Bearer ${apiKey}`,
-            'Content-Type'  : 'application/json'
-          },
-          timeout,
-        }
-      );
+      const response = await axios.post(url, payload, {
+        headers : { 'Content-Type': 'application/json' },
+        timeout,
+      });
 
       const data = response.data || {};
-      if (data.success === false || data.error || data.detail) {
-        throw new Error(data.error || data.detail || data.message || 'TimelinesAI: gagal kirim');
+      if (data.success === false || data.error) {
+        throw new Error(data.message || data.error || 'Kirimi: gagal kirim');
       }
 
       if (attempt > 1) {
-        console.log(`[TIMELINESAI] Send succeeded on attempt ${attempt}/${maxRetries}`);
+        console.log(`[KIRIMI] Send succeeded on attempt ${attempt}/${maxRetries}`);
       }
       return data;
 
     } catch (err) {
       lastError = err;
 
+      const httpStatus = err.response?.status;
+      const httpBody   = JSON.stringify(err.response?.data || {}).substring(0, 200);
+      if (httpStatus) {
+        console.error(`[KIRIMI SEND] HTTP ${httpStatus} error: ${httpBody}`);
+      }
+
+      // 401 — user_code / secret salah, JANGAN retry
+      if (httpStatus === 401) {
+        console.error('[KIRIMI SEND] ❌ 401 — cek KIRIMI_USER_CODE / KIRIMI_SECRET di .env');
+        break;
+      }
+      // 400 — validasi (device_id / phone salah), JANGAN retry
+      if (httpStatus === 400) {
+        console.error('[KIRIMI SEND] ❌ 400 — cek device_id / nomor tujuan');
+        break;
+      }
+
       const isRetryable = RETRYABLE.has(err.code) ||
         (err.code === 'ECONNABORTED' && /timeout/i.test(err.message));
       if (!isRetryable || attempt >= maxRetries) break;
 
       const delay = retryDelay * attempt;  // linear back-off: 3s, 6s, 9s …
-      console.warn(`[TIMELINESAI] Send attempt ${attempt}/${maxRetries} failed (${err.code || err.message}). Retry in ${delay}ms…`);
+      console.warn(`[KIRIMI] Send attempt ${attempt}/${maxRetries} failed (${err.code || err.message}). Retry in ${delay}ms…`);
       await new Promise(r => setTimeout(r, delay));
     }
   }
 
   if (lastError && maxRetries > 1) {
     const code = lastError.code || '';
-    lastError.message = `${lastError.message} (after ${maxRetries} attempts — check TIMELINESAI_RETRY_COUNT / TIMELINESAI_TIMEOUT_MS in .env)`;
+    lastError.message = `${lastError.message} (after ${maxRetries} attempts — check KIRIMI_RETRY_COUNT / KIRIMI_TIMEOUT_MS in .env)`;
     if (code) lastError.code = code;
   }
   throw lastError;
@@ -275,28 +315,28 @@ async function sendViaTimelinesAI(targetPhone, message) {
 
 /* ══════════════════════════════════════════════════════════════════════════════
    BAGIAN 4 — AI REPLY (ChatGPT → Claude → Private Agent)
-   Memakai whatsappAIService.generateWhatsAppAIReply (sama dengan Fonnte).
+   Memakai whatsappAIService.generateWhatsAppAIReply (sama dengan Fonnte/TimelinesAI).
 ══════════════════════════════════════════════════════════════════════════════ */
 
 /* ══════════════════════════════════════════════════════════════════════════════
    BAGIAN 5 — PROSES PESAN MASUK (background)
-   Dipanggil setelah response 200 dikirim ke TimelinesAI. Identik dengan Fonnte.
+   Dipanggil setelah response 200 dikirim ke Kirimi. Identik dengan Fonnte/TimelinesAI.
 ══════════════════════════════════════════════════════════════════════════════ */
 
 async function processIncomingMessage(body, agent) {
-  const { sender, name, message, messageId, isGroup } = extractMessage(body);
+  const { sender, name, message, messageId, fromMe } = extractMessage(body);
   const ts = new Date().toISOString();
 
-  // ── Skip media/non-teks & grup ──────────────────────────────────────
+  // ── Skip pesan kosong & pesan kita sendiri ──────────────────────────
   if (!message) return;
-  if (isGroup) {
-    console.log(`[TIMELINESAI] Skip pesan grup dari ${maskPhone(sender)}`);
+  if (fromMe) {
+    console.log(`[KIRIMI] Skip pesan keluar (fromMe) ke ${maskPhone(sender)}`);
     return;
   }
 
-  // ── Dedup guard layer 1: stable message_uid (webhook retries) ───────
+  // ── Dedup guard layer 1: stable messageId (webhook retries) ─────────
   if (_isAlreadyProcessed(messageId)) {
-    console.log(`[TIMELINESAI DEDUP] ⚠️  Pesan sudah diproses (ID), skip: ${messageId}`);
+    console.log(`[KIRIMI DEDUP] ⚠️  Pesan sudah diproses (ID), skip: ${messageId}`);
     return;
   }
   _markProcessed(messageId);
@@ -304,14 +344,14 @@ async function processIncomingMessage(body, agent) {
   // ── Dedup guard layer 2: content-based (same sender+text within 90s) ─
   const normSender = normalizePhone(sender);
   if (_isContentDup(normSender, message)) {
-    console.log(`[TIMELINESAI DEDUP] ⚠️  Konten sama dari ${normSender} dalam 90s, skip.`);
+    console.log(`[KIRIMI DEDUP] ⚠️  Konten sama dari ${normSender} dalam 90s, skip.`);
     return;
   }
   _markContentDup(normSender, message);
-  const source = `timelinesai_${agent.name.toLowerCase().replace(/\s+/g, '_')}`;
+
+  const source = `kirimi_${agent.name.toLowerCase().replace(/\s+/g, '_')}`;
 
   let session = await ChatSession.findOne({ where: { normalizedPhone: normSender, source } });
-
   if (!session) {
     session = await ChatSession.create({
       name              : name,
@@ -331,27 +371,26 @@ async function processIncomingMessage(body, agent) {
   let isContinuation = false;
   if (!isPropertyQuery) {
     try {
-      // Window 12 (bukan 6): alur kualifikasi panjang butuh history lebih lebar agar
-      // kata TIPE properti & bukti in-flow tetap terlihat saat jawaban pendek.
+      // Window 12 (bukan 6): alur kualifikasi panjang (Q1–Q12) butuh history lebih
+      // lebar agar kata TIPE properti & bukti in-flow (≥2 pertanyaan AI) tetap terlihat
+      // saat customer jawab pendek ("Boleh..", "Terserah") di pertanyaan akhir.
       const history = await getConversationHistory(session.id, 12);
       isContinuation = isPropertyContextContinuation(message, history);
-    } catch (_) {
-      // Jika gagal ambil history, abaikan continuation check (fallthrough ke skip)
-    }
+    } catch (_) { /* abaikan continuation check jika gagal ambil history */ }
   }
 
   if (!isPropertyQuery && !isContinuation) {
-    if (isTerminalActive('TIMELINESAI')) {
+    if (isTerminalActive('KIRIMI')) {
       const D = '─'.repeat(62);
       console.log('');
       console.log(D);
-      console.log(`[TIMELINESAI] ⬇  PESAN MASUK (bukan query properti — tidak dibalas)`);
-      console.log(`[TIMELINESAI]    Agent    : ${sanitizeLog(agent.name, 60)} (${maskPhone(agent.phone)})`);
-      console.log(`[TIMELINESAI]    Owner    : User ${sanitizeLog(agent.user_id || '-', 40)}`);
-      console.log(`[TIMELINESAI]    Customer : ${maskPhone(sender)} (${maskName(name)})`);
-      console.log(`[TIMELINESAI]    Time     : ${ts}`);
-      console.log(`[TIMELINESAI]    Message  : ${sanitizeLog(message, 120)}`);
-      console.log(`[TIMELINESAI]    Status   : ⏭️  Tidak disimpan ke DB, AI skip (bukan query properti)`);
+      console.log(`[KIRIMI] ⬇  PESAN MASUK (bukan query properti — tidak dibalas)`);
+      console.log(`[KIRIMI]    Agent    : ${sanitizeLog(agent.name, 60)} (${maskPhone(agent.phone)})`);
+      console.log(`[KIRIMI]    Owner    : User ${sanitizeLog(agent.user_id || '-', 40)}`);
+      console.log(`[KIRIMI]    Customer : ${maskPhone(sender)} (${maskName(name)})`);
+      console.log(`[KIRIMI]    Time     : ${ts}`);
+      console.log(`[KIRIMI]    Message  : ${sanitizeLog(message, 120)}`);
+      console.log(`[KIRIMI]    Status   : ⏭️  Tidak disimpan ke DB, AI skip (bukan query properti)`);
       console.log(D);
       console.log('');
     }
@@ -365,7 +404,7 @@ async function processIncomingMessage(body, agent) {
     role          : 'customer',
     message,
     channel       : 'whatsapp',
-    metadata      : JSON.stringify({ agentName: agent.name, messageId, platform: 'timelinesai' })
+    metadata      : JSON.stringify({ agentName: agent.name, messageId, platform: 'kirimi' })
   });
 
   // ── Generate AI reply (dengan property context injection) ────────────
@@ -377,7 +416,7 @@ async function processIncomingMessage(body, agent) {
       message,
       agentName: agent.name,
     });
-    aiResult = result;
+    aiResult  = result;
     ctxSource = result.contextSource || 'none';
   } catch (err) {
     const appName = process.env.APP_NAME || 'Elevan Property';
@@ -399,14 +438,14 @@ async function processIncomingMessage(body, agent) {
     metadata      : JSON.stringify({ aiProvider: aiResult.provider, contextSource: ctxSource })
   });
 
-  // ── Kirim via TimelinesAI (shared key) ───────────────────────────────
+  // ── Kirim via Kirimi (device milik agent) ────────────────────────────
   let sent      = false;
   let sendError = null;
 
   try {
-    await sendViaTimelinesAI(sender, aiResult.reply);
+    await sendViaKirimi(sender, aiResult.reply, agent.kirimi_device_id);
     sent = true;
-    safeLog('TIMELINESAI_REPLY_SENT', {
+    safeLog('KIRIMI_REPLY_SENT', {
       sessionId  : session.id,
       agent      : agent.name,
       recipient  : sender,
@@ -415,11 +454,11 @@ async function processIncomingMessage(body, agent) {
     });
   } catch (err) {
     sendError = err.message;
-    safeLog('TIMELINESAI_REPLY_SEND_FAILED', { sessionId: session.id, agent: agent.name, error: err.message }, 'error');
+    safeLog('KIRIMI_REPLY_SEND_FAILED', { sessionId: session.id, agent: agent.name, error: err.message }, 'error');
   }
 
   // ── LOG RINGKASAN TERMINAL (FULL RESPONSE) ──────────────────────────
-  if (isTerminalActive('TIMELINESAI')) {
+  if (isTerminalActive('KIRIMI')) {
     const D          = '═'.repeat(80);
     const sendStatus = sent ? `✅ Terkirim` : `❌ Gagal: ${sanitizeLog(sendError, 80)}`;
 
@@ -429,7 +468,7 @@ async function processIncomingMessage(body, agent) {
 
     console.log('');
     console.log(D);
-    console.log(`[TIMELINESAI] ⬇  PESAN PROPERTI MASUK & DIBALAS`);
+    console.log(`[KIRIMI] ⬇  PESAN PROPERTI MASUK & DIBALAS`);
     console.log(D);
     console.log(`Agent    : ${sanitizeLog(agent.name, 60)} (${maskPhone(agent.phone)})`);
     console.log(`Owner    : User ${sanitizeLog(agent.user_id || '-', 40)}`);
@@ -453,13 +492,13 @@ async function processIncomingMessage(body, agent) {
    BAGIAN 6 — CONTROLLER CLASS
 ══════════════════════════════════════════════════════════════════════════════ */
 
-class TimelinesAIChatController {
+class KirimiChatController {
 
   /* ─────────────────────────────────────────────────────────────────────
-     POST /api/timelinesai/webhook
-     Endpoint utama. Set URL ini di TimelinesAI → Integrations → Webhooks.
+     POST /api/kirimi/webhook
+     Endpoint utama. Set URL ini di Kirimi Dashboard → Device → Webhook.
 
-     Alur (identik dengan Fonnte):
+     Alur (identik dengan Fonnte/TimelinesAI):
        1. Terima payload → log raw
        2. detectEventType
        3. Jika bukan incoming → langsung return 200
@@ -469,22 +508,22 @@ class TimelinesAIChatController {
     const body = req.body || {};
 
     // ── Log raw payload ─────────────────────────────────────────────
-    console.log('\n╔══════════ TIMELINESAI WEBHOOK MASUK ══════════╗');
+    console.log('\n╔════════════ KIRIMI WEBHOOK MASUK ═════════════╗');
     console.log(`║ Time  : ${new Date().toISOString().padEnd(31)} ║`);
     console.log(`║ Keys  : ${String(Object.keys(body).join(', ')).substring(0, 31).padEnd(31)} ║`);
     console.log('╚═══════════════════════════════════════════════╝');
-    console.log('[TIMELINESAI RAW]', JSON.stringify(body).substring(0, 300));
+    console.log('[KIRIMI RAW]', JSON.stringify(body).substring(0, 300));
 
     // ── Detect event type ───────────────────────────────────────────
     const eventType = detectEventType(body);
-    console.log(`[TIMELINESAI EVENT] Type: ${eventType}`);
+    console.log(`[KIRIMI EVENT] Type: ${eventType}`);
 
-    // ── Handle status update ────────────────────────────────────────
+    // ── Handle status update (koneksi device) ──────────────────────
     if (eventType === 'message_status') {
       return res.status(process.env.HTTP_OK).json({ status: true, type: 'message_status', message: 'Status diterima' });
     }
 
-    // ── Handle send notification (pesan keluar / kita sendiri) ──────
+    // ── Handle send notification (pesan keluar / ack / failed) ──────
     if (eventType === 'send') {
       return res.status(process.env.HTTP_OK).json({ status: true, type: 'send', message: 'Send event diterima' });
     }
@@ -495,63 +534,63 @@ class TimelinesAIChatController {
     }
 
     // ── INCOMING MESSAGE ────────────────────────────────────────────
-    // Respond 200 SEKARANG sebelum proses AI (hindari TimelinesAI timeout)
+    // Respond 200 SEKARANG sebelum proses AI (hindari Kirimi timeout)
     res.status(process.env.HTTP_OK).json({ status: true, type: 'incoming', message: 'Webhook diterima' });
 
     // Proses di background (tidak block response)
     setImmediate(async () => {
       try {
-        const { accountPhone } = extractMessage(body);
+        const { deviceId } = extractMessage(body);
 
-        // Strategi 1: cari agent by nomor WA terhubung (whatsapp_account.phone)
+        // Strategi 1: cari agent by device_id (kirimi_device_id)
         let agent = null;
-        if (accountPhone) {
-          agent = await findAgentByAccount(accountPhone);
+        if (deviceId) {
+          agent = await findAgentByDevice(deviceId);
         }
 
-        // Strategi 2: jika tidak cocok, pakai agent pertama
+        // Strategi 2: jika tidak cocok, pakai agent pertama yang punya device
         if (!agent) {
-          const allAgents = await getAllAgents();
+          const allAgents = await getAllAgentsWithKirimi();
           if (allAgents.length > 0) {
             agent = allAgents[0];
-            console.log(`[TIMELINESAI AGENT] Auto-select: ${agent.name}`);
+            console.log(`[KIRIMI AGENT] Auto-select: ${agent.name}`);
           }
         }
 
         if (!agent) {
-          console.warn('[TIMELINESAI] Tidak ada agent aktif di database');
+          console.warn('[KIRIMI] Tidak ada agent dengan kirimi_device_id aktif di database');
           return;
         }
 
         await processIncomingMessage(body, agent);
 
       } catch (err) {
-        console.error('[TIMELINESAI BACKGROUND ERROR]', err.message, err.stack);
-        safeLog('TIMELINESAI_BACKGROUND_ERROR', { error: err.message }, 'error');
+        console.error('[KIRIMI BACKGROUND ERROR]', err.message, err.stack);
+        safeLog('KIRIMI_BACKGROUND_ERROR', { error: err.message }, 'error');
       }
     });
   }
 
   /* ─────────────────────────────────────────────────────────────────────
-     POST /api/timelinesai/webhook-raw
-     Debug endpoint — log semua payload mentah dari TimelinesAI
+     POST /api/kirimi/webhook-raw
+     Debug endpoint — log semua payload mentah dari Kirimi
   ───────────────────────────────────────────────────────────────────── */
   static async webhookRawCatcher(req, res) {
     const body = req.body || {};
     const ts   = new Date().toISOString();
 
-    console.log('\n╔════════════ TIMELINESAI RAW CATCHER ════════════╗');
-    console.log(`║ ${ts.padEnd(46)} ║`);
-    console.log(`║ Keys: ${String(Object.keys(body).join(', ')).substring(0, 39).padEnd(39)} ║`);
-    console.log('╚═════════════════════════════════════════════════╝');
-    console.log('[RAW PAYLOAD]', JSON.stringify(body, null, 2));
+    console.log('\n╔════════════ KIRIMI RAW CATCHER ═════════════╗');
+    console.log(`║ ${ts.padEnd(43)} ║`);
+    console.log(`║ Keys: ${String(Object.keys(body).join(', ')).substring(0, 37).padEnd(37)} ║`);
+    console.log('╚══════════════════════════════════════════════╝');
+    console.log('[KIRIMI RAW PAYLOAD]', JSON.stringify(body, null, 2));
 
     const eventType = detectEventType(body);
-    console.log('[TIMELINESAI RAW CATCHER] Detected event:', eventType);
+    console.log('[KIRIMI RAW CATCHER] Detected event:', eventType);
 
     if (eventType === 'incoming') {
-      console.log('[TIMELINESAI RAW CATCHER] ✅ Ini incoming message → teruskan ke handler...');
-      return TimelinesAIChatController.handleInboundMessage(req, res);
+      console.log('[KIRIMI RAW CATCHER] ✅ Ini incoming message → teruskan ke handler...');
+      return KirimiChatController.handleInboundMessage(req, res);
     }
 
     return res.status(process.env.HTTP_OK).json({
@@ -564,59 +603,62 @@ class TimelinesAIChatController {
   }
 
   /* ─────────────────────────────────────────────────────────────────────
-     POST /api/timelinesai/simulate
+     POST /api/kirimi/simulate
      Test endpoint — simulasi pesan masuk tanpa WA asli
   ───────────────────────────────────────────────────────────────────── */
   static async simulateInboundMessage(req, res) {
     const {
       sender   = '628999888777',
       message  = 'Halo, saya mau tanya properti',
-      account  = null,            // nomor WA agent terhubung (whatsapp_account.phone)
+      device   = null,            // device_id Kirimi (kirimi_device_id)
       name     = 'Test Customer',
       dry_run  = false
     } = req.body || {};
 
-    console.log('\n[TIMELINESAI SIMULATE] 🧪 Simulasi pesan masuk');
-    console.log(`  From    : ${sender} (${name})`);
-    console.log(`  Account : ${account || '(auto)'}`);
-    console.log(`  Message : ${message}`);
-    console.log(`  Dry run : ${dry_run}`);
+    console.log('\n[KIRIMI SIMULATE] 🧪 Simulasi pesan masuk');
+    console.log(`  From   : ${sender} (${name})`);
+    console.log(`  Device : ${device || '(auto)'}`);
+    console.log(`  Message: ${message}`);
+    console.log(`  Dry run: ${dry_run}`);
 
     if (!sender || !message) {
       return res.status(process.env.HTTP_BAD_REQUEST).json({ success: false, message: 'Wajib ada: sender dan message' });
     }
 
-    let agent = account ? await findAgentByAccount(account) : null;
+    let agent = device ? await findAgentByDevice(device) : null;
     if (!agent) {
-      const all = await getAllAgents();
+      const all = await getAllAgentsWithKirimi();
       if (all.length > 0) agent = all[0];
     }
 
     if (!agent) {
       return res.status(process.env.HTTP_NOT_FOUND).json({
         success : false,
-        message : 'Tidak ada agent aktif. Cek /api/timelinesai/status'
+        message : 'Tidak ada agent dengan kirimi_device_id. Cek /api/kirimi/status'
       });
     }
 
     if (dry_run) {
       return res.json({
-        success  : true,
-        dry_run  : true,
-        agent    : agent.name,
+        success : true,
+        dry_run : true,
+        agent   : agent.name,
         sender,
         message,
-        hint     : 'Dry run — tidak ada AI / tidak ada kirim'
+        hint    : 'Dry run — tidak ada AI / tidak ada kirim'
       });
     }
 
-    // Proses penuh — bentuk payload menyerupai webhook TimelinesAI
+    // Proses penuh — bentuk payload menyerupai webhook Kirimi
     try {
       const fakeBody = {
-        event_type: 'message:received:new',
-        chat   : { chat_id: `sim_${Date.now()}`, phone: sender, full_name: name, is_group: false },
-        whatsapp_account: { phone: account || agent.phone },
-        message: { text: message, direction: 'received', message_uid: `sim_${Date.now()}`, sender: { phone: sender, full_name: name } }
+        type      : 'message',
+        device_id : device || agent.kirimi_device_id || '',
+        from      : sender,
+        pushName  : name,
+        message,
+        messageId : `sim_${Date.now()}`,
+        fromMe    : false
       };
       await processIncomingMessage(fakeBody, agent);
 
@@ -633,19 +675,20 @@ class TimelinesAIChatController {
   }
 
   /* ─────────────────────────────────────────────────────────────────────
-     GET /api/timelinesai/agents
+     GET /api/kirimi/agents
   ───────────────────────────────────────────────────────────────────── */
-  static async getRegisteredAgents(req, res) {
+  static async getAgentsWithKirimi(req, res) {
     try {
-      const agents = await getAllAgents();
+      const agents = await getAllAgentsWithKirimi();
       return res.json({
         success : true,
         data    : {
           agents: agents.map(a => ({
-            user_id : a.user_id,
-            name    : a.name,
-            phone   : a.phone
-            // TIDAK return API key ke client (security)
+            user_id      : a.user_id,
+            name         : a.name,
+            phone        : a.phone,
+            device_id    : a.kirimi_device_id,
+            kirimi_ready : true
           })),
           total: agents.length
         }
@@ -656,14 +699,14 @@ class TimelinesAIChatController {
   }
 
   /* ─────────────────────────────────────────────────────────────────────
-     GET /api/timelinesai/agent-chats/:agentName
+     GET /api/kirimi/agent-chats/:agentName
   ───────────────────────────────────────────────────────────────────── */
   static async getAgentChats(req, res) {
     try {
       const { agentName }              = req.params;
       const { limit = 50, offset = 0 } = req.query;
 
-      const source   = `timelinesai_${agentName.toLowerCase().replace(/\s+/g, '_')}`;
+      const source   = `kirimi_${agentName.toLowerCase().replace(/\s+/g, '_')}`;
       const sessions = await ChatSession.findAll({
         where  : { source },
         order  : [['updatedAt', 'DESC']],
@@ -682,12 +725,12 @@ class TimelinesAIChatController {
   }
 
   /* ─────────────────────────────────────────────────────────────────────
-     GET /api/timelinesai/chat-history/:sessionId
+     GET /api/kirimi/chat-history/:sessionId
   ───────────────────────────────────────────────────────────────────── */
   static async getChatHistory(req, res) {
     try {
-      const { sessionId }  = req.params;
-      const { limit = 100} = req.query;
+      const { sessionId }   = req.params;
+      const { limit = 100 } = req.query;
 
       const session = await ChatSession.findByPk(sessionId);
       if (!session) return res.status(process.env.HTTP_NOT_FOUND).json({ success: false, message: 'Sesi tidak ditemukan' });
@@ -712,29 +755,41 @@ class TimelinesAIChatController {
   }
 
   /* ─────────────────────────────────────────────────────────────────────
-     GET /api/timelinesai/status
+     GET /api/kirimi/status
   ───────────────────────────────────────────────────────────────────── */
-  static async getStatus(req, res) {
+  static async getKirimiStatus(req, res) {
     try {
-      const agents     = await getAllAgents();
-      const keyPresent = !!String(process.env.TIMELINESAI_API_KEY || '').trim();
+      const allAgents = await User.findAll({
+        where      : { privilege: 'agent', status: 1 },
+        attributes : ['user_id', 'name', 'phone', 'kirimi_device_id']
+      });
+
+      const accountConfigured = !!String(process.env.KIRIMI_USER_CODE || '').trim()
+                             && !!String(process.env.KIRIMI_SECRET    || '').trim();
+
+      const ready = allAgents.filter(a => a.kirimi_device_id && String(a.kirimi_device_id).trim().length > 2);
 
       return res.json({
         success : true,
         data    : {
-          api_key_configured: keyPresent,           // boolean saja — JANGAN return key
+          account_configured: accountConfigured,    // boolean — JANGAN return user_code/secret
           api_base          : apiBase(),
-          terminal_active   : isTerminalActive('TIMELINESAI'),
-          total             : agents.length,
-          agents            : agents.map(a => ({
-            user_id   : a.user_id,
-            name      : a.name,
-            phone     : a.phone,
-            has_phone : !!(a.phone && a.phone.trim()),
-            ready     : !!(a.phone && a.phone.trim()) && keyPresent
+          send_path         : sendPath(),
+          terminal_active   : isTerminalActive('KIRIMI'),
+          total             : allAgents.length,
+          kirimi_ready      : ready.length,
+          agents            : allAgents.map(a => ({
+            user_id    : a.user_id,
+            name       : a.name,
+            phone      : a.phone,
+            device_id  : a.kirimi_device_id,
+            has_device : !!(a.kirimi_device_id && String(a.kirimi_device_id).trim().length > 2),
+            ready      : !!(a.kirimi_device_id && String(a.kirimi_device_id).trim().length > 2) && accountConfigured
           }))
         },
-        message: keyPresent ? `${agents.length} agent siap TimelinesAI` : 'TIMELINESAI_API_KEY belum di-set di .env'
+        message: accountConfigured
+          ? `${ready.length} dari ${allAgents.length} agent siap Kirimi`
+          : 'KIRIMI_USER_CODE / KIRIMI_SECRET belum di-set di .env'
       });
     } catch (err) {
       return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
@@ -742,22 +797,31 @@ class TimelinesAIChatController {
   }
 
   /* ─────────────────────────────────────────────────────────────────────
-     GET /api/timelinesai/debug-info
+     GET /api/kirimi/debug-info
   ───────────────────────────────────────────────────────────────────── */
   static async getDebugInfo(req, res) {
     try {
-      const agents = await getAllAgents();
+      const agents = await User.findAll({
+        where      : { privilege: 'agent', status: 1 },
+        attributes : ['user_id', 'name', 'phone', 'kirimi_device_id']
+      });
 
       return res.json({
         success: true,
         data   : {
-          server: { port: process.env.PORT || 5005, webhookUrl: 'POST /api/timelinesai/webhook' },
-          api   : { base: apiBase(), key_configured: !!String(process.env.TIMELINESAI_API_KEY || '').trim() },
+          server: { port: process.env.PORT || 5005, webhookUrl: 'POST /api/kirimi/webhook' },
+          api   : {
+            base               : apiBase(),
+            send_path          : sendPath(),
+            account_configured : !!String(process.env.KIRIMI_USER_CODE || '').trim() && !!String(process.env.KIRIMI_SECRET || '').trim()
+          },
           agents: agents.map(a => ({
             user_id          : a.user_id,
             name             : a.name,
             phone_raw        : a.phone,
-            phone_normalized : normalizePhone(a.phone || '')
+            phone_normalized : normalizePhone(a.phone || ''),
+            device_id        : a.kirimi_device_id,
+            has_device       : !!(a.kirimi_device_id && String(a.kirimi_device_id).trim().length > 2)
           }))
         }
       });
@@ -767,34 +831,49 @@ class TimelinesAIChatController {
   }
 
   /* ─────────────────────────────────────────────────────────────────────
-     GET /api/timelinesai/check-api
-     Test apakah TimelinesAI API bisa dihubungi (paralel checkFonnteApi).
+     GET /api/kirimi/check-api
+     Test apakah Kirimi API bisa dihubungi (paralel checkFonnteApi).
+     Memakai /v1/device-status dengan device_id agent pertama.
   ───────────────────────────────────────────────────────────────────── */
-  static async checkTimelinesApi(req, res) {
+  static async checkKirimiApi(req, res) {
     try {
-      const apiKey = String(process.env.TIMELINESAI_API_KEY || '').trim();
-      if (!apiKey) {
-        return res.status(process.env.HTTP_NOT_FOUND).json({ success: false, message: 'TIMELINESAI_API_KEY belum di-set di .env' });
+      const userCode = String(process.env.KIRIMI_USER_CODE || '').trim();
+      const secret   = String(process.env.KIRIMI_SECRET    || '').trim();
+      if (!userCode || !secret) {
+        return res.status(process.env.HTTP_NOT_FOUND).json({ success: false, message: 'KIRIMI_USER_CODE / KIRIMI_SECRET belum di-set di .env' });
       }
 
+      const agents = await getAllAgentsWithKirimi();
+      if (agents.length === 0) {
+        return res.status(process.env.HTTP_NOT_FOUND).json({ success: false, message: 'Tidak ada agent dengan kirimi_device_id' });
+      }
+
+      const target  = agents[0];
       const results = {};
-      // GET chats — endpoint baca untuk verifikasi konektivitas + auth
+
+      // device-status — verifikasi konektivitas + auth + device terhubung
       try {
-        const r = await axios.get(`${apiBase()}/chats`, {
-          headers: { Authorization: `Bearer ${apiKey}` },
-          params : { page: 1, per_page: 1 },
-          timeout: 8000
-        });
-        results.chats = { status: r.status, preview: JSON.stringify(r.data).substring(0, 300) };
+        const r = await axios.post(
+          `${apiBase()}/v1/device-status`,
+          { user_code: userCode, secret, device_id: String(target.kirimi_device_id).trim() },
+          { headers: { 'Content-Type': 'application/json' }, timeout: 8000 }
+        );
+        results.device_status = { status: r.status, ok: true, preview: JSON.stringify(r.data).substring(0, 300) };
       } catch (err) {
-        results.chats = { status: err?.response?.status || 'error', error: err.message };
+        results.device_status = { status: err?.response?.status || 'error', ok: false, error: err.message, body: JSON.stringify(err?.response?.data || {}).substring(0, 200) };
       }
 
-      return res.json({ success: true, api_base: apiBase(), results });
+      return res.json({
+        success  : true,
+        agent    : target.name,
+        device_id: target.kirimi_device_id,
+        api_base : apiBase(),
+        results
+      });
     } catch (err) {
       return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 }
 
-module.exports = TimelinesAIChatController;
+module.exports = KirimiChatController;

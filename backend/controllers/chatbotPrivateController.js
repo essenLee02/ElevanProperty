@@ -718,7 +718,7 @@ class ResponseBuilder {
 }
 
 // ─── ResponseBuilderWhatsApp ──────────────────────────────────────────────────
-// Format khusus untuk WhatsApp terminal message (Fonnte, ChakraHQ, TimelinesAI)
+// Format khusus untuk WhatsApp terminal message (Fonnte, Kirimi, TimelinesAI)
 // Dengan property images, agent name, dan bolder formatting untuk readability
 
 class ResponseBuilderWhatsApp {
@@ -1053,6 +1053,8 @@ class ResponseBuilderWhatsApp {
     if (rfL) lines.push(rfL);
     const ancL = fmt(isId ? 'Patokan lokasi' : 'Anchor', brief.anchorPoint);
     if (ancL) lines.push(ancL);
+    const viewL = fmt('Viewing', brief.viewingPreference);
+    if (viewL) lines.push(viewL);
 
     const bulletBlock = lines.join('\n');
 
@@ -2616,7 +2618,9 @@ class ConversationQualifier {
       },
       budget: {
         // Append the rental period basis the customer stated ("/2 minggu", "/bulan").
-        value : filters.budget?.text
+        // Skip budget yang AMBIGU (mis. "15-20" tanpa unit dari "lantai 15-20") —
+        // jangan tampilkan sebagai budget asli.
+        value : (filters.budget?.text && !filters.budget?.ambiguous)
           ? filters.budget.text + ConversationQualifier.#budgetPeriodSuffix(custText)
           : 'UNKNOWN',
         source: wasStated(custText, ['juta', 'ribu', 'miliar', 'jt', 'm ', 'rb', 'budget', 'harga'])
@@ -2656,14 +2660,22 @@ class ConversationQualifier {
         source: profile.hasFurnishing ? 'stated' : 'inferred',
       },
       leaseDuration: {
-        // Prefer qualState.leaseDuration (exact customer response to Q10).
-        // Null when transaction type is not rent (suppresses the line in summary).
+        // Prefer qualState.leaseDuration (exact customer response to Q10). Jika customer
+        // menyebut durasi LANGSUNG di awal ("butuh sewa 2 minggu") tanpa Q10 ditanya,
+        // tetap tangkap via #extractLeaseDuration(custText) — tidak bergantung flag profil.
+        // Null saat transaksi bukan rent (menyembunyikan baris di summary).
         value : filters.transactionType === 'rent'
-          ? (qualState.leaseDuration
-              ? qualState.leaseDuration
-              : (profile.hasLeaseDuration ? this.#extractLeaseDuration(custText) : 'UNKNOWN'))
+          ? (qualState.leaseDuration || this.#extractLeaseDuration(custText))
           : null,
-        source: (qualState.leaseDuration || profile.hasLeaseDuration) ? 'stated' : 'UNKNOWN',
+        source: (qualState.leaseDuration || profile.hasLeaseDuration
+                 || this.#extractLeaseDuration(custText) !== 'UNKNOWN') ? 'stated' : 'UNKNOWN',
+      },
+      viewingPreference: {
+        // Q9 — preferensi survey/viewing. Customer bisa minta langsung lihat katalog
+        // tanpa survei ("Mau lihat katalognya aja, gak ada waktu survei"), atau minta
+        // dijadwalkan viewing. UNKNOWN → baris disembunyikan.
+        value : this.#extractViewingPreference(custText),
+        source: this.#extractViewingPreference(custText) !== 'UNKNOWN' ? 'stated' : 'UNKNOWN',
       },
       alternativeAreas: {
         value : profile.hasAlternativeArea
@@ -2814,12 +2826,46 @@ class ConversationQualifier {
   }
 
   static #extractLeaseDuration(custText) {
-    const m = custText.match(/(\d+)\s*(tahun|year)/i);
-    if (m) return `${m[1]} tahun`;
-    if (/setahun|satu tahun|1 year/.test(custText)) return '1 tahun';
-    if (/6 bulan|enam bulan|6 months/.test(custText)) return '6 bulan';
+    // Tangkap durasi sewa untuk SEMUA satuan: hari/malam/minggu/bulan/tahun (+ Inggris).
+    // Sebelumnya hanya 'tahun' yang ditangkap → "2 minggu", "10 hari", "6 bulan" hilang
+    // dari summary. Cari angka+satuan eksplisit (mis. "butuh sewa 2 minggu").
+    const m = custText.match(/(\d+)\s*(hari|malam|minggu|bulan|tahun|day|night|week|month|year)s?\b/i);
+    if (m) {
+      const unitMap = {
+        hari: 'hari', day: 'hari', malam: 'malam', night: 'malam',
+        minggu: 'minggu', week: 'minggu', bulan: 'bulan', month: 'bulan',
+        tahun: 'tahun', year: 'tahun',
+      };
+      const unit = unitMap[m[2].toLowerCase()] || m[2].toLowerCase();
+      return `${m[1]} ${unit}`;
+    }
+    if (/setahun|satu tahun|1 year/.test(custText))   return '1 tahun';
+    if (/sebulan|satu bulan|1 month/.test(custText))  return '1 bulan';
+    if (/seminggu|satu minggu|1 week/.test(custText)) return '1 minggu';
     // Return 'UNKNOWN' (not 'Disebutkan') so the summary line is suppressed
     // when no specific duration was stated by the customer.
+    return 'UNKNOWN';
+  }
+
+  /**
+   * Preferensi VIEWING/SURVEY (Q9). Customer sering minta langsung lihat katalog tanpa
+   * survei ("Mau lihat katalognya aja, gak ada waktu survei") ATAU minta dijadwalkan
+   * viewing. Ditangkap agar agent tahu langkah berikutnya. UNKNOWN → baris disembunyikan.
+   */
+  static #extractViewingPreference(custText) {
+    const wantsCatalogOnly =
+      /(lihat|liat)\s+(katalog|listing|pilihan)/.test(custText) ||
+      /katalog\s*(nya)?\s*(aja|saja|dulu)/.test(custText) ||
+      /langsung\s+(katalog|listing|rekomendasi)/.test(custText) ||
+      /tanpa\s+(survey|survei|viewing|lihat\s+lokasi)/.test(custText) ||
+      /(ga|gak|engga|enggak|nggak|tidak|tdk|ndak)\s*(ada|punya|sempat)?\s*waktu\s*(untuk|buat)?\s*(survey|survei|viewing|lihat)/.test(custText);
+    if (wantsCatalogOnly) return 'Butuh lihat katalog saja';
+
+    const wantsScheduled =
+      /(jadwal(kan)?|atur|booking)\s+(viewing|survey|survei|kunjungan)/.test(custText) ||
+      /(mau|pengen|ingin|bisa)\s+(viewing|survey|survei|lihat\s+unit|lihat\s+lokasi)/.test(custText);
+    if (wantsScheduled) return 'Mau dijadwalkan viewing';
+
     return 'UNKNOWN';
   }
 
@@ -3131,7 +3177,7 @@ class ChatbotPrivateService {
   }
 
   /**
-   * Generate response untuk WhatsApp terminal message (Fonnte, ChakraHQ, TimelinesAI).
+   * Generate response untuk WhatsApp terminal message (Fonnte, Kirimi, TimelinesAI).
    * Menggunakan ResponseBuilderWhatsApp (format WhatsApp dengan images + agent name).
    *
    * @param {object} params
@@ -3144,7 +3190,7 @@ class ChatbotPrivateService {
    * @returns {Promise<{reply, source, controller, fallbackUsed, ...}>}
    */
   /**
-   * Generate response untuk WhatsApp terminal message (Fonnte, ChakraHQ, TimelinesAI).
+   * Generate response untuk WhatsApp terminal message (Fonnte, Kirimi, TimelinesAI).
    *
    * QUALIFICATION FLOW (sebelum tampil listing):
    *   Implements CUSTOMER (RENTER/BUYER) FLOW Q0–Q12.
@@ -3682,7 +3728,7 @@ module.exports.generatePrivateTerminalMassege  = (params)  => ChatbotPrivateServ
 module.exports.generatePrivateContactReply     = (payload) => ChatbotPrivateService.generateContactFormReply(payload);
 
 /**
- * Generate private WhatsApp reply for WhatsApp controllers (Fonnte, ChakraHQ, TimelinesAI).
+ * Generate private WhatsApp reply for WhatsApp controllers (Fonnte, Kirimi, TimelinesAI).
  * Simplified version with agent name.
  */
 module.exports.generatePrivateWhatsappReply = (payload) => {

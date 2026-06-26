@@ -76,15 +76,15 @@ app.post('/', (req, res) => {
     return TimelinesAIChatController.handleInboundMessage(req, res);
   }
 
-  if (active === 'CHAKRAHQ') {
-    const ChakraHQController = require('./controllers/chakraHQController');
-    return ChakraHQController.handleInboundMessage(req, res);
+  if (active === 'KIRIMI') {
+    const KirimiChatController = require('./controllers/kirimiChatController');
+    return KirimiChatController.handleInboundMessage(req, res);
   }
 
   // Fallback jika MASSEGE_TERMINAL tidak dikenali
   return res.status(process.env.HTTP_OK).json({
     success : true,
-    message : 'Webhook diterima. Set MASSEGE_TERMINAL=FONNTE|TIMELINESAI|CHAKRAHQ di .env untuk routing.'
+    message : 'Webhook diterima. Set MASSEGE_TERMINAL=FONNTE|TIMELINESAI|KIRIMI di .env untuk routing.'
   });
 });
 
@@ -98,7 +98,7 @@ app.use((req, res, next) => {
     '/api/fonnte/webhook',
     '/api/timelinesai/webhook',
     '/api/whatsapp/webhook',
-    '/api/chakrahq/webhook'
+    '/api/kirimi/webhook'
   ];
   if (webhookPaths.includes(req.path) && req.method === 'POST') {
     const contentType  = req.headers['content-type'] || '(no content-type)';

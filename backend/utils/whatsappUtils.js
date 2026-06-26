@@ -2,7 +2,7 @@
  * whatsappUtils.js
  *
  * Shared utility functions untuk semua WhatsApp platform controllers.
- * (Fonnte, ChakraHQ, TimelinesAI)
+ * (Fonnte, Kirimi, TimelinesAI)
  *
  * Menghilangkan duplikasi kode di tiga controller dengan menyediakan:
  *  - normalizePhone / isValidPhone
@@ -56,7 +56,7 @@ function isValidPhone(phone) {
  * Find or create a ChatSession untuk customer.
  *
  * Source format: `{platform}_{agentSlug}`
- * Contoh: 'fonnte_leo_felix', 'chakrahq_natasha', 'timelinesai_budi'
+ * Contoh: 'fonnte_leo_felix', 'kirimi_natasha', 'timelinesai_budi'
  *
  * @param {object} params
  * @param {string} params.customerPhone - Nomor telepon customer (raw)
@@ -166,7 +166,7 @@ function maskName(name) {
  * Log terminal lengkap setelah pesan properti dibalas AI.
  *
  * @param {object} params
- * @param {'FONNTE'|'CHAKRAHQ'|'TIMELINESAI'} params.platform   - Key untuk isTerminalActive()
+ * @param {'FONNTE'|'KIRIMI'|'TIMELINESAI'} params.platform   - Key untuk isTerminalActive()
  * @param {string}  params.tag         - Prefix label, misal '[FONNTE]'
  * @param {object}  params.agent       - { name, phone }
  * @param {string}  params.customerPhone
@@ -225,7 +225,7 @@ function logTerminalSummary({
  * Format identik dengan blok skip inline fonnteChatController.
  *
  * @param {object} params
- * @param {'FONNTE'|'TIMELINESAI'|'CHAKRAHQ'} params.platform
+ * @param {'FONNTE'|'TIMELINESAI'|'KIRIMI'} params.platform
  * @param {string}  params.tag
  * @param {object}  params.agent   - { name, phone }
  * @param {string}  params.customerPhone

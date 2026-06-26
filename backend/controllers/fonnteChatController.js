@@ -33,7 +33,7 @@ const { sanitizeLog, maskPhone, maskName, appendSentViaTag } = require('../utils
 /* ══════════════════════════════════════════════════════════════════════════════
    BAGIAN 0 — MESSAGE-ID DEDUP CACHE
    Prevents double-processing when Fonnte retries a webhook delivery.
-   Shared with ChakraHQ & TimelinesAI via utils/messageDedup.js (stable IDs only;
+   Shared with Kirimi & TimelinesAI via utils/messageDedup.js (stable IDs only;
    synthetic fonnte_<timestamp> IDs are ignored automatically).
 ══════════════════════════════════════════════════════════════════════════════ */
 
@@ -211,7 +211,7 @@ async function sendViaFonnte(targetPhone, message, agentToken) {
  * @param {string} propertyCtx  - Konteks properti (dari Rumah123 atau flat JSON)
  */
 // ✅ UPDATED: generateAIReply removed — now using whatsappAIService.generateWhatsAppAIReply
-// This centralizes AI logic across all WhatsApp platforms (Fonnte, ChakraHQ, TimelinesAI)
+// This centralizes AI logic across all WhatsApp platforms (Fonnte, Kirimi, TimelinesAI)
 
 /* ══════════════════════════════════════════════════════════════════════════════
    BAGIAN 5 — PROSES PESAN MASUK (background)
@@ -282,7 +282,9 @@ async function processIncomingMessage(body, agent) {
   let isContinuation = false;
   if (!isPropertyQuery) {
     try {
-      const history = await getConversationHistory(session.id, 6);
+      // Window 12 (bukan 6): alur kualifikasi panjang butuh history lebih lebar agar
+      // kata TIPE properti & bukti in-flow tetap terlihat saat jawaban pendek.
+      const history = await getConversationHistory(session.id, 12);
       isContinuation = isPropertyContextContinuation(message, history);
     } catch (_) {
       // Jika gagal ambil history, abaikan continuation check (fallthrough ke skip)

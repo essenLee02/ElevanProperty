@@ -52,7 +52,7 @@ exports.getCurrentProfile = async (req, res) => {
 
     const user = await User.findOne({
       where: { refresh_token: refreshTokenFromCookie },
-      attributes: ['user_id', 'name', 'username', 'phone', 'birthdate', 'status', 'fonnte_token', 'chakra_hq_token']
+      attributes: ['user_id', 'name', 'username', 'phone', 'birthdate', 'status', 'fonnte_token', 'kirimi_device_id']
     });
 
     if (!user) {
@@ -78,7 +78,7 @@ exports.updateDataAgent = async (req, res) => {
   const refreshTokenFromCookie = req.cookies ? req.cookies[refreshCookieName] : null;
 
   // username sengaja TIDAK diambil dari body — tidak boleh diupdate
-  const { name, phone, birthdate, password, fonnte_token, chakra_hq_token } = req.body;
+  const { name, phone, birthdate, password, fonnte_token, kirimi_device_id } = req.body;
 
   const requestInfo = {
     ip:    req.ip || req.connection?.remoteAddress || 'unknown',
@@ -148,11 +148,11 @@ exports.updateDataAgent = async (req, res) => {
       : null;
     updateFields.fonnte_token = cleanFonnte || null;
 
-    // ChakraHQ Access Token — boleh kosong / null
-    const cleanChakra = chakra_hq_token !== undefined && chakra_hq_token !== null
-      ? String(chakra_hq_token).trim()
+    // Kirimi Device ID — boleh kosong / null
+    const cleanKirimi = kirimi_device_id !== undefined && kirimi_device_id !== null
+      ? String(kirimi_device_id).trim()
       : null;
-    updateFields.chakra_hq_token = cleanChakra || null;
+    updateFields.kirimi_device_id = cleanKirimi || null;
 
     // Metadata update
     updateFields.updated_date = new Date();
@@ -171,7 +171,7 @@ exports.updateDataAgent = async (req, res) => {
     /* 5. Kembalikan data terbaru (tanpa password) */
     const updatedUser = await User.findOne({
       where: { user_id: user.user_id },
-      attributes: ['user_id', 'name', 'username', 'phone', 'birthdate', 'fonnte_token', 'chakra_hq_token']
+      attributes: ['user_id', 'name', 'username', 'phone', 'birthdate', 'fonnte_token', 'kirimi_device_id']
     });
 
     // Log ke terminal

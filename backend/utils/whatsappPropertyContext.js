@@ -7,7 +7,7 @@
  *   1. Rumah123 live data (jika APIFY_API_TOKEN tersedia dan quota ada)
  *   2. Fallback: backend/asset/json_data/indonesia_property_36_provinces_flat.json
  *
- * Digunakan oleh: fonnteChatController, chakraHQController, timelinesAIChatController
+ * Digunakan oleh: fonnteChatController, kirimiChatController, timelinesAIChatController
  */
 
 'use strict';

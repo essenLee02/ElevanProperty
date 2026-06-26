@@ -12,7 +12,7 @@ function normalizeLocation(value = '') {
 }
 
 function resolveLocationAndSource(locationOrSource = '', sourceMaybe = '') {
-  const knownSources = ['website_chatbot', 'contact_form', 'whatsapp_fonnte', 'whatsapp', 'whatsapp_chakrahq', 'whatsapp_timelinesai'];
+  const knownSources = ['website_chatbot', 'contact_form', 'whatsapp_fonnte', 'whatsapp', 'whatsapp_kirimi', 'whatsapp_timelinesai'];
   const third = String(locationOrSource || '').trim();
   const fourth = String(sourceMaybe || '').trim();
 

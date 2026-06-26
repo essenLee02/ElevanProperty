@@ -1,7 +1,7 @@
 /**
  * whatsappAIService.js
  *
- * Unified AI response service untuk semua WhatsApp controllers (Fonnte, ChakraHQ, TimelinesAI).
+ * Unified AI response service untuk semua WhatsApp controllers (Fonnte, Kirimi, TimelinesAI).
  *
  * ALUR LENGKAP:
  *   1. Fetch property context (Rumah123 / flat JSON)

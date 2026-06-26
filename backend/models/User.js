@@ -19,8 +19,8 @@ const sequelize = require('../config/database');
  * - created_by    : siapa yang melakukan registrasi (default 'Self-Register')
  * - status        : 1 = aktif, 2 = blocked, 3 = delete
  * - privilege     : level akses / role (nullable)
- * - fonnte_token  : Fonnte token milik agent (untuk kirim WA via Fonnte, nullable)
- * - chakra_hq_token: ChakraHQ Access Token milik agent (Bearer token untuk API ChakraHQ, nullable)
+ * - fonnte_token     : Fonnte token milik agent (untuk kirim WA via Fonnte, nullable)
+ * - kirimi_device_id : Device ID Kirimi milik agent (mis. "D-3OCA6"; user_code & secret di .env, nullable)
  */
 const User = sequelize.define('User', {
   user_id: {
@@ -72,11 +72,11 @@ const User = sequelize.define('User', {
     defaultValue: null,
     comment: 'Fonnte token milik agent (untuk kirim WA via Fonnte)'
   },
-  chakra_hq_token: {
-    type: DataTypes.STRING(2000),
+  kirimi_device_id: {
+    type: DataTypes.STRING(50),
     allowNull: true,
     defaultValue: null,
-    comment: 'ChakraHQ Access Token milik agent (Bearer token untuk API ChakraHQ)'
+    comment: 'Device ID Kirimi milik agent (mis. D-3OCA6). user_code & secret akun di .env (KIRIMI_USER_CODE/KIRIMI_SECRET)'
   },
   created_date: {
     type: DataTypes.DATE,

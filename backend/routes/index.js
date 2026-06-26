@@ -49,7 +49,7 @@ const rumah123Controller         = require('../controllers/rumah123Controller');
 const whatsappInboundController  = require('../controllers/whatsappInboundController');
 const timelinesAIChatController  = require('../controllers/timelinesAIChatController');
 const fonnteChatController       = require('../controllers/fonnteChatController');
-const chakraHQController         = require('../controllers/chakraHQController');
+const kirimiChatController       = require('../controllers/kirimiChatController');
 
 // Auth controllers
 const registerController         = require('../controllers/registerController');
@@ -113,7 +113,7 @@ router.put('/profile/update-agent',  verifyToken, profileController.updateDataAg
 
 /* ══════════════════════════════════════════════════════════════════════════════
    WEBHOOK ROUTES — Public tapi rate-limited
-   (Dikirim dari platform eksternal: Fonnte, ChakraHQ, TimelinesAI)
+   (Dikirim dari platform eksternal: Fonnte, Kirimi, TimelinesAI)
 ══════════════════════════════════════════════════════════════════════════════ */
 
 // Fonnte legacy webhook
@@ -132,9 +132,9 @@ router.post('/fonnte-chat/webhook-raw',  webhookLimiter, fonnteChatController.we
 router.post('/timelinesai/webhook',      webhookLimiter, timelinesAIChatController.handleInboundMessage);
 router.post('/timelinesai/webhook-raw',  webhookLimiter, timelinesAIChatController.webhookRawCatcher);
 
-// ChakraHQ webhook (public)
-router.post('/chakrahq/webhook',         webhookLimiter, chakraHQController.handleInboundMessage);
-router.post('/chakrahq/webhook-raw',     webhookLimiter, chakraHQController.webhookRawCatcher);
+// Kirimi webhook (public)
+router.post('/kirimi/webhook',           webhookLimiter, kirimiChatController.handleInboundMessage);
+router.post('/kirimi/webhook-raw',       webhookLimiter, kirimiChatController.webhookRawCatcher);
 
 /* ══════════════════════════════════════════════════════════════════════════════
    WHATSAPP ADMIN ROUTES — Butuh login (verifyToken)
@@ -162,14 +162,14 @@ router.get('/timelinesai/chat-history/:sessionId',verifyToken, timelinesAIChatCo
 router.get('/timelinesai/status',                 verifyToken, timelinesAIChatController.getStatus);
 router.get('/timelinesai/check-api',              verifyToken, timelinesAIChatController.checkTimelinesApi);
 
-// ChakraHQ admin endpoints (butuh login)
-router.post('/chakrahq/simulate',                      verifyToken, chakraHQController.simulateInboundMessage);
-router.get('/chakrahq/debug-info',                     verifyToken, chakraHQController.getDebugInfo);
-router.get('/chakrahq/agents',                         verifyToken, chakraHQController.getAgentsWithChakra);
-router.get('/chakrahq/agent-chats/:agentName',         verifyToken, chakraHQController.getAgentChats);
-router.get('/chakrahq/chat-history/:sessionId',        verifyToken, chakraHQController.getChatHistory);
-router.get('/chakrahq/status',                         verifyToken, chakraHQController.getChakraStatus);
-router.get('/chakrahq/check-api',                      verifyToken, chakraHQController.checkChakraApi);
+// Kirimi admin endpoints (butuh login)
+router.post('/kirimi/simulate',                        verifyToken, kirimiChatController.simulateInboundMessage);
+router.get('/kirimi/debug-info',                       verifyToken, kirimiChatController.getDebugInfo);
+router.get('/kirimi/agents',                           verifyToken, kirimiChatController.getAgentsWithKirimi);
+router.get('/kirimi/agent-chats/:agentName',           verifyToken, kirimiChatController.getAgentChats);
+router.get('/kirimi/chat-history/:sessionId',          verifyToken, kirimiChatController.getChatHistory);
+router.get('/kirimi/status',                           verifyToken, kirimiChatController.getKirimiStatus);
+router.get('/kirimi/check-api',                        verifyToken, kirimiChatController.checkKirimiApi);
 
 /* ══════════════════════════════════════════════════════════════════════════════
    UTILITY ROUTES
