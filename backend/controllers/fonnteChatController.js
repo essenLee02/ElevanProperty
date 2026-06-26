@@ -28,7 +28,7 @@ const { hasPropertyKeyword,
         isPropertyContextContinuation } = require('../utils/propertyKeywordFilter');
 const { generateWhatsAppAIReply }       = require('../services/whatsappAIService');
 const { getConversationHistory }        = require('../services/sessionService');
-const { sanitizeLog, maskPhone, maskName, appendSentViaTag } = require('../utils/whatsappUtils');
+const { sanitizeLog, maskPhone, maskName, appendSentViaTag, isOwnEcho } = require('../utils/whatsappUtils');
 
 /* ══════════════════════════════════════════════════════════════════════════════
    BAGIAN 0 — MESSAGE-ID DEDUP CACHE
@@ -234,6 +234,11 @@ async function processIncomingMessage(body, agent) {
 
   // ── Skip media/non-teks ─────────────────────────────────────────────
   if (!message) return;
+  // Gema pesan AI kita sendiri (footer "Sent via …") → skip (anti-loop).
+  if (isOwnEcho(message)) {
+    console.log(`[FONNTE] Skip gema pesan AI sendiri dari ${maskPhone(sender)}`);
+    return;
+  }
 
   // ── Dedup guard layer 1: stable message-ID (Fonnte webhook retries) ─
   if (_isAlreadyProcessed(messageId)) {

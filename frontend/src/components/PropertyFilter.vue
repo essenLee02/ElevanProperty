@@ -24,7 +24,6 @@
         <option value="">All Transactions</option>
         <option value="sale">Sale</option>
         <option value="rent">Rent</option>
-        <option value="purchase">Purchase</option>
       </select>
     </div>
     <div class="col-md-4 mb-3">

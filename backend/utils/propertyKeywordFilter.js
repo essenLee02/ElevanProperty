@@ -427,6 +427,13 @@ const PROPERTY_QUESTION_PATTERNS = [
   /jadwalkan\s+(viewing|survey|survei|kunjungan)/, /perlu\s+koordinasi/, /koordinasi\s+dulu/, /keluarga\s+lain/,
   /schedule\s+(a\s+)?(viewing|survey|visit)/, /check\s+with\s+(family|spouse|partner)/,
   /langsung\s+bisa\s+jadwalkan/, /langsung\s+jadwalkan/,
+  // ── Q8: move-in / start-rent date ──────────────────────────────────────────
+  // Needed so "Kak, kira-kira tanggalnya?" (rule-25/35 path) counts as a property
+  // question → inPropertyFlow reaches ≥2 → customer clarifications ("Ini tanggal apa ya?")
+  // are not dropped by isPropertyContextContinuation.
+  /kira-kira\s+tanggalnya/, /info\s+tanggalnya/, /mohon.*info.*tanggal/,
+  /kapan\s+rencananya\s+masuk/, /tanggal\s+berapa\s+rencananya\s+masuk/,
+  /when.*planning\s+to\s+move\s+in/,
   // ── Q12 apartment tower / floor ─────────────────────────────────────────────
   /tower\s+atau\s+lantai/, /preferensi\s+tower/, /lantai\s+(rendah|tinggi|tertentu|berapa)/,
   /tower\s+or\s+floor/, /floor\s+(prefer|choice)/,
@@ -822,6 +829,16 @@ function isPropertyContextContinuation(message, history = []) {
   //      "gimana", "summarize", "ringkas". Pendek (≤ 60) + konteks properti aktif.
   if (lower.length <= 60 &&
       /\b(rekom|rekomendasi|rekomen|saran|sarankan|kasi|kasih|tolong|gimana|bagaimana|better|lebih\s+baik|yang\s+mana|mana\s+(yang|lebih)|pilih\s+mana|summar(y|ize|kan)|ringkas|simpulkan)\b/i.test(lower))
+    return true;
+
+  // 15d) Customer meminta klarifikasi tentang pertanyaan AI (meta-pertanyaan
+  //      dalam alur aktif, bukan jawaban properti langsung).
+  //      Contoh: "Ini tanggal apa ya?", "Maksud gimana?", "Yang mana yang dimaksud?"
+  //      Guard: pesan pendek ≤ 80 char + ada tanda tanya + ada kata interogatif.
+  //      CLEAR_NON_PROPERTY sudah diblokir di atas sehingga "Film apa yang bagus?"
+  //      tidak akan lolos ke sini.
+  if (lower.length <= 80 && /\?/.test(lower) &&
+      /\b(apa|maksud|gimana|bagaimana|yang\s+mana|mana\s+yang|dimaksud|maksudnya|artinya|ini\s+apa|itu\s+apa)\b/.test(lower))
     return true;
 
   // 16) ── FINAL FALLBACK ──────────────────────────────────────────────────────

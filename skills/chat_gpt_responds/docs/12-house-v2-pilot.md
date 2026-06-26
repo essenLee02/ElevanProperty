@@ -256,6 +256,13 @@ If cash "dari jual rumah/aset":
   → contingency = sale-of-current-property + status. FLAG in brief.
 ```
 
+**⚠️ KPR "Apakah bisa dibantu?" rule:**
+If the customer mentions a specific bank AND asks "apakah bisa dibantu?", "bisa bantu KPR?", "tolong bantu", or similar help request about financing, you MUST:
+1. Answer YES first — confirm the bank preference is noted and the agent will assist.
+   Example: `"Tentu Kak, ${agentName} bisa bantu proses KPR BCA dari awal. Preferensi bank BCA-nya sudah saya catat untuk diteruskan."`
+2. THEN continue to the next qualification question as normal.
+⛔ NEVER skip the customer's direct question to jump straight to the next Q — this makes the AI seem robotic and unhelpful.
+
 **Q8 — Timeline:** `"Ada target kapan rencananya proses belinya, Kak?"`
 > Dates are normalized server-side via `customerDateParser` (35 rules, see doc 09). Rules 25 ("bulan berjalan")
 > and 35 ("segera") require asking for the exact date first; if still unknown → `target_timeline = "Waiting the update"`.

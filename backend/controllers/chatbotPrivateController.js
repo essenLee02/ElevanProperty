@@ -1315,14 +1315,38 @@ class ConversationQualifier {
       }
     }
 
-    const activeSessionStart = Math.max(summaryStart, switchStart);
+    // ── Boundary C: a fresh GREETING + property intent = new conversation ────
+    // "Hi.. mau sewa apartemen di malang" — even with the SAME type as a prior
+    // abandoned search — is a restart. Without this, stale budget/answers (e.g. an
+    // old ambiguous "0-1600000") leak in and the AI asks a confusing question.
+    // Conservative: requires greeting at the start + intent word + a property type.
+    let greetingStart = 0;
+    {
+      const GREET_RE  = /^[\s.…,!-]*(hi|hai|halo+|hello|hey|pagi|siang|sore|malam|selamat\s+(pagi|siang|sore|malam)|permisi|assalamualaikum|asalamualaikum|met\s+(pagi|siang|sore|malam))\b/i;
+      const INTENT_RE = /\b(sewa|menyewa|ngontrak|kontrak|beli|membeli|cari|nyari|mau|pengen|butuh|rent|buy|looking|cariin|carikan)\b/i;
+      const seq = [
+        ...history.map((m, i) => ({ i, role: m.role, message: m.message })),
+        { i: history.length, role: 'customer', message: userMessage },
+      ];
+      for (const m of seq) {
+        if (!(m.role === 'user' || m.role === 'customer')) continue;
+        if (m.i === 0) continue; // pesan pertama = awal alami, bukan restart
+        const msg = m.message || '';
+        if (GREET_RE.test(msg) && INTENT_RE.test(msg) && _typeOfP0(msg)) {
+          greetingStart = m.i;
+        }
+      }
+    }
+
+    const activeSessionStart = Math.max(summaryStart, switchStart, greetingStart);
     const activeHistory = history.slice(activeSessionStart);
 
-    // True when the active session began because of a type/tx switch (not a
-    // summary). Forces the Q2–Q12 reset below, since the now-trimmed segment can
-    // no longer see the pre-switch type. Business rule: any type OR transaction
-    // change → restart from Q1.
-    const switchBoundaryHit = switchStart > 0 && switchStart >= summaryStart;
+    // True when the active session began because of a type/tx switch OR a fresh
+    // greeting restart (not just a summary). Forces the Q2–Q12 reset below, since
+    // the now-trimmed segment can no longer see the pre-switch context.
+    // Business rule: any type/transaction change OR a greeting restart → Q1.
+    const switchBoundaryHit = (switchStart > 0 && switchStart >= summaryStart)
+                           || (greetingStart > 0 && greetingStart >= summaryStart);
 
     // custText / aiText / aiCount — scoped to ACTIVE session only
     const custText = this.#customerText(activeHistory, userMessage);
@@ -1466,7 +1490,26 @@ class ConversationQualifier {
         'dp 10', 'dp 15', 'dp 20', 'dp 25', 'dp 30', 'dp 40', 'dp 50',
         'persen', '%', 'sudah approve', 'pre-approved', 'pre approval', 'preapproval',
         'sudah cek bank', 'sudah ajukan', 'belum cek', 'belum ajukan', 'masih rencana', 'blm',
+        'belum pernah',
       ]),
+      // Bank name explicitly mentioned — separate from "has approved" status
+      kprBankPreference: (() => {
+        const lower = custText.toLowerCase();
+        const banks = ['BCA', 'Mandiri', 'BNI', 'BRI', 'BTN', 'CIMB', 'Danamon', 'Permata'];
+        return banks.find(b => lower.includes(b.toLowerCase())) || null;
+      })(),
+      // Customer said application is not yet started ("belum pernah", "masih rencana", etc.)
+      kprApprovalNotStarted: this.#has(custText, [
+        'belum pernah', 'belum cek', 'belum ajukan', 'masih rencana', 'belum ada bank',
+        'blm cek', 'blm ajukan', 'not started', "haven't applied", 'not applied yet',
+      ]),
+      // DP% mentioned (separate from bank name alone)
+      hasDpInfo: this.#has(custText, [
+        'dp 10', 'dp 15', 'dp 20', 'dp 25', 'dp 30', 'dp 40', 'dp 50',
+        'persen dp', 'dp persen', '% dp', 'dp %', 'down payment',
+        'uang muka',
+      ]) || /\bdp\s*\d{2,}\s*(?:%|persen)/.test(custText.toLowerCase())
+         || /\b\d{2,}\s*(?:%|persen)\s*dp\b/.test(custText.toLowerCase()),
       aiAskedKprDetails: this.#has(aiText, [
         'bank mana', 'dp berapa', 'berapa persen', 'which bank', 'down payment',
         'rekomendasikan bank', 'sudah ada bank', 'sudah sempat cek', 'sudah sempat ajukan',
@@ -1617,6 +1660,7 @@ class ConversationQualifier {
       hasDecisionMaker: this.#has(custText, [
         'langsung bisa', 'bisa langsung', 'perlu koordinasi', 'perlu diskusi',
         'sama suami', 'sama istri', 'sama pasangan', 'sama keluarga', 'sendiri saja',
+        'sama teman', 'bersama teman', 'teman-teman', 'koordinasikan', 'koordinasiin',
         'solo decision', 'joint decision', 'discuss with', 'check with',
         'suami dulu', 'istri dulu', 'koordinasi dulu', 'minta persetujuan',
         'izin dulu', 'keputusan bersama', 'decide together',
@@ -1624,6 +1668,37 @@ class ConversationQualifier {
       aiAskedDecisionMaker: this.#has(aiText, [
         'jadwalkan viewing', 'bisa jadwalkan', 'koordinasi dulu', 'keluarga lain',
         'schedule a viewing', 'coordinate with family', 'check with',
+      ]),
+
+      /* ── Q9b: Viewing/survey date — customer asked "kapan bisa viewing?" ── */
+      // Flags whether customer signalled they WANT a viewing and asked about timing.
+      wantsViewingScheduled: (() => {
+        // If customer explicitly said they don't need a viewing (catalog only)
+        const noViewing =
+          /(lihat|liat)\s+(katalog|listing|pilihan)/i.test(custText) ||
+          /katalog\s*(nya)?\s*(aja|saja|dulu)/i.test(custText) ||
+          /(ga|gak|engga|enggak|nggak|tidak|tdk|ndak)\s*(ada|punya|sempat)?\s*waktu\s*(untuk|buat)?\s*(survey|survei|viewing|lihat)/i.test(custText);
+        if (noViewing) return false;
+        return /\b(viewing|survey|survei|kunjungan)\s+kapan\b/i.test(custText) ||
+               /\bkapan\s+(?:bisa|boleh|mau)\s*(?:viewing|survey|survei|kunjungan)\b/i.test(custText) ||
+               /\bboleh\s+(?:viewing|survey|survei)\b/i.test(custText) ||
+               /\bmau\s+dijadwalkan\s+(?:viewing|survey|survei)\b/i.test(custText) ||
+               /\bjadwalkan\s+(?:viewing|survey|survei)\b/i.test(custText) ||
+               /\bschedule.{0,20}(?:viewing|survey)\b/i.test(custText);
+      })(),
+      // Customer gave a specific day/date for the viewing after AI asked.
+      hasViewingDate: (() => {
+        return /\bbesok\b|\blusa\b/i.test(custText) ||
+               /\b(senin|selasa|rabu|kamis|jumat|sabtu|ahad|minggu)\s*(ini|depan)?\b/i.test(custText) ||
+               /\b\d{1,2}\s*(januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)\b/i.test(custText) ||
+               /\btanggal\s*\d{1,2}\b/i.test(custText) ||
+               /\bjam\s*\d{1,2}(?:[.:]\d{2})?\b/i.test(custText);
+      })(),
+      aiAskedViewingDate: this.#has(aiText, [
+        'kapan mau dijadwalkan survey', 'kapan mau survey', 'kapan mau survei',
+        'kapan mau viewing', 'dijadwalkan survey-nya', 'dijadwalkan viewing-nya',
+        'schedule the viewing', 'when would you like to schedule',
+        'kapan survey-nya', 'kapan viewing-nya',
       ]),
 
       /* ── Q10: Lease duration (sewa only) ── */
@@ -1761,8 +1836,10 @@ class ConversationQualifier {
       aiAskedMoveIn     : this.#has(aiText, [
         'masuk bulan', 'pindah bulan', 'rencananya masuk', 'move in', 'moving',
         'target kapan proses belinya', 'kapan rencananya mulai operasional',
-        // Rule 25/35 clarification phrasings
+        // Rule 25/35 clarification phrasings — old & new wording
         'kira-kira tanggalnya', 'tanggal berapa rencananya', 'info tanggalnya',
+        'kapan rencananya masuk', 'tanggal berapa rencananya masuk',
+        'planning to move in', 'when you\'re planning to move',
         'around which date', 'which date are you planning', 'target date to close',
       ]),
       aiAskedHousehold  : this.#has(aiText, ['tinggal bersama', 'akan tinggal', 'living with', 'who will be']),
@@ -1791,6 +1868,7 @@ class ConversationQualifier {
         'aiAskedRedFlags', 'aiAskedAnchorPoint', 'aiAskedAltArea',
         'aiAskedDecisionMaker', 'aiAskedLeaseDuration', 'aiAskedPaymentTerms',
         'aiAskedApartmentPrefs',
+        'wantsViewingScheduled', 'hasViewingDate', 'aiAskedViewingDate',
         // Q14 type-specific slots
         'hasCheckInDate', 'hasCheckOutDate', 'hasRoomType', 'hasBreakfastPref',
         'hasPrivatePool', 'hasRentalPeriod', 'hasKosType', 'hasBathroomType',
@@ -1800,6 +1878,7 @@ class ConversationQualifier {
         'aiAskedBusinessType', 'aiAskedHeadcount', 'aiAskedRoi', 'aiAskedPropertyPurpose',
         // BELI flow (Q_KPR / Q_KPR-a / Q_COND + per-type Q14 beli)
         'hasFinancing', 'aiAskedFinancing', 'financingIsKPR', 'hasKprDetails',
+        'kprBankPreference', 'kprApprovalNotStarted', 'hasDpInfo',
         'aiAskedKprDetails', 'hasPropertyCondition', 'aiAskedPropertyCondition',
         'hasTenantStatus', 'aiAskedTenantStatus', 'hasZonasi', 'aiAskedZonasi',
         // House v2 pilot (motivation + financing contingency)
@@ -1843,6 +1922,30 @@ class ConversationQualifier {
     // ── Post-processing: tx-only change → quietly update transaction type ─────
     else if (txOnlyChanged && curTx) {
       profile.transactionType = curTx;
+    }
+
+    // Store active-session custText on profile so buildAgentBrief can reuse it
+    // without re-reading FULL history (which would leak stale data from old sessions).
+    profile._custText = custText;
+
+    // ── Re-scope budget to the ACTIVE session (anti-leak) ─────────────────────
+    // `filters` di atas diisi extractPropertyFilters() yang membaca FULL history,
+    // sehingga budget angka/ambigu dari pencarian LAMA (mis. "0-1600000") bocor ke
+    // pencarian baru — bahkan saat sesi aktif cuma berisi durasi "2 bulan" (digit
+    // "2" BUKAN budget). Hitung ulang budget HANYA dari sesi aktif (activeHistory +
+    // pesan saat ini) supaya nilai basi tidak pernah terlihat.
+    // Catatan: budget KATEGORI (preference terjangkau/menengah/eksklusif) tetap
+    // tertangkap karena ia memang muncul di sesi aktif bila customer menyebutnya.
+    const activeBudget = extractPropertyFilters(userMessage, activeHistory).budget || null;
+    if (activeBudget && activeBudget.ambiguous) {
+      profile.budget          = null;
+      profile.budgetAmbiguous = activeBudget;
+    } else if (activeBudget) {
+      profile.budget          = activeBudget;
+      profile.budgetAmbiguous = null;
+    } else {
+      profile.budget          = null;
+      profile.budgetAmbiguous = null;
     }
 
     return profile;
@@ -1935,70 +2038,88 @@ class ConversationQualifier {
    *
    * @returns {{terjangkau:number[], menengah:number[], eksklusif:number[], period:string}|null}
    */
-  static getBudgetTiers(buildingType = '', transactionType = '') {
+  static getBudgetTiers(buildingType = '', transactionType = '', periodHint = '') {
     const type = (buildingType || '').toLowerCase();
     const tx   = (transactionType || '').toLowerCase();
     const txKey = (tx === 'rent') ? 'rent' : (tx === 'sale' || tx === 'purchase') ? 'sale' : null;
     if (!txKey) return null;
 
     const M = 1e6, B = 1e9, K = 1e3;
+    // Tabel referensi harga wajar Indonesia (2026). period: 'month'=/bln, 'night'=/malam,
+    // 'year'=/thn, ''=harga jual. Tier eksklusif bersifat open-ended (ditampilkan "+").
     const TIERS = {
       house: {
-        rent: { terjangkau: [2*M, 5*M],   menengah: [5*M, 12*M],   eksklusif: [12*M, 35*M],   period: 'month' },
-        sale: { terjangkau: [300*M, 800*M], menengah: [800*M, 2.5*B], eksklusif: [2.5*B, 10*B], period: '' },
+        rent: { terjangkau: [2*M, 6*M],     menengah: [6*M, 15*M],    eksklusif: [15*M, 50*M],   period: 'month' },
+        sale: { terjangkau: [350*M, 900*M], menengah: [900*M, 3*B],   eksklusif: [3*B, 15*B],    period: '' },
       },
       apartment: {
-        rent: { terjangkau: [2*M, 5*M],   menengah: [5*M, 10*M],   eksklusif: [10*M, 30*M],   period: 'month' },
-        sale: { terjangkau: [300*M, 700*M], menengah: [700*M, 2*B], eksklusif: [2*B, 8*B], period: '' },
+        rent: { terjangkau: [2*M, 5*M],     menengah: [5*M, 15*M],    eksklusif: [15*M, 50*M],   period: 'month' },
+        sale: { terjangkau: [350*M, 800*M], menengah: [800*M, 2.5*B], eksklusif: [2.5*B, 10*B],  period: '' },
       },
-      villa: {
-        rent: { terjangkau: [1*M, 3*M],   menengah: [3*M, 8*M],    eksklusif: [8*M, 25*M],    period: 'night' },
-        sale: { terjangkau: [1*B, 3*B],   menengah: [3*B, 8*B],    eksklusif: [8*B, 30*B],    period: '' },
+      condo: {
+        rent: { terjangkau: [4*M, 10*M],    menengah: [10*M, 30*M],   eksklusif: [30*M, 100*M],  period: 'month' },
+        sale: { terjangkau: [700*M, 1.5*B], menengah: [1.5*B, 5*B],   eksklusif: [5*B, 20*B],    period: '' },
       },
       hotel: {
-        rent: { terjangkau: [400*K, 800*K], menengah: [800*K, 2*M], eksklusif: [2*M, 8*M], period: 'night' },
-        sale: { terjangkau: [2*B, 5*B],   menengah: [5*B, 15*B],   eksklusif: [15*B, 50*B],   period: '' },
+        rent: { terjangkau: [100*M, 500*M], menengah: [500*M, 2*B],   eksklusif: [2*B, 10*B],    period: 'month' },
+        sale: { terjangkau: [5*B, 20*B],    menengah: [20*B, 100*B],  eksklusif: [100*B, 500*B], period: '' },
+      },
+      villa: {
+        // Sewa villa punya DUA mode: bulanan (long-stay) & harian (vacation). Dipilih via periodHint.
+        rent: { byPeriod: {
+          month: { terjangkau: [15*M, 50*M], menengah: [50*M, 150*M], eksklusif: [150*M, 500*M], period: 'month' },
+          night: { terjangkau: [1.5*M, 4*M], menengah: [4*M, 10*M],   eksklusif: [10*M, 40*M],   period: 'night' },
+        } },
+        sale: { terjangkau: [800*M, 3*B],   menengah: [3*B, 10*B],    eksklusif: [10*B, 100*B],  period: '' },
       },
       boarding_house: {
-        rent: { terjangkau: [500*K, 1.5*M], menengah: [1.5*M, 3*M], eksklusif: [3*M, 8*M], period: 'month' },
-        sale: { terjangkau: [800*M, 2*B], menengah: [2*B, 5*B],    eksklusif: [5*B, 15*B],    period: '' },
+        rent: { terjangkau: [600*K, 1.8*M], menengah: [1.8*M, 3.5*M], eksklusif: [3.5*M, 10*M],  period: 'month' },
+        sale: { terjangkau: [500*M, 2*B],   menengah: [2*B, 8*B],     eksklusif: [8*B, 50*B],    period: '' },
       },
       shophouse: {
-        rent: { terjangkau: [5*M, 15*M],  menengah: [15*M, 40*M],  eksklusif: [40*M, 150*M],  period: 'month' },
-        sale: { terjangkau: [800*M, 2*B], menengah: [2*B, 5*B],    eksklusif: [5*B, 20*B],    period: '' },
+        rent: { terjangkau: [30*M, 100*M],  menengah: [100*M, 300*M], eksklusif: [300*M, 1*B],   period: 'year' },
+        sale: { terjangkau: [1*B, 2.5*B],   menengah: [2.5*B, 7*B],   eksklusif: [7*B, 25*B],    period: '' },
       },
       office: {
-        rent: { terjangkau: [5*M, 20*M],  menengah: [20*M, 60*M],  eksklusif: [60*M, 250*M],  period: 'month' },
-        sale: { terjangkau: [1*B, 3*B],   menengah: [3*B, 10*B],   eksklusif: [10*B, 40*B],   period: '' },
+        rent: { terjangkau: [50*M, 200*M],  menengah: [200*M, 800*M], eksklusif: [800*M, 5*B],   period: 'year' },
+        sale: { terjangkau: [1*B, 5*B],     menengah: [5*B, 20*B],    eksklusif: [20*B, 200*B],  period: '' },
       },
       warehouse: {
-        rent: { terjangkau: [10*M, 30*M], menengah: [30*M, 80*M],  eksklusif: [80*M, 250*M],  period: 'month' },
-        sale: { terjangkau: [800*M, 2.5*B], menengah: [2.5*B, 7*B], eksklusif: [7*B, 25*B], period: '' },
+        rent: { terjangkau: [50*M, 200*M],  menengah: [200*M, 800*M], eksklusif: [800*M, 5*B],   period: 'year' },
+        sale: { terjangkau: [1*B, 4*B],     menengah: [4*B, 15*B],    eksklusif: [15*B, 100*B],  period: '' },
       },
       store: {
-        rent: { terjangkau: [5*M, 15*M],  menengah: [15*M, 40*M],  eksklusif: [40*M, 150*M],  period: 'month' },
-        sale: { terjangkau: [500*M, 1.5*B], menengah: [1.5*B, 5*B], eksklusif: [5*B, 20*B], period: '' },
-      },
-      land: {
-        rent: { terjangkau: [50*M, 150*M], menengah: [150*M, 500*M], eksklusif: [500*M, 2*B], period: 'month' },
-        sale: { terjangkau: [300*M, 1*B], menengah: [1*B, 4*B],    eksklusif: [4*B, 20*B],    period: '' },
+        rent: { terjangkau: [20*M, 80*M],   menengah: [80*M, 300*M],  eksklusif: [300*M, 2*B],   period: 'year' },
+        sale: { terjangkau: [500*M, 2*B],   menengah: [2*B, 6*B],     eksklusif: [6*B, 25*B],    period: '' },
       },
       mansion: {
-        rent: { terjangkau: [5*M, 15*M],  menengah: [15*M, 50*M],  eksklusif: [50*M, 150*M],  period: 'month' },
-        sale: { terjangkau: [5*B, 15*B],  menengah: [15*B, 40*B],  eksklusif: [40*B, 150*B],  period: '' },
+        rent: { terjangkau: [30*M, 100*M],  menengah: [100*M, 300*M], eksklusif: [300*M, 2*B],   period: 'month' },
+        sale: { terjangkau: [5*B, 20*B],    menengah: [20*B, 100*B],  eksklusif: [100*B, 500*B], period: '' },
+      },
+      land: {
+        rent: { terjangkau: [50*M, 150*M],  menengah: [150*M, 500*M], eksklusif: [500*M, 2*B],   period: 'year' },
+        sale: { terjangkau: [300*M, 1*B],   menengah: [1*B, 4*B],     eksklusif: [4*B, 20*B],    period: '' },
       },
       kondotel: {
-        rent: { terjangkau: [500*K, 1.5*M], menengah: [1.5*M, 3*M], eksklusif: [3*M, 8*M], period: 'night' },
-        sale: { terjangkau: [500*M, 900*M], menengah: [900*M, 1.5*B], eksklusif: [1.5*B, 4*B], period: '' },
+        rent: { terjangkau: [500*K, 1.5*M], menengah: [1.5*M, 3*M],   eksklusif: [3*M, 8*M],     period: 'night' },
+        sale: { terjangkau: [500*M, 900*M], menengah: [900*M, 1.5*B], eksklusif: [1.5*B, 4*B],   period: '' },
       },
       others: {
-        rent: { terjangkau: [5*M, 20*M],  menengah: [20*M, 60*M],  eksklusif: [60*M, 200*M],  period: 'month' },
-        sale: { terjangkau: [500*M, 2*B], menengah: [2*B, 7*B],    eksklusif: [7*B, 25*B],    period: '' },
+        rent: { terjangkau: [5*M, 20*M],    menengah: [20*M, 60*M],   eksklusif: [60*M, 200*M],  period: 'month' },
+        sale: { terjangkau: [500*M, 2*B],   menengah: [2*B, 7*B],     eksklusif: [7*B, 25*B],    period: '' },
       },
     };
 
     const row = TIERS[type] || TIERS.others;
-    return row[txKey] || TIERS.others[txKey] || null;
+    let entry = row[txKey] || TIERS.others[txKey] || null;
+    if (!entry) return null;
+
+    // Mode periode ganda (villa sewa): pilih bulanan vs harian dari periodHint.
+    if (entry.byPeriod) {
+      const wantMonthly = /month|bulan|year|tahun|thn/i.test(periodHint || '');
+      entry = wantMonthly ? entry.byPeriod.month : entry.byPeriod.night;
+    }
+    return entry;
   }
 
   /** Format angka IDR penuh: 5000000 → "Rp 5.000.000". */
@@ -2009,18 +2130,22 @@ class ConversationQualifier {
 
   /**
    * Resolve KATEGORI budget (terjangkau/menengah/eksklusif) → string range harga wajar
-   * untuk tipe+transaksi tertentu, mis. "Rp 300.000.000 - Rp 800.000.000" atau
-   * "Rp 2.000.000 - Rp 5.000.000 /bln". Dipakai di summary saat customer jawab kategori.
+   * untuk tipe+transaksi tertentu, mis. "Rp 350.000.000 - Rp 900.000.000" atau
+   * "Rp 2.000.000 - Rp 6.000.000 /bln". Tier eksklusif open-ended → akhiri "+".
+   * Dipakai di summary saat customer jawab kategori (bukan angka).
    *
+   * @param {string} periodHint - 'month'|'night'|'year'|'' untuk memilih mode villa sewa.
    * @returns {string|null}
    */
-  static getBudgetRangeForTier(buildingType, transactionType, tierName, lang = 'id') {
-    const tiers = this.getBudgetTiers(buildingType, transactionType);
+  static getBudgetRangeForTier(buildingType, transactionType, tierName, lang = 'id', periodHint = '') {
+    const tiers = this.getBudgetTiers(buildingType, transactionType, periodHint);
     if (!tiers || !tiers[tierName]) return null;
     const [min, max] = tiers[tierName];
     const suffix = tiers.period === 'month' ? (lang === 'id' ? ' /bln' : ' /month')
-      : tiers.period === 'night' ? (lang === 'id' ? ' /malam' : ' /night') : '';
-    return `${this.#rpFull(min)} - ${this.#rpFull(max)}${suffix}`;
+      : tiers.period === 'night' ? (lang === 'id' ? ' /malam' : ' /night')
+      : tiers.period === 'year'  ? (lang === 'id' ? ' /thn'   : ' /year') : '';
+    const plus = tierName === 'eksklusif' ? '+' : '';   // luxury = open-ended
+    return `${this.#rpFull(min)} - ${this.#rpFull(max)}${plus}${suffix}`;
   }
 
   /* ─── Public: readiness score ───────────────────────────────────────────── */
@@ -2160,13 +2285,13 @@ class ConversationQualifier {
     if (profile.moveInDateAsk && !profile.moveInDateValue && !profile.aiAskedMoveIn) {
       if (profile.moveInDateAsk === 'soon') {
         return isId
-          ? `Kak, boleh tau kira-kira tanggalnya? Mohon segera info tanggalnya ya 📅`
-          : `Could you let me know roughly which date? Please share it soon 📅`;
+          ? `Kak, kira-kira *kapan rencananya masuk / pindah*? (mohon info bulan & tanggalnya 📅)`
+          : `Could you let me know roughly *when you're planning to move in*? (month & date please 📅)`;
       }
       // current_month — tanggal harus ≥ hari ini
       return isId
-        ? `Untuk bulan ini, kira-kira tanggal berapa rencananya, Kak? 📅`
-        : `For this month, around which date are you planning? 📅`;
+        ? `Untuk bulan ini, kira-kira *tanggal berapa rencananya masuk*, Kak? 📅`
+        : `For this month, around *which date* are you planning to move in? 📅`;
     }
 
     if (!profile.hasMoveInDate && !profile.aiAskedMoveIn) {
@@ -2294,6 +2419,24 @@ class ConversationQualifier {
         return isId
           ? `Kalau nanti ada yang cocok, langsung bisa jadwalkan viewing atau perlu koordinasi dulu sama keluarga lain? 📅`
           : `If I find a match, can you schedule a viewing on the spot, or would you need to coordinate with family first? 📅`;
+      }
+
+      /* ── Q9b: Viewing/survey date — fires when customer asked "kapan bisa viewing?" ──
+       * Fires only when:
+       *  (a) customer signalled they want to schedule (wantsViewingScheduled)
+       *  (b) AI hasn't asked for the date yet (!aiAskedViewingDate)
+       *  (c) customer hasn't volunteered a specific date (!hasViewingDate)
+       * NOT fired when customer prefers catalog only (wantsCatalogOnly). */
+      if (profile.wantsViewingScheduled && !profile.hasViewingDate && !profile.aiAskedViewingDate) {
+        const ct = profile._custText || '';
+        // Personalize: extract who they're bringing to the viewing
+        const withM = ct.match(/koordinasikan?\s+sama\s+([\w\s-]+?)(?:\s*\.|,|\?|$)/i)
+                   || ct.match(/sama\s+(istri|suami|pasangan|teman(?:-teman)?|keluarga|orang\s+tua)\b/i);
+        const withWhom = withM ? withM[1].trim().replace(/\s*saya\s*$/i, '').trim() : '';
+        const bersama = withWhom ? ` bersama ${withWhom} Anda` : '';
+        return isId
+          ? `Baik, Kak. Kira-kira kapan mau dijadwalkan survey-nya${bersama}? 📅`
+          : `Got it! When would you like to schedule the viewing${bersama}? 📅`;
       }
 
       /* ── Q10: Lease duration (sewa only, duration not volunteered) ── */
@@ -2538,6 +2681,18 @@ class ConversationQualifier {
         : `When something fits, can you schedule a viewing right away, or coordinate with family first, Kak?`;
     }
 
+    /* ── Q9b: Viewing date (same logic as summary mode) ── */
+    if (profile.wantsViewingScheduled && !profile.hasViewingDate && !profile.aiAskedViewingDate) {
+      const ct = profile._custText || '';
+      const withM = ct.match(/koordinasikan?\s+sama\s+([\w\s-]+?)(?:\s*\.|,|\?|$)/i)
+                 || ct.match(/sama\s+(istri|suami|pasangan|teman(?:-teman)?|keluarga|orang\s+tua)\b/i);
+      const withWhom = withM ? withM[1].trim().replace(/\s*saya\s*$/i, '').trim() : '';
+      const bersama = withWhom ? ` bersama ${withWhom} Anda` : '';
+      return isId
+        ? `Baik, Kak. Kira-kira kapan mau dijadwalkan survey-nya${bersama}? 📅`
+        : `Got it! When would you like to schedule the viewing${bersama}? 📅`;
+    }
+
     /* ── Q7: Red flags (if not captured at Q4) ── */
     if (!profile.hasRedFlags && !profile.aiAskedRedFlags && profile.aiAskedSearchHist) {
       return isId
@@ -2609,8 +2764,11 @@ class ConversationQualifier {
     const contingencyStatus = profile.financingFromSale
       ? (profile.hasContingencyStatus ? 'in-progress' : 'unknown') : 'n/a';
     const approval = profile.financingIsKPR
-      ? (profile.hasKprDetails ? 'applied/pre-approved' : 'not-started') : (profile.financingCash ? 'n/a' : 'unknown');
-    const dpReady = profile.hasKprDetails ? 'ready/partial' : 'unknown';
+      ? (profile.kprApprovalNotStarted ? 'not-started'
+         : profile.hasKprDetails ? 'applied/pre-approved'
+         : 'not-started')
+      : (profile.financingCash ? 'n/a' : 'unknown');
+    const dpReady = profile.hasDpInfo ? 'ready/partial' : 'unknown';
 
     // financing_readiness = 2 only if method known AND (dp or approval known) AND contingency surfaced
     const financingReady = (method !== 'unknown')
@@ -2637,7 +2795,8 @@ class ConversationQualifier {
       agentNote = 'Cash dependent on an unsold asset — do NOT treat as cash-ready; timing depends on the sale.';
     }
     if (isSale && method === 'KPR' && approval === 'not-started') {
-      agentNote = agentNote || 'KPR not-started / DP unknown — qualify financing before viewing.';
+      const bankHint = profile.kprBankPreference ? ` (prefers ${profile.kprBankPreference})` : '';
+      agentNote = agentNote || `KPR not-started${bankHint} / DP unknown — qualify financing before viewing.`;
     }
 
     const tag = (v) => (v ? 'stated' : 'unknown');
@@ -2651,7 +2810,10 @@ class ConversationQualifier {
       budget: filters.budget?.text || qs.budget || null,
       budget_source: tag(!!profile.budget),
       financing: isSale ? {
-        method, dp_readiness: dpReady, approval_status: approval,
+        method,
+        bank_preference: profile.kprBankPreference || null,
+        dp_readiness: dpReady,
+        approval_status: approval,
         contingency, contingency_status: contingencyStatus,
       } : undefined,
       occupants_source: tag(profile.hasHouseholdInfo),
@@ -2690,7 +2852,10 @@ class ConversationQualifier {
     // anchor points, decision-maker labels, and lease durations.
     const qualState = extractQualificationState(history, userMessage);
 
-    const custText = this.#customerText(history, userMessage);
+    // Use the active-session custText stored by buildProfile() — it is scoped to
+    // activeHistory only, so stale data from prior sessions (e.g. "2 bulan" from
+    // an old Malang search) never leaks into the current search's brief.
+    const custText = profile._custText || this.#customerText(history, userMessage);
 
     // Helper: detect if a field was stated (explicit keywords) or inferred
     const wasStated = (text, keywords) => this.#has(text, keywords);
@@ -2717,8 +2882,10 @@ class ConversationQualifier {
         //     kategori + perkiraan range harga wajar untuk tipe+transaksi tsb.
         if (b && b.preference && TIER_LABEL[b.preference]) {
           const tierKey = b.preference === 'affordable' ? 'terjangkau' : b.preference;
+          // periodHint untuk villa sewa (bulanan vs harian) — dari budget.period atau custText.
+          const periodHint = (b && b.period) || ConversationQualifier.#periodHintFromText(custText);
           const range = ConversationQualifier.getBudgetRangeForTier(
-            filters.buildingType, filters.transactionType, tierKey, 'id'
+            filters.buildingType, filters.transactionType, tierKey, 'id', periodHint
           );
           return {
             value : range ? `${TIER_LABEL[b.preference]} (${range})` : TIER_LABEL[b.preference],
@@ -2782,8 +2949,8 @@ class ConversationQualifier {
         // Q9 — preferensi survey/viewing. Customer bisa minta langsung lihat katalog
         // tanpa survei ("Mau lihat katalognya aja, gak ada waktu survei"), atau minta
         // dijadwalkan viewing. UNKNOWN → baris disembunyikan.
-        value : this.#extractViewingPreference(custText),
-        source: this.#extractViewingPreference(custText) !== 'UNKNOWN' ? 'stated' : 'UNKNOWN',
+        value : this.#extractViewingPreference(custText, profile),
+        source: this.#extractViewingPreference(custText, profile) !== 'UNKNOWN' ? 'stated' : 'UNKNOWN',
       },
       alternativeAreas: {
         value : profile.hasAlternativeArea
@@ -2878,6 +3045,15 @@ class ConversationQualifier {
    * Anchored on "/" or "per" so it picks the BUDGET period ("2-4 juta/2 minggu")
    * and NOT a lease-duration phrase ("sewa selama 2 minggu"). '' if none stated.
    */
+  /** Tebak periode dari teks customer untuk memilih band villa sewa (bulanan vs harian). */
+  static #periodHintFromText(custText) {
+    if (/\bmalam\b|\bnight\b|harian|per\s+malam|\/\s*malam/i.test(custText)) return 'night';
+    if (/\bbulan\b|\bmonth\b|bulanan|per\s+bulan|\/\s*bulan/i.test(custText)) return 'month';
+    if (/\btahun\b|\byear\b|tahunan|per\s+tahun|\/\s*tahun|\bthn\b/i.test(custText)) return 'year';
+    if (/\bminggu\b|\bweek\b|mingguan/i.test(custText)) return 'night'; // short-stay → band harian
+    return '';
+  }
+
   static #budgetPeriodSuffix(custText) {
     const UNIT = 'hari|minggu|bulan|tahun|malam|day|week|month|year|night|seminggu|sebulan|setahun|semalam';
     const m = custText.match(new RegExp(`\\/\\s*(\\d+\\s*)?(${UNIT})\\b`, 'i'))
@@ -2894,8 +3070,9 @@ class ConversationQualifier {
     if (/sama istri|bersama istri|with wife/.test(custText))    return 'Bersama istri';
     if (/sama pasangan|with partner/.test(custText))      return 'Bersama pasangan';
     if (/sama keluarga|with family/.test(custText))       return 'Bersama keluarga';
+    if (/sama teman(-teman)?|bersama teman|teman-teman|with friends?/.test(custText)) return 'Teman';
     if (/langsung bisa|bisa langsung/.test(custText))     return 'Solo (bisa langsung jadwalkan)';
-    if (/koordinasi dulu|perlu diskusi/.test(custText))   return 'Perlu koordinasi (joint decision)';
+    if (/koordinasikan?|koordinasi dulu|perlu diskusi/.test(custText)) return 'Perlu koordinasi (joint decision)';
     if (profile.hasHouseholdInfo) return 'Disebutkan di Q4';
     return 'UNKNOWN';
   }
@@ -2960,18 +3137,49 @@ class ConversationQualifier {
    * survei ("Mau lihat katalognya aja, gak ada waktu survei") ATAU minta dijadwalkan
    * viewing. Ditangkap agar agent tahu langkah berikutnya. UNKNOWN → baris disembunyikan.
    */
-  static #extractViewingPreference(custText) {
+  static #extractViewingPreference(custText, profile = {}) {
     const wantsCatalogOnly =
       /(lihat|liat)\s+(katalog|listing|pilihan)/.test(custText) ||
       /katalog\s*(nya)?\s*(aja|saja|dulu)/.test(custText) ||
       /langsung\s+(katalog|listing|rekomendasi)/.test(custText) ||
       /tanpa\s+(survey|survei|viewing|lihat\s+lokasi)/.test(custText) ||
       /(ga|gak|engga|enggak|nggak|tidak|tdk|ndak)\s*(ada|punya|sempat)?\s*waktu\s*(untuk|buat)?\s*(survey|survei|viewing|lihat)/.test(custText);
-    if (wantsCatalogOnly) return 'Butuh lihat katalog saja';
+    if (wantsCatalogOnly) return 'Minta listing';
+
+    // AI already asked for viewing date — check if customer confirmed a date
+    if (profile.aiAskedViewingDate) {
+      if (profile.hasViewingDate) {
+        const datePatterns = [
+          /\b(besok|lusa)\b/i,
+          /\b(senin|selasa|rabu|kamis|jumat|sabtu|ahad|minggu)(?:\s+(?:ini|depan))?\b/i,
+          /\b(\d{1,2}\s*(?:januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember))\b/i,
+          /\b(tanggal\s*\d{1,2})\b/i,
+          /\b(jam\s*\d{1,2}(?:[.:]\d{2})?)\b/i,
+        ];
+        for (const p of datePatterns) {
+          const m = custText.match(p);
+          if (m) return `Survey dijadwalkan: ${m[1]}`;
+        }
+        return 'Mau viewing (tanggal dikonfirmasi)';
+      }
+      return 'Mau viewing (tanggal belum dikonfirmasi)';
+    }
+
+    // Customer perlu koordinasi dulu sebelum viewing — tangkap dengan siapa.
+    // Contoh: "saya koordinasikan sama teman saya" → "koordinasikan sama teman (Belum ditanyakan)"
+    const coordMatch = custText.match(/koordinasikan?\s+sama\s+([\w\s-]+?)(?:\s*\.|,|\?|$)/i);
+    if (coordMatch) {
+      const withWhom = coordMatch[1].trim().replace(/\s*saya\s*$/i, '').trim();
+      return `koordinasikan sama ${withWhom} (Belum ditanyakan)`;
+    }
+    if (/koordinasikan?|perlu\s+koordinasi|koordinasi\s+dulu/.test(custText))
+      return 'Perlu koordinasi dulu (tanggal belum ditanyakan)';
 
     const wantsScheduled =
-      /(jadwal(kan)?|atur|booking)\s+(viewing|survey|survei|kunjungan)/.test(custText) ||
-      /(mau|pengen|ingin|bisa)\s+(viewing|survey|survei|lihat\s+unit|lihat\s+lokasi)/.test(custText);
+      /(jadwal(kan)?|atur|booking|boleh)\s+(viewing|survey|survei|kunjungan)/.test(custText) ||
+      /(mau|pengen|ingin|bisa)\s+(viewing|survey|survei|lihat\s+unit|lihat\s+lokasi)/.test(custText) ||
+      /\bboleh\s+viewing\b/.test(custText) ||
+      /\b(viewing|survey|survei)\s+kapan\b/.test(custText);
     if (wantsScheduled) return 'Mau dijadwalkan viewing';
 
     return 'UNKNOWN';

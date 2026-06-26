@@ -42,7 +42,7 @@ const { hasPropertyKeyword,
         isPropertyContextContinuation } = require('../utils/propertyKeywordFilter');
 const { generateWhatsAppAIReply }       = require('../services/whatsappAIService');
 const { getConversationHistory }        = require('../services/sessionService');
-const { sanitizeLog, maskPhone, maskName, appendSentViaTag } = require('../utils/whatsappUtils');
+const { sanitizeLog, maskPhone, maskName, appendSentViaTag, isOwnEcho } = require('../utils/whatsappUtils');
 
 /* ══════════════════════════════════════════════════════════════════════════════
    BAGIAN 0 — MESSAGE-ID DEDUP CACHE
@@ -291,6 +291,11 @@ async function processIncomingMessage(body, agent) {
   if (!message) return;
   if (isGroup) {
     console.log(`[TIMELINESAI] Skip pesan grup dari ${maskPhone(sender)}`);
+    return;
+  }
+  // Gema pesan AI kita sendiri (footer "Sent via …") → skip (anti-loop).
+  if (isOwnEcho(message)) {
+    console.log(`[TIMELINESAI] Skip gema pesan AI sendiri dari ${maskPhone(sender)}`);
     return;
   }
 

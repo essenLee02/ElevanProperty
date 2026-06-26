@@ -271,6 +271,23 @@ function appendSentViaTag(message) {
   return `${body}\n\n> _Sent via ${tag}_`;
 }
 
+/**
+ * Apakah pesan masuk ini sebenarnya GEMA dari pesan AI kita sendiri?
+ * Pesan keluar AI diberi footer "Sent via <AI_PRIMARY_TAG>". Jika sebuah inbound
+ * mengandung footer itu, berarti ia balikan dari pesan kita (mis. self-chat: nomor
+ * agent = nomor customer, atau platform meng-echo pesan terkirim). Harus di-skip
+ * agar AI tidak memproses/menjawab pesannya sendiri (loop & out-of-context).
+ *
+ * @param {string} message
+ * @returns {boolean}
+ */
+function isOwnEcho(message) {
+  const tag = String(process.env.AI_PRIMARY_TAG || '').trim();
+  if (!tag) return false;
+  const escaped = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`sent\\s+via\\s+${escaped}`, 'i').test(String(message || ''));
+}
+
 module.exports = {
   normalizePhone,
   isValidPhone,
@@ -282,4 +299,5 @@ module.exports = {
   maskPhone,
   maskName,
   appendSentViaTag,
+  isOwnEcho,
 };

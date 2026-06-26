@@ -274,10 +274,16 @@ const NON_LOCATION_AFTER_DI = new RegExp(
 
 function detectLocation(message = '') {
   const text = normalizeText(message);
-  const found = getKnownLocations().find((location) => new RegExp(`\\b${escapeRegExp(location.toLowerCase())}\\b`, 'i').test(text));
+
+  // "kisaran" sebagai kata keterangan harga ("kisaran 900K", "kisaran Rp 1,5 juta",
+  // "kisaran 2M") BUKAN nama kota Kisaran (Sumatera Utara). Strip sebelum deteksi
+  // agar tidak salah-match kota dari JSON catalog.
+  const textForLoc = text.replace(/\bkisaran\s+(?:rp\.?\s*)?\d[\d.,kKmMjJ]*/gi, '');
+
+  const found = getKnownLocations().find((location) => new RegExp(`\\b${escapeRegExp(location.toLowerCase())}\\b`, 'i').test(textForLoc));
   if (found) return found;
 
-  const afterDi = text.match(/\bdi\s+([a-zA-Z\s]{3,35})/i);
+  const afterDi = textForLoc.match(/\bdi\s+([a-zA-Z\s]{3,35})/i);
   if (afterDi && afterDi[1]) {
     const candidate = afterDi[1].trim();
     if (NON_LOCATION_AFTER_DI.test(candidate)) return '';  // "di lantai 27" dst → bukan lokasi

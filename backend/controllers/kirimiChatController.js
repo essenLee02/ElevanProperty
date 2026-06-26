@@ -49,7 +49,7 @@ const { hasPropertyKeyword,
         isPropertyContextContinuation } = require('../utils/propertyKeywordFilter');
 const { generateWhatsAppAIReply }       = require('../services/whatsappAIService');
 const { getConversationHistory }        = require('../services/sessionService');
-const { sanitizeLog, maskPhone, maskName, appendSentViaTag } = require('../utils/whatsappUtils');
+const { sanitizeLog, maskPhone, maskName, appendSentViaTag, isOwnEcho } = require('../utils/whatsappUtils');
 
 /* ══════════════════════════════════════════════════════════════════════════════
    BAGIAN 0 — MESSAGE-ID DEDUP CACHE
@@ -266,8 +266,23 @@ async function sendViaKirimi(targetPhone, message, deviceId) {
       });
 
       const data = response.data || {};
-      if (data.success === false || data.error) {
-        throw new Error(data.message || data.error || 'Kirimi: gagal kirim');
+      // Selalu log respons MENTAH Kirimi agar status kirim transparan (status ✅/❌
+      // sebelumnya bisa keliru bila Kirimi memakai bentuk respons selain {success}).
+      console.log(`[KIRIMI SEND] API response (${response.status}):`, JSON.stringify(data).substring(0, 300));
+
+      // Deteksi GAGAL dari berbagai kemungkinan bentuk respons Kirimi — bukan hanya
+      // success===false. Mencegah "✅ Terkirim" palsu saat pesan sebenarnya gagal
+      // (device disconnect, nomor tidak terdaftar WA, kuota, dll.).
+      const statusStr = String(data.status ?? data.state ?? '').toLowerCase();
+      const failed =
+        data.success === false ||
+        data.status  === false ||
+        data.sent    === false ||
+        !!data.error ||
+        /fail|gagal|error|invalid|reject|not[\s_-]*connect|disconnect|expired|unauthor/i.test(statusStr) ||
+        /fail|gagal|error|invalid|tidak\s+terkirim|not\s+sent|reject/i.test(String(data.message || '').toLowerCase());
+      if (failed) {
+        throw new Error(data.message || data.error || statusStr || 'Kirimi: gagal kirim');
       }
 
       if (attempt > 1) {
@@ -331,6 +346,11 @@ async function processIncomingMessage(body, agent) {
   if (!message) return;
   if (fromMe) {
     console.log(`[KIRIMI] Skip pesan keluar (fromMe) ke ${maskPhone(sender)}`);
+    return;
+  }
+  // Gema pesan AI kita sendiri (footer "Sent via …") — jangan diproses (anti-loop).
+  if (isOwnEcho(message)) {
+    console.log(`[KIRIMI] Skip gema pesan AI sendiri (footer Sent via) dari ${maskPhone(sender)}`);
     return;
   }
 
