@@ -10,69 +10,16 @@
  */
 
 const { Op } = require('sequelize');
-const { Country, User } = require('../models');
-const { HTTP }           = require('../utils/httpStatus');
+const { Country } = require('../models');
+const { HTTP }    = require('../utils/httpStatus');
 const { sendSuccess, sendError } = require('../utils/responseFormat');
+const GeneralController = require('./GeneralController');
 
-class CountryMasterController {
+class CountryMasterController extends GeneralController {
 
   /* ──────────────────────────────────────────────────────────────────────────
-     PRIVATE HELPERS
+     PRIVATE HELPERS — hanya yang unik untuk country
   ────────────────────────────────────────────────────────────────────────── */
-
-  static #randomString(length = 5) {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let result  = '';
-    for (let i = 0; i < length; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
-  }
-
-  /**
-   * Generate country_id: [prefix 2 huruf] + [random 5 char] + [count+1 padded 3 digit]
-   */
-  static #makeCountryId(name, count) {
-    const cleanName = String(name || '').trim();
-    const parts     = cleanName.split(/\s+/);
-    let prefix;
-
-    if (parts.length < 2) {
-      prefix = (cleanName[0] || 'C').toUpperCase() + (cleanName[1] || 'A').toUpperCase();
-    } else {
-      prefix = parts[0][0].toUpperCase() + parts[parts.length - 1][0].toUpperCase();
-    }
-
-    const random    = CountryMasterController.#randomString(5);
-    const total     = count + 1;
-    const numberStr = total < 10 ? `00${total}` : total < 100 ? `0${total}` : `${total}`;
-
-    return prefix + random + numberStr;
-  }
-
-  static #pageSize() {
-    const raw    = String(process.env.PAGINATION_ROWS || '10').trim().replace(/[;\s]+$/g, '');
-    const parsed = parseInt(raw, 10);
-    return Number.isFinite(parsed) && parsed >= 1 ? parsed : 10;
-  }
-
-  static async #resolveUserName(userId) {
-    if (!userId) return null;
-    try {
-      const user = await User.findOne({ where: { user_id: userId }, attributes: ['name'] });
-      return user ? user.name : userId;
-    } catch (_) {
-      return userId;
-    }
-  }
-
-  static #todayDate() {
-    return new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-  }
-
-  static #normalizeName(name) {
-    return String(name || '').toLowerCase().replace(/\s+/g, ' ').trim();
-  }
 
   /**
    * Cari negara aktif (status ≠ 3) dengan nama yang sama (case/spasi-insensitive).
@@ -80,14 +27,14 @@ class CountryMasterController {
    * @param {string|null} excludeId  country_id yang dikecualikan (untuk update)
    */
   static async #findDuplicate(name, excludeId = null) {
-    const target = CountryMasterController.#normalizeName(name);
+    const target = GeneralController.normalizeName(name);
     if (!target) return null;
 
     const where = { status: { [Op.ne]: 3 } };
     if (excludeId) where.country_id = { [Op.ne]: excludeId };
 
     const existing = await Country.findAll({ where, attributes: ['country_id', 'name'] });
-    return existing.find(c => CountryMasterController.#normalizeName(c.name) === target) || null;
+    return existing.find(c => GeneralController.normalizeName(c.name) === target) || null;
   }
 
   /* ──────────────────────────────────────────────────────────────────────────
@@ -120,13 +67,13 @@ class CountryMasterController {
       }
 
       const total     = await Country.count();
-      const idCountry = CountryMasterController.#makeCountryId(name, total).toUpperCase();
+      const idCountry = GeneralController.generateRandomId(name, total).toUpperCase();
 
       const newCountry = await Country.create({
-        country_id:   idCountry.toUpperCase(),
+        country_id:   idCountry,
         name:         String(name).trim().toUpperCase(),
         status:       1,
-        created_date: CountryMasterController.#todayDate(),
+        created_date: GeneralController.todayDate(),
         created_by:   String(createdBy).toUpperCase(),
         updated_date: null,
         updated_by:   null
@@ -191,12 +138,12 @@ class CountryMasterController {
 
       await country.update({
         name:         String(name).trim().toUpperCase(),
-        updated_date: CountryMasterController.#todayDate(),
+        updated_date: GeneralController.todayDate(),
         updated_by:   updatedBy.toUpperCase()
       });
 
-      const creatorName = await CountryMasterController.#resolveUserName(country.created_by);
-      const updaterName = await CountryMasterController.#resolveUserName(updatedBy);
+      const creatorName = await GeneralController.resolveUserName(country.created_by);
+      const updaterName = await GeneralController.resolveUserName(updatedBy);
 
       console.log(`[COUNTRY] ✏️  UPDATE — ${country.country_id} | "${country.name}" | By: ${updatedBy}`);
 
@@ -233,7 +180,7 @@ class CountryMasterController {
   static async showDataCountry(req, res) {
     try {
       const page     = Math.max(1, parseInt(req.query.page, 10) || 1);
-      const pageSize = CountryMasterController.#pageSize();
+      const pageSize = GeneralController.pageSize();
       const offset   = (page - 1) * pageSize;
       const search   = req.query.search ? String(req.query.search).trim() : '';
 
@@ -296,8 +243,8 @@ class CountryMasterController {
         return sendError(res, HTTP.NOT_FOUND, null, 'Negara tidak ditemukan');
       }
 
-      const creatorName = await CountryMasterController.#resolveUserName(country.created_by);
-      const updaterName = await CountryMasterController.#resolveUserName(country.updated_by);
+      const creatorName = await GeneralController.resolveUserName(country.created_by);
+      const updaterName = await GeneralController.resolveUserName(country.updated_by);
 
       return sendSuccess(res, HTTP.OK, {
         country: {
@@ -369,7 +316,7 @@ class CountryMasterController {
 
       await country.update({
         status:       newStatus,
-        updated_date: CountryMasterController.#todayDate(),
+        updated_date: GeneralController.todayDate(),
         updated_by:   updatedBy
       });
 
@@ -409,7 +356,7 @@ class CountryMasterController {
 
       await country.update({
         status:       3,
-        updated_date: CountryMasterController.#todayDate(),
+        updated_date: GeneralController.todayDate(),
         updated_by:   updatedBy
       });
 

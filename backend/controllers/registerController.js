@@ -12,44 +12,13 @@ const { HTTP } = require('../utils/httpStatus');
 const { sendSuccess, sendError } = require('../utils/responseFormat');
 const { safeLog } = require('../utils/safeLog');
 const { authLog } = require('../utils/authLogger');
+const GeneralController = require('./GeneralController');
 
-class RegisterController {
+class RegisterController extends GeneralController {
   static #saltRounds() {
     const raw    = String(process.env.BCRYPT_SALT_ROUNDS || '10').trim().replace(/[;\s]+$/g, '');
     const parsed = parseInt(raw, 10);
     return Number.isFinite(parsed) && parsed >= 4 && parsed <= 15 ? parsed : 10;
-  }
-
-  static #randomString(length = 5) {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let result  = '';
-    for (let i = 0; i < length; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
-  }
-
-  /**
-   * Generate user_id: [prefix] + [random 5 chars] + [(count+1) padded 3 digits]
-   * e.g. "Nigel Tjandra" + 5 users → "NTAb3xK006"
-   */
-  static #makeUserId(nama, jumlah) {
-    jumlah += 1;
-
-    const cleanNama   = String(nama || '').trim();
-    const parts       = cleanNama.split(/\s+/);
-    let prefix;
-
-    if (parts.length < 2) {
-      prefix = (cleanNama[0] || 'X').toUpperCase() + (cleanNama[1] || 'X').toUpperCase();
-    } else {
-      prefix = parts[0][0].toUpperCase() + parts[parts.length - 1][0].toUpperCase();
-    }
-
-    const random    = RegisterController.#randomString(5);
-    const numberStr = jumlah < 10 ? `00${jumlah}` : jumlah < 100 ? `0${jumlah}` : `${jumlah}`;
-
-    return prefix + random + numberStr;
   }
 
   static async insertDataAgent(req, res) {
@@ -106,7 +75,7 @@ class RegisterController {
       const hashedPassword = await bcrypt.hash(password, salt);
 
       const totalUsers  = await User.count();
-      const newUserId   = RegisterController.#makeUserId(name, totalUsers).toUpperCase();
+      const newUserId   = GeneralController.generateRandomId(name, totalUsers).toUpperCase();
       const formattedName = String(name).trim().toUpperCase();
 
       const createdByValue = (createdBy && String(createdBy).trim() !== '')

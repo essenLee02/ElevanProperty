@@ -10,9 +10,10 @@
  */
 
 const { Op } = require('sequelize');
-const { Facility, User } = require('../models');
-const { HTTP }           = require('../utils/httpStatus');
+const { Facility } = require('../models');
+const { HTTP }     = require('../utils/httpStatus');
 const { sendSuccess, sendError } = require('../utils/responseFormat');
+const GeneralController = require('./GeneralController');
 
 /* ════════════════════════════════════════════════════════════════════════════
    ANTI-REDUNDANCY — kelompok sinonim fasilitas
@@ -47,83 +48,11 @@ const FACILITY_SYNONYM_GROUPS = [
   ['taman', 'garden', 'taman hijau'],
 ];
 
-class FacilityMasterController {
+class FacilityMasterController extends GeneralController {
 
   /* ──────────────────────────────────────────────────────────────────────────
-     PRIVATE HELPERS
+     PRIVATE HELPERS — hanya yang unik untuk fasilitas
   ────────────────────────────────────────────────────────────────────────── */
-
-  static #randomString(length = 5) {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let result  = '';
-    for (let i = 0; i < length; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
-  }
-
-  /**
-   * Generate facility_id: [prefix 2 huruf] + [random 5 char] + [count+1 padded 3 digit]
-   * e.g. "Kolam Renang" + 3 existing → "KRAb3xK004"
-   */
-  static #makeFacilityId(name, count) {
-    const cleanName = String(name || '').trim();
-    const parts     = cleanName.split(/\s+/);
-    let prefix;
-
-    if (parts.length < 2) {
-      prefix = (cleanName[0] || 'F').toUpperCase() + (cleanName[1] || 'A').toUpperCase();
-    } else {
-      prefix = parts[0][0].toUpperCase() + parts[parts.length - 1][0].toUpperCase();
-    }
-
-    const random    = FacilityMasterController.#randomString(5);
-    const total     = count + 1;
-    const numberStr = total < 10 ? `00${total}` : total < 100 ? `0${total}` : `${total}`;
-
-    return prefix + random + numberStr;
-  }
-
-  /**
-   * Baca PAGINATION_ROWS dari .env (default 10, minimum 1)
-   */
-  static #pageSize() {
-    const raw    = String(process.env.PAGINATION_ROWS || '10').trim().replace(/[;\s]+$/g, '');
-    const parsed = parseInt(raw, 10);
-    return Number.isFinite(parsed) && parsed >= 1 ? parsed : 10;
-  }
-
-  /**
-   * Resolve created_by/updated_by FK ke nama user untuk tampil di UI
-   */
-  static async #resolveUserName(userId) {
-    if (!userId) return null;
-    try {
-      const user = await User.findOne({ where: { user_id: userId }, attributes: ['name'] });
-      return user ? user.name : userId;
-    } catch (_) {
-      return userId;
-    }
-  }
-
-  static #todayDate() {
-    return new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-  }
-
-  /* ── Anti-redundancy helpers ─────────────────────────────────────────────── */
-
-  /**
-   * Normalisasi nama fasilitas untuk perbandingan:
-   *   huruf kecil → tanda baca jadi spasi → spasi ganda dirapikan → trim.
-   * "Parkir  Mobil!" → "parkir mobil"  |  "A/C" → "a c"
-   */
-  static #normalizeName(name) {
-    return String(name || '')
-      .toLowerCase()
-      .replace(/[^a-z0-9\s]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-  }
 
   /**
    * Kunci kanonik: jika nama (ternormalisasi) ada di salah satu grup sinonim,
@@ -131,7 +60,7 @@ class FacilityMasterController {
    * Dua nama yang menghasilkan kunci sama dianggap fasilitas yang sama.
    */
   static #canonicalKey(name) {
-    const norm = FacilityMasterController.#normalizeName(name);
+    const norm = GeneralController.normalizeName(name);
     for (const group of FACILITY_SYNONYM_GROUPS) {
       if (group.includes(norm)) return group[0];
     }
@@ -187,15 +116,15 @@ class FacilityMasterController {
       }
 
       const totalFacilities = await Facility.count();
-      const facilityId      = FacilityMasterController.#makeFacilityId(name, totalFacilities).toUpperCase();
+      const facilityId      = GeneralController.generateRandomId(name, totalFacilities).toUpperCase();
 
       const newFacility = await Facility.create({
-        facility_id:  facilityId.toUpperCase(),
+        facility_id:  facilityId,
         name:         String(name).trim().toUpperCase(),
         description:  description ? String(description).trim().toUpperCase() : null,
         icon:         icon        ? String(icon).trim()        : null,
         status:       1,
-        created_date: FacilityMasterController.#todayDate(),
+        created_date: GeneralController.todayDate(),
         created_by:   createdBy.toUpperCase(),
         updated_date: null,
         updated_by:   null
@@ -266,12 +195,12 @@ class FacilityMasterController {
         name:         String(name).trim().toUpperCase(),
         description:  description !== undefined ? (description ? String(description).trim() : null) : facility.description,
         icon:         icon        !== undefined ? (icon        ? String(icon).trim()        : null) : facility.icon,
-        updated_date: FacilityMasterController.#todayDate(),
+        updated_date: GeneralController.todayDate(),
         updated_by:   updatedBy
       });
 
-      const creatorName = await FacilityMasterController.#resolveUserName(facility.created_by);
-      const updaterName = await FacilityMasterController.#resolveUserName(updatedBy);
+      const creatorName = await GeneralController.resolveUserName(facility.created_by);
+      const updaterName = await GeneralController.resolveUserName(updatedBy);
 
       console.log(`[FACILITY] ✏️  UPDATE — ${facility.facility_id} | "${facility.name}" | By: ${updatedBy}`);
 
@@ -310,7 +239,7 @@ class FacilityMasterController {
   static async showDataFacility(req, res) {
     try {
       const page     = Math.max(1, parseInt(req.query.page, 10) || 1);
-      const pageSize = FacilityMasterController.#pageSize();
+      const pageSize = GeneralController.pageSize();
       const offset   = (page - 1) * pageSize;
 
       const search   = req.query.search   ? String(req.query.search).trim()   : '';
@@ -379,8 +308,8 @@ class FacilityMasterController {
         return sendError(res, HTTP.NOT_FOUND, null, 'Fasilitas tidak ditemukan');
       }
 
-      const creatorName = await FacilityMasterController.#resolveUserName(facility.created_by);
-      const updaterName = await FacilityMasterController.#resolveUserName(facility.updated_by);
+      const creatorName = await GeneralController.resolveUserName(facility.created_by);
+      const updaterName = await GeneralController.resolveUserName(facility.updated_by);
 
       return sendSuccess(res, HTTP.OK, {
         facility: {
@@ -430,7 +359,7 @@ class FacilityMasterController {
 
       await facility.update({
         status:       newStatus,
-        updated_date: FacilityMasterController.#todayDate(),
+        updated_date: GeneralController.todayDate(),
         updated_by:   updatedBy
       });
 
@@ -470,7 +399,7 @@ class FacilityMasterController {
 
       await facility.update({
         status:       3,
-        updated_date: FacilityMasterController.#todayDate(),
+        updated_date: GeneralController.todayDate(),
         updated_by:   updatedBy
       });
 

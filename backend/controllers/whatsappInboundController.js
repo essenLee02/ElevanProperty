@@ -1,33 +1,25 @@
-﻿/**
+/**
  * whatsappInboundController.js
  *
  * Handle incoming WhatsApp messages from Fonnte webhook.
- * Captures messages from 5 agents and logs them to terminal + database.
+ * Captures messages from agent phone numbers and logs them to terminal + database.
  *
- * Agents:
- * - Clarence: +62 821-1136-7154
- * - Desy:     +62 821-1331-8191
- * - Nigel:    082233556796
- * - Natasha:  +62 822-3058-7788
- * - Leo:      0813-3470-8691
+ * Agent lookup dilakukan ke tabel `users` berdasarkan field `phone` — tidak ada
+ * data phone yang hardcode di sini.
  */
 
-const { WhatsAppInbound } = require('../models');
-const { safeLog } = require('../utils/safeLog');
+'use strict';
+
+const { Op }             = require('sequelize');
+const { WhatsAppInbound, User } = require('../models');
+const { safeLog }        = require('../utils/safeLog');
 
 class WhatsAppInboundController {
-  static #AGENTS = {
-    '6282111367154': { name: 'Clarence', original: '+62 821-1136-7154' },
-    '6282113318191': { name: 'Desy',     original: '+62 821-1331-8191' },
-    '6282233556796': { name: 'Nigel',    original: '082233556796'       },
-    '6282223058788': { name: 'Natasha',  original: '+62 822-3058-7788'  },
-    '6281334708691': { name: 'Leo',      original: '0813-3470-8691'     },
-  };
 
   /**
-   * Normalize phone number to 628... format.
-   * +62 821-1136-7154 → 6282111367154
-   * 082233556796      → 6282233556796
+   * Normalize phone number ke format 628... (strip +, spaces, dashes, leading 0).
+   * "+62 821-1136-7154" → "6282111367154"
+   * "082233556796"      → "6282233556796"
    */
   static #normalize(phone = '') {
     return String(phone || '')
@@ -36,20 +28,33 @@ class WhatsAppInboundController {
       .replace(/[\s\-()]/g, '');
   }
 
-  static #findAgent(phoneNumber) {
+  /**
+   * Cari user agent berdasarkan nomor telepon di tabel `users`.
+   * Matching dilakukan dengan 10 digit terakhir (suffix) agar toleran terhadap
+   * format simpan yang berbeda (0812xxx vs +62 812xxx vs 62812xxx).
+   *
+   * @param {string} phoneNumber  Nomor dari payload webhook (format apapun)
+   * @returns {Promise<{name: string, phone: string}|null>}
+   */
+  static async #findAgent(phoneNumber) {
     const normalized = WhatsAppInboundController.#normalize(phoneNumber);
+    const last10     = normalized.slice(-10);
+    if (!last10) return null;
 
-    if (WhatsAppInboundController.#AGENTS[normalized]) {
-      return WhatsAppInboundController.#AGENTS[normalized];
+    try {
+      const user = await User.findOne({
+        where: {
+          phone:  { [Op.like]: `%${last10}` },
+          status: 1
+        },
+        attributes: ['name', 'phone']
+      });
+
+      if (!user) return null;
+      return { name: user.name, phone: user.phone };
+    } catch (_) {
+      return null;
     }
-
-    for (const [key, agent] of Object.entries(WhatsAppInboundController.#AGENTS)) {
-      if (key.includes(normalized.slice(-10))) {
-        return agent;
-      }
-    }
-
-    return null;
   }
 
   /**
@@ -67,7 +72,7 @@ class WhatsAppInboundController {
       }
 
       const agentNumber = payload.from;
-      const agent       = WhatsAppInboundController.#findAgent(agentNumber);
+      const agent       = await WhatsAppInboundController.#findAgent(agentNumber);
 
       if (!agent) {
         console.warn('[WHATSAPP WEBHOOK] Message from unknown agent:', agentNumber);
@@ -209,50 +214,6 @@ class WhatsAppInboundController {
     } catch (error) {
       console.error('[WHATSAPP GET MESSAGE ERROR]', error);
       return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: 'Failed to retrieve message' });
-    }
-  }
-
-  /**
-   * GET /api/whatsapp/agents/status
-   */
-  static async getAgentsStatus(req, res) {
-    try {
-      const agentStatuses = [];
-
-      for (const [phoneNormalized, agentInfo] of Object.entries(WhatsAppInboundController.#AGENTS)) {
-        const normalizedOriginal = WhatsAppInboundController.#normalize(agentInfo.original);
-
-        const lastMessage = await WhatsAppInbound.findOne({
-          where: { agentPhoneNormalized: normalizedOriginal },
-          order: [['createdAt', 'DESC']]
-        });
-
-        const messageCount = await WhatsAppInbound.count({
-          where: { agentPhoneNormalized: normalizedOriginal }
-        });
-
-        agentStatuses.push({
-          name:            agentInfo.name,
-          phone:           agentInfo.original,
-          phoneNormalized: phoneNormalized,
-          totalMessages:   messageCount,
-          lastMessageAt:   lastMessage?.createdAt || null,
-          lastMessageFrom: lastMessage?.senderName || null,
-          status:          messageCount > 0 ? 'active' : 'no_messages'
-        });
-      }
-
-      return res.json({
-        success: true,
-        data: {
-          agents:        agentStatuses,
-          totalMessages: await WhatsAppInbound.count(),
-          timestamp:     new Date().toISOString()
-        }
-      });
-    } catch (error) {
-      console.error('[WHATSAPP AGENTS STATUS ERROR]', error);
-      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: 'Failed to retrieve agents status' });
     }
   }
 }

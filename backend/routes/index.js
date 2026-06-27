@@ -121,7 +121,6 @@ router.post('/fonnte/webhook',       webhookLimiter, fonnteWebhookController.han
 router.post('/whatsapp/webhook',     webhookLimiter, whatsappInboundController.handleInboundMessage);
 router.get('/whatsapp/messages',                     whatsappInboundController.getInboundMessages);
 router.get('/whatsapp/messages/:id',                 whatsappInboundController.getMessageDetail);
-router.get('/whatsapp/agents/status',                whatsappInboundController.getAgentsStatus);
 
 // Fonnte multi-agent webhook (public)
 router.post('/fonnte-chat/webhook',      webhookLimiter, fonnteChatController.handleInboundMessage);

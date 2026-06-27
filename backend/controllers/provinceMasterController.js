@@ -11,66 +11,16 @@
  */
 
 const { Op } = require('sequelize');
-const { Province, Country, User } = require('../models');
-const { HTTP }           = require('../utils/httpStatus');
+const { Province, Country } = require('../models');
+const { HTTP }              = require('../utils/httpStatus');
 const { sendSuccess, sendError } = require('../utils/responseFormat');
+const GeneralController = require('./GeneralController');
 
-class ProvinceMasterController {
+class ProvinceMasterController extends GeneralController {
 
   /* ──────────────────────────────────────────────────────────────────────────
-     PRIVATE HELPERS
+     PRIVATE HELPERS — hanya yang unik untuk province
   ────────────────────────────────────────────────────────────────────────── */
-
-  static #randomString(length = 5) {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let result  = '';
-    for (let i = 0; i < length; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
-  }
-
-  static #makeProvinceId(name, count) {
-    const cleanName = String(name || '').trim();
-    const parts     = cleanName.split(/\s+/);
-    let prefix;
-
-    if (parts.length < 2) {
-      prefix = (cleanName[0] || 'P').toUpperCase() + (cleanName[1] || 'A').toUpperCase();
-    } else {
-      prefix = parts[0][0].toUpperCase() + parts[parts.length - 1][0].toUpperCase();
-    }
-
-    const random    = ProvinceMasterController.#randomString(5);
-    const total     = count + 1;
-    const numberStr = total < 10 ? `00${total}` : total < 100 ? `0${total}` : `${total}`;
-
-    return prefix + random + numberStr;
-  }
-
-  static #pageSize() {
-    const raw    = String(process.env.PAGINATION_ROWS || '10').trim().replace(/[;\s]+$/g, '');
-    const parsed = parseInt(raw, 10);
-    return Number.isFinite(parsed) && parsed >= 1 ? parsed : 10;
-  }
-
-  static async #resolveUserName(userId) {
-    if (!userId) return null;
-    try {
-      const user = await User.findOne({ where: { user_id: userId }, attributes: ['name'] });
-      return user ? user.name : userId;
-    } catch (_) {
-      return userId;
-    }
-  }
-
-  static #todayDate() {
-    return new Date().toISOString().split('T')[0];
-  }
-
-  static #normalizeName(name) {
-    return String(name || '').toLowerCase().replace(/\s+/g, ' ').trim();
-  }
 
   /** Ambil nama negara dari country_id (untuk join tampilan list/detail). */
   static async #countryName(idCountry) {
@@ -94,14 +44,14 @@ class ProvinceMasterController {
    * Nama provinsi unik per-negara, bukan global.
    */
   static async #findDuplicate(name, idCountry, excludeId = null) {
-    const target = ProvinceMasterController.#normalizeName(name);
+    const target = GeneralController.normalizeName(name);
     if (!target) return null;
 
     const where = { country_id: idCountry, status: { [Op.ne]: 3 } };
     if (excludeId) where.province_id = { [Op.ne]: excludeId };
 
     const existing = await Province.findAll({ where, attributes: ['province_id', 'name'] });
-    return existing.find(p => ProvinceMasterController.#normalizeName(p.name) === target) || null;
+    return existing.find(p => GeneralController.normalizeName(p.name) === target) || null;
   }
 
   /* ──────────────────────────────────────────────────────────────────────────
@@ -141,14 +91,14 @@ class ProvinceMasterController {
       }
 
       const total      = await Province.count();
-      const idProvince = ProvinceMasterController.#makeProvinceId(name, total).toUpperCase();
+      const idProvince = GeneralController.generateRandomId(name, total).toUpperCase();
 
       const newProvince = await Province.create({
-        province_id:  idProvince.toUpperCase(),
+        province_id:  idProvince,
         country_id:   String(country_id).toUpperCase(),
         name:         String(name).trim().toUpperCase(),
         status:       1,
-        created_date: ProvinceMasterController.#todayDate(),
+        created_date: GeneralController.todayDate(),
         created_by:   String(createdBy).toUpperCase(),
         updated_date: null,
         updated_by:   null
@@ -222,12 +172,12 @@ class ProvinceMasterController {
       await province.update({
         country_id:   country_id.toUpperCase(),
         name:         String(name).trim().toUpperCase(),
-        updated_date: ProvinceMasterController.#todayDate(),
+        updated_date: GeneralController.todayDate(),
         updated_by:   updatedBy.toUpperCase()
       });
 
-      const creatorName = await ProvinceMasterController.#resolveUserName(province.created_by);
-      const updaterName = await ProvinceMasterController.#resolveUserName(updatedBy);
+      const creatorName = await GeneralController.resolveUserName(province.created_by);
+      const updaterName = await GeneralController.resolveUserName(updatedBy);
       const countryName = await ProvinceMasterController.#countryName(province.country_id);
 
       console.log(`[PROVINCE] ✏️  UPDATE — ${province.province_id} | "${province.name}" | By: ${updatedBy}`);
@@ -266,7 +216,7 @@ class ProvinceMasterController {
   static async showDataProvince(req, res) {
     try {
       const page     = Math.max(1, parseInt(req.query.page, 10) || 1);
-      const pageSize = ProvinceMasterController.#pageSize();
+      const pageSize = GeneralController.pageSize();
       const offset   = (page - 1) * pageSize;
       const search   = req.query.search ? String(req.query.search).trim() : '';
       const idCountry = req.query.country_id ? String(req.query.country_id).trim() : '';
@@ -340,8 +290,8 @@ class ProvinceMasterController {
         return sendError(res, HTTP.NOT_FOUND, null, 'Provinsi tidak ditemukan');
       }
 
-      const creatorName = await ProvinceMasterController.#resolveUserName(province.created_by);
-      const updaterName = await ProvinceMasterController.#resolveUserName(province.updated_by);
+      const creatorName = await GeneralController.resolveUserName(province.created_by);
+      const updaterName = await GeneralController.resolveUserName(province.updated_by);
       const countryName = await ProvinceMasterController.#countryName(province.country_id);
 
       return sendSuccess(res, HTTP.OK, {
@@ -421,7 +371,7 @@ class ProvinceMasterController {
 
       await province.update({
         status:       newStatus,
-        updated_date: ProvinceMasterController.#todayDate(),
+        updated_date: GeneralController.todayDate(),
         updated_by:   updatedBy
       });
 
@@ -461,7 +411,7 @@ class ProvinceMasterController {
 
       await province.update({
         status:       3,
-        updated_date: ProvinceMasterController.#todayDate(),
+        updated_date: GeneralController.todayDate(),
         updated_by:   updatedBy
       });
 

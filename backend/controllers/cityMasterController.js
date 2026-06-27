@@ -11,66 +11,16 @@
  */
 
 const { Op } = require('sequelize');
-const { City, Province, Country, User } = require('../models');
+const { City, Province, Country } = require('../models');
 const { HTTP }           = require('../utils/httpStatus');
 const { sendSuccess, sendError } = require('../utils/responseFormat');
+const GeneralController = require('./GeneralController');
 
-class CityMasterController {
+class CityMasterController extends GeneralController {
 
   /* ──────────────────────────────────────────────────────────────────────────
-     PRIVATE HELPERS
+     PRIVATE HELPERS — hanya yang unik untuk city
   ────────────────────────────────────────────────────────────────────────── */
-
-  static #randomString(length = 5) {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let result  = '';
-    for (let i = 0; i < length; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
-  }
-
-  static #makeCityId(name, count) {
-    const cleanName = String(name || '').trim();
-    const parts     = cleanName.split(/\s+/);
-    let prefix;
-
-    if (parts.length < 2) {
-      prefix = (cleanName[0] || 'C').toUpperCase() + (cleanName[1] || 'A').toUpperCase();
-    } else {
-      prefix = parts[0][0].toUpperCase() + parts[parts.length - 1][0].toUpperCase();
-    }
-
-    const random    = CityMasterController.#randomString(5);
-    const total     = count + 1;
-    const numberStr = total < 10 ? `00${total}` : total < 100 ? `0${total}` : `${total}`;
-
-    return prefix + random + numberStr;
-  }
-
-  static #pageSize() {
-    const raw    = String(process.env.PAGINATION_ROWS || '10').trim().replace(/[;\s]+$/g, '');
-    const parsed = parseInt(raw, 10);
-    return Number.isFinite(parsed) && parsed >= 1 ? parsed : 10;
-  }
-
-  static async #resolveUserName(userId) {
-    if (!userId) return null;
-    try {
-      const user = await User.findOne({ where: { user_id: userId }, attributes: ['name'] });
-      return user ? user.name : userId;
-    } catch (_) {
-      return userId;
-    }
-  }
-
-  static #todayDate() {
-    return new Date().toISOString().split('T')[0];
-  }
-
-  static #normalizeName(name) {
-    return String(name || '').toLowerCase().replace(/\s+/g, ' ').trim();
-  }
 
   static async #countryName(idCountry) {
     if (!idCountry) return null;
@@ -107,14 +57,14 @@ class CityMasterController {
    * Cari kota aktif dengan nama sama DALAM provinsi yang sama (case/spasi-insensitive).
    */
   static async #findDuplicate(name, idProvince, excludeId = null) {
-    const target = CityMasterController.#normalizeName(name);
+    const target = GeneralController.normalizeName(name);
     if (!target) return null;
 
     const where = { province_id: idProvince, status: { [Op.ne]: 3 } };
     if (excludeId) where.city_id = { [Op.ne]: excludeId };
 
     const existing = await City.findAll({ where, attributes: ['city_id', 'name'] });
-    return existing.find(c => CityMasterController.#normalizeName(c.name) === target) || null;
+    return existing.find(c => GeneralController.normalizeName(c.name) === target) || null;
   }
 
   /* ──────────────────────────────────────────────────────────────────────────
@@ -158,7 +108,7 @@ class CityMasterController {
       }
 
       const total  = await City.count();
-      const idCity = CityMasterController.#makeCityId(name, total).toUpperCase();
+      const idCity = GeneralController.generateRandomId(name, total).toUpperCase();
 
       const newCity = await City.create({
         city_id:      idCity,
@@ -166,7 +116,7 @@ class CityMasterController {
         country_id:   String(country_id).toUpperCase(),
         name:         String(name).trim().toUpperCase(),
         status:       1,
-        created_date: CityMasterController.#todayDate(),
+        created_date: GeneralController.todayDate(),
         created_by:   String(createdBy).toUpperCase(),
         updated_date: null,
         updated_by:   null
@@ -246,12 +196,12 @@ class CityMasterController {
         country_id:   country_id.toUpperCase(),
         province_id:  province_id.toUpperCase(),
         name:         String(name).trim().toUpperCase(),
-        updated_date: CityMasterController.#todayDate(),
+        updated_date: GeneralController.todayDate(),
         updated_by:   updatedBy.toUpperCase()
       });
 
-      const creatorName  = await CityMasterController.#resolveUserName(city.created_by);
-      const updaterName  = await CityMasterController.#resolveUserName(updatedBy);
+      const creatorName  = await GeneralController.resolveUserName(city.created_by);
+      const updaterName  = await GeneralController.resolveUserName(updatedBy);
       const provinceName = await CityMasterController.#provinceName(city.province_id);
       const countryName  = await CityMasterController.#countryName(city.country_id);
 
@@ -293,7 +243,7 @@ class CityMasterController {
   static async showDataCity(req, res) {
     try {
       const page      = Math.max(1, parseInt(req.query.page, 10) || 1);
-      const pageSize  = CityMasterController.#pageSize();
+      const pageSize  = GeneralController.pageSize();
       const offset    = (page - 1) * pageSize;
       const search    = req.query.search      ? String(req.query.search).trim()      : '';
       const idCountry = req.query.country_id  ? String(req.query.country_id).trim()  : '';
@@ -378,8 +328,8 @@ class CityMasterController {
         return sendError(res, HTTP.NOT_FOUND, null, 'Kota tidak ditemukan');
       }
 
-      const creatorName  = await CityMasterController.#resolveUserName(city.created_by);
-      const updaterName  = await CityMasterController.#resolveUserName(city.updated_by);
+      const creatorName  = await GeneralController.resolveUserName(city.created_by);
+      const updaterName  = await GeneralController.resolveUserName(city.updated_by);
       const provinceName = await CityMasterController.#provinceName(city.province_id);
       const countryName  = await CityMasterController.#countryName(city.country_id);
 
@@ -432,7 +382,7 @@ class CityMasterController {
 
       await city.update({
         status:       newStatus,
-        updated_date: CityMasterController.#todayDate(),
+        updated_date: GeneralController.todayDate(),
         updated_by:   updatedBy.toUpperCase()
       });
 
@@ -472,7 +422,7 @@ class CityMasterController {
 
       await city.update({
         status:       3,
-        updated_date: CityMasterController.#todayDate(),
+        updated_date: GeneralController.todayDate(),
         updated_by:   updatedBy
       });
 
