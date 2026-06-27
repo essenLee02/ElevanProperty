@@ -62,6 +62,7 @@ const facilityMasterController   = require('../controllers/facilityMasterControl
 const countryMasterController    = require('../controllers/countryMasterController');
 const provinceMasterController   = require('../controllers/provinceMasterController');
 const cityMasterController       = require('../controllers/cityMasterController');
+const propertyMasterController   = require('../controllers/propertyMasterController');
 
 const { verifyToken, requirePrivilege } = require('../middleware/verifyToken');
 
@@ -233,5 +234,16 @@ router.post('/city/insert',                         verifyToken, cityMasterContr
 router.put('/city/update/:city_id',                 verifyToken, cityMasterController.updateDataCity);
 router.patch('/city/toggle-status/:city_id',        verifyToken, cityMasterController.toggleStatusCity);
 router.delete('/city/delete/:city_id',              verifyToken, cityMasterController.deleteCity);
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   MASTER DATA — PROPERTY (Butuh login)
+══════════════════════════════════════════════════════════════════════════════ */
+
+router.get('/property/list',                          verifyToken, propertyMasterController.showDataProperty);
+router.get('/property/detail/:property_id',           verifyToken, propertyMasterController.getDetailProperty);
+router.post('/property/insert',                       verifyToken, propertyMasterController.insertDataProperty);
+router.put('/property/update/:property_id',           verifyToken, propertyMasterController.updateDataProperty);
+router.patch('/property/toggle-status/:property_id',  verifyToken, propertyMasterController.toggleStatusProperty);
+router.delete('/property/delete/:property_id',        verifyToken, propertyMasterController.deleteProperty);
 
 module.exports = router;

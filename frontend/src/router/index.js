@@ -16,6 +16,8 @@ import ProvinceListView from '../views/Province/ProvinceListView.vue'
 import ProvinceMasterView from '../views/Province/ProvinceMasterView.vue'
 import CityListView from '../views/City/CityListView.vue'
 import CityMasterView from '../views/City/CityMasterView.vue'
+import PropertyListView from '../views/Property/PropertyListView.vue'
+import PropertyMasterView from '../views/Property/PropertyMasterView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -132,6 +134,25 @@ const router = createRouter({
       path: '/city/edit/:city_id',
       name: 'city-edit',
       component: CityMasterView,
+      meta: { layout: 'auth', requiresAuth: true }
+    },
+    // Master Data — Property
+    {
+      path: '/property',
+      name: 'property-list',
+      component: PropertyListView,
+      meta: { layout: 'auth', requiresAuth: true }
+    },
+    {
+      path: '/property/add',
+      name: 'property-add',
+      component: PropertyMasterView,
+      meta: { layout: 'auth', requiresAuth: true }
+    },
+    {
+      path: '/property/edit/:property_id',
+      name: 'property-edit',
+      component: PropertyMasterView,
       meta: { layout: 'auth', requiresAuth: true }
     }
   ]

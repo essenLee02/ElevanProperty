@@ -19,6 +19,7 @@
       <!-- Desktop Nav — Authenticated -->
       <nav class="navbar-links d-none d-lg-flex" v-else>
         <router-link class="nav-link-elevan" active-class="active" to="/rumah123">Rumah123</router-link>
+        <router-link class="nav-link-elevan" active-class="active" to="/property">Properti</router-link>
         <router-link class="nav-link-elevan" active-class="active" to="/facility">Fasilitas</router-link>
         <router-link class="nav-link-elevan" active-class="active" to="/city">Kota</router-link>
         <router-link class="nav-link-elevan" active-class="active" to="/province">Provinsi</router-link>
@@ -84,8 +85,18 @@
               <div class="dropdown-divider-item"></div>
 
               <div class="dropdown-header-menu">
-                <span>Wilayah</span>
+                <span>Properti & Wilayah</span>
               </div>
+
+              <router-link
+                to="/property"
+                class="dropdown-item-elevan"
+                @click="closeDropdown"
+                role="menuitem"
+              >
+                <i class="fa-solid fa-house item-icon"></i>
+                <span>Master Properti</span>
+              </router-link>
 
               <router-link
                 to="/city"
@@ -164,6 +175,7 @@
             </div>
           </div>
           <router-link class="mobile-nav-link" to="/rumah123"  @click="closeMobileMenu">Rumah123</router-link>
+          <router-link class="mobile-nav-link" to="/property"  @click="closeMobileMenu">Master Properti</router-link>
           <router-link class="mobile-nav-link" to="/facility"  @click="closeMobileMenu">Master Fasilitas</router-link>
           <router-link class="mobile-nav-link" to="/city"      @click="closeMobileMenu">Master Kota</router-link>
           <router-link class="mobile-nav-link" to="/province"  @click="closeMobileMenu">Master Provinsi</router-link>

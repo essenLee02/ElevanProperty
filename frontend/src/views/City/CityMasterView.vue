@@ -38,41 +38,46 @@
             <!-- Form -->
             <form v-else @submit.prevent="submitForm" class="master-form">
 
-              <!-- Negara -->
+              <!-- Negara (pilih via modal — terhubung database) -->
               <div class="form-group">
-                <label for="country_id">Negara <span class="required">*</span></label>
-                <select
-                  id="country_id"
-                  v-model="form.country_id"
-                  :disabled="isSubmitting"
-                  required
-                  @change="onCountryChange"
-                >
-                  <option value="" disabled>— Pilih Negara —</option>
-                  <option v-for="c in countryOptions" :key="c.country_id" :value="c.country_id">
-                    {{ c.name }}
-                  </option>
-                </select>
-                <p class="field-hint">Pilih negara terlebih dahulu untuk memuat provinsi</p>
+                <label for="country_name">Negara <span class="required">*</span></label>
+                <div class="picker-field" :class="{ disabled: isSubmitting }">
+                  <input
+                    id="country_name"
+                    v-model="form.country_name"
+                    type="text"
+                    placeholder="Ketik nama negara, lalu tekan Enter / Tab"
+                    :disabled="isSubmitting"
+                    autocomplete="off"
+                    @keydown="onPickerKey($event, showModalCountry)"
+                    @input="onCountryInput"
+                  />
+                  <button type="button" class="picker-btn" :disabled="isSubmitting" @click="showModalCountry()">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                  </button>
+                </div>
+                <p class="field-hint">Pilih negara dulu untuk memilih provinsi. Ketik <b>*</b> lalu Enter untuk semua.</p>
               </div>
 
-              <!-- Provinsi -->
+              <!-- Provinsi (pilih via modal — terhubung database) -->
               <div class="form-group">
-                <label for="province_id">Provinsi <span class="required">*</span></label>
-                <select
-                  id="province_id"
-                  v-model="form.province_id"
-                  :disabled="isSubmitting || !form.country_id || isLoadingProvince"
-                  required
-                >
-                  <option value="" disabled>
-                    {{ isLoadingProvince ? 'Memuat provinsi...' : '— Pilih Provinsi —' }}
-                  </option>
-                  <option v-for="p in provinceOptions" :key="p.province_id" :value="p.province_id">
-                    {{ p.name }}
-                  </option>
-                </select>
-                <p class="field-hint">Provinsi induk dari kota ini</p>
+                <label for="province_name">Provinsi <span class="required">*</span></label>
+                <div class="picker-field" :class="{ disabled: isSubmitting || !form.country_id }">
+                  <input
+                    id="province_name"
+                    v-model="form.province_name"
+                    type="text"
+                    :placeholder="form.country_id ? 'Ketik nama provinsi, lalu tekan Enter / Tab' : 'Pilih negara terlebih dahulu'"
+                    :disabled="isSubmitting || !form.country_id"
+                    autocomplete="off"
+                    @keydown="onPickerKey($event, showModalProvince)"
+                    @input="onProvinceInput"
+                  />
+                  <button type="button" class="picker-btn" :disabled="isSubmitting || !form.country_id" @click="showModalProvince()">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                  </button>
+                </div>
+                <p class="field-hint">Provinsi induk dari kota ini (difilter sesuai negara terpilih)</p>
               </div>
 
               <!-- Nama Kota -->
@@ -164,6 +169,9 @@
       </div>
     </div>
 
+    <!-- Pemilih data (negara/provinsi) — terhubung database -->
+    <Modal ref="modalRef" />
+
     <!-- Confirm Delete Modal -->
     <div v-if="deleteModal.show" class="modal-overlay" @click.self="closeDeleteModal">
       <div class="modal-box">
@@ -196,11 +204,15 @@ import {
   toggleCityStatus,
   deleteCity
 } from '../../services/cityApi';
-import { getCountryOptions } from '../../services/countryApi';
-import { getProvinceOptions } from '../../services/provinceApi';
+import { getCountryList } from '../../services/countryApi';
+import { getProvinceList } from '../../services/provinceApi';
+import Modal from '../../components/Modal.vue';
 
 const route  = useRoute();
 const router = useRouter();
+
+/* ── Ref komponen pemilih data (modal terhubung database) ───────────── */
+const modalRef = ref(null);
 
 /* ── Mode detection ─────────────────────────────────────────────── */
 const cityId     = computed(() => route.params.city_id || null);
@@ -208,19 +220,18 @@ const isEditMode = computed(() => !!cityId.value);
 
 /* ── State ──────────────────────────────────────────────────────── */
 const isLoadingDetail   = ref(false);
-const isLoadingProvince = ref(false);
 const isSubmitting      = ref(false);
 const isTogglingStatus  = ref(false);
 const isDeleting        = ref(false);
 
-const countryOptions  = ref([]);
-const provinceOptions = ref([]);
 const deleteModal     = reactive({ show: false });
 
 const form = reactive({
   city_id:         '',
   province_id:     '',
+  province_name:   '',
   country_id:      '',
+  country_name:    '',
   name:            '',
   status:          1,
   created_date:    '',
@@ -265,31 +276,84 @@ const syncOriginal = () => {
   originalForm.name        = form.name;
 };
 
-/* ── Load options ───────────────────────────────────────────────── */
-const loadCountryOptions = async () => {
-  try {
-    const result = await getCountryOptions();
-    if (result?.isSuccess === 1) countryOptions.value = result.data.response.countries || [];
-  } catch (_) { /* non-fatal */ }
-};
+/* ── Pemilih Negara & Provinsi via Modal (terhubung database) ───── */
 
-const loadProvinceOptions = async (idCountry) => {
-  if (!idCountry) { provinceOptions.value = []; return; }
-  isLoadingProvince.value = true;
-  try {
-    const result = await getProvinceOptions(idCountry);
-    if (result?.isSuccess === 1) provinceOptions.value = result.data.response.provinces || [];
-  } catch (_) {
-    provinceOptions.value = [];
-  } finally {
-    isLoadingProvince.value = false;
+/** Buka modal jika user menekan Enter atau Tab pada input. */
+const onPickerKey = (e, opener) => {
+  if (e.key === 'Enter' || e.key === 'Tab') {
+    e.preventDefault();
+    opener(e.target.value);
   }
 };
 
-/* ── Cascading: ganti negara → reset & reload provinsi ──────────── */
-const onCountryChange = async () => {
-  form.province_id = '';
-  await loadProvinceOptions(form.country_id);
+/** Ketik manual negara → batalkan id & reset provinsi (wajib pilih ulang). */
+const onCountryInput = () => {
+  form.country_id   = '';
+  form.province_id  = '';
+  form.province_name = '';
+};
+
+/** Ketik manual provinsi → batalkan id provinsi. */
+const onProvinceInput = () => { form.province_id = ''; };
+
+/* Fetcher Modal → { rows, currentPage, lastPage } */
+const fetchCountries = async (search, page) => {
+  const result = await getCountryList({ search, page });
+  if (result?.isSuccess === 1) {
+    const r = result.data.response;
+    return { rows: r.countries || [], currentPage: r.pagination?.page || page, lastPage: r.pagination?.totalPages || 1 };
+  }
+  return { rows: [], currentPage: 1, lastPage: 1 };
+};
+
+const fetchProvinces = async (search, page) => {
+  const result = await getProvinceList({ search, page, country_id: form.country_id });
+  if (result?.isSuccess === 1) {
+    const r = result.data.response;
+    return { rows: r.provinces || [], currentPage: r.pagination?.page || page, lastPage: r.pagination?.totalPages || 1 };
+  }
+  return { rows: [], currentPage: 1, lastPage: 1 };
+};
+
+const showModalCountry = (seed = '') => {
+  modalRef.value?.open({
+    title:        'Pilih Negara',
+    placeholder:  'Ketik nama negara, atau * untuk semua',
+    headers:      ['Negara', 'Status'],
+    chunks:       ['name', 'status'],
+    actionParams: ['country_id', 'name'],
+    multiSelect:  false,
+    initialSearch: seed || form.country_name,
+    fetch:        fetchCountries,
+    onChoose: (sel) => {
+      // Ganti negara → reset provinsi
+      form.country_id    = sel.country_id;
+      form.country_name  = sel.name;
+      form.province_id   = '';
+      form.province_name = '';
+    }
+  });
+};
+
+const showModalProvince = (seed = '') => {
+  if (!form.country_id) {
+    setAlert('warning', 'Pilih negara terlebih dahulu');
+    return;
+  }
+  modalRef.value?.open({
+    title:        'Pilih Provinsi',
+    placeholder:  'Ketik nama provinsi, atau * untuk semua',
+    headers:      ['Provinsi', 'Status'],
+    chunks:       ['name', 'status'],
+    actionParams: ['province_id', 'name'],
+    multiSelect:  false,
+    initialSearch: seed || form.province_name,
+    fetch:        fetchProvinces,
+    onChoose: (sel) => {
+      form.province_id   = sel.province_id;
+      form.province_name = sel.name;
+    }
+  });
 };
 
 /* ── Load detail (edit mode) ─────────────────────────────────────── */
@@ -303,7 +367,9 @@ const loadDetail = async () => {
       Object.assign(form, {
         city_id:         c.city_id         || '',
         province_id:     c.province_id     || '',
+        province_name:   c.province_name   || '',
         country_id:      c.country_id      || '',
+        country_name:    c.country_name    || '',
         name:            c.name            || '',
         status:          c.status          ?? 1,
         created_date:    c.created_date    || '',
@@ -313,8 +379,6 @@ const loadDetail = async () => {
         updated_by:      c.updated_by      || '',
         updated_by_name: c.updated_by_name || ''
       });
-      // muat provinsi sesuai negara terpilih agar dropdown menampilkan nilai tersimpan
-      await loadProvinceOptions(form.country_id);
       syncOriginal();
     } else {
       setAlert('danger', result?.data?.message || 'Kota tidak ditemukan');
@@ -436,8 +500,7 @@ const handleDelete = async () => {
 };
 
 /* ── Lifecycle ──────────────────────────────────────────────────── */
-onMounted(async () => {
-  await loadCountryOptions();
+onMounted(() => {
   if (isEditMode.value) loadDetail();
 });
 </script>
@@ -500,6 +563,17 @@ onMounted(async () => {
 .master-form input:disabled, .master-form select:disabled { background: #edf2f7; cursor: not-allowed; color: #718096; }
 
 .field-hint { margin: 5px 0 0; font-size: 12px; color: #a0aec0; }
+
+/* ── Picker field (input + tombol modal) ────────────────────────── */
+.picker-field { display: flex; gap: 8px; }
+.picker-field input { flex: 1; }
+.picker-field.disabled { opacity: 0.7; }
+.picker-btn {
+  flex: 0 0 auto; width: 46px; border: 1px solid #cbd5e0; border-radius: 8px;
+  background: #f7fafc; color: #667eea; cursor: pointer; font-size: 15px; transition: all 0.15s;
+}
+.picker-btn:hover:not(:disabled) { background: #edf2f7; border-color: #667eea; }
+.picker-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ── Audit info ─────────────────────────────────────────────────── */
 .audit-info { margin-top: 8px; margin-bottom: 20px; }

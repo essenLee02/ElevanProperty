@@ -12,6 +12,7 @@
  */
 
 const { validateChatbotMessage }              = require('../services/validationService');
+const City                                    = require('../models/City');
 const { findOrCreateSession,
         getConversationHistory,
         saveUserMessage,
@@ -3285,6 +3286,9 @@ class ConversationQualifier {
 
 // ─── ChatbotPrivateService ────────────────────────────────────────────────────
 
+// Module-level cache for city names loaded from DB (populated once per process lifetime)
+let _cityNamesCache = null;
+
 class ChatbotPrivateService {
   /**
    * Load skill registry metadata and prompt statistics for status reporting.
@@ -3304,26 +3308,27 @@ class ChatbotPrivateService {
   }
 
   /**
-   * Normalize location by extracting the city name from district+city combinations.
-   * Example: "PTC surabaya" → "Surabaya" (matches known locations)
-   *          "Gunawangsa Surabaya" → "Surabaya"
-   *
-   * @param {string} location - Raw location string from filters
-   * @returns {string} Normalized location (city name)
-   * @private
+   * Load city names from DB, cached for the lifetime of this process.
+   * Returns lowercase city names for case-insensitive matching.
    */
-  static #normalizeLocation(location = '') {
+  static async #loadCityNames() {
+    if (_cityNamesCache) return _cityNamesCache;
+    try {
+      const rows = await City.findAll({ where: { status: 1 }, attributes: ['name'] });
+      _cityNamesCache = rows.map(r => r.name.toLowerCase().trim());
+      console.log(`[PrivateController] City cache loaded: ${_cityNamesCache.length} cities from DB`);
+    } catch (err) {
+      console.error('[PrivateController] Failed to load cities from DB:', err.message);
+      _cityNamesCache = [];
+    }
+    return _cityNamesCache;
+  }
+
+  static async #normalizeLocation(location = '') {
     if (!location) return '';
 
     const text = String(location).toLowerCase().trim();
-
-    // Known cities/provinces that should be extracted from compound locations
-    const knownCities = [
-      'surabaya', 'jakarta', 'bandung', 'semarang', 'yogyakarta', 'malang',
-      'medan', 'palembang', 'pekanbaru', 'padang', 'makassar', 'denpasar',
-      'bali', 'batu', 'bogor', 'depok', 'tangerang', 'bekasi', 'solo',
-      'serang', 'cilegon', 'cirebon', 'tasikmalaya', 'sukabumi', 'karawang'
-    ];
+    const knownCities = await this.#loadCityNames();
 
     // If location is already a known city, return it as-is
     if (knownCities.includes(text)) {
@@ -3340,7 +3345,8 @@ class ChatbotPrivateService {
             return word; // return with original capitalization
           }
         }
-        return city;
+        // Capitalize the city name from DB
+        return city.charAt(0).toUpperCase() + city.slice(1);
       }
     }
 
@@ -3379,7 +3385,7 @@ class ChatbotPrivateService {
       // Normalize location to extract city name from compound locations
       if (location) {
         const originalLocation = location;
-        location = this.#normalizeLocation(location);
+        location = await this.#normalizeLocation(location);
         if (originalLocation !== location) {
           console.log(`[PrivateController] Location normalized: "${originalLocation}" → "${location}"`);
         }

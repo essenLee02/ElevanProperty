@@ -38,21 +38,25 @@
             <!-- Form -->
             <form v-else @submit.prevent="submitForm" class="master-form">
 
-              <!-- Negara -->
+              <!-- Negara (pilih via modal — terhubung database) -->
               <div class="form-group">
-                <label for="country_id">Negara <span class="required">*</span></label>
-                <select
-                  id="country_id"
-                  v-model="form.country_id"
-                  :disabled="isSubmitting"
-                  required
-                >
-                  <option value="" disabled>— Pilih Negara —</option>
-                  <option v-for="c in countryOptions" :key="c.country_id" :value="c.country_id">
-                    {{ c.name }}
-                  </option>
-                </select>
-                <p class="field-hint">Negara induk dari provinsi ini</p>
+                <label for="country_name">Negara <span class="required">*</span></label>
+                <div class="picker-field" :class="{ disabled: isSubmitting }">
+                  <input
+                    id="country_name"
+                    v-model="form.country_name"
+                    type="text"
+                    placeholder="Ketik nama negara, lalu tekan Enter / Tab"
+                    :disabled="isSubmitting"
+                    autocomplete="off"
+                    @keydown="onPickerKey($event, showModalCountry)"
+                    @input="onCountryInput"
+                  />
+                  <button type="button" class="picker-btn" :disabled="isSubmitting" @click="showModalCountry()">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                  </button>
+                </div>
+                <p class="field-hint">Tekan Enter/Tab atau klik 🔍 untuk memilih negara induk. Ketik <b>*</b> lalu Enter untuk semua.</p>
               </div>
 
               <!-- Nama Provinsi -->
@@ -144,6 +148,9 @@
       </div>
     </div>
 
+    <!-- Pemilih data (negara) — terhubung database -->
+    <Modal ref="modalRef" />
+
     <!-- Confirm Delete Modal -->
     <div v-if="deleteModal.show" class="modal-overlay" @click.self="closeDeleteModal">
       <div class="modal-box">
@@ -176,10 +183,14 @@ import {
   toggleProvinceStatus,
   deleteProvince
 } from '../../services/provinceApi';
-import { getCountryOptions } from '../../services/countryApi';
+import { getCountryList } from '../../services/countryApi';
+import Modal from '../../components/Modal.vue';
 
 const route  = useRoute();
 const router = useRouter();
+
+/* ── Ref komponen pemilih data (modal terhubung database) ───────────── */
+const modalRef = ref(null);
 
 /* ── Mode detection ─────────────────────────────────────────────── */
 const provinceId = computed(() => route.params.province_id || null);
@@ -191,12 +202,12 @@ const isSubmitting     = ref(false);
 const isTogglingStatus = ref(false);
 const isDeleting       = ref(false);
 
-const countryOptions = ref([]);
 const deleteModal    = reactive({ show: false });
 
 const form = reactive({
   province_id:     '',
   country_id:      '',
+  country_name:    '',
   name:            '',
   status:          1,
   created_date:    '',
@@ -239,14 +250,44 @@ const syncOriginal = () => {
   originalForm.name       = form.name;
 };
 
-/* ── Load country options (untuk dropdown) ──────────────────────── */
-const loadCountryOptions = async () => {
-  try {
-    const result = await getCountryOptions();
-    if (result?.isSuccess === 1) {
-      countryOptions.value = result.data.response.countries || [];
+/* ── Pemilih Negara via Modal (terhubung database) ──────────────── */
+
+/** Buka modal jika user menekan Enter atau Tab pada input. */
+const onPickerKey = (e, opener) => {
+  if (e.key === 'Enter' || e.key === 'Tab') {
+    e.preventDefault();
+    opener(e.target.value);
+  }
+};
+
+/** Saat user mengetik manual, batalkan pilihan id agar wajib pilih ulang. */
+const onCountryInput = () => { form.country_id = ''; };
+
+/** Fetcher untuk Modal: kembalikan { rows, currentPage, lastPage }. */
+const fetchCountries = async (search, page) => {
+  const result = await getCountryList({ search, page });
+  if (result?.isSuccess === 1) {
+    const r = result.data.response;
+    return { rows: r.countries || [], currentPage: r.pagination?.page || page, lastPage: r.pagination?.totalPages || 1 };
+  }
+  return { rows: [], currentPage: 1, lastPage: 1 };
+};
+
+const showModalCountry = (seed = '') => {
+  modalRef.value?.open({
+    title:        'Pilih Negara',
+    placeholder:  'Ketik nama negara, atau * untuk semua',
+    headers:      ['Negara', 'Status'],
+    chunks:       ['name', 'status'],
+    actionParams: ['country_id', 'name'],
+    multiSelect:  false,
+    initialSearch: seed || form.country_name,
+    fetch:        fetchCountries,
+    onChoose: (sel) => {
+      form.country_id   = sel.country_id;
+      form.country_name = sel.name;
     }
-  } catch (_) { /* non-fatal */ }
+  });
 };
 
 /* ── Load detail (edit mode) ─────────────────────────────────────── */
@@ -260,6 +301,7 @@ const loadDetail = async () => {
       Object.assign(form, {
         province_id:     p.province_id     || '',
         country_id:      p.country_id      || '',
+        country_name:    p.country_name    || '',
         name:            p.name            || '',
         status:          p.status          ?? 1,
         created_date:    p.created_date    || '',
@@ -382,8 +424,7 @@ const handleDelete = async () => {
 };
 
 /* ── Lifecycle ──────────────────────────────────────────────────── */
-onMounted(async () => {
-  await loadCountryOptions();
+onMounted(() => {
   if (isEditMode.value) loadDetail();
 });
 </script>
@@ -446,6 +487,17 @@ onMounted(async () => {
 .master-form input:disabled, .master-form select:disabled { background: #edf2f7; cursor: not-allowed; color: #718096; }
 
 .field-hint { margin: 5px 0 0; font-size: 12px; color: #a0aec0; }
+
+/* ── Picker field (input + tombol modal) ────────────────────────── */
+.picker-field { display: flex; gap: 8px; }
+.picker-field input { flex: 1; }
+.picker-field.disabled { opacity: 0.7; }
+.picker-btn {
+  flex: 0 0 auto; width: 46px; border: 1px solid #cbd5e0; border-radius: 8px;
+  background: #f7fafc; color: #667eea; cursor: pointer; font-size: 15px; transition: all 0.15s;
+}
+.picker-btn:hover:not(:disabled) { background: #edf2f7; border-color: #667eea; }
+.picker-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ── Audit info ─────────────────────────────────────────────────── */
 .audit-info { margin-top: 8px; margin-bottom: 20px; }
