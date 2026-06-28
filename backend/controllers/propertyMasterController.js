@@ -29,7 +29,8 @@ const VALID_BUILDING_TYPES = [
 ];
 
 const VALID_TRANSACTION_TYPES = ['Rent', 'Sale'];
-const VALID_FURNISHED = ['Full Furnished', 'Semi Furnished', 'Unfurnished'];
+const VALID_FURNISHED    = ['Full Furnished', 'Semi Furnished', 'Unfurnished'];
+const VALID_PRICE_TYPES  = ['Night', 'Daily', 'Weekly', 'Monthly', 'Yearly', 'Cash', 'Negotiable', 'Others'];
 
 class PropertyMasterController extends GeneralController {
 
@@ -108,7 +109,7 @@ class PropertyMasterController extends GeneralController {
 
   /**
    * POST /api/property/insert
-   * Body: { city_id, province_id, country_id, title, description?, price?,
+   * Body: { city_id, province_id, country_id, title, description?, price?, price_type,
    *         address?, area?, district?, postal_code?, furnished_status?,
    *         bed_rooms?, bath_rooms?, electricity_capacity?, building_area?,
    *         land_area?, floor_location?, floor_quantity?, kpr_status?, building_type, transaction_type }
@@ -117,7 +118,7 @@ class PropertyMasterController extends GeneralController {
   static async insertDataProperty(req, res) {
     const {
       city_id, province_id, country_id,
-      title, description, price, address, area, district, postal_code,
+      title, description, price, price_type, address, area, district, postal_code,
       furnished_status, bed_rooms, bath_rooms, electricity_capacity,
       building_area, land_area, floor_location, floor_quantity, kpr_status,
       building_type, transaction_type, facilities
@@ -144,6 +145,9 @@ class PropertyMasterController extends GeneralController {
     if (furnished_status && !VALID_FURNISHED.includes(furnished_status)) {
       return sendError(res, HTTP.BAD_REQUEST, null, `furnished_status tidak valid. Pilih: ${VALID_FURNISHED.join(', ')}`);
     }
+    if (!price_type || !VALID_PRICE_TYPES.includes(price_type)) {
+      return sendError(res, HTTP.BAD_REQUEST, null, `Tipe harga wajib dipilih. Pilih: ${VALID_PRICE_TYPES.join(', ')}`);
+    }
 
     try {
       // Validasi region
@@ -166,6 +170,7 @@ class PropertyMasterController extends GeneralController {
         title:                String(title).trim(),
         description:          description ? String(description).trim() : null,
         price:                PropertyMasterController.#num(price),
+        price_type:           price_type,
         address:              address      ? String(address).trim()      : null,
         area:                 area         ? String(area).trim()         : null,
         district:             district     ? String(district).trim()     : null,
@@ -200,12 +205,13 @@ class PropertyMasterController extends GeneralController {
           city:          city.name,
           province:      province.name,
           country:       country.name,
-          building_type: newProperty.building_type,
+          building_type:    newProperty.building_type,
           transaction_type: newProperty.transaction_type,
-          price:         newProperty.price,
-          status:        newProperty.status,
-          created_date:  newProperty.created_date,
-          created_by:    newProperty.created_by
+          price:            newProperty.price,
+          price_type:       newProperty.price_type,
+          status:           newProperty.status,
+          created_date:     newProperty.created_date,
+          created_by:       newProperty.created_by
         }
       }, 'Properti berhasil ditambahkan');
 
@@ -228,7 +234,7 @@ class PropertyMasterController extends GeneralController {
     const { property_id } = req.params;
     const {
       city_id, province_id, country_id,
-      title, description, price, address, area, district, postal_code,
+      title, description, price, price_type, address, area, district, postal_code,
       furnished_status, bed_rooms, bath_rooms, electricity_capacity,
       building_area, land_area, floor_location, floor_quantity, kpr_status,
       building_type, transaction_type, facilities
@@ -253,6 +259,9 @@ class PropertyMasterController extends GeneralController {
     }
     if (furnished_status && !VALID_FURNISHED.includes(furnished_status)) {
       return sendError(res, HTTP.BAD_REQUEST, null, `furnished_status tidak valid. Pilih: ${VALID_FURNISHED.join(', ')}`);
+    }
+    if (price_type !== undefined && !VALID_PRICE_TYPES.includes(price_type)) {
+      return sendError(res, HTTP.BAD_REQUEST, null, `price_type tidak valid. Pilih: ${VALID_PRICE_TYPES.join(', ')}`);
     }
 
     try {
@@ -290,6 +299,7 @@ class PropertyMasterController extends GeneralController {
       if (title             !== undefined) updatePayload.title             = String(title).trim();
       if (description       !== undefined) updatePayload.description       = description ? String(description).trim() : null;
       if (price             !== undefined) updatePayload.price             = PropertyMasterController.#num(price);
+      if (price_type        !== undefined) updatePayload.price_type        = price_type;
       if (address           !== undefined) updatePayload.address           = address ? String(address).trim() : null;
       if (area              !== undefined) updatePayload.area              = area    ? String(area).trim()    : null;
       if (district          !== undefined) updatePayload.district          = district ? String(district).trim() : null;
@@ -327,6 +337,7 @@ class PropertyMasterController extends GeneralController {
           transaction_type: property.transaction_type,
           kpr_status:       property.kpr_status,
           price:            property.price,
+          price_type:       property.price_type,
           status:           property.status,
           created_date:     property.created_date,
           created_by:       property.created_by,
@@ -477,6 +488,7 @@ class PropertyMasterController extends GeneralController {
           title:                property.title,
           description:          property.description,
           price:                property.price,
+          price_type:           property.price_type,
           price_display:        property.price != null ? 'Rp ' + Number(property.price).toLocaleString('id-ID') : '-',
           address:              property.address,
           area:                 property.area,

@@ -154,6 +154,13 @@
                   <label for="price">Harga (Rp) <span class="required">*</span></label>
                   <input id="price" v-model="form.price" type="number" min="0" step="any" placeholder="0" :disabled="isSubmitting" required />
                 </div>
+                <div class="form-group">
+                  <label for="price_type">Tipe Harga <span class="required">*</span></label>
+                  <select id="price_type" v-model="form.price_type" :disabled="isSubmitting" required>
+                    <option value="" disabled>— Pilih Tipe Harga —</option>
+                    <option v-for="pt in PRICE_TYPE_OPTIONS" :key="pt.value" :value="pt.value">{{ pt.label }}</option>
+                  </select>
+                </div>
               </div>
 
               <!-- ── Detail Bangunan ── -->
@@ -376,7 +383,17 @@ const BUILDING_TYPES = [
   { value: 'mansion',        label: 'Mansion' },
   { value: 'others',         label: 'Lainnya' }
 ];
-const FURNISHED_OPTIONS = ['Full Furnished', 'Semi Furnished', 'Unfurnished'];
+const FURNISHED_OPTIONS  = ['Full Furnished', 'Semi Furnished', 'Unfurnished'];
+const PRICE_TYPE_OPTIONS = [
+  { value: 'Night',      label: 'Per Malam (Night)'   },
+  { value: 'Daily',      label: 'Per Hari (Daily)'     },
+  { value: 'Weekly',     label: 'Per Minggu (Weekly)'  },
+  { value: 'Monthly',    label: 'Per Bulan (Monthly)'  },
+  { value: 'Yearly',     label: 'Per Tahun (Yearly)'   },
+  { value: 'Cash',       label: 'Cash'                 },
+  { value: 'Negotiable', label: 'Nego (Negotiable)'    },
+  { value: 'Others',     label: 'Lainnya (Others)'     }
+];
 
 /* Tipe bangunan yang field "Lantai"-nya bermakna POSISI lantai unit
    (bukan jumlah lantai). Mis. unit apartemen berada di Lantai 5. */
@@ -406,6 +423,7 @@ const form = reactive({
   title:                '',
   description:          '',
   price:                '',
+  price_type:           '',
   address:              '',
   area:                 '',
   district:             '',
@@ -593,6 +611,7 @@ const loadDetail = async () => {
         title:                p.title                || '',
         description:          p.description          || '',
         price:                p.price                ?? '',
+        price_type:           p.price_type           || '',
         address:              p.address              || '',
         area:                 p.area                 || '',
         district:             p.district             || '',
@@ -654,6 +673,10 @@ const submitForm = async () => {
     setAlert('warning', 'Harga wajib diisi dan tidak boleh negatif');
     return;
   }
+  if (!form.price_type) {
+    setAlert('warning', 'Tipe harga wajib dipilih');
+    return;
+  }
 
   isSubmitting.value = true;
 
@@ -667,6 +690,7 @@ const submitForm = async () => {
     title:                form.title,
     description:          form.description || null,
     price:                num(form.price),
+    price_type:           form.price_type || null,
     address:              form.address || null,
     area:                 form.area || null,
     district:             form.district || null,

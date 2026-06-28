@@ -43,6 +43,20 @@ app.use(cookieParser());
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// ─── UNIVERSAL ENTRY LOGGER ──────────────────────────────────────────────────
+// Cetak SETIAP request HTTP yang menyentuh backend (method + path), tanpa peduli
+// platform atau path. Tujuannya: saat customer chat agent, kita bisa langsung
+// LIHAT apakah webhook benar-benar SAMPAI ke server. Jika baris ini TIDAK muncul
+// saat customer kirim pesan → request belum sampai (masalah di Kirimi/ngrok/URL),
+// BUKAN di controller. Hanya POST yang ditampilkan agar tidak bising oleh GET API.
+app.use((req, res, next) => {
+  if (req.method === 'POST') {
+    const keys = req.body && typeof req.body === 'object' ? Object.keys(req.body).join(',') : '';
+    console.log(`\n[⇨ HTTP IN] ${req.method} ${req.path}  | body-keys: ${keys.substring(0, 80) || '(kosong)'}`);
+  }
+  next();
+});
+
 app.get('/', (req, res) => {
   const appName = process.env.APP_NAME || 'Elevan Property';
   res.json({ success: true, message: `${appName} backend is running.` });
@@ -175,9 +189,11 @@ sequelize.sync()
       console.log(`CORS Allowed Origins: ${allowedOrigins.join(', ')}`);
 
       // ─── Auto-start Fonnte Message Poller ─────────────────────────────
-      // Polling aktif mengambil pesan masuk dari Fonnte API karena
-      // "Webhook ?" Fonnte tidak selalu fire untuk incoming messages.
-      const pollingEnabled  = String(process.env.FONNTE_POLLING_ENABLED  || 'true').toLowerCase() !== 'false';
+      // Hanya aktif jika MASSEGE_TERMINAL mengandung FONNTE.
+      // Jika aktif platform lain (KIRIMI / TIMELINESAI), poller tidak diperlukan.
+      const activeTerminals = String(process.env.MASSEGE_TERMINAL || 'FONNTE').toUpperCase().split(',').map(s => s.trim());
+      const fonnteIsActive  = activeTerminals.includes('FONNTE');
+      const pollingEnabled  = fonnteIsActive && String(process.env.FONNTE_POLLING_ENABLED || 'true').toLowerCase() !== 'false';
       const pollingInterval = parseInt(process.env.FONNTE_POLLING_INTERVAL_MS || '10000');
 
       if (pollingEnabled) {
@@ -190,8 +206,22 @@ sequelize.sync()
             console.error('[FONNTE POLLER] ❌ Gagal auto-start:', pollErr.message);
           }
         }, 3000); // delay 3s agar DB connection stabil dulu
+      } else if (!fonnteIsActive) {
+        console.log(`[FONNTE POLLER] ℹ️  Skip — MASSEGE_TERMINAL=${process.env.MASSEGE_TERMINAL || 'FONNTE'} (bukan FONNTE)`);
       } else {
         console.log('[FONNTE POLLER] ℹ️  Dinonaktifkan via FONNTE_POLLING_ENABLED=false');
+      }
+
+      // ─── Kirimi startup hint ───────────────────────────────────────────
+      if (activeTerminals.includes('KIRIMI')) {
+        console.log('');
+        console.log('╔══════════════════════════════════════════════════════════════╗');
+        console.log('║  KIRIMI ACTIVE — set webhook URL di Kirimi Dashboard:        ║');
+        console.log(`║  https://<ngrok-url>/api/kirimi/webhook                      ║`);
+        console.log(`║  (Server port: ${String(port).padEnd(46)}║`);
+        console.log('║  Device webhook: Kirimi Dashboard → Device → Detail          ║');
+        console.log('╚══════════════════════════════════════════════════════════════╝');
+        console.log('');
       }
 
       // ─── Warmup Rumah123 cache ─────────────────────────────────────────

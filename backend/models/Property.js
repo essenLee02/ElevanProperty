@@ -50,6 +50,11 @@ const Property = sequelize.define('Property', {
     allowNull: true,
     comment: 'Harga jual / sewa'
   },
+  price_type: {
+    type: DataTypes.STRING(20),
+    allowNull: true,
+    comment: 'Night, Daily, Weekly, Monthly, Yearly, Cash, Negotiable, Others : 300K/hari, 1.7 juta/bulan, 1 Milyar/cash, 1.2 Milyar/nego'
+  },
   address: {
     type: DataTypes.STRING(255),
     allowNull: true,
