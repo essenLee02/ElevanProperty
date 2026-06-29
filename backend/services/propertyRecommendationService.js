@@ -437,7 +437,7 @@ function _formatRpFull(n) {
 function _detectBudgetTier(text) {
   const t = ' ' + String(text || '').toLowerCase() + ' ';
   if (/\b(eksklusif|ekslusif|mewah|premium|luxur(y|ious)|high\s*end|elit|elite|kelas\s*atas|paling\s*(bagus|mahal|mewah)|termahal|sultan|the\s*best|mahal)\b/.test(t)) return 'eksklusif';
-  if (/\b(menengah|sedang|standar|standard|medium|mid(?:dle)?|menengah\s*ke\s*atas|lumayan|kompetitif|competitive|moderate)\b/.test(t)) return 'menengah';
+  if (/\b(menengah|sedang|medium|mid(?:dle)?|menengah\s*ke\s*atas|lumayan|kompetitif|competitive|moderate)\b/.test(t)) return 'menengah';
   if (/\b(terjangkau|ekonomis|murah|termurah|hemat|low\s*budget|affordable|cheap(?:est)?|economy|low\s*(cost|price)|paling\s*murah|standar\s*bawah|budget\s*friendly|seadanya)\b/.test(t)) return 'terjangkau';
   return null;
 }

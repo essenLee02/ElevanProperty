@@ -216,11 +216,11 @@ async function generateChatbotReplyWithProviderFallback(session, history, userMe
   );
 }
 
-async function generateWhatsappReplyWithProviderFallback(session, history, userMessage, propertyContext = '') {
+async function generateWhatsappReplyWithProviderFallback(session, history, userMessage, propertyContext = '', extraContext = {}) {
   return executeAIProviderWithFallback(
     'whatsapp_reply',
-    () => generateChatGPTWhatsappReply(session, history, userMessage, propertyContext),
-    () => generateClaudeWhatsappReply(session, history, userMessage, propertyContext)
+    () => generateChatGPTWhatsappReply(session, history, userMessage, propertyContext, extraContext),
+    () => generateClaudeWhatsappReply(session, history, userMessage, propertyContext, extraContext)
   );
 }
 

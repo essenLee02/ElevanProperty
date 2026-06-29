@@ -15,6 +15,7 @@ const { City, Province, Country } = require('../models');
 const { HTTP }           = require('../utils/httpStatus');
 const { sendSuccess, sendError } = require('../utils/responseFormat');
 const GeneralController = require('./GeneralController');
+const { invalidateCache: invalidateAICache } = require('../services/aiContextService');
 
 class CityMasterController extends GeneralController {
 
@@ -123,6 +124,7 @@ class CityMasterController extends GeneralController {
       });
 
       console.log(`[CITY] ✅ INSERT — ${newCity.city_id} | "${newCity.name}" | Province: ${newCity.province_id} | By: ${createdBy}`);
+      invalidateAICache();
 
       return sendSuccess(res, HTTP.CREATED, {
         city: {
@@ -206,6 +208,7 @@ class CityMasterController extends GeneralController {
       const countryName  = await CityMasterController.#countryName(city.country_id);
 
       console.log(`[CITY] ✏️  UPDATE — ${city.city_id} | "${city.name}" | By: ${updatedBy}`);
+      invalidateAICache();
 
       return sendSuccess(res, HTTP.OK, {
         city: {
@@ -427,6 +430,7 @@ class CityMasterController extends GeneralController {
       });
 
       console.log(`[CITY] 🗑️  DELETE — ${city.city_id} | "${city.name}" | By: ${updatedBy}`);
+      invalidateAICache();
 
       return sendSuccess(res, HTTP.OK, {
         city_id: city.city_id,

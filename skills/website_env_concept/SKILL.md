@@ -1,6 +1,6 @@
 ---
 name: elevan-property-system
-description: Elevan Property — Node.js+Express backend, Vue 3 frontend, MySQL, AI chatbot (ChatGPT→Claude→Private Agent), WhatsApp multi-agent (Fonnte/ChakraHQ/TimelinesAI), JWT auth, Rumah123 via Apify, property keyword filter + context-aware continuation, Q1–Q12 qualification, ResponseBuilderWhatsApp.
+description: Elevan Property — Node.js+Express backend, Vue 3 frontend, MySQL, AI chatbot (ChatGPT→Claude→Private Agent), WhatsApp multi-agent (Fonnte/Kirimi/TimelinesAI), JWT auth, Rumah123 via Apify, property keyword filter + context-aware continuation, Q1–Q12 qualification, ResponseBuilderWhatsApp.
 version: 9.0
 status: production
 updated: 2026-06-23
@@ -11,7 +11,7 @@ updated: 2026-06-23
 Dokumentasi arsitektur website + environment + integrasi. Untuk konteks 1-file
 (upload sekali), pakai `WEBSITE_ENV_CONCEPT_BRIEF.txt` di root skill ini.
 
-WhatsApp terminal platforms aktif: **Fonnte, ChakraHQ, TimelinesAI**.
+WhatsApp terminal platforms aktif: **Fonnte, Kirimi, TimelinesAI**.
 
 ## Doc Files (`docs/`) — urut 01–15
 
@@ -25,7 +25,7 @@ WhatsApp terminal platforms aktif: **Fonnte, ChakraHQ, TimelinesAI**.
 06-ai-integration-system.md                    ← ChatGPT→Claude→Private, whatsappAIService, skill loader
 07-frontend-and-modules.md                     ← Vue 3, router/guard, modul halaman, Facility, vendor global
 08-fonnte-whatsapp-integration.md              ← Fonnte multi-agent (implementasi)
-09-whatsapp-terminal-multiagent.md             ← terminal: Fonnte + ChakraHQ + TimelinesAI, MASSEGE_TERMINAL
+09-whatsapp-terminal-multiagent.md             ← terminal: Fonnte + Kirimi + TimelinesAI, MASSEGE_TERMINAL
 10-qualification-flow-and-ai-prompt-builder.md ← Q1–Q12, state extractor, prompt builder
 11-private-agent-whatsapp-format.md            ← ResponseBuilderWhatsApp, format WA, footer agent
 12-rumah123-and-apify.md                       ← data properti live + fallback JSON
@@ -46,7 +46,7 @@ WhatsApp terminal platforms aktif: **Fonnte, ChakraHQ, TimelinesAI**.
 | ChatGPT / Claude / Private / whatsappAIService / skill | `06-ai-integration-system.md` |
 | Frontend Vue 3 + modul + Facility | `07-frontend-and-modules.md` |
 | Fonnte multi-agent | `08-fonnte-whatsapp-integration.md` |
-| Terminal multi-agent (Fonnte/ChakraHQ/TimelinesAI), MASSEGE_TERMINAL | `09-whatsapp-terminal-multiagent.md` |
+| Terminal multi-agent (Fonnte/Kirimi/TimelinesAI), MASSEGE_TERMINAL | `09-whatsapp-terminal-multiagent.md` |
 | Q1–Q12 qualification | `10-qualification-flow-and-ai-prompt-builder.md` |
 | Format balasan WhatsApp (ResponseBuilderWhatsApp) | `11-private-agent-whatsapp-format.md` |
 | Rumah123 / Apify | `12-rumah123-and-apify.md` |
@@ -59,14 +59,14 @@ WhatsApp terminal platforms aktif: **Fonnte, ChakraHQ, TimelinesAI**.
 | Service | Untuk |
 |---|---|
 | Fonnte | Kirim WA contact form + fonnteChatController multi-agent |
-| ChakraHQ | chakraHQController multi-agent (format Meta WhatsApp Cloud API) |
+| Kirimi | kirimiChatController multi-agent (device_id per-agent, shared account) |
 | TimelinesAI | timelinesAIChatController multi-agent |
 | ChatGPT | AI primary (chatbot / WA) |
 | Claude | AI fallback |
 | Private Agent | Fallback terjamin (web: chatbot; WA: terminal message) |
 | Google Sheets | Backup submission contact form |
 | Apify/Rumah123 | Data properti live |
-| MASSEGE_TERMINAL | Pilih platform mana yang log ke terminal (FONNTE,CHAKRAHQ,TIMELINESAI) |
+| MASSEGE_TERMINAL | Pilih platform mana yang log ke terminal (FONNTE,KIRIMI,TIMELINESAI) |
 
 ## Key Environment Variables
 
@@ -78,10 +78,10 @@ OPENAI_API_KEY / OPENAI_MODEL=gpt-4o-mini
 ANTHROPIC_API_KEY / CLAUDE_MODEL=claude-haiku-4-5
 RESPOND_CATALOG_RUN=OFF            # OFF = Q1–Q12 + summary ; ON = katalog
 
-# WhatsApp (per-agent token di tabel users untuk Fonnte & ChakraHQ)
+# WhatsApp (per-agent token di tabel users untuk Fonnte; per-device untuk Kirimi)
 FONNTE_TOKEN  TIMELINESAI_API_KEY
-CHAKRAHQ_PLUGIN_ID / CHAKRAHQ_PHONE_NUMBER_ID / CHAKRAHQ_API_VERSION
-MASSEGE_TERMINAL=FONNTE,CHAKRAHQ,TIMELINESAI
+KIRIMI_USER_CODE / KIRIMI_SECRET / users.kirimi_device_id (per-agent)
+MASSEGE_TERMINAL=FONNTE,KIRIMI,TIMELINESAI
 
 # Data properti
 RUMAH123_DATA=OFF   APIFY_API_TOKEN
@@ -92,5 +92,5 @@ ACCESS_TOKEN_EXPIRY=5m / REFRESH_TOKEN_EXPIRY=1d / BCRYPT_SALT_ROUNDS=10
 DB_HOST / DB_USER / DB_PASSWORD / DB_NAME=db_property / DB_DIALECT=mysql
 ```
 
-> RAHASIA — jangan echo/commit: OPENAI/ANTHROPIC/FONNTE/TIMELINESAI keys,
-> chakra_hq_token, APIFY_API_TOKEN, ACCESS/REFRESH_TOKEN_SECRET.
+> RAHASIA — jangan echo/commit: OPENAI/ANTHROPIC/FONNTE/KIRIMI/TIMELINESAI keys,
+> APIFY_API_TOKEN, ACCESS/REFRESH_TOKEN_SECRET.

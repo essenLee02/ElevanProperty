@@ -221,11 +221,13 @@ async function sendViaTimelinesAI(targetPhone, message) {
   if (!apiKey) throw new Error('TIMELINESAI_API_KEY belum di-set di .env');
 
   const phone      = toIntlPlus(targetPhone);
-  const timeout    = parseInt(process.env.TIMELINESAI_TIMEOUT_MS    || '30000', 10);
-  const maxRetries = parseInt(process.env.TIMELINESAI_RETRY_COUNT   || '3',     10);
-  const retryDelay = parseInt(process.env.TIMELINESAI_RETRY_DELAY_MS || '3000', 10);
+  const timeout    = parseInt(process.env.TIMELINESAI_TIMEOUT_MS     || '30000', 10);
+  const maxRetries = parseInt(process.env.TIMELINESAI_RETRY_COUNT    || '3',     10);
+  const retryDelay = parseInt(process.env.TIMELINESAI_RETRY_DELAY_MS || '3000',  10);
 
   const RETRYABLE = new Set(['ETIMEDOUT', 'ECONNREFUSED', 'ECONNRESET', 'ENOTFOUND', 'ENETUNREACH', 'ECONNABORTED']);
+
+  console.log(`[TIMELINESAI SEND] → ${toIntlPlus(targetPhone)} | len: ${String(message).trim().length}`);
 
   let lastError;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -243,8 +245,18 @@ async function sendViaTimelinesAI(targetPhone, message) {
       );
 
       const data = response.data || {};
-      if (data.success === false || data.error || data.detail) {
-        throw new Error(data.error || data.detail || data.message || 'TimelinesAI: gagal kirim');
+      console.log(`[TIMELINESAI SEND] API response (${response.status}):`, JSON.stringify(data).substring(0, 300));
+
+      // Deteksi GAGAL dari berbagai kemungkinan bentuk respons TimelinesAI.
+      const statusStr = String(data.status ?? data.state ?? '').toLowerCase();
+      const failed =
+        data.success === false ||
+        data.status  === false ||
+        !!data.error  ||
+        !!data.detail ||
+        /fail|error|invalid|reject|unauthorized/i.test(statusStr);
+      if (failed) {
+        throw new Error(data.error || data.detail || data.message || statusStr || 'TimelinesAI: gagal kirim');
       }
 
       if (attempt > 1) {
@@ -254,6 +266,23 @@ async function sendViaTimelinesAI(targetPhone, message) {
 
     } catch (err) {
       lastError = err;
+
+      const httpStatus = err.response?.status;
+      const httpBody   = JSON.stringify(err.response?.data || {}).substring(0, 200);
+      if (httpStatus) {
+        console.error(`[TIMELINESAI SEND] HTTP ${httpStatus} error: ${httpBody}`);
+      }
+
+      // 401 — API key salah, JANGAN retry
+      if (httpStatus === 401) {
+        console.error('[TIMELINESAI SEND] ❌ 401 — cek TIMELINESAI_API_KEY di .env');
+        break;
+      }
+      // 400 — validasi (phone salah), JANGAN retry
+      if (httpStatus === 400) {
+        console.error('[TIMELINESAI SEND] ❌ 400 — cek format nomor tujuan');
+        break;
+      }
 
       const isRetryable = RETRYABLE.has(err.code) ||
         (err.code === 'ECONNABORTED' && /timeout/i.test(err.message));

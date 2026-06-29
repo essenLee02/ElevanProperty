@@ -31,7 +31,7 @@ RESPOND_CATALOG_RUN=OFF              # OFF = Q1-Q12 mode; ON = catalog mode
 
 ## WhatsApp AI Service (`whatsappAIService.js`)
 
-Unified entry point for all WhatsApp platforms (Fonnte, ChakraHQ, TimelinesAI).
+Unified entry point for all WhatsApp platforms (Fonnte, Kirimi, TimelinesAI).
 
 ### Main Function: `generateWhatsAppAIReply(params)`
 
@@ -52,11 +52,15 @@ generateWhatsAppAIReply({
 2. **Pre-qualification gate** (`buildQualifyReply`):
    - Checks 4 minimum fields: buildingType, transactionType, location, budget
    - If any missing → returns qualification question immediately (no AI called)
-3. **Check `RESPOND_CATALOG_RUN`**:
+3. **★ Load AI Context Blocks** (`aiContextService.loadAIContextBlocks`): ← NEW
+   - `buildFacilityContextBlock()` — always injected (facility names from DB)
+   - `buildCityContextBlock()` — injected only when message is location-related
+   - Cached 5 minutes, parallel fetch. See doc 16 for full details.
+3.5. **Check `RESPOND_CATALOG_RUN`**:
    - `OFF` → call `aiPromptBuilderService.buildWhatsappReplyPrompt()` → Private Agent
    - `ON` → call ChatGPT → Claude → Private Agent
 4. **Get property context** (`getWhatsappPropertyContext`)
-5. **Build full prompt** (`buildWhatsappReplyPrompt`) with Q1-Q12 state injected
+5. **Build full prompt** (`buildWhatsappReplyPrompt`) with Q1-Q12 state + facility + city context injected
 6. **Call AI provider chain** → return reply
 
 ### `buildQualifyReply` — Pre-Qualification Gate

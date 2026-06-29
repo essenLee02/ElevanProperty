@@ -514,6 +514,19 @@ function extractQualificationState(history = [], currentMessage = '') {
       else if (custResp.trim())                      state.propertyCondition = custResp.trim();
     }
 
+    // Q_FAC — facilities (opsional). AI tanya fasilitas → customer jawab apapun → catat.
+    // "standar", "biasa", "tidak ada", "terserah" = tidak ada preferensi spesifik → simpan 'standar'
+    // agar AI tidak mengulangi pertanyaan fasilitas (field ❓ yang sudah dijawab).
+    if ((!state.facilities || (Array.isArray(state.facilities) && !state.facilities.length)) &&
+        /fasilitas|amenity|amenities|facility|kolam|gym|parking|parkir/i.test(aiText) &&
+        custResp.trim()) {
+      const custLo = custResp.toLowerCase();
+      if (/\b(standar|biasa|standard|gak ada|tidak ada|apa saja|terserah|bebas|gapapa|ga pa pa|ngga ada|engga ada)\b/i.test(custLo)) {
+        state.facilities = ['standar'];
+      }
+      // Specific facilities already captured by Phase 1 detectFacilities; this only covers
+      // the "no preference / standard" case that detectFacilities misses.
+    }
     // Q5 — red flags
     if (!state.redFlags && /pasti tidak cocok|hadap barat|gang sempit|rumah tua/.test(aiText)) {
       state.redFlags = custResp;
@@ -886,7 +899,16 @@ function findNextQuestion(state) {
   // Q14 — Type-specific slots: 24 kombinasi (12 tipe × sewa/beli).
   // AI checks from conversation history whether these were already answered.
   if (isBooking) {
-    return { q: 'Q14', hint: `Lanjutkan Q14 ${type === 'hotel' ? 'hotel' : 'kondotel'} booking: (a) check-out/berapa malam? (b) tipe kamar? Standard/Deluxe/Suite/Family? (c) breakfast included? — CEK history dulu sebelum tanya yang sudah dijawab.` };
+    const hasDuration = !!state.leaseDuration;
+    const hasCheckIn  = !!state.moveInDate && state.moveInDate !== 'Waiting the update';
+    const autoCheckout = (hasDuration && hasCheckIn)
+      ? `⚠️ Check-in (${state.moveInDate}) dan durasi (${state.leaseDuration}) sudah diketahui → HITUNG check-out otomatis (check-in + durasi), JANGAN tanya check-out lagi. `
+      : '';
+    const subItems = [];
+    if (!hasDuration || !hasCheckIn) subItems.push('(a) check-out/berapa malam?');
+    subItems.push('(b) tipe kamar? Standard/Deluxe/Suite/Family?');
+    subItems.push('(c) breakfast included?');
+    return { q: 'Q14', hint: `${autoCheckout}Lanjutkan Q14 ${type === 'hotel' ? 'hotel' : 'kondotel'} booking: ${subItems.join(' ')} — CEK history dulu sebelum tanya yang sudah dijawab.` };
   }
   if (type === 'hotel' && !isSewa) {
     return { q: 'Q14', hint: 'Lanjutkan Q14 hotel akuisisi: (a) hotel operasional atau bangunan/lahan untuk dikembangkan? (b) minimal berapa kamar? (c) kelola sendiri / management contract / franchise? (d) target bintang? — CEK history dulu.' };
@@ -1299,7 +1321,7 @@ If no exact match is available, say that no exact match is available and then pr
 Do not keep asking discovery questions before showing options when the customer asks for suggestions or available properties.`;
 }
 
-function buildWhatsappReplyPrompt(session, history, userMessage, propertyContext = '', provider = 'shared') {
+function buildWhatsappReplyPrompt(session, history, userMessage, propertyContext = '', provider = 'shared', extraContext = {}) {
   // ── Identitas dinamis (JANGAN hardcode "LEO FELIX" / "Elevan Property") ──
   // Nama agent SELALU dari database (session.agentName); nama app dari APP_NAME env.
   const resolvedAppName   = process.env.APP_NAME || 'Elevan Property';
@@ -1528,7 +1550,8 @@ ${formatConversationHistory(history)}
 
 Backend property catalog context for this latest WhatsApp message:
 ${summaryMode ? '(Not used in qualification mode — ask Q1–Q12 first)' : (propertyContext || 'No backend property catalog context is available.')}
-
+${extraContext.facilityContext || ''}
+${extraContext.cityContext || ''}
 Latest WhatsApp customer message. This is the highest-priority instruction:
 ${userMessage}
 

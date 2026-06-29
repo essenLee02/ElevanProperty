@@ -670,6 +670,10 @@ function isPropertyContextContinuation(message, history = []) {
   if (/\b(januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)\b/i.test(lower)) return true;
   // Bulan Bahasa Inggris
   if (/\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/i.test(lower)) return true;
+  // Singkatan bulan ("sep", "jan", "feb", "aug", dll.) — "Tanggal 18 sep ini"
+  if (/\b(jan|feb|mar|apr|jun|jul|agu|aug|sep|okt|oct|nov|des|dec)\b/i.test(lower)) return true;
+  // Pola tanggal eksplisit: "tanggal 18", "tgl 5" — jawaban Q8
+  if (/\b(tanggal|tgl)\s+\d{1,2}\b/i.test(lower)) return true;
   // Tahun referensi (e.g. "Juni 2026", "2027", "tahun depan 2027")
   if (/\b(202[4-9]|203[0-9])\b/.test(lower)) return true;
   // Jawaban tipe transaksi murni (satu kata / frasa pendek)
@@ -688,6 +692,8 @@ function isPropertyContextContinuation(message, history = []) {
   // "Belum pernah." (standalone — customer never searched before).
   // These are ALWAYS Q2b answers and must pass even before hasRecentPropertyQuestion check.
   if (/\b(belum\s+pernah\s+lihat|belum\s+pernah\s+survey|belum\s+pernah\s+cek|belum\s+pernah|pernah\s+lihat|sudah\s+lihat\s+\d|belum\s+lihat|sudah\s+survey|belum\s+ada\s+yang\s+cocok)\b/i.test(lower)) return true;
+  // Hotel/penginapan keywords — meal plan & room type answers ("tanpa breakfast", "deluxe", "suite")
+  if (/\b(breakfast|sarapan|makan\s+pagi|deluxe|suite|family\s+room|standard\s+room|check.?in|check.?out)\b/i.test(lower)) return true;
 
   // Note: context (hasPropertyCtx OR hasRecentPropertyQ) was already verified above.
   // We do NOT re-require a recent question here — that used to drop valid answers in
@@ -862,7 +868,7 @@ function isPropertyContextContinuation(message, history = []) {
   //     Ini mencegah jawaban kualifikasi yang sah ter-drop hanya karena tidak match
   //     salah satu pola spesifik di atas.
   if (lower.length <= 70 &&
-      /^(saya\s+|aku\s+)?(mau|ingin|pengen|prefer|butuh|perlu|suka|lebih\s+suka|maunya|yang|jangan|hindari|tidak\s+mau|gak\s+mau|ga\s+mau|nggak\s+mau|enggak\s+mau|engga\s+mau|gamau|gakmau)\b/i.test(lower.trim()))
+      /^(saya\s+|aku\s+)?(mau|ingin|pengen|prefer|butuh|perlu|suka|lebih\s+suka|maunya|yang|jangan|hindari|tidak\s+mau|gak\s+mau|ga\s+mau|nggak\s+mau|enggak\s+mau|engga\s+mau|gamau|gakmau|tanpa|tidak\s+include|tidak\s+termasuk)\b/i.test(lower.trim()))
     return true;
 
   return false;

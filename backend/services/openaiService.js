@@ -203,8 +203,8 @@ async function generateChatGPTChatbotReply(session, history, userMessage, proper
   });
 }
 
-async function generateChatGPTWhatsappReply(session, history, userMessage, propertyContext = '') {
-  return callChatGPTResponseAPI(buildWhatsappReplyPrompt(session, history, userMessage, propertyContext, 'chatgpt'), {
+async function generateChatGPTWhatsappReply(session, history, userMessage, propertyContext = '', extraContext = {}) {
+  return callChatGPTResponseAPI(buildWhatsappReplyPrompt(session, history, userMessage, propertyContext, 'chatgpt', extraContext), {
     store: true,
     metadata: {
       source: 'fonnte_whatsapp',

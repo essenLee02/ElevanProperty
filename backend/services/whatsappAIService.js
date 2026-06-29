@@ -31,6 +31,7 @@ const { getWhatsappPropertyContext }                = require('../utils/whatsapp
 const { buildRecommendationContextForLLM,
         extractPropertyFilters }                    = require('./propertyRecommendationService');
 const { getConversationHistory }                    = require('./sessionService');
+const { loadAIContextBlocks }                       = require('./aiContextService');
 
 /* ══════════════════════════════════════════════════════════════════════════════
    QUALIFICATION GATE — 4 Minimum Info Required
@@ -328,6 +329,23 @@ async function generateWhatsAppAIReply(params) {
     budget  : filters.budget?.text || 'set',
   });
 
+  // ── Step 3.2: LOAD AI CONTEXT BLOCKS (facilities + cities from DB) ──────────
+  let facilityContext = '';
+  let cityContext     = '';
+  try {
+    const ctx = await loadAIContextBlocks(message, history);
+    facilityContext = ctx.facilityContext || '';
+    cityContext     = ctx.cityContext     || '';
+    if (ctx.detectedCities.length) {
+      console.log('[WhatsAppAI] 🏙️ Detected cities in message:', ctx.detectedCities.join(', '));
+    }
+  } catch (err) {
+    console.warn('[WhatsAppAI] Context blocks load failed:', err.message);
+  }
+
+  // Append facility + city context to propertyCtx so it reaches all AI providers
+  const enrichedPropertyCtx = [propertyCtx, facilityContext, cityContext].filter(Boolean).join('\n\n');
+
   // ── Step 3.5: CHECK AI_PRIMARY_PROVIDER & RESPOND_CATALOG_RUN ─────────────
   //
   // AI_PRIMARY_PROVIDER: 'chatgpt' (default) | 'claude' | 'private'
@@ -369,7 +387,8 @@ async function generateWhatsAppAIReply(params) {
         session,
         history,
         message,
-        propertyCtx
+        propertyCtx,
+        { facilityContext, cityContext }
       );
       return {
         reply         : result.reply,

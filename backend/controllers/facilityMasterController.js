@@ -14,6 +14,7 @@ const { Facility } = require('../models');
 const { HTTP }     = require('../utils/httpStatus');
 const { sendSuccess, sendError } = require('../utils/responseFormat');
 const GeneralController = require('./GeneralController');
+const { invalidateCache: invalidateAICache } = require('../services/aiContextService');
 
 /* ════════════════════════════════════════════════════════════════════════════
    ANTI-REDUNDANCY — kelompok sinonim fasilitas
@@ -131,6 +132,7 @@ class FacilityMasterController extends GeneralController {
       });
 
       console.log(`[FACILITY] ✅ INSERT — ${newFacility.facility_id} | "${newFacility.name}" | By: ${createdBy}`);
+      invalidateAICache();
 
       return sendSuccess(res, HTTP.CREATED, {
         facility: {
@@ -203,6 +205,7 @@ class FacilityMasterController extends GeneralController {
       const updaterName = await GeneralController.resolveUserName(updatedBy);
 
       console.log(`[FACILITY] ✏️  UPDATE — ${facility.facility_id} | "${facility.name}" | By: ${updatedBy}`);
+      invalidateAICache();
 
       return sendSuccess(res, HTTP.OK, {
         facility: {
@@ -404,6 +407,7 @@ class FacilityMasterController extends GeneralController {
       });
 
       console.log(`[FACILITY] 🗑️  DELETE — ${facility.facility_id} | "${facility.name}" | By: ${updatedBy}`);
+      invalidateAICache();
 
       return sendSuccess(res, HTTP.OK, {
         facility_id: facility.facility_id,

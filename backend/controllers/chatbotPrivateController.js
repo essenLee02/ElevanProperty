@@ -1126,13 +1126,27 @@ class ResponseBuilderWhatsApp {
     lines.push(row(isId ? 'Masuk' : 'Move-in',              brief.moveInDate));
     lines.push(row(isId ? 'Keputusan bersama' : 'Decision', brief.decisionMaker));
     lines.push(row(isId ? 'Furnitur' : 'Furnishing',        brief.furnishing));
-    lines.push(row(isId ? 'Fasilitas' : 'Facilities',       brief.facilities));
+    // Fasilitas — tiga kasus:
+    //   ✓ Fasilitas: *[spesifik]*          ← customer minta fasilitas tertentu
+    //   ✗ Fasilitas: *[standar] (Fasilitas standar)* ← customer jawab "standar"
+    //   ✗ Fasilitas: *(Belum ditanyakan)*  ← belum ditanya sama sekali
+    if (known(brief.facilities)) {
+      if (brief.facilities.isStandard) {
+        lines.push(`✗ ${isId ? 'Fasilitas' : 'Facilities'}: *${brief.facilities.value} (Fasilitas standar)*`);
+      } else {
+        lines.push(`✓ ${isId ? 'Fasilitas' : 'Facilities'}: *${brief.facilities.value}*`);
+      }
+    } else {
+      lines.push(row(isId ? 'Fasilitas' : 'Facilities', brief.facilities));
+    }
     lines.push(row(isId ? 'Budget' : 'Budget',              brief.budget));
     lines.push(row(isId ? 'Patokan lokasi' : 'Anchor',      brief.anchorPoint));
     // Preferensi positif & hal yang dihindari — hanya tampil bila customer menyebutnya
     // (opsional, jadi tidak ditandai ✗ "Belum ditanyakan" saat kosong).
     if (known(brief.preferences)) lines.push(`✓ ${isId ? 'Preferensi' : 'Preferences'}: *${brief.preferences.value}*`);
     if (known(brief.redFlags))    lines.push(`✓ ${isId ? 'Hindari' : 'Avoid'}: *${brief.redFlags.value}*`);
+    // Viewing — opsional, tampil hanya jika jadwal survey sudah dikonfirmasi
+    if (known(brief.viewingPreference)) lines.push(`✓ Viewing: *${brief.viewingPreference.value}*`);
 
     const priorityBadge = {
       HIGH      : isId ? '📋 Prioritas Tinggi'   : '📋 High Priority',
@@ -2923,12 +2937,34 @@ class ConversationQualifier {
       budget: (() => {
         const b = filters.budget;
         const TIER_LABEL = { terjangkau: 'Terjangkau', menengah: 'Menengah', eksklusif: 'Eksklusif', affordable: 'Terjangkau' };
+        const periodHint = (b && b.period) || ConversationQualifier.#periodHintFromText(custText);
+
+        // (0) qualState.budget takes priority — it's first-captured and session-scoped,
+        //     immune to later messages (e.g. "fasilitas standar") triggering a wrong tier.
+        const qb = qualState.budget || '';
+        if (/^terjangkau/.test(qb)) {
+          const range = ConversationQualifier.getBudgetRangeForTier(
+            filters.buildingType, filters.transactionType, 'terjangkau', 'id', periodHint
+          );
+          return { value: range ? `Terjangkau (${range})` : 'Terjangkau', source: 'stated' };
+        }
+        if (/^menengah/.test(qb)) {
+          const range = ConversationQualifier.getBudgetRangeForTier(
+            filters.buildingType, filters.transactionType, 'menengah', 'id', periodHint
+          );
+          return { value: range ? `Menengah (${range})` : 'Menengah', source: 'stated' };
+        }
+        if (/^eksklusif/.test(qb)) {
+          const range = ConversationQualifier.getBudgetRangeForTier(
+            filters.buildingType, filters.transactionType, 'eksklusif', 'id', periodHint
+          );
+          return { value: range ? `Eksklusif (${range})` : 'Eksklusif', source: 'stated' };
+        }
+
         // (a) Customer jawab KATEGORI (terjangkau/menengah/eksklusif) → tampilkan
         //     kategori + perkiraan range harga wajar untuk tipe+transaksi tsb.
         if (b && b.preference && TIER_LABEL[b.preference]) {
           const tierKey = b.preference === 'affordable' ? 'terjangkau' : b.preference;
-          // periodHint untuk villa sewa (bulanan vs harian) — dari budget.period atau custText.
-          const periodHint = (b && b.period) || ConversationQualifier.#periodHintFromText(custText);
           const range = ConversationQualifier.getBudgetRangeForTier(
             filters.buildingType, filters.transactionType, tierKey, 'id', periodHint
           );
@@ -2937,7 +2973,11 @@ class ConversationQualifier {
             source: 'stated',
           };
         }
-        // (b) Angka / range konkret. Skip yang AMBIGU ("15-20" dari "lantai 15-20").
+        // (b) Angka / range konkret dari qualState (mis. "Rp 2.000.000 - Rp 4.000.000/bulan")
+        if (qb && !qb.startsWith('terjangkau') && !qb.startsWith('menengah') && !qb.startsWith('eksklusif')) {
+          return { value: qb, source: 'stated' };
+        }
+        // (c) Angka / range konkret dari filters. Skip yang AMBIGU ("15-20" dari "lantai 15-20").
         return {
           value : (b?.text && !b?.ambiguous)
             ? b.text + ConversationQualifier.#budgetPeriodSuffix(custText)
@@ -2957,9 +2997,9 @@ class ConversationQualifier {
         source: (qualState.moveInDate || profile.hasMoveInDate) ? 'stated' : 'UNKNOWN',
       },
       decisionMaker: {
-        // Prefer qualState.decisionMaker (Phase 2 normalized: "Sendirian", "Mandiri",
-        // "Koordinasi dengan pasangan", etc.) over extraction from full custText.
-        // Gate fallback by profile flags to prevent stale Q4 data from old sessions.
+        // Prefer qualState.decisionMaker (Phase 2 normalized: "Mandiri", "Koordinasi
+        // dengan pasangan", etc.) over extraction from full custText.
+        // Gate fallback by profile flags — hasHouseholdInfo → "Disebutkan di Q4".
         value : qualState.decisionMaker
           ? qualState.decisionMaker
           : ((profile.hasDecisionMaker || profile.hasHouseholdInfo)
@@ -3026,14 +3066,25 @@ class ConversationQualifier {
           : ((profile.hasAnchorPoint && profile.aiAskedAnchorPoint) ? this.#extractAnchorPoint(custText) : 'UNKNOWN'),
         source: (qualState.anchorPoint || (profile.hasAnchorPoint && profile.aiAskedAnchorPoint)) ? 'stated' : 'UNKNOWN',
       },
-      facilities: {
-        // Customer-requested amenities (gym, kids zone, kolam renang, etc.), accumulated
-        // across the session by extractPropertyFilters → detectFacilities.
-        value : (Array.isArray(filters.facilities) && filters.facilities.length)
-          ? filters.facilities.join(', ')
-          : 'UNKNOWN',
-        source: (Array.isArray(filters.facilities) && filters.facilities.length) ? 'stated' : 'UNKNOWN',
-      },
+      facilities: (() => {
+        // (a) Specific facilities the customer requested (gym, kolam renang, dll.)
+        if (Array.isArray(filters.facilities) && filters.facilities.length) {
+          return { value: filters.facilities.join(', '), isStandard: false, source: 'stated' };
+        }
+        // (b) qualState accumulated facilities (Phase 1 detectFacilities or Phase 2 standar)
+        if (Array.isArray(qualState.facilities) && qualState.facilities.length) {
+          if (qualState.facilities.length === 1 && qualState.facilities[0] === 'standar') {
+            // Customer said "standar/biasa/terserah" → inject standard list by type + furnishing
+            const stdList = ConversationQualifier.#getStandardFacilitiesByType(
+              filters.buildingType, qualState.furnishing || filters.furnishing || ''
+            );
+            if (stdList) return { value: stdList, isStandard: true, source: 'stated' };
+            return { value: 'UNKNOWN', isStandard: false, source: 'UNKNOWN' };
+          }
+          return { value: qualState.facilities.join(', '), isStandard: false, source: 'stated' };
+        }
+        return { value: 'UNKNOWN', isStandard: false, source: 'UNKNOWN' };
+      })(),
 
       // ─ Meta ─
       score        : this.#calcBriefScore(profile, filters),
@@ -3091,6 +3142,39 @@ class ConversationQualifier {
    * and NOT a lease-duration phrase ("sewa selama 2 minggu"). '' if none stated.
    */
   /** Tebak periode dari teks customer untuk memilih band villa sewa (bulanan vs harian). */
+  /**
+   * Standard facility list by building type + furnishing level.
+   * Shown when customer answers Q_FAC with "standar/biasa/terserah".
+   * Returns null when no meaningful standard list exists for the type.
+   */
+  static #getStandardFacilitiesByType(buildingType, furnishing) {
+    const type = (buildingType || '').toLowerCase();
+    const furn = (furnishing || '').toLowerCase();
+    const isFull = /fully|full/.test(furn);
+    const isSemi = /semi/.test(furn);
+
+    if (type === 'house' || type === 'kontrakan') {
+      if (isFull) return 'AC, Kitchen set, Lemari, Tempat Tidur, TV, Kulkas, CCTV, Kamar Mandi, One gate system';
+      if (isSemi) return 'AC, Kitchen set, CCTV camera, Lemari, Kamar Mandi, Kulkas, One gate system';
+      return 'Kamar Mandi, One gate system';
+    }
+    if (type === 'apartment') {
+      if (isFull) return 'AC, Kitchen set, Lemari, Tempat Tidur, TV, Kulkas, Microwave, Kamar Mandi';
+      if (isSemi) return 'AC, Kitchen set, Lemari, Kamar Mandi';
+      return 'Kamar Mandi';
+    }
+    if (type === 'boarding_house') {
+      if (isFull) return 'AC, Kasur, Lemari, Kamar Mandi dalam, WiFi, Meja belajar';
+      if (isSemi) return 'AC, Kamar Mandi dalam';
+      return 'Kamar Mandi';
+    }
+    if (type === 'villa') {
+      if (isFull) return 'AC, Kitchen set, Kolam renang, TV, Kulkas, Lemari, Kamar Mandi';
+      return 'AC, Kitchen set, Kolam renang, Kamar Mandi';
+    }
+    return null;
+  }
+
   static #periodHintFromText(custText) {
     if (/\bmalam\b|\bnight\b|harian|per\s+malam|\/\s*malam/i.test(custText)) return 'night';
     if (/\bbulan\b|\bmonth\b|bulanan|per\s+bulan|\/\s*bulan/i.test(custText)) return 'month';
@@ -3226,6 +3310,18 @@ class ConversationQualifier {
       /tanpa\s+(survey|survei|viewing|lihat\s+lokasi)/.test(custText) ||
       /(ga|gak|engga|enggak|nggak|tidak|tdk|ndak)\s*(ada|punya|sempat)?\s*waktu\s*(untuk|buat)?\s*(survey|survei|viewing|lihat)/.test(custText);
     if (wantsCatalogOnly) return 'Minta listing';
+
+    // AI asked for viewing HOUR and customer gave a specific time ("jam 1 siang")
+    // Triggered by Q9c "mau viewing jam berapa?" — builds "Besok siang jam 1" label.
+    if ((profile.aiAskedViewingHour || profile.aiAskedDecisionMaker) && profile.hasViewingHour) {
+      const tod    = profile.viewingTimeOfDay;
+      const dayRef = profile.viewingDayRef || (tod ? 'besok' : '');
+      const dayRefCap = dayRef ? dayRef.charAt(0).toUpperCase() + dayRef.slice(1) : '';
+      const hourM  = custText.match(/\bjam\s*(\d{1,2}(?:[.:]\d{2})?)\b/i);
+      const hourStr = hourM ? `jam ${hourM[1]}` : '';
+      const parts  = [dayRefCap, tod, hourStr].filter(Boolean);
+      return parts.length ? parts.join(' ') : 'Sudah dikonfirmasi';
+    }
 
     // AI already asked for viewing date — check if customer confirmed a date
     if (profile.aiAskedViewingDate) {

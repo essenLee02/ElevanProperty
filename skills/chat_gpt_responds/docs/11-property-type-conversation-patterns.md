@@ -121,6 +121,8 @@ Booking frame: customer needs check-in, check-out, room type, and breakfast.
 | `breakfast` | "Termasuk breakfast ya? Atau tanpa breakfast oke juga?" |
 | `star_rating` | "Hotel bintang berapa kira-kira? (1–5, atau tidak ada preferensi)" |
 
+**⚠️ Auto-kalkulasi check-out:** Jika customer sudah menjawab check-in (Q8) DAN durasi sewa (Q10, mis. "8 hari", "3 malam") — **JANGAN tanya check-out lagi**. Hitung otomatis: check-out = check-in + durasi. Tampilkan di summary sebagai "Check-out: 26 September 2026 (8 hari)". Slot `check_out_date` hanya ditanya jika customer belum memberikan salah satu dari keduanya.
+
 **Inferences:**
 - "2 orang" + "berdua" → double bed room
 - "pasangan" / "honeymoon" → suggest romantic/suite package

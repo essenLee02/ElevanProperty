@@ -126,8 +126,8 @@ async function generateClaudeChatbotReply(session, history, userMessage, propert
   });
 }
 
-async function generateClaudeWhatsappReply(session, history, userMessage, propertyContext = '') {
-  return callClaudeMessagesAPI(buildWhatsappReplyPrompt(session, history, userMessage, propertyContext, 'claude'), {
+async function generateClaudeWhatsappReply(session, history, userMessage, propertyContext = '', extraContext = {}) {
+  return callClaudeMessagesAPI(buildWhatsappReplyPrompt(session, history, userMessage, propertyContext, 'claude', extraContext), {
     system: getProjectSkillInstruction('claude'),
     metadata: {
       source: 'fonnte_whatsapp',
