@@ -388,8 +388,16 @@ const handleToggleStatus = async () => {
   try {
     const result = await toggleProvinceStatus(provinceId.value);
     if (result?.isSuccess === 1) {
-      form.status = result.data.response.status;
+      const province = result.data.response.province;
+      Object.assign(form, {
+        status:          province.status,
+        updated_date:    province.updated_date    || '',
+        updated_by:      province.updated_by      || '',
+        updated_by_name: province.updated_by_name || ''
+      });
       toast.success(result.data.message || 'Status berhasil diubah');
+      setAlert('success', result.data.message);
+      setTimeout(clearAlert, 3000);
     } else {
       toast.error(result?.data?.message || 'Gagal mengubah status');
     }

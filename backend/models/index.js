@@ -5,12 +5,14 @@ const ChatMessage = require('./ChatMessage');
 const Property = require('./Property');
 const PropertyImage = require('./PropertyImage');
 const PropertyFacility = require('./PropertyFacility');
+const PropertyLocation = require('./PropertyLocation');
 const WhatsAppInbound = require('./WhatsAppInbound');
 const User = require('./User');
 const Facility = require('./Facility');
 const Country = require('./Country');
 const Province = require('./Province');
 const City = require('./City');
+const Location = require('./Location');
 
 ChatSession.hasMany(ChatMessage, { foreignKey: 'chatSessionId', as: 'messages' });
 ChatMessage.belongsTo(ChatSession, { foreignKey: 'chatSessionId', as: 'session' });
@@ -40,6 +42,12 @@ Property.hasMany(PropertyFacility,   { foreignKey: 'property_id', sourceKey: 'pr
 PropertyFacility.belongsTo(Property, { foreignKey: 'property_id', targetKey: 'property_id', as: 'property',   constraints: false });
 PropertyFacility.belongsTo(Facility, { foreignKey: 'facility_id', targetKey: 'facility_id', as: 'facility',   constraints: false });
 
+// Property → Location relationship (many-to-many through property_locations table)
+Property.hasMany(PropertyLocation,  { foreignKey: 'property_id', sourceKey: 'property_id', as: 'locations', constraints: false });
+PropertyLocation.belongsTo(Property, { foreignKey: 'property_id', targetKey: 'property_id', as: 'property',  constraints: false });
+PropertyLocation.belongsTo(Location, { foreignKey: 'location_id', targetKey: 'location_id', as: 'location',  constraints: false });
+Location.hasMany(PropertyLocation,   { foreignKey: 'location_id', sourceKey: 'location_id', as: 'properties', constraints: false });
+
 module.exports = {
   Contact,
   Log,
@@ -48,10 +56,12 @@ module.exports = {
   Property,
   PropertyImage,
   PropertyFacility,
+  PropertyLocation,
   WhatsAppInbound,
   User,
   Facility,
   Country,
   Province,
-  City
+  City,
+  Location
 };

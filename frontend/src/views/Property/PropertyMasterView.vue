@@ -257,6 +257,33 @@
                 <p class="field-hint">Klik "Pilih Fasilitas" untuk memilih lebih dari satu fasilitas.</p>
               </div>
 
+              <!-- ── Lokasi Patokan (Nearby Landmarks) ── -->
+              <div class="section-divider"><span>Lokasi Patokan (Landmarks)</span></div>
+
+              <div class="form-group">
+                <label>Lokasi/Patokan Terdekat</label>
+                <p class="field-hint">Tambahkan landmark terdekat (Indomaret, Sekolah, Stasiun, dll) yang membantu pelanggan menemukan properti</p>
+                <div class="location-box">
+                  <div v-if="form.locations.length === 0" class="location-empty">
+                    Belum ada lokasi patokan dipilih
+                  </div>
+                  <div v-else class="location-chips">
+                    <span v-for="loc in form.locations" :key="loc.location_id" class="location-chip">
+                      📍 {{ loc.name }}
+                      <button type="button" class="chip-x" :disabled="isSubmitting" @click="removeLocation(loc.location_id)">
+                        <i class="fa-solid fa-xmark"></i>
+                      </button>
+                    </span>
+                  </div>
+                  <button type="button" class="btn-pick-location" :disabled="isSubmitting || !form.property_id" @click="showModalLocation()">
+                    <i class="fa-solid fa-plus"></i> Pilih Lokasi Patokan
+                  </button>
+                  <p v-if="!form.property_id" class="field-hint" style="color: #dc3545;">
+                    Simpan properti terlebih dahulu sebelum menambahkan lokasi patokan.
+                  </p>
+                </div>
+              </div>
+
               <!-- ── Info Pembuat/Pengubah (Edit mode only) ── -->
               <div v-if="isEditMode && form.property_id" class="audit-info">
                 <div class="audit-divider"><span>Informasi Audit</span></div>
@@ -356,6 +383,12 @@ import { getCountryList } from '../../services/countryApi';
 import { getProvinceList } from '../../services/provinceApi';
 import { getCityList } from '../../services/cityApi';
 import { getFacilityList } from '../../services/facilityApi';
+import { getLocationList } from '../../services/locationApi';
+import {
+  getPropertyLocations,
+  bulkAddLocations,
+  removeLocationFromProperty
+} from '../../services/propertyLocationApi';
 import Modal from '../../components/Modal.vue';
 
 const route  = useRoute();
@@ -420,6 +453,7 @@ const form = reactive({
   city_id:              '',
   city_name:            '',
   facilities:           [],   // [{ facility_id, name }]
+  locations:            [],   // [{ location_id, name }]
   title:                '',
   description:          '',
   price:                '',
@@ -608,6 +642,82 @@ const removeFacility = (facilityId) => {
   form.facilities = form.facilities.filter(f => f.facility_id !== facilityId);
 };
 
+const fetchLocations = async (search, page) => {
+  const result = await getLocationList({ search, page });
+  if (result?.isSuccess === 1) {
+    const r = result.data.response;
+    return { rows: r.locations || [], currentPage: r.pagination?.page || page, lastPage: r.pagination?.totalPages || 1 };
+  }
+  return { rows: [], currentPage: 1, lastPage: 1 };
+};
+
+const showModalLocation = async () => {
+  if (!form.property_id) {
+    setAlert('warning', 'Simpan properti terlebih dahulu sebelum menambahkan lokasi patokan');
+    return;
+  }
+  modalRef.value?.open({
+    title: 'Pilih Lokasi Patokan (Landmarks)', placeholder: 'Ketik nama lokasi, atau * untuk semua',
+    headers: ['Lokasi', 'Status'], chunks: ['name', 'status'],
+    actionParams: ['location_id', 'name'], multiSelect: true,
+    preselected: form.locations.map(l => ({ location_id: l.location_id, name: l.name })),
+    fetch: fetchLocations,
+    onChoose: async (selections) => {
+      try {
+        // Get location_ids from selections
+        const selectedLocationIds = selections.map(s => s.location_id);
+
+        // Get currently saved locations
+        const currentResult = await getPropertyLocations(form.property_id);
+        const currentLocationIds = currentResult?.data?.response?.locations?.map(l => l.location_id) || [];
+
+        // Locations to remove (were selected before, not selected now)
+        const toRemove = currentLocationIds.filter(id => !selectedLocationIds.includes(id));
+
+        // Locations to add (not selected before, selected now)
+        const toAdd = selectedLocationIds.filter(id => !currentLocationIds.includes(id));
+
+        // Remove unselected locations
+        for (const locId of toRemove) {
+          try {
+            await removeLocationFromProperty(form.property_id, locId);
+          } catch (e) {
+            console.error(`Failed to remove location ${locId}:`, e.message);
+          }
+        }
+
+        // Add newly selected locations
+        if (toAdd.length > 0) {
+          try {
+            await bulkAddLocations(form.property_id, toAdd);
+          } catch (e) {
+            console.error('Failed to add locations:', e.message);
+          }
+        }
+
+        // Update local form with selected locations
+        form.locations = selections.map(s => ({ location_id: s.location_id, name: s.name }));
+        toast.success('Lokasi patokan berhasil diperbarui');
+      } catch (err) {
+        console.error('Error updating locations:', err);
+        toast.error('Gagal memperbarui lokasi patokan');
+      }
+    }
+  });
+};
+
+const removeLocation = async (locationId) => {
+  if (!form.property_id) return;
+  try {
+    await removeLocationFromProperty(form.property_id, locationId);
+    form.locations = form.locations.filter(l => l.location_id !== locationId);
+    toast.success('Lokasi patokan berhasil dihapus');
+  } catch (err) {
+    console.error('Error removing location:', err);
+    toast.error('Gagal menghapus lokasi patokan');
+  }
+};
+
 const onTransactionChange = () => {
   // Sewa tidak bisa KPR — paksa N (disabled). Jual → kembalikan default Y.
   form.kpr_status = form.transaction_type === 'Rent' ? 'N' : 'Y';
@@ -678,6 +788,20 @@ const loadDetail = async () => {
         updated_by_name:      p.updated_by_name      || ''
       });
       priceDisplay.value = form.price ? window.formatPriceDisplay(form.price) : '';
+
+      // Load linked locations for this property
+      try {
+        const locResult = await getPropertyLocations(propertyId.value);
+        if (locResult?.isSuccess === 1) {
+          form.locations = (locResult.data.response.locations || []).map(l => ({
+            location_id: l.location_id,
+            name: l.location?.name || ''
+          }));
+        }
+      } catch (locErr) {
+        console.warn('Failed to load property locations:', locErr);
+        // Non-fatal error
+      }
     } else {
       setAlert('danger', result?.data?.message || 'Properti tidak ditemukan');
       setTimeout(() => router.push('/property'), 2000);

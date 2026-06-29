@@ -93,6 +93,23 @@
 .btn-pick-facility:hover:not(:disabled) { background: #edf2f7; border-color: #667eea; }
 .btn-pick-facility:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* ── Lokasi Patokan (chips multi-select) — mirrors facility styles ── */
+.location-box { border: 1px solid #cbd5e0; border-radius: 10px; padding: 14px; background: #fff; }
+.location-empty { color: #a0aec0; font-size: 13px; margin-bottom: 12px; }
+.location-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.location-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: #ebf4ff; color: #2b6cb0; border: 1px solid #bee3f8;
+  padding: 5px 10px; border-radius: 20px; font-size: 13px; font-weight: 600;
+}
+.btn-pick-location {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: #f7fafc; border: 1px dashed #cbd5e0; color: #667eea;
+  padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s;
+}
+.btn-pick-location:hover:not(:disabled) { background: #edf2f7; border-color: #667eea; }
+.btn-pick-location:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* ── Audit info ──────────────────────────────────────────── */
 .audit-info { margin-top: 8px; margin-bottom: 20px; }
 .audit-divider { position: relative; text-align: center; margin: 24px 0 18px; }

@@ -188,8 +188,8 @@ Q4   Household           "Nanti akan tinggal bersama siapa saja?
      investasi-sewa (kos/kontrakan) ask TARGET PENYEWA instead. For liburan/dinas
      ask CAPACITY ("menginap berapa orang"). Full table in doc 09 §Q4.
 
-Q5   Red flags           "Ada yang pasti tidak cocok? Misalnya hadap barat,
-     Skip if in Q2b.     dekat jalan ramai, gang sempit, atau rumah tua?"
+Q5   Red flags           "Ada yang pasti tidak cocok atau ingin dihindari? Misalnya
+     Skip if in Q2b.     rawan banjir, area panas, hadap barat, gang sempit, atau dekat rel kereta?"
 
 Q6   Anchor point        "Ada lokasi tertentu yang jadi patokan?
      Skip if in Q2b.     Misalnya dekat sekolah anak, kantor, atau mall?"

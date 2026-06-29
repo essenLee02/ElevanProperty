@@ -391,8 +391,16 @@ const handleToggleStatus = async () => {
   try {
     const result = await toggleFacilityStatus(facilityId.value);
     if (result?.isSuccess === 1) {
-      form.status = result.data.response.status;
+      const facility = result.data.response.facility;
+      Object.assign(form, {
+        status:          facility.status,
+        updated_date:    facility.updated_date    || '',
+        updated_by:      facility.updated_by      || '',
+        updated_by_name: facility.updated_by_name || ''
+      });
       toast.success(result.data.message || 'Status berhasil diubah');
+      setAlert('success', result.data.message);
+      setTimeout(clearAlert, 3000);
     } else {
       toast.error(result?.data?.message || 'Gagal mengubah status');
     }

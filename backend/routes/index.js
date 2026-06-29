@@ -63,6 +63,8 @@ const countryMasterController    = require('../controllers/countryMasterControll
 const provinceMasterController   = require('../controllers/provinceMasterController');
 const cityMasterController       = require('../controllers/cityMasterController');
 const propertyMasterController   = require('../controllers/propertyMasterController');
+const locationMasterController   = require('../controllers/locationMasterController');
+const propertyLocationController  = require('../controllers/propertyLocationController');
 
 const { verifyToken, requirePrivilege } = require('../middleware/verifyToken');
 
@@ -245,5 +247,26 @@ router.post('/property/insert',                       verifyToken, propertyMaste
 router.put('/property/update/:property_id',           verifyToken, propertyMasterController.updateDataProperty);
 router.patch('/property/toggle-status/:property_id',  verifyToken, propertyMasterController.toggleStatusProperty);
 router.delete('/property/delete/:property_id',        verifyToken, propertyMasterController.deleteProperty);
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   PROPERTY-LOCATION RELATIONSHIPS (Butuh login)
+   Menghubungkan property dengan nearby location anchors (landmarks)
+══════════════════════════════════════════════════════════════════════════════ */
+
+router.get('/property/:property_id/locations',              verifyToken, propertyLocationController.getPropertyLocations);
+router.post('/property/:property_id/locations',             verifyToken, propertyLocationController.addLocationToProperty);
+router.post('/property/:property_id/locations/bulk',        verifyToken, propertyLocationController.bulkAddLocations);
+router.delete('/property/:property_id/locations/:location_id', verifyToken, propertyLocationController.removeLocationFromProperty);
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   MASTER DATA — LOCATION (Butuh login)
+══════════════════════════════════════════════════════════════════════════════ */
+
+router.get('/location/list',                              verifyToken, locationMasterController.showDataLocation);
+router.get('/location/detail/:location_id',               verifyToken, locationMasterController.getDetailLocation);
+router.post('/location/insert',                           verifyToken, locationMasterController.insertDataLocation);
+router.put('/location/update/:location_id',               verifyToken, locationMasterController.updateDataLocation);
+router.patch('/location/toggle-status/:location_id',      verifyToken, locationMasterController.toggleStatusLocation);
+router.delete('/location/delete/:location_id',            verifyToken, locationMasterController.deleteDataLocation);
 
 module.exports = router;

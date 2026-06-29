@@ -363,16 +363,29 @@ class FacilityMasterController extends GeneralController {
       await facility.update({
         status:       newStatus,
         updated_date: GeneralController.todayDate(),
-        updated_by:   updatedBy
+        updated_by:   updatedBy ? updatedBy.toUpperCase() : null
       });
+
+      const updaterName = await GeneralController.resolveUserName(updatedBy);
 
       console.log(`[FACILITY] 🔄 TOGGLE — ${facility.facility_id} | "${facility.name}" | Status: ${label} | By: ${updatedBy}`);
 
       return sendSuccess(res, HTTP.OK, {
-        facility_id: facility.facility_id,
-        name:        facility.name,
-        status:      newStatus,
-        status_label: label
+        facility: {
+          id:              facility.id,
+          facility_id:     facility.facility_id,
+          name:            facility.name,
+          description:     facility.description,
+          icon:            facility.icon,
+          status:          newStatus,
+          status_label:    label,
+          created_date:    facility.created_date,
+          created_by:      facility.created_by,
+          created_by_name: await GeneralController.resolveUserName(facility.created_by),
+          updated_date:    facility.updated_date,
+          updated_by:      facility.updated_by,
+          updated_by_name: updaterName
+        }
       }, `Fasilitas "${facility.name}" berhasil diubah menjadi ${label}`);
 
     } catch (error) {

@@ -389,13 +389,30 @@ class CityMasterController extends GeneralController {
         updated_by:   updatedBy.toUpperCase()
       });
 
+      const updaterName  = await GeneralController.resolveUserName(updatedBy);
+      const provinceName = await CityMasterController.#provinceName(city.province_id);
+      const countryName  = await CityMasterController.#countryName(city.country_id);
+
       console.log(`[CITY] 🔄 TOGGLE — ${city.city_id} | "${city.name}" | Status: ${label} | By: ${updatedBy}`);
 
       return sendSuccess(res, HTTP.OK, {
-        city_id:      city.city_id,
-        name:         city.name,
-        status:       newStatus,
-        status_label: label
+        city: {
+          id:              city.id,
+          city_id:         city.city_id,
+          province_id:     city.province_id,
+          province_name:   provinceName,
+          country_id:      city.country_id,
+          country_name:    countryName,
+          name:            city.name,
+          status:          newStatus,
+          status_label:    label,
+          created_date:    city.created_date,
+          created_by:      city.created_by,
+          created_by_name: await GeneralController.resolveUserName(city.created_by),
+          updated_date:    city.updated_date,
+          updated_by:      city.updated_by,
+          updated_by_name: updaterName
+        }
       }, `Kota "${city.name}" berhasil diubah menjadi ${label}`);
 
     } catch (error) {

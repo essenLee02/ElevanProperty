@@ -317,16 +317,27 @@ class CountryMasterController extends GeneralController {
       await country.update({
         status:       newStatus,
         updated_date: GeneralController.todayDate(),
-        updated_by:   updatedBy
+        updated_by:   updatedBy ? updatedBy.toUpperCase() : null
       });
+
+      const updaterName = await GeneralController.resolveUserName(updatedBy);
 
       console.log(`[COUNTRY] 🔄 TOGGLE — ${country.country_id} | "${country.name}" | Status: ${label} | By: ${updatedBy}`);
 
       return sendSuccess(res, HTTP.OK, {
-        country_id:   country.country_id,
-        name:         country.name,
-        status:       newStatus,
-        status_label: label
+        country: {
+          id:              country.id,
+          country_id:      country.country_id,
+          name:            country.name,
+          status:          newStatus,
+          status_label:    label,
+          created_date:    country.created_date,
+          created_by:      country.created_by,
+          created_by_name: await GeneralController.resolveUserName(country.created_by),
+          updated_date:    country.updated_date,
+          updated_by:      country.updated_by,
+          updated_by_name: updaterName
+        }
       }, `Negara "${country.name}" berhasil diubah menjadi ${label}`);
 
     } catch (error) {

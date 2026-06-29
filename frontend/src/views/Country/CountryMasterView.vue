@@ -305,8 +305,16 @@ const handleToggleStatus = async () => {
   try {
     const result = await toggleCountryStatus(countryId.value);
     if (result?.isSuccess === 1) {
-      form.status = result.data.response.status;
+      const country = result.data.response.country;
+      Object.assign(form, {
+        status:          country.status,
+        updated_date:    country.updated_date    || '',
+        updated_by:      country.updated_by      || '',
+        updated_by_name: country.updated_by_name || ''
+      });
       toast.success(result.data.message || 'Status berhasil diubah');
+      setAlert('success', result.data.message);
+      setTimeout(clearAlert, 3000);
     } else {
       toast.error(result?.data?.message || 'Gagal mengubah status');
     }

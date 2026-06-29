@@ -327,8 +327,16 @@ const handleToggleStatus = async () => {
   try {
     const result = await toggleLocationStatus(locationId.value);
     if (result?.isSuccess === 1) {
-      form.status = result.data.response.status;
+      const loc = result.data.response.location;
+      Object.assign(form, {
+        status:          loc.status,
+        updated_date:    loc.updated_date    || '',
+        updated_by:      loc.updated_by      || '',
+        updated_by_name: loc.updated_by_name || ''
+      });
       toast.success(result.data.message || 'Status berhasil diubah');
+      setAlert('success', result.data.message);
+      setTimeout(clearAlert, 3000);
     } else {
       toast.error(result?.data?.message || 'Gagal mengubah status');
     }

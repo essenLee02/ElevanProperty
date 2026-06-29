@@ -28,6 +28,7 @@ function extractQualificationState(history = [], currentMessage = '') {
     buildingType    : null,   // from first message
     fallbackTypes   : [],     // "kalau tidak ada X, Y saja"
     location        : null,   // Q2
+    district        : null,   // Q2c: area/district within large city (Surabaya → Pakuwon, Rungkut, dll)
     budget          : null,   // Q3
     household       : null,   // Q4
     redFlags        : null,   // Q5
@@ -238,6 +239,44 @@ function extractQualificationState(history = [], currentMessage = '') {
       if (cm) state.location = cm[1];
     }
 
+    // Q2c — District / area within large city
+    // Only detect when a city-level location is known, and customer mentions a specific area.
+    if (!state.district && state.location) {
+      const locL = state.location.toLowerCase();
+      let areaList = null;
+      if (locL.includes('surabaya')) {
+        areaList = ['rungkut', 'pakuwon', 'pakuwon city', 'darmo', 'wonokromo', 'kenjeran',
+          'gubeng', 'sukolilo', 'mulyorejo', 'tenggilis', 'gayungan', 'benowo',
+          'lakarsantri', 'sambikerep', 'sukomanunggal', 'dukuh pakis', 'sawahan',
+          'genteng', 'bubutan', 'simokerto', 'krembangan', 'asemrowo', 'tandes',
+          'wiyung', 'karangpilang', 'wonocolo', 'jambangan', 'dukuh kupang',
+          'ngagel', 'nginden', 'citraland', 'graha family', 'kembang jepun',
+          'surabaya selatan', 'surabaya utara', 'surabaya barat', 'surabaya timur', 'surabaya pusat'];
+      } else if (locL.includes('jakarta')) {
+        areaList = ['menteng', 'kebayoran', 'kemang', 'kuningan', 'sudirman', 'thamrin',
+          'kelapa gading', 'pluit', 'pantai indah kapuk', 'pik', 'sunter', 'tebet',
+          'senayan', 'fatmawati', 'cempaka putih', 'condet', 'mampang',
+          'jakarta selatan', 'jakarta utara', 'jakarta barat', 'jakarta timur', 'jakarta pusat'];
+      } else if (locL.includes('bandung')) {
+        areaList = ['dago', 'buah batu', 'antapani', 'cicaheum', 'pasteur', 'setrasari',
+          'setiabudi', 'sukajadi', 'bojongsoang', 'cimahi', 'lembang',
+          'bandung selatan', 'bandung utara', 'bandung barat', 'bandung timur'];
+      } else if (locL.includes('semarang')) {
+        areaList = ['banyumanik', 'gajahmungkur', 'tembalang', 'pedurungan',
+          'semarang tengah', 'semarang selatan', 'semarang barat', 'semarang timur'];
+      } else if (locL.includes('makassar')) {
+        areaList = ['panakkukang', 'tamalate', 'biringkanaya', 'rappocini', 'manggala',
+          'makassar pusat', 'makassar selatan', 'makassar timur'];
+      } else if (locL.includes('medan')) {
+        areaList = ['medan baru', 'medan sunggal', 'medan petisah', 'medan helvetia',
+          'medan kota', 'medan selayang', 'medan polonia'];
+      }
+      if (areaList) {
+        const found = areaList.find(a => text.includes(a));
+        if (found) state.district = found.replace(/\b\w/g, c => c.toUpperCase());
+      }
+    }
+
     // Q2b — Direct Phase-1 capture for explicit "belum/sudah lihat" answers.
     // This runs independently of Phase-2 AI→customer pair detection so Q2b is
     // captured even if the pair-based scan misses the turn (e.g. duplicate message
@@ -428,8 +467,16 @@ function extractQualificationState(history = [], currentMessage = '') {
     const aiText   = (ai.message   || '').toLowerCase();
     const custResp = (cust.message || '').trim();
 
+    // Q2c — district/area (pair detection: AI asked which area, customer answered)
+    if (!state.district && /area.{0,20}(mana|kawasan|wilayah)|kawasan.{0,20}mana|daerah.{0,20}mana|di bagian mana|which area|which.{0,15}neighbourhood|bagian.{0,20}(surabaya|jakarta|bandung|medan|semarang|makassar)/i.test(aiText)) {
+      const candidateDistrict = custResp.trim();
+      if (candidateDistrict && !/^(tidak|belum|ga|gak|ngga|tidak\s+ada|manapun|flexible|fleksibel)\b/i.test(candidateDistrict)) {
+        state.district = candidateDistrict;
+      }
+    }
+
     // Q6 — anchor point
-    if (!state.anchorPoint && /patokan|dekat sekolah|dekat kantor|mall tertentu|anchor/.test(aiText)) {
+    if (!state.anchorPoint && /patokan|dekat sekolah|dekat kantor|mall tertentu|anchor|wisata|kawasan tertentu|tempat tertentu.*patokan/.test(aiText)) {
       state.anchorPoint = custResp;
     }
     // Q7 — alternative areas
@@ -794,6 +841,26 @@ function findNextQuestion(state) {
     return { q: 'Q2', hint: `Oke, mau ${tx} *${typeLbl}*. 📍 Di kota atau area mana yang Anda pertimbangkan?` };
   }
 
+  // Q2c — Area/district dalam kota besar (SEBELUM Q2b — mempersempit area pencarian)
+  // Hanya berlaku untuk kota besar yang punya banyak area/district.
+  const LARGE_CITIES_Q2C = ['surabaya', 'jakarta', 'bandung', 'medan', 'semarang', 'makassar', 'palembang', 'tangerang'];
+  if (!state.district && state.location &&
+      LARGE_CITIES_Q2C.some(c => state.location.toLowerCase().includes(c)) &&
+      !isBooking && !isCommercial) {
+    let areaEx = 'Misalnya pusat kota, area selatan, kawasan tertentu?';
+    if (state.location.toLowerCase().includes('surabaya'))
+      areaEx = 'Misalnya Pakuwon, Darmo, Rungkut, Gubeng, Kenjeran, atau area lainnya?';
+    else if (state.location.toLowerCase().includes('jakarta'))
+      areaEx = 'Misalnya Kebayoran, Menteng, Kelapa Gading, Kemang, atau area lainnya?';
+    else if (state.location.toLowerCase().includes('bandung'))
+      areaEx = 'Misalnya Dago, Buah Batu, Antapani, Pasteur, atau area lainnya?';
+    else if (state.location.toLowerCase().includes('semarang'))
+      areaEx = 'Misalnya Banyumanik, Tembalang, Gajahmungkur, atau area lainnya?';
+    else if (state.location.toLowerCase().includes('makassar'))
+      areaEx = 'Misalnya Panakkukang, Tamalate, Rappocini, atau area lainnya?';
+    return { q: 'Q2c', hint: `Di area atau kawasan mana di ${loc} yang Anda pertimbangkan? 📍 ${areaEx}` };
+  }
+
   // Q2b — Riwayat pencarian (kecuali untuk booking hotel/kondotel dan properti komersial)
   if (!state.searchHistory && !state.aiAskedQ2b && !isBooking) {
     const humanType = _humanType[type] || 'properti';
@@ -848,11 +915,13 @@ function findNextQuestion(state) {
     return { q: 'Q5', hint: 'Ada yang pasti tidak cocok? Misalnya yang hadap barat, dekat jalan ramai, gang sempit, atau rumah tua? 🚫' };
   }
 
-  // Q6 — Patokan lokasi
+  // Q6 — Patokan lokasi (include wisata, kawasan, dan landmark named examples)
   if (!state.anchorPoint) {
     if (isCommercial)
       return { q: 'Q6', hint: `Ada lokasi atau kawasan tertentu yang jadi prioritas? Misalnya dekat kawasan industri, pelabuhan, atau pusat bisnis? 📍` };
-    return { q: 'Q6', hint: 'Ada lokasi tertentu yang jadi patokan? Misalnya dekat sekolah anak, kantor, atau mall tertentu? 📍' };
+    if (state.location && state.location.toLowerCase().includes('surabaya'))
+      return { q: 'Q6', hint: 'Ada lokasi atau tempat tertentu yang jadi patokan? Misalnya dekat Grand City, Pakuwon, KBS, wisata mangrove, sekolah anak, atau jalan tertentu? 📍' };
+    return { q: 'Q6', hint: 'Ada lokasi atau tempat tertentu yang jadi patokan? Misalnya dekat sekolah anak, mal, wisata, kawasan tertentu, atau jalan tertentu? 📍' };
   }
 
   // Q7 — Area alternatif
@@ -1025,6 +1094,7 @@ function buildQualificationStateBlock(state) {
     row('Tipe transaksi    [Q1]', state.transactionType),
     row('Tipe properti         ', state.buildingType ? state.buildingType + fbNote : null),
     row('Lokasi            [Q2]', state.location),
+    row('Area/District    [Q2c]', state.district),
     // Q2b: ✅ = customer answered; ⏭️ = AI asked but customer redirected (skip, don't repeat); ❓ = not asked yet.
     state.searchHistory
       ? `✅ Riwayat pencarian [Q2b]: ${state.searchHistory}`

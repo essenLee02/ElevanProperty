@@ -175,6 +175,43 @@ EN: Got it, *[rent/buy] a [Type]*. 📍 Which city or area are you considering?
 
 ---
 
+### Q2c — District / Area within Large City *(new)*
+
+**Fires when:** Location is a large city (Surabaya, Jakarta, Bandung, Semarang, Makassar, Medan) AND no specific area/district has been mentioned.  
+**Does NOT fire for:** Commercial types (ruko, kantor, gudang), hotel/kondotel booking.  
+**Fires BEFORE Q2b** — knowing the district narrows the search before asking about search history.
+
+```
+ID: Di area atau kawasan mana di *[kota]* yang Anda pertimbangkan? 📍
+    [Contoh spesifik per kota]
+
+EN: Which area or neighbourhood in *[city]* are you considering? 📍
+    [City-specific examples]
+```
+
+**City-specific examples:**
+
+| City | Indonesian example |
+|------|-------------------|
+| Surabaya | Misalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya? |
+| Jakarta | Misalnya Kebayoran, Menteng, Kelapa Gading, Kemang, atau area lainnya? |
+| Bandung | Misalnya Dago, Buah Batu, Antapani, Pasteur, atau area lainnya? |
+| Semarang | Misalnya Banyumanik, Tembalang, Gajahmungkur, atau area lainnya? |
+| Makassar | Misalnya Panakkukang, Tamalate, Rappocini, atau area lainnya? |
+
+**Q2c Answer Handling:**
+
+| Customer answers | AI action |
+|---|---|
+| Names a specific area ("Pakuwon City") | ✅ Store as district. Proceed to Q2b. |
+| Names a district with anchor ("deket Grand City") | ✅ Store district + capture anchor for Q6. |
+| "Di mana saja oke" / "Fleksibel" / "Terserah" | ✅ Q2c answered (flexible = no constraint). Proceed. |
+| Customer answers with district info included in Q2 | ✅ Q2c already answered — skip, don't ask. |
+
+**Updated Priority order:** Q1 → Q2 → **Q2c** → Q2b → Q3 → Q8 → Q4 → Q5 → Q6 → Q7 → Q9 → Q10 → Q11 → Q12
+
+---
+
 ### Q2b — Search History *(Highest-value question)*
 
 **Fires when:** Location established, not yet asked, AI has asked ≤ 3 questions.
@@ -398,14 +435,30 @@ AI:       Oke, berarti 1 kamar sudah cukup ya 😊 [→ ask Q3 or next unanswere
 ### Q5 — Red Flags *(only if not captured in Q2b)*
 
 ```
-ID: Ada yang pasti tidak cocok? Misalnya yang hadap barat,
-    dekat jalan ramai, gang sempit, atau rumah tua?
-EN: Is there anything you definitely want to avoid?
-    Such as west-facing, near a busy road, narrow alleys, or older buildings?
+ID: Ada yang pasti tidak cocok atau ingin dihindari?
+    Misalnya rawan banjir, area panas, hadap barat, dekat jalan ramai,
+    gang sempit, atau dekat rel kereta?
+EN: Anything you definitely want to avoid?
+    Like flood-prone areas, hot/west-facing, noisy streets,
+    narrow alleys, or near train tracks?
 ```
 
+**Common red flags to detect and store:**
+
+| Customer says | Red flag stored |
+|---|---|
+| `rawan banjir`, `sering banjir`, `tergenang` | Rawan banjir |
+| `panas`, `terlalu panas`, `kurang rindang`, `tidak teduh` | Area panas / kurang pohon |
+| `hadap barat`, `west facing` | Hadap barat |
+| `bising`, `berisik`, `ramai`, `terlalu ramai` | Area bising |
+| `gang sempit`, `lorong sempit` | Akses gang sempit |
+| `dekat rel kereta`, `rel kereta api` | Dekat rel kereta |
+| `dekat pabrik`, `polusi udara`, `bau pabrik` | Polusi / dekat industri |
+| `macet banget`, `kemacetan parah` | Area macet parah |
+| `rumah tua`, `bangunan tua` | Kondisi properti tua |
+
 **Q5 Summary display rule:**
-Include `✓ Hindari:` only when a **specific, concrete** red flag was stated (e.g., `Tidak mau hadap barat`, `Tidak mau bising/ramai`).
+Include `✓ Hindari:` only when a **specific, concrete** red flag was stated (e.g., `Tidak mau rawan banjir`, `Tidak mau area panas`).
 
 **FORBIDDEN:** `✓ Hindari: *Disebutkan*` — this placeholder is never shown. If no specific red flag pattern matches the customer's answer, the `Hindari` line is **omitted entirely** from the summary brief. "Tidak ada" or vague non-answers → omit the line.
 
@@ -414,11 +467,20 @@ Include `✓ Hindari:` only when a **specific, concrete** red flag was stated (e
 ### Q6 — Anchor Point *(only if not captured in Q2b)*
 
 ```
-ID: Ada lokasi tertentu yang jadi patokan?
-    Misalnya dekat sekolah anak, kantor, atau mall tertentu?
-EN: Is there a specific landmark you want to be near?
-    For example: near a school, office, or mall?
+ID: Ada lokasi atau tempat tertentu yang jadi patokan?
+    Misalnya dekat sekolah anak, mal, wisata, kawasan tertentu, atau jalan tertentu? 📍
+
+EN: Any specific location or landmark you'd like to be near?
+    For example a school, mall, tourist spot, residential estate, or street? 📍
 ```
+
+**For Surabaya specifically:**
+```
+ID: Ada lokasi atau tempat tertentu yang jadi patokan?
+    Misalnya dekat Grand City, Pakuwon, wisata mangrove, KBS, sekolah anak, atau jalan tertentu? 📍
+```
+
+**Why include wisata/kawasan:** Customers in Surabaya commonly reference tourist spots (Kenjeran, Mangrove Wonorejo, KBS) and named estates (Pakuwon City, Citraland) as anchor points, especially for house/villa rentals. These are NOT off-topic — they are property location references.
 
 **IMPORTANT — "Deket kantor" is a location anchor, NOT a building type:**
 When a customer answers Q6 with `"deket kantor dan mall"`, `"dekat kantor saya"`, or any landmark description containing "kantor":
@@ -593,16 +655,32 @@ Customers often answer Q11 by naming the furniture/appliances they need, e.g.
 
 ---
 
-### Q_FAC — Facilities / Amenities *(rent only — WAJIB / MANDATORY for sewa)*
+### Q_FAC — Facilities / Amenities *(WAJIB untuk sewa, opsional untuk beli hunian)*
 
-For **every sewa (rent) transaction**, the AI **must** ask which facilities the customer wants —
-unless they already volunteered them. Fires after Q11 (furnishing), before the summary.
+**For sewa (rent):** MANDATORY — must ask before showing summary.  
+**For beli (buy) residential** (rumah, apartemen, villa, mansion): OPTIONAL but recommended — ask to understand must-have facilities.  
+**For commercial types:** NOT asked.
+
+Fires after Q11 (furnishing), before the summary. Adapts by property type:
 
 ```
-ID: Ada fasilitas tertentu yang Anda inginkan? Misalnya AC, kolam renang,
-    gym, keamanan 24 jam, atau yang lainnya? 🏊
-EN: Any specific facilities you'd like? For example AC, swimming pool, gym,
-    24-hour security, or others? 🏊
+Apartemen:
+ID: Ada fasilitas apartemen tertentu yang Anda inginkan?
+    Misalnya kolam renang, gym, rooftop, keamanan 24 jam, atau yang lainnya? 🏊
+EN: Any specific apartment facilities you'd like?
+    For example swimming pool, gym, rooftop, 24-hour security, or others? 🏊
+
+Villa:
+ID: Ada fasilitas villa yang diinginkan?
+    Misalnya kolam renang pribadi, dapur lengkap, BBQ area, atau yang lainnya? 🏊
+EN: Any specific villa facilities you'd like?
+    For example private pool, full kitchen, BBQ area, or others? 🏊
+
+Rumah / Default:
+ID: Ada fasilitas tertentu yang Anda inginkan?
+    Misalnya AC, kolam renang, gym, carport/garasi, keamanan 24 jam, atau yang lainnya? 🏊
+EN: Any specific facilities you'd like?
+    For example AC, swimming pool, gym, carport/garage, 24-hour security, or others? 🏊
 ```
 
 - Detected amenities accumulate across the session and appear as `✓ Fasilitas: Kids zone, Gym`
@@ -633,6 +711,133 @@ ID: Untuk apartemen, ada preferensi tower atau lantai tertentu?
     (Lantai tinggi biasanya lebih tenang, lantai rendah lebih mudah akses)
 EN: For apartments, do you have a floor or tower preference?
     (Higher floors = quieter, lower floors = easier access)
+```
+
+---
+
+### Q14 — Property-Type-Specific Slots *(summary mode only)*
+
+Fire **one per message**, in the order shown. Skip if already answered.
+
+#### Kos / Boarding House
+
+```
+Q14-KOS-1 (Kos type):
+ID: Kos yang dicari untuk *putra*, *putri*, atau *campur*? 🏠
+EN: Looking for *male-only*, *female-only*, or *mixed* boarding house? 🏠
+
+Q14-KOS-2 (Bathroom):
+ID: Kamar mandi *dalam* (en-suite) atau *luar* (shared) oke? 🚿
+EN: *Private bathroom* (en-suite) or *shared bathroom* is okay? 🚿
+
+Q14-KOS-3 (Payment period):
+ID: Untuk pembayaran kos, prefer *harian*, *mingguan*, *bulanan*, atau *tahunan*? 💳
+EN: For payment, do you prefer *daily*, *weekly*, *monthly*, or *annual*? 💳
+```
+
+#### Hotel / Kondotel (sewa = booking)
+
+```
+Check-in date → Check-out date → Room type (Standard/Deluxe/Suite/Family) → Breakfast included?
+```
+
+#### Villa (sewa)
+
+```
+Rental period (per malam / minggu / bulan) → Private pool? → Check-in date
+```
+
+#### Kantor / Office
+
+```
+Q14-OFF-1 (Headcount → infer m²):
+ID: Berapa orang yang akan bekerja di kantor ini? (untuk tentukan luas & grade gedung) 👥
+EN: How many people will work in this office? (to determine size & building grade) 👥
+Note: Infer area at ~5–7 m²/person.
+
+Q14-OFF-2 (Building grade):
+ID: Preferensi gedung *Grade A* (premium), *Grade B* (mid), atau *Grade C* (ekonomis)? 🏢
+EN: Preference: *Grade A* (premium), *Grade B* (mid), or *Grade C* (economy) building? 🏢
+
+Q14-OFF-3 (Fit-out condition):
+ID: Kondisi ruang yang diinginkan: *fitted out* (siap pakai, tinggal kerja) atau *bare shell* (bangun interior sendiri)? 🏢
+EN: Office condition: *fitted out* (move-in ready) or *bare shell* (build your own interior)? 🏢
+```
+
+#### Gudang / Warehouse
+
+```
+Q14-WH-1 (Purpose):
+ID: Gudangnya untuk apa — *produksi*, *distribusi*, atau *penyimpanan*? 📦
+EN: What is the warehouse for — *production*, *distribution*, or *storage*? 📦
+
+Q14-WH-2 (Ceiling height):
+ID: Tinggi langit-langit dibutuhkan berapa meter? (penting untuk penyimpanan bertingkat & forklift) 📏
+EN: What ceiling height is needed? (important for stacked storage & forklift use) 📏
+
+Q14-WH-3 (Loading dock):
+ID: Perlu berapa *loading dock*? Dan akses forklift di dalam? 🚛
+EN: How many *loading docks* are needed? And forklift access inside? 🚛
+
+Q14-WH-4 (Beli only — zonasi):
+ID: Perlu pengecekan legalitas *zona industri/pergudangan* sebelum deal? 📋
+EN: Should we verify the *industrial/warehouse zoning* legality before the deal? 📋
+```
+
+#### Ruko / Shophouse
+
+```
+Q14-RUKO-1: Bisnis apa yang akan dijalankan di sana? 🏪
+Q14-RUKO-2 (beli): Prefer ruko *kosong* atau yang sudah ada *tenant* berjalan? (tenant existing = langsung cashflow)
+```
+
+#### Kondotel (beli = investasi)
+
+```
+Q14-KONDO-1: Target ROI per tahun berapa? (contoh: 7%, 10%) 📈
+Q14-KONDO-2: Tipe unit paling laku: *Studio* atau *1 kamar* biasanya ROI terbaik 🛏️
+```
+
+#### Mansion
+
+```
+Q14-MANSION: Wajib ada *private pool*? (hampir selalu standar mansion premium) 🏊
+```
+
+#### Properti Lainnya (Others)
+
+```
+Q14-OTHER-1: Properti ini rencananya untuk tujuan apa? (parkir, event, pertanian, pabrik, klinik, dll) 🏗️
+Q14-OTHER-2 (beli): Perlu pengecekan *sertifikat (SHM)* dan *zonasi* sebelum deal? 📋
+```
+
+---
+
+### Q_KPR — Financing (beli only)
+
+```
+ID: Untuk pembeliannya, rencana pakai *KPR* atau *cash*? 💳
+EN: For the purchase, are you planning *mortgage (KPR)* or *cash*? 💳
+```
+
+**Payment method variants to detect and acknowledge:**
+
+| Customer says | Method stored | Follow-up |
+|---|---|---|
+| `cash`, `tunai`, `cash keras` | Cash | No follow-up |
+| `kpr`, `kredit`, `cicil` | KPR Komersial | Ask Q_KPR-a (bank + DP) |
+| `kpr syariah`, `murabahah`, `syariah` | KPR Syariah | Ask Q_KPR-a (bank + DP) |
+| `subsidi`, `flpp`, `kpr subsidi` | KPR Subsidi (FLPP) | Note DP rendah, ada income limit |
+| `kombinasi`, `cash + kpr` | Kombinasi | Ask Q_KPR-a |
+| `cash bertahap`, `nyicil ke developer` | Developer in-house | Note terms/DP |
+| `tanpa dp`, `dp 0%` | Zero DP (promo) | Confirm program |
+
+**Q_KPR-a (if KPR/kombinasi/syariah):**
+```
+ID: Sudah ada gambaran bank yang dituju, atau perlu saya bantu rekomendasikan?
+    Dan DP-nya kira-kira berapa persen yang disiapkan? 🏦
+EN: Do you have a preferred bank, or would you like a recommendation?
+    And roughly what DP percentage are you preparing? 🏦
 ```
 
 ---

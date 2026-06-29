@@ -64,6 +64,9 @@ class LanguageDetector {
     // Location & place (ID)
     'di ', 'dekat', 'deket', 'sekitar', 'wilayah', 'area', 'daerah',
     'jalan', 'gang', 'perumahan', 'komplek', 'kawasan',
+    // Location anchor / wisata (valid property context)
+    'mangrove', 'wonorejo', 'kenjeran', 'pakuwon', 'citraland',
+    'grand city', 'galaxy mall', 'tunjungan', 'ciputra', 'darmo',
     // Facilities (ID)
     'fasilitas', 'kamar', 'dapur', 'parkir', 'garasi', 'kolam', 'taman',
     'furnished', 'furnish', 'kosongan', 'perabot',
@@ -262,18 +265,48 @@ class LanguageDetector {
    * @param {string} message
    * @returns {boolean}
    */
+  // ── Location anchor keywords — place names customers use as "dekat X" references ──
+  // These override OFF_TOPIC_WORDS: if the message contains any of these AND a proximity
+  // preposition (dekat/deket/near/etc.), it's a valid Q6 location anchor, NOT off-topic.
+  static #LOCATION_ANCHOR_WORDS = [
+    // Malls & shopping (named)
+    'grand city', 'galaxy mall', 'delta plaza', 'ptc', 'pakuwon trade', 'ciputra world',
+    'wtc', 'plasa marina', 'bg junction', 'marvell city', 'pakuwon mall', 'tunjungan plaza',
+    'gwalk', 'suncity', 'pasar atom', 'jembatan merah plaza',
+    // Tourist & wisata
+    'mangrove', 'wonorejo', 'kebun binatang', 'kbs', 'kenjeran', 'taman bungkul',
+    'house of sampoerna', 'monkasel', 'monumen kapal selam', 'kalimas', 'waterpark',
+    'carnival night', 'thr', 'taman hiburan', 'pantai', 'taman botani',
+    // Named kawasan
+    'pakuwon city', 'citraland', 'graha family', 'darmo permai',
+    // Named schools
+    'sekolah ciputra', 'sd petra', 'smp petra', 'sma petra', 'sekolah petra',
+    'santa klara', 'darul muttaqin',
+    // Named universities
+    'unair', 'its', 'unesa', 'ubaya', 'airlangga',
+    // Named hospitals
+    'rs mitra', 'rs siloam', 'rs brawijaya', 'rs national', 'dr soetomo', 'rkz',
+    // Named restaurants
+    'gacoan', 'depot bu rudy', 'embong malang',
+    // Named banks
+    'bank bca', 'bank bni', 'bank mandiri',
+    // Generic wisata words that appear in off-topic list but are valid anchors
+    'wisata', 'pantai', 'taman', 'kebun', 'museum',
+  ];
+
   static isOffTopic(message = '') {
     const text = this.#normalize(message);
-    // Landmark/anchor answers (Q6) use place names that may appear in OFF_TOPIC_WORDS.
-    // "dekat cafe", "dekat restoran", "di jalan Dukuh Kupang" are valid Q6 answers —
-    // never block them as off-topic even if "cafe" / "restoran" is in the off-topic list.
-    const isLandmarkAnswer = /\b(dekat|deket|near|di\s+jalan|di\s+sekitar|samping|next\s+to|beside)\b/.test(text);
-    if (isLandmarkAnswer) return false;
 
-    // Developer/tech keyword lists: 8+ hyphenated-word tokens AND no property words.
-    // Pattern: "memory-management search-strategy build-dashboard incident-response
-    // system-design crm-maintenance customer-pulse-check ..." (>= 8 hyphenated tokens).
-    // Property answers ("semi-furnished, garden-view, near-station") rarely exceed 7.
+    // Guard 1: Proximity preposition → always a location anchor answer (Q6), never off-topic.
+    // Covers: "dekat cafe", "deket wisata mangrove", "di jalan Dukuh Kupang", etc.
+    const hasProximityWord = /\b(dekat|deket|near|di\s+jalan|di\s+sekitar|samping|next\s+to|beside|sekitar|area)\b/.test(text);
+    if (hasProximityWord) return false;
+
+    // Guard 2: Named location anchor present (mall, wisata, kawasan, university, hospital)
+    // Even without "dekat", "Pakuwon City", "Grand City Mall", "KBS" etc. are property context.
+    if (this.#LOCATION_ANCHOR_WORDS.some(w => text.includes(w))) return false;
+
+    // Guard 3: Developer/tech keyword spam — 8+ hyphenated tokens with no property words.
     const hyphenTokens = (text.match(/\b\w+-\w+\b/g) || []);
     if (hyphenTokens.length >= 8 && !this.#PROPERTY_WORDS.some(w => text.includes(w))) return true;
 
@@ -822,17 +855,44 @@ class ResponseBuilderWhatsApp {
 
     // ── Step 3: Try city-level match (for district-level requests) ─────────
     // e.g. "Ngagel Jaya Selatan Surabaya" → fall back to any part of Surabaya
-    const cityWords = normLoc.split(/\s+/).filter(w => w.length >= 4);
+    // Strategy: Extract city name (last word >= 4 chars is usually the city name)
+    const cityWords = normLoc.split(/\s+/).filter(w => w.length >= 3);
+
+    // Try to match using the longest/last word (usually the city name)
+    for (let i = cityWords.length - 1; i >= 0; i--) {
+      const cityWord = cityWords[i];
+      const atCity = byType.filter(item => {
+        const itemCity = String(item.city || '').toLowerCase();
+        const itemLoc  = String(item.location || '').toLowerCase();
+        // Strict city matching: exact word match, not just substring
+        return itemCity === cityWord || itemCity.endsWith(' ' + cityWord) ||
+               itemLoc === cityWord || itemLoc.endsWith(' ' + cityWord);
+      });
+      if (atCity.length > 0) {
+        console.log(`[PrivateController] City-level match found for "${cityWord}": ${atCity.length} items`);
+        return { items: atCity, locationScope: 'city' };
+      }
+    }
+
+    // ── Step 3b: Substring fallback for compound city names ─────────────────
+    // Last resort within city filtering: substring match (case-insensitive)
     for (const cityWord of cityWords) {
       const atCity = byType.filter(item => {
-        const itemLoc = [item.city, item.province, item.location]
+        const itemLoc = [item.city, item.location]
           .filter(Boolean).map(s => String(s).toLowerCase()).join(' ');
         return itemLoc.includes(cityWord);
       });
-      if (atCity.length > 0) return { items: atCity, locationScope: 'city' };
+      if (atCity.length > 0) {
+        console.log(`[PrivateController] Substring city-level match found for "${cityWord}": ${atCity.length} items`);
+        return { items: atCity, locationScope: 'city' };
+      }
     }
 
-    // ── Step 4: National fallback — same type, any city ───────────────────
+    // ── Step 4: National fallback — ONLY if customer explicitly asked for alternatives ──
+    // or if we've exhausted city-level options.
+    // Log this as a fallback so the response builder can explain why we're showing
+    // properties from other cities.
+    console.warn(`[PrivateController] NO city-level match for location "${filters.location}" — falling back to national alternatives`);
     return { items: byType, locationScope: 'national' };
   }
 
@@ -968,9 +1028,11 @@ class ResponseBuilderWhatsApp {
             : `⚠️ No *${summary}* at that specific area. Here are *${PropertyFormatter.humanBuildingType(filters.buildingType, 'en')}* options in other parts of *${location}*:\n`;
 
         } else if (locationScope === 'national' && location) {
+          // Customer specifically asked for a city, but we have no properties there.
+          // Be explicit about why we're showing alternatives from other cities.
           contextMsg = isId
-            ? `⚠️ Belum ada *${PropertyFormatter.humanBuildingType(filters.buildingType, 'id')}* sewa di *${location}* saat ini. Berikut pilihan terdekat di kota lain:\n`
-            : `⚠️ No *${PropertyFormatter.humanBuildingType(filters.buildingType, 'en')}* for rent in *${location}* right now. Here are the closest options from other cities:\n`;
+            ? `⚠️ Maaf, saat ini belum ada *${PropertyFormatter.humanBuildingType(filters.buildingType, 'id')}* tersedia di *${location}* dengan kriteria yang Anda minta (${filters.transactionType === 'rent' ? 'sewa' : 'jual'}, budget ${filters.budget || 'fleksibel'}).\n\n📍 Berikut pilihan *${PropertyFormatter.humanBuildingType(filters.buildingType, 'id')}* terdekat dari kota lain yang mungkin sesuai:\n`
+            : `⚠️ Unfortunately, there are currently no *${PropertyFormatter.humanBuildingType(filters.buildingType, 'en')}* available in *${location}* matching your criteria (${filters.transactionType === 'rent' ? 'for rent' : 'for sale'}, budget ${filters.budget || 'flexible'}).\n\n📍 Here are the closest *${PropertyFormatter.humanBuildingType(filters.buildingType, 'en')}* options from nearby cities:\n`;
 
         } else {
           contextMsg = isId
@@ -1491,13 +1553,21 @@ class ConversationQualifier {
       hasFinancing: this.#has(custText, [
         'cash', 'tunai', 'kpr', 'kredit', 'cicil', 'kombinasi', 'kpr komersial',
         'kpt', 'pembiayaan', 'dp ', 'down payment', 'mortgage', 'installment',
+        // Subsidi / FLPP
+        'subsidi', 'flpp', 'rumah subsidi', 'kpr subsidi',
+        // KPR Syariah
+        'syariah', 'murabahah', 'kpr syariah',
+        // Cash variants
+        'cash keras', 'cash bertahap', 'tanpa dp', 'dp 0',
       ]),
       aiAskedFinancing: this.#has(aiText, [
         'cash atau kpr', 'kpr atau cash', 'pembiayaannya', 'rencananya cash',
         'cash, kpr', 'pembiayaan', 'financing', 'pay cash or',
       ]),
       // Whether customer's financing answer indicates KPR/kredit (→ ask Q_KPR-a)
-      financingIsKPR: this.#has(custText, ['kpr', 'kredit', 'cicil', 'kombinasi', 'kpt', 'mortgage']),
+      financingIsKPR: this.#has(custText, ['kpr', 'kredit', 'cicil', 'kombinasi', 'kpt', 'mortgage', 'syariah', 'murabahah', 'flpp', 'subsidi']),
+      // Whether customer uses KPR subsidi/FLPP (lower DP, income limit)
+      financingIsSubsidi: this.#has(custText, ['subsidi', 'flpp', 'rumah subsidi', 'kpr subsidi']),
 
       /* ── Q_KPR-a: KPR readiness (bank + DP) ── */
       hasKprDetails: this.#has(custText, [
@@ -1630,12 +1700,53 @@ class ConversationQualifier {
       hasRedFlags: this.#has(custText, [
         'tidak mau', 'jangan', 'avoid', 'tidak suka', 'kurang suka',
         'hadap barat', 'west facing', 'bising', 'noisy', 'gang sempit',
-        'banjir', 'jauh', 'lorong', 'tua banget', 'tidak cocok', 'kurang cocok',
+        'banjir', 'rawan banjir', 'genangan', 'tergenang',
+        'panas', 'terlalu panas', 'kurang rindang', 'tidak teduh',
+        'rel kereta', 'dekat rel', 'kereta api lewat',
+        'polusi', 'bau pabrik', 'dekat industri',
+        'padat', 'terlalu ramai', 'macet banget',
+        'jauh', 'lorong', 'tua banget', 'tidak cocok', 'kurang cocok',
         'yang pasti', 'yang jelas tidak', 'nggak mau yang',
       ]),
       aiAskedRedFlags: this.#has(aiText, [
         'tidak cocok', 'pasti tidak', 'yang harus dihindari', 'hadap barat',
         'dekat jalan ramai', 'gang sempit', 'rumah tua', 'anything you want to avoid',
+        'rawan banjir', 'banjir', 'panas', 'want to avoid',
+      ]),
+
+      /* ── Q2c: District/area dalam kota besar ── */
+      hasDistrict: (() => {
+        const SURABAYA_AREAS = [
+          'rungkut', 'pakuwon', 'darmo', 'wonokromo', 'kenjeran', 'gubeng',
+          'sukolilo', 'mulyorejo', 'tenggilis', 'gayungan', 'benowo', 'lakarsantri',
+          'sambikerep', 'sukomanunggal', 'dukuh pakis', 'sawahan', 'genteng', 'bubutan',
+          'simokerto', 'krembangan', 'asemrowo', 'tandes', 'wiyung', 'karangpilang',
+          'wonocolo', 'jambangan', 'dukuh kupang', 'ngagel', 'nginden', 'citraland',
+          'graha family', 'kembang jepun', 'surabaya selatan', 'surabaya utara',
+          'surabaya barat', 'surabaya timur', 'surabaya pusat',
+        ];
+        const JAKARTA_AREAS = [
+          'menteng', 'kebayoran', 'kemang', 'kuningan', 'sudirman', 'thamrin',
+          'kelapa gading', 'pluit', 'pantai indah kapuk', 'pik', 'sunter', 'tebet',
+          'senayan', 'fatmawati', 'jakarta selatan', 'jakarta utara',
+          'jakarta barat', 'jakarta timur', 'jakarta pusat',
+        ];
+        const BANDUNG_AREAS = [
+          'dago', 'buah batu', 'antapani', 'cicaheum', 'pasteur', 'setrasari',
+          'setiabudi', 'sukajadi', 'lembang', 'bandung selatan', 'bandung utara',
+        ];
+        const ALL_AREAS = [...SURABAYA_AREAS, ...JAKARTA_AREAS, ...BANDUNG_AREAS,
+          'banyumanik', 'tembalang', 'gajahmungkur', // Semarang
+          'panakkukang', 'tamalate', 'biringkanaya', // Makassar
+          'medan baru', 'medan sunggal', 'medan petisah', // Medan
+        ];
+        return ALL_AREAS.some(a => custText.toLowerCase().includes(a));
+      })(),
+      aiAskedDistrict: this.#has(aiText, [
+        'area mana di', 'kawasan mana di', 'daerah mana di', 'wilayah mana di',
+        'di bagian mana', 'area atau kawasan mana', 'mana di surabaya',
+        'mana di jakarta', 'mana di bandung', 'which area or neighbourhood',
+        'which neighbourhood', 'which area',
       ]),
 
       /* ── Q6: Anchor point (patokan lokasi) ── */
@@ -1828,6 +1939,14 @@ class ConversationQualifier {
       ]),
       aiAskedBathroomType: this.#has(aiText, ['kamar mandi dalam', 'kamar mandi luar', 'bathroom type']),
 
+      hasPaymentPeriod: this.#has(custText, [
+        'per hari', 'harian', 'per minggu', 'mingguan', 'per bulan', 'bulanan',
+        'per 3 bulan', '3 bulanan', 'per 6 bulan', '6 bulanan', 'per tahun', 'tahunan',
+        'bayar harian', 'bayar mingguan', 'bayar bulanan', 'bayar tahunan',
+        'daily', 'weekly', 'monthly', 'quarterly', 'annually',
+      ]),
+      aiAskedPaymentPeriod: this.#has(aiText, ['bayarnya', 'payment period', 'bayar per', 'bulanan atau', 'per hari, per minggu']),
+
       /* ── Q14: Commercial (Ruko/Kantor/Gudang/Toko) ── */
       hasBusinessType: this.#has(custText, [
         'restoran', 'restaurant', 'cafe', 'retail', 'fashion', 'butik', 'toko',
@@ -1842,6 +1961,24 @@ class ConversationQualifier {
         'kapasitas', '10 orang', '20 orang', '50 orang',
       ]) && (filters.buildingType === 'office'),
       aiAskedHeadcount: this.#has(aiText, ['berapa orang', 'headcount', 'kapasitas karyawan']),
+
+      hasFitOut: this.#has(custText, [
+        'fitted', 'fit out', 'fit-out', 'fitout', 'shell', 'bare shell',
+        'siap pakai', 'bangun sendiri', 'renovasi sendiri', 'interior sendiri',
+      ]),
+      aiAskedFitOut: this.#has(aiText, ['fitted out', 'bare shell', 'fit out', 'kondisi ruang', 'siap pakai atau']),
+
+      /* ── Q14: Warehouse specific ── */
+      hasCeilingHeight: this.#has(custText, [
+        'tinggi langit', 'ceiling', 'ketinggian gudang', 'tinggi gudang',
+      ]) || /\b\d+(?:[.,]\d+)?\s*m(?:eter)?\s+(tinggi|height)\b/i.test(custText),
+      aiAskedCeilingHeight: this.#has(aiText, ['tinggi langit-langit', 'ceiling height', 'tinggi gudang']),
+
+      hasLoadingDock: this.#has(custText, [
+        'loading dock', 'dock', 'bongkar muat', 'pintu truk', 'akses truk',
+        'truk masuk', 'forklift',
+      ]),
+      aiAskedLoadingDock: this.#has(aiText, ['loading dock', 'bongkar muat', 'akses truk', 'forklift']),
 
       /* ── Q14: Kondotel beli (investasi) ── */
       hasRoiExpectation: this.#has(custText, [
@@ -1905,6 +2042,7 @@ class ConversationQualifier {
     if (summaryAlreadyShown) {
       const resetFields = [
         'hasFurnishing', 'hasMoveInDate', 'hasHouseholdInfo', 'hasSearchHistory',
+        'hasDistrict', 'aiAskedDistrict',
         'hasRedFlags', 'hasAlternativeArea', 'hasAnchorPoint', 'hasDecisionMaker',
         'hasLeaseDuration', 'hasPaymentTerms', 'hasApartmentPrefs',
         'aiAskedTxType', 'aiAskedPropType', 'aiAskedLocation', 'aiAskedSearchHist',
@@ -1917,10 +2055,13 @@ class ConversationQualifier {
         // Q14 type-specific slots
         'hasCheckInDate', 'hasCheckOutDate', 'hasRoomType', 'hasBreakfastPref',
         'hasPrivatePool', 'hasRentalPeriod', 'hasKosType', 'hasBathroomType',
+        'hasPaymentPeriod', 'hasFitOut', 'hasCeilingHeight', 'hasLoadingDock',
         'hasBusinessType', 'hasHeadcount', 'hasRoiExpectation', 'hasPropertyPurpose',
         'aiAskedCheckIn', 'aiAskedCheckOut', 'aiAskedRoomType', 'aiAskedBreakfast',
         'aiAskedPrivatePool', 'aiAskedRentalPeriod', 'aiAskedKosType', 'aiAskedBathroomType',
+        'aiAskedPaymentPeriod', 'aiAskedFitOut', 'aiAskedCeilingHeight', 'aiAskedLoadingDock',
         'aiAskedBusinessType', 'aiAskedHeadcount', 'aiAskedRoi', 'aiAskedPropertyPurpose',
+        'financingIsSubsidi',
         // BELI flow (Q_KPR / Q_KPR-a / Q_COND + per-type Q14 beli)
         'hasFinancing', 'aiAskedFinancing', 'financingIsKPR', 'hasKprDetails',
         'kprBankPreference', 'kprApprovalNotStarted', 'hasDpInfo',
@@ -2286,6 +2427,32 @@ class ConversationQualifier {
             : `Looking to *${txLabel}* — which city or area do you have in mind? 📍`);
     }
 
+    /* ── Q2c: District/area sub-question for large cities ── */
+    // Only fires when location is a large city but no specific area/district yet mentioned.
+    // Not fired for commercial types, bookings, or when district is already known.
+    const LARGE_CITIES_SET = ['surabaya', 'jakarta', 'bandung', 'medan', 'semarang', 'makassar', 'palembang', 'tangerang'];
+    const isCommercialType  = ['shophouse', 'office', 'warehouse', 'store'].includes(type);
+    if (loc && !profile.hasDistrict && !profile.aiAskedDistrict
+        && !isCommercialType
+        && LARGE_CITIES_SET.some(c => loc.toLowerCase().includes(c))) {
+      let exDistrict;
+      if (loc.toLowerCase().includes('surabaya'))
+        exDistrict = isId ? 'Misalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?' : 'For example Pakuwon, Darmo, Rungkut, Gubeng, or another area?';
+      else if (loc.toLowerCase().includes('jakarta'))
+        exDistrict = isId ? 'Misalnya Kebayoran, Menteng, Kelapa Gading, Kemang, atau area lainnya?' : 'For example Kebayoran, Menteng, Kelapa Gading, Kemang, or another area?';
+      else if (loc.toLowerCase().includes('bandung'))
+        exDistrict = isId ? 'Misalnya Dago, Buah Batu, Antapani, Pasteur, atau area lainnya?' : 'For example Dago, Buah Batu, Antapani, Pasteur, or another area?';
+      else if (loc.toLowerCase().includes('semarang'))
+        exDistrict = isId ? 'Misalnya Banyumanik, Tembalang, Gajahmungkur, atau area lainnya?' : 'For example Banyumanik, Tembalang, Gajahmungkur, or another area?';
+      else if (loc.toLowerCase().includes('makassar'))
+        exDistrict = isId ? 'Misalnya Panakkukang, Tamalate, Rappocini, atau area lainnya?' : 'For example Panakkukang, Tamalate, Rappocini, or another area?';
+      else
+        exDistrict = isId ? 'Misalnya pusat kota, area selatan, atau kawasan tertentu?' : 'For example city centre, south area, or a specific neighbourhood?';
+      return isId
+        ? `Di area atau kawasan mana di *${loc}* yang Anda pertimbangkan? 📍\n${exDistrict}`
+        : `Which area or neighbourhood in *${loc}* are you considering? 📍\n${exDistrict}`;
+    }
+
     /* ── Q2: search history (highest-value question — fire early, once) ── */
     if (!profile.hasSearchHistory && !profile.aiAskedSearchHist && !profile.customerStatedSearchHistory && profile.aiCount <= 3 && loc) {
       const typeWord = typeLabel
@@ -2370,11 +2537,22 @@ class ConversationQualifier {
         : `For furnishing, do you prefer *fully furnished*, *semi-furnished*, or *unfurnished*? 🛋️`;
     }
 
-    /* ── Q_FAC: facilities/amenities (WAJIB untuk SEWA — tanyakan sebelum summary) ── */
-    if (tx === 'rent' && !profile.hasFacilities && !profile.aiAskedFacilities) {
+    /* ── Q_FAC: facilities/amenities (WAJIB untuk SEWA, OPSIONAL untuk BELI hunian) ── */
+    const isBuyResidential = tx === 'sale' && ['house', 'apartment', 'villa', 'mansion'].includes(type);
+    if ((tx === 'rent' || isBuyResidential) && !profile.hasFacilities && !profile.aiAskedFacilities) {
+      if (type === 'apartment') {
+        return isId
+          ? `Ada fasilitas apartemen tertentu yang Anda inginkan? Misalnya kolam renang, gym, rooftop, keamanan 24 jam, atau yang lainnya? 🏊`
+          : `Any specific apartment facilities you'd like? For example swimming pool, gym, rooftop, 24-hour security, or others? 🏊`;
+      }
+      if (type === 'villa') {
+        return isId
+          ? `Ada fasilitas villa yang diinginkan? Misalnya kolam renang pribadi, dapur lengkap, BBQ area, atau yang lainnya? 🏊`
+          : `Any specific villa facilities you'd like? For example private pool, full kitchen, BBQ area, or others? 🏊`;
+      }
       return isId
-        ? `Ada fasilitas tertentu yang Anda inginkan? Misalnya AC, kolam renang, gym, keamanan 24 jam, atau yang lainnya? 🏊`
-        : `Any specific facilities you'd like? For example AC, swimming pool, gym, 24-hour security, or others? 🏊`;
+        ? `Ada fasilitas tertentu yang Anda inginkan? Misalnya AC, kolam renang, gym, carport/garasi, keamanan 24 jam, atau yang lainnya? 🏊`
+        : `Any specific facilities you'd like? For example AC, swimming pool, gym, carport/garage, 24-hour security, or others? 🏊`;
     }
 
     /* ══════════════════════════════════════════════════════════════════════
@@ -2441,15 +2619,21 @@ class ConversationQualifier {
       /* ── Q5: Red flags (only if not captured in Q2 answer) ── */
       if (!profile.hasRedFlags && !profile.aiAskedRedFlags && profile.aiAskedSearchHist) {
         return isId
-          ? `Ada yang pasti tidak cocok? Misalnya yang hadap barat, dekat jalan ramai, gang sempit, atau rumah tua? 🚫`
-          : `Anything you want to avoid? Like west-facing, noisy streets, narrow alleys, or older buildings? 🚫`;
+          ? `Ada yang pasti tidak cocok atau ingin dihindari? Misalnya rawan banjir, area panas, hadap barat, dekat jalan ramai, gang sempit, atau dekat rel kereta? 🚫`
+          : `Anything you definitely want to avoid? Like flood-prone areas, hot/west-facing, noisy streets, narrow alleys, or near train tracks? 🚫`;
       }
 
       /* ── Q6: Anchor point (only if not surfaced in Q2) ── */
       if (!profile.hasAnchorPoint && !profile.aiAskedAnchorPoint && loc) {
+        // For Surabaya, mention local landmarks (malls, wisata, kawasan)
+        if (loc.toLowerCase().includes('surabaya')) {
+          return isId
+            ? `Ada lokasi atau tempat tertentu yang jadi patokan? Misalnya dekat Grand City, Pakuwon, wisata mangrove, KBS, sekolah anak, atau jalan tertentu? 📍`
+            : `Any specific location or landmark you'd like to be near? For example Grand City, Pakuwon, Mangrove Wonorejo, KBS, a school, or a specific street? 📍`;
+        }
         return isId
-          ? `Ada lokasi tertentu yang jadi patokan? Misalnya dekat sekolah anak, kantor, atau mall tertentu? 📍`
-          : `Any specific landmark that matters? Like near a school, office, or certain mall? 📍`;
+          ? `Ada lokasi atau tempat tertentu yang jadi patokan? Misalnya dekat sekolah anak, mal, wisata, kawasan tertentu, atau jalan tertentu? 📍`
+          : `Any specific location or landmark you'd like to be near? For example a school, mall, tourist spot, residential estate, or street? 📍`;
       }
 
       /* ── Q7: Alternative areas (always unless already volunteered) ── */
@@ -2547,12 +2731,14 @@ class ConversationQualifier {
           return isId ? `Untuk villa, wajib ada *private pool*? Ini biasanya jadi standar villa premium. 🏊` : `For the villa, is a *private pool* a must? It's usually a standard for premium villas. 🏊`;
       }
 
-      // Kos: type + bathroom
+      // Kos: type + bathroom + payment period
       if (type === 'boarding_house') {
         if (!profile.hasKosType && !profile.aiAskedKosType)
           return isId ? `Kos yang dicari untuk *putra*, *putri*, atau *campur*? 🏠` : `Looking for *male-only*, *female-only*, or *mixed* boarding house? 🏠`;
         if (!profile.hasBathroomType && !profile.aiAskedBathroomType)
           return isId ? `Kamar mandi *dalam* (en-suite) atau *luar* (shared) oke? 🚿` : `*Private bathroom* (en-suite) or *shared bathroom* is okay? 🚿`;
+        if (!profile.hasPaymentPeriod && !profile.aiAskedPaymentPeriod)
+          return isId ? `Untuk pembayaran kos, prefer *harian*, *mingguan*, *bulanan*, atau *tahunan*? 💳` : `For payment, do you prefer *daily*, *weekly*, *monthly*, or *annual*? 💳`;
       }
 
       // Ruko / Shophouse: business type + floors
@@ -2572,12 +2758,14 @@ class ConversationQualifier {
           return isId ? `Prefer unit *mal prime* (stabil) atau *trade center* (yield lebih tinggi)? Dan unit kosong atau sudah ada penyewa? 🛍️` : `Prefer a *prime mall* unit (stable) or *trade center* (higher yield)? And empty or with an existing tenant? 🛍️`;
       }
 
-      // Kantor / Office: headcount + building grade
+      // Kantor / Office: headcount + building grade + fit-out condition
       if (type === 'office') {
         if (!profile.hasHeadcount && !profile.aiAskedHeadcount)
           return isId ? `Berapa orang yang akan bekerja di kantor ini? (untuk tentukan luas & grade gedung) 👥` : `How many people will work in this office? (to determine size & building grade) 👥`;
         if (!profile.hasBusinessType && !profile.aiAskedBusinessType)
           return isId ? `Preferensi gedung *Grade A* (premium), *Grade B* (mid), atau *Grade C* (ekonomis)? 🏢` : `Preference: *Grade A* (premium), *Grade B* (mid), or *Grade C* (economy) building? 🏢`;
+        if (!profile.hasFitOut && !profile.aiAskedFitOut)
+          return isId ? `Kondisi ruang yang diinginkan: *fitted out* (siap pakai, tinggal kerja) atau *bare shell* (bangun interior sendiri)? 🏢` : `Office condition: *fitted out* (move-in ready) or *bare shell* (build your own interior)? 🏢`;
       }
 
       // Mansion: private pool check
@@ -2594,10 +2782,14 @@ class ConversationQualifier {
           return isId ? `Tipe unit yang paling laku disewakan? *Studio* atau *1 kamar* biasanya ROI terbaik. 🛏️` : `Which unit type rents best? *Studio* or *1-bedroom* usually gives the best ROI. 🛏️`;
       }
 
-      // Gudang / Warehouse: purpose + (beli) zonasi/legalitas
+      // Gudang / Warehouse: purpose + ceiling height + loading dock + (beli) zonasi
       if (type === 'warehouse') {
         if (!profile.hasBusinessType && !profile.aiAskedBusinessType)
           return isId ? `Gudangnya untuk apa — *produksi*, *distribusi*, atau *penyimpanan*? 📦` : `What is the warehouse for — *production*, *distribution*, or *storage*? 📦`;
+        if (!profile.hasCeilingHeight && !profile.aiAskedCeilingHeight)
+          return isId ? `Tinggi langit-langit dibutuhkan berapa meter? (penting untuk penyimpanan bertingkat & forklift) 📏` : `What ceiling height is needed? (important for stacked storage & forklift use) 📏`;
+        if (!profile.hasLoadingDock && !profile.aiAskedLoadingDock)
+          return isId ? `Perlu berapa *loading dock*? Dan akses forklift di dalam? 🚛` : `How many *loading docks* are needed? And forklift access inside? 🚛`;
         if (tx === 'sale' && !profile.hasZonasi && !profile.aiAskedZonasi)
           return isId ? `Perlu pengecekan legalitas *zona industri/pergudangan* sebelum deal? (agar tidak salah peruntukan) 📋` : `Should we verify the *industrial/warehouse zoning* legality before the deal? 📋`;
       }
@@ -2755,8 +2947,8 @@ class ConversationQualifier {
     /* ── Q7: Red flags (if not captured at Q4) ── */
     if (!profile.hasRedFlags && !profile.aiAskedRedFlags && profile.aiAskedSearchHist) {
       return isId
-        ? `Ada yang pasti Kak hindari? Misalnya rawan banjir, hadap barat, gang sempit, atau dekat jalan terlalu ramai? 🚫`
-        : `Anything you definitely want to avoid? E.g. flood-prone, west-facing, narrow alley, or too-busy road? 🚫`;
+        ? `Ada yang pasti Kak hindari? Misalnya rawan banjir, area panas, hadap barat, gang sempit, atau dekat rel kereta? 🚫`
+        : `Anything you definitely want to avoid? E.g. flood-prone, hot area, west-facing, narrow alley, or near train tracks? 🚫`;
     }
 
     /* ── QA: Alternative areas ── */
@@ -2795,11 +2987,17 @@ class ConversationQualifier {
           ? `Furniturnya prefer *Full Furnished*, *Semi*, atau *Kosongan*, Kak? 🛋️`
           : `For furnishing, do you prefer *Fully Furnished*, *Semi*, or *Unfurnished*, Kak? 🛋️`;
       }
-      /* ── Q_FAC: facilities/amenities (WAJIB untuk SEWA) ── */
+      /* ── Q_FAC: facilities/amenities (WAJIB untuk SEWA, OPSIONAL untuk BELI hunian) ── */
       if (!profile.hasFacilities && !profile.aiAskedFacilities) {
+        const profileType = profile.buildingType || type || '';
+        if (profileType === 'apartment') {
+          return isId
+            ? `Ada fasilitas apartemen yang Kak inginkan? Misalnya kolam renang, gym, rooftop, atau keamanan 24 jam? 🏊`
+            : `Any specific apartment facilities you'd like, Kak? E.g. swimming pool, gym, rooftop, or 24-hour security? 🏊`;
+        }
         return isId
-          ? `Ada fasilitas tertentu yang Kak inginkan? Misalnya AC, kolam renang, gym, keamanan 24 jam, atau lainnya? 🏊`
-          : `Any specific facilities you'd like, Kak? E.g. AC, swimming pool, gym, 24-hour security, or others? 🏊`;
+          ? `Ada fasilitas tertentu yang Kak inginkan? Misalnya AC, kolam renang, gym, carport/garasi, keamanan 24 jam, atau lainnya? 🏊`
+          : `Any specific facilities you'd like, Kak? E.g. AC, swimming pool, gym, carport/garage, 24-hour security, or others? 🏊`;
       }
     }
 
@@ -3903,11 +4101,15 @@ class ChatbotPrivateService {
     }
 
     // ── Q8 mandatory: append move-in question before signature ───────────────
+    // IMPORTANT: Always detect language from the CURRENT message, not the session.
+    // This ensures consistency: if customer writes in Indonesian, questions are in Indonesian.
+    // Even if previous messages were in English, this message's language takes precedence.
     if (!profile.hasMoveInDate && !profile.aiAskedMoveIn) {
-      const moveInQ   = lang === 'id'
+      const currentLang = LanguageDetector.detect(userMessage, history);
+      const moveInQ   = currentLang === 'id'
         ? '\n\nOmong-omong, rencananya masuk atau pindah bulan apa? 📅'
         : '\n\nBy the way, what month are you planning to move in? 📅';
-      const insertBefore = lang === 'id' ? '\n\nSalam hangat,' : '\n\nWarm regards,';
+      const insertBefore = currentLang === 'id' ? '\n\nSalam hangat,' : '\n\nWarm regards,';
       reply = reply.includes(insertBefore)
         ? reply.replace(insertBefore, moveInQ + insertBefore)
         : reply + moveInQ;

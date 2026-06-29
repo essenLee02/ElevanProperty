@@ -372,16 +372,30 @@ class ProvinceMasterController extends GeneralController {
       await province.update({
         status:       newStatus,
         updated_date: GeneralController.todayDate(),
-        updated_by:   updatedBy
+        updated_by:   updatedBy ? updatedBy.toUpperCase() : null
       });
+
+      const updaterName = await GeneralController.resolveUserName(updatedBy);
+      const countryName = await ProvinceMasterController.#countryName(province.country_id);
 
       console.log(`[PROVINCE] 🔄 TOGGLE — ${province.province_id} | "${province.name}" | Status: ${label} | By: ${updatedBy}`);
 
       return sendSuccess(res, HTTP.OK, {
-        province_id:  province.province_id,
-        name:         province.name,
-        status:       newStatus,
-        status_label: label
+        province: {
+          id:              province.id,
+          province_id:     province.province_id,
+          country_id:      province.country_id,
+          country_name:    countryName,
+          name:            province.name,
+          status:          newStatus,
+          status_label:    label,
+          created_date:    province.created_date,
+          created_by:      province.created_by,
+          created_by_name: await GeneralController.resolveUserName(province.created_by),
+          updated_date:    province.updated_date,
+          updated_by:      province.updated_by,
+          updated_by_name: updaterName
+        }
       }, `Provinsi "${province.name}" berhasil diubah menjadi ${label}`);
 
     } catch (error) {
