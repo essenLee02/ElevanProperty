@@ -152,13 +152,13 @@
                 </div>
                 <div class="form-group">
                   <label for="price">Harga (Rp) <span class="required">*</span></label>
-                  <input id="price" v-model="form.price" type="number" min="0" step="any" placeholder="0" :disabled="isSubmitting" required />
+                  <input id="price" :value="priceDisplay" @input="onPriceInput" type="text" inputmode="numeric" placeholder="0" autocomplete="off" :disabled="isSubmitting" required />
                 </div>
                 <div class="form-group">
                   <label for="price_type">Tipe Harga <span class="required">*</span></label>
                   <select id="price_type" v-model="form.price_type" :disabled="isSubmitting" required>
                     <option value="" disabled>— Pilih Tipe Harga —</option>
-                    <option v-for="pt in PRICE_TYPE_OPTIONS" :key="pt.value" :value="pt.value">{{ pt.label }}</option>
+                    <option v-for="pt in filteredPriceTypeOptions" :key="pt.value" :value="pt.value">{{ pt.label }}</option>
                   </select>
                 </div>
               </div>
@@ -448,7 +448,8 @@ const form = reactive({
   updated_by_name:      ''
 });
 
-const alert = reactive({ type: '', message: '' });
+const alert        = reactive({ type: '', message: '' });
+const priceDisplay = ref('');
 
 /* ── Field "Lantai" dinamis sesuai tipe bangunan ────────────────── */
 const isFloorPosition  = computed(() => FLOOR_POSITION_TYPES.includes(form.building_type));
@@ -458,9 +459,32 @@ const floorHint        = computed(() => (isFloorPosition.value
   ? 'Unit berada di lantai berapa (mis. Lantai 5)'
   : 'Jumlah lantai bangunan (mis. 2)'));
 
+/* ── Tipe Harga dinamis sesuai tipe transaksi ─────────────────────── */
+const filteredPriceTypeOptions = computed(() => {
+  const saleOptions = PRICE_TYPE_OPTIONS.filter(pt => ['Cash', 'Negotiable', 'Others'].includes(pt.value));
+  const rentOptions = PRICE_TYPE_OPTIONS.filter(pt => ['Night', 'Daily', 'Weekly', 'Monthly', 'Yearly', 'Others'].includes(pt.value));
+  return form.transaction_type === 'Sale' ? saleOptions : (form.transaction_type === 'Rent' ? rentOptions : PRICE_TYPE_OPTIONS);
+});
+
 /* ── Helpers ────────────────────────────────────────────────────── */
 const setAlert   = (type, message) => { alert.type = type; alert.message = message; };
 const clearAlert = () => { alert.type = ''; alert.message = ''; };
+
+const onPriceInput = (e) => {
+  const raw = e.target.value.replace(/,/g, '').replace(/[^0-9.]/g, '');
+  form.price = raw;
+  // Format only the integer part while typing (keep decimal as-is so user can type freely)
+  let formatted = '';
+  if (raw) {
+    const dotIdx = raw.indexOf('.');
+    const intPart = dotIdx >= 0 ? raw.slice(0, dotIdx) : raw;
+    const decPart = dotIdx >= 0 ? raw.slice(dotIdx + 1) : null;
+    const formattedInt = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    formatted = decPart !== null ? `${formattedInt}.${decPart}` : formattedInt;
+  }
+  priceDisplay.value = formatted;
+  e.target.value     = formatted;
+};
 
 const formatDate = (dateStr) => {
   if (!dateStr) return '—';
@@ -587,6 +611,24 @@ const removeFacility = (facilityId) => {
 const onTransactionChange = () => {
   // Sewa tidak bisa KPR — paksa N (disabled). Jual → kembalikan default Y.
   form.kpr_status = form.transaction_type === 'Rent' ? 'N' : 'Y';
+
+  // Smart price_type logic: keep if valid, reset to default if null or invalid
+  const saleTypes = ['Cash', 'Negotiable', 'Others'];
+  const rentTypes = ['Night', 'Daily', 'Weekly', 'Monthly', 'Yearly', 'Others'];
+  const isValidForSale = saleTypes.includes(form.price_type);
+  const isValidForRent = rentTypes.includes(form.price_type);
+
+  if (form.transaction_type === 'Sale') {
+    // Jika price_type null atau tidak valid untuk Sale → set ke Cash (default)
+    if (!form.price_type || !isValidForSale) {
+      form.price_type = 'Cash';
+    }
+  } else if (form.transaction_type === 'Rent') {
+    // Jika price_type null atau tidak valid untuk Rent → set ke Yearly (default)
+    if (!form.price_type || !isValidForRent) {
+      form.price_type = 'Yearly';
+    }
+  }
 };
 
 /* ── Load detail (edit mode) ─────────────────────────────────────── */
@@ -635,6 +677,7 @@ const loadDetail = async () => {
         updated_by:           p.updated_by           || '',
         updated_by_name:      p.updated_by_name      || ''
       });
+      priceDisplay.value = form.price ? window.formatPriceDisplay(form.price) : '';
     } else {
       setAlert('danger', result?.data?.message || 'Properti tidak ditemukan');
       setTimeout(() => router.push('/property'), 2000);
@@ -791,170 +834,3 @@ onMounted(() => {
   if (isEditMode.value) loadDetail();
 });
 </script>
-
-<style scoped>
-.master-form-section {
-  min-height: calc(100vh - 80px);
-  padding: 36px 0 60px;
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-}
-
-/* ── Back nav ────────────────────────────────────────────────────── */
-.back-nav { margin-bottom: 16px; }
-.back-link { color: #667eea; font-size: 14px; font-weight: 600; text-decoration: none; }
-.back-link:hover { text-decoration: underline; }
-
-/* ── Card ────────────────────────────────────────────────────────── */
-.master-card { background: white; border-radius: 16px; padding: 36px 32px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08); }
-
-/* ── Card header ─────────────────────────────────────────────────── */
-.card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
-.card-header h2 { font-size: 22px; font-weight: 700; color: #2d3748; margin: 0 0 4px; }
-.card-header p  { font-size: 13px; color: #718096; margin: 0; }
-
-.header-id { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
-.id-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #a0aec0; font-weight: 600; }
-.id-value { font-size: 13px; font-weight: 700; color: #667eea; background: #ebf4ff; padding: 3px 10px; border-radius: 20px; }
-
-/* ── Alert ──────────────────────────────────────────────────────── */
-.alert { padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; font-size: 14px; }
-.alert-danger  { background: #fed7d7; color: #742a2a; border: 1px solid #feb2b2; }
-.alert-success { background: #c6f6d5; color: #22543d; border: 1px solid #9ae6b4; }
-.alert-warning { background: #fefcbf; color: #744210; border: 1px solid #faf089; }
-
-/* ── Loading ────────────────────────────────────────────────────── */
-.loading-state { display: flex; flex-direction: column; align-items: center; padding: 48px 20px; color: #718096; gap: 16px; }
-.spinner-lg { width: 40px; height: 40px; border: 3px solid #e2e8f0; border-top-color: #667eea; border-radius: 50%; animation: spin 0.7s linear infinite; }
-.spinner-sm { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.4); border-top-color: currentColor; border-radius: 50%; animation: spin 0.7s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* ── Section divider ────────────────────────────────────────────── */
-.section-divider { position: relative; text-align: center; margin: 26px 0 18px; }
-.section-divider::before { content: ''; position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: #e2e8f0; }
-.section-divider span { position: relative; background: white; padding: 0 12px; font-size: 12px; font-weight: 700; color: #667eea; text-transform: uppercase; letter-spacing: 0.6px; }
-
-/* ── Form ────────────────────────────────────────────────────────── */
-.master-form .form-group { margin-bottom: 18px; flex: 1; }
-.form-row { display: flex; gap: 16px; flex-wrap: wrap; }
-.form-row .form-group { min-width: 180px; }
-.master-form label { display: block; margin-bottom: 6px; font-weight: 600; color: #2d3748; font-size: 14px; }
-.required { color: #e53e3e; margin-left: 2px; }
-
-.master-form input[type="text"],
-.master-form input[type="number"],
-.master-form textarea,
-.master-form select {
-  width: 100%;
-  padding: 11px 14px;
-  font-size: 14px;
-  border: 1px solid #cbd5e0;
-  border-radius: 8px;
-  outline: none;
-  transition: border-color 0.2s;
-  box-sizing: border-box;
-  font-family: inherit;
-  background: white;
-}
-.master-form textarea { resize: vertical; }
-.master-form input:focus, .master-form select:focus, .master-form textarea:focus { border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15); }
-.master-form input:disabled, .master-form select:disabled, .master-form textarea:disabled { background: #edf2f7; cursor: not-allowed; color: #718096; }
-
-.field-hint { margin: 5px 0 0; font-size: 12px; color: #a0aec0; }
-
-/* ── Picker field (input + tombol modal) ────────────────────────── */
-.picker-field { display: flex; gap: 8px; }
-.picker-field input { flex: 1; }
-.picker-field.disabled { opacity: 0.7; }
-.picker-btn {
-  flex: 0 0 auto; width: 46px; border: 1px solid #cbd5e0; border-radius: 8px;
-  background: #f7fafc; color: #667eea; cursor: pointer; font-size: 15px; transition: all 0.15s;
-}
-.picker-btn:hover:not(:disabled) { background: #edf2f7; border-color: #667eea; }
-.picker-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-/* ── Fasilitas (chips multi-select) ─────────────────────────────── */
-.facility-box { border: 1px solid #cbd5e0; border-radius: 10px; padding: 14px; background: #fff; }
-.facility-empty { color: #a0aec0; font-size: 13px; margin-bottom: 12px; }
-.facility-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
-.facility-chip {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: #ebf4ff; color: #2b6cb0; border: 1px solid #bee3f8;
-  padding: 5px 10px; border-radius: 20px; font-size: 13px; font-weight: 600;
-}
-.chip-x { border: none; background: none; color: #2b6cb0; cursor: pointer; font-size: 12px; padding: 0; line-height: 1; opacity: 0.7; }
-.chip-x:hover:not(:disabled) { opacity: 1; color: #c53030; }
-.chip-x:disabled { opacity: 0.4; cursor: not-allowed; }
-.btn-pick-facility {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: #f7fafc; border: 1px dashed #cbd5e0; color: #667eea;
-  padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s;
-}
-.btn-pick-facility:hover:not(:disabled) { background: #edf2f7; border-color: #667eea; }
-.btn-pick-facility:disabled { opacity: 0.5; cursor: not-allowed; }
-
-/* ── Audit info ─────────────────────────────────────────────────── */
-.audit-info { margin-top: 8px; margin-bottom: 20px; }
-.audit-divider { position: relative; text-align: center; margin: 24px 0 18px; }
-.audit-divider::before { content: ''; position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: #e2e8f0; }
-.audit-divider span { position: relative; background: white; padding: 0 12px; font-size: 11px; font-weight: 600; color: #a0aec0; text-transform: uppercase; letter-spacing: 0.5px; }
-
-.audit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; background: #f7fafc; border-radius: 10px; padding: 16px; border: 1px solid #e2e8f0; margin-bottom: 16px; }
-.audit-item { display: flex; flex-direction: column; gap: 3px; }
-.audit-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: #a0aec0; font-weight: 600; }
-.audit-value { font-size: 13px; font-weight: 600; color: #4a5568; }
-
-/* ── Status bar ─────────────────────────────────────────────────── */
-.status-bar { display: flex; align-items: center; justify-content: space-between; background: #f7fafc; border-radius: 10px; padding: 14px 16px; border: 1px solid #e2e8f0; gap: 12px; flex-wrap: wrap; }
-.status-info { display: flex; align-items: center; gap: 10px; }
-.badge-status { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 600; }
-.badge-aktif    { background: #c6f6d5; color: #22543d; }
-.badge-disabled { background: #fed7d7; color: #742a2a; }
-
-.btn-toggle-status { display: inline-flex; align-items: center; gap: 6px; padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; transition: all 0.15s; min-width: 130px; justify-content: center; }
-.btn-toggle-status:disabled { opacity: 0.6; cursor: not-allowed; }
-.btn-toggle-disable { background: #fed7d7; color: #742a2a; }
-.btn-toggle-disable:hover:not(:disabled) { background: #feb2b2; }
-.btn-toggle-enable  { background: #c6f6d5; color: #22543d; }
-.btn-toggle-enable:hover:not(:disabled)  { background: #9ae6b4; }
-
-.status-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.btn-delete-status { display: inline-flex; align-items: center; gap: 6px; padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid #feb2b2; background: white; color: #c53030; transition: all 0.15s; justify-content: center; }
-.btn-delete-status:hover:not(:disabled) { background: #fff5f5; border-color: #fc8181; }
-.btn-delete-status:disabled { opacity: 0.6; cursor: not-allowed; }
-
-/* ── Confirm Delete Modal ───────────────────────────────────────── */
-.modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
-.modal-box { background: white; border-radius: 14px; padding: 28px 26px; max-width: 400px; width: 100%; text-align: center; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25); }
-.modal-icon { font-size: 40px; margin-bottom: 10px; }
-.modal-title { font-size: 18px; font-weight: 700; color: #2d3748; margin: 0 0 8px; }
-.modal-desc { font-size: 14px; color: #718096; margin: 0 0 22px; line-height: 1.5; }
-.modal-actions { display: flex; gap: 10px; justify-content: center; }
-.btn-modal-cancel { padding: 10px 24px; border: 1px solid #e2e8f0; background: white; color: #4a5568; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
-.btn-modal-cancel:hover:not(:disabled) { background: #f7fafc; }
-.btn-modal-cancel:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-modal-confirm { padding: 10px 24px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s; min-width: 100px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: white; }
-.btn-modal-confirm:disabled { opacity: 0.6; cursor: not-allowed; }
-.btn-confirm-danger { background: #e53e3e; }
-.btn-confirm-danger:hover:not(:disabled) { background: #c53030; }
-
-/* ── Form actions ───────────────────────────────────────────────── */
-.form-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 28px; padding-top: 24px; border-top: 1px solid #e2e8f0; }
-.btn-cancel { display: inline-flex; align-items: center; padding: 11px 24px; border: 1px solid #e2e8f0; background: white; color: #4a5568; border-radius: 8px; font-size: 14px; font-weight: 600; text-decoration: none; cursor: pointer; transition: all 0.15s; }
-.btn-cancel:hover { background: #f7fafc; color: #2d3748; }
-.btn-submit { display: inline-flex; align-items: center; gap: 6px; padding: 11px 28px; background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
-.btn-submit:hover:not(:disabled) { opacity: 0.9; }
-.btn-submit:disabled { opacity: 0.55; cursor: not-allowed; }
-
-/* ── Responsive ─────────────────────────────────────────────────── */
-@media (max-width: 768px) {
-  .form-row { flex-direction: column; gap: 0; }
-}
-@media (max-width: 576px) {
-  .master-card { padding: 24px 16px; }
-  .audit-grid { grid-template-columns: 1fr; }
-  .form-actions { flex-direction: column-reverse; gap: 10px; }
-  .btn-cancel, .btn-submit { width: 100%; justify-content: center; }
-  .card-header { flex-direction: column; }
-  .header-id { align-items: flex-start; }
-}
-</style>

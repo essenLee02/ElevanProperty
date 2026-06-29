@@ -32,6 +32,24 @@ function formatNumberWithCommas(number) {
     return number.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
+// Format harga dari database: strip trailing decimal zeros (string-based, aman untuk currency),
+// lalu tambah pemisah ribuan HANYA pada bagian integer.
+// Contoh: 13400000.0000 → "13,400,000" | 170000000.0600 → "170,000,000.06"
+function formatPriceDisplay(value) {
+    if (value === '' || value === null || value === undefined) return '';
+    const str = value.toString().replace(/,/g, '').trim();
+    if (!str || !/\d/.test(str)) return '';
+    const dotIdx = str.indexOf('.');
+    if (dotIdx === -1) {
+        return str.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    }
+    const intPart = str.slice(0, dotIdx);
+    // Strip trailing zeros; if nothing remains, omit decimal point
+    const decPart = str.slice(dotIdx + 1).replace(/0+$/, '');
+    const formattedInt = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return decPart ? `${formattedInt}.${decPart}` : formattedInt;
+}
+
 // Fungsi untuk menghapus pemisah koma dari angka
 function unformatNumber(numberStr) {
     if (numberStr === '') return '';

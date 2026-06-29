@@ -824,6 +824,18 @@ function isPropertyContextContinuation(message, history = []) {
   if (isSchedulingRequest)
     return true;
 
+  // 15b-4) Jawaban WAKTU survey/viewing (Q9/Q9b/Q9c) — "Boleh siang?", "besok pagi",
+  //        "nanti sore", "siang ini", "jam 2", "hari ini", "Sabtu". Konteks properti
+  //        SUDAH diverifikasi di atas (AI baru tanya jadwal survey). Pendek & khas
+  //        jawaban penjadwalan; tanpa ini, "Boleh siang, Kak?" ter-skip karena "siang"
+  //        bukan kata afirmasi/properti. Dibatasi ≤ 40 char agar tetap aman.
+  if (lower.length <= 40 &&
+      (/\b(pagi|siang|sore|malam|subuh|petang)\b/i.test(lower)
+       || /\b(besok|lusa|nanti|hari\s+ini|sekarang|akhir\s+pekan|weekend)\b/i.test(lower)
+       || /\b(jam|pukul)\s*\d{1,2}/i.test(lower)
+       || /\b(senin|selasa|rabu|kamis|jum'?at|sabtu|minggu|ahad)\b/i.test(lower)))
+    return true;
+
   // 15c) Permintaan rekomendasi / saran / keputusan dalam konteks properti —
   //      "kasi rekom DP", "rekomendasi", "saran", "better mana", "yang mana",
   //      "gimana", "summarize", "ringkas". Pendek (≤ 60) + konteks properti aktif.

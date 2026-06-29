@@ -12,19 +12,16 @@ import FloatingChatbot from './components/FloatingChatbot.vue';
 
 /* ──────────────────────────────────────────────────────────────────────────
    Global vendor assets (disajikan dari /public/assets)
-   Dimuat SEKALI di root App agar SEMUA menu/route otomatis dapat mengakses
-   Bootstrap 5.3.8, jQuery 4.0.0, dan Font Awesome 7.2.0 — tanpa perlu
-   meng-import ulang di tiap komponen/view. Helper di bawah idempotent
-   (cek duplikat) sehingga aman dari pemuatan ganda saat hot-reload.
+   Bootstrap 5.3.8 (CSS+JS) & Font Awesome 7.2.0 kini dimuat STATIS di
+   index.html. Di sini hanya tersisa jQuery 4.0.0 + Function_Path (helper
+   global window.tableModal/loadModalPagination/dll) yang dimuat SEKALI saat
+   root App mount. Helper di bawah idempotent (cek duplikat) sehingga aman
+   dari pemuatan ganda saat hot-reload.
 ────────────────────────────────────────────────────────────────────────── */
-const VENDOR_STYLES = [
-  '/assets/bootstrap_5_3_8/css/bootstrap.min.css',
-  '/assets/fontawesome_7_2_0_web/css/all.min.css',
-];
+const VENDOR_STYLES = [];
 
 const VENDOR_SCRIPTS = [
   '/assets/jquery-4.0.0/jquery-4.0.0.min.js',
-  '/assets/bootstrap_5_3_8/js/bootstrap.bundle.min.js',
   // Function_Path — helper global (tableModal, loadModalPagination, sendMessageBox,
   // ajaxHit, dll). Sekali dimuat di sini → bisa dipanggil dari SEMUA komponen Vue
   // lewat window.tableModal(...) tanpa import berulang.
@@ -52,9 +49,3 @@ function loadScript(src) {
 VENDOR_STYLES.forEach(loadStylesheet);
 VENDOR_SCRIPTS.forEach(loadScript);
 </script>
-
-<style scoped>
-.app-main {
-  padding-top: 80px;
-}
-</style>

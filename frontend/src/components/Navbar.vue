@@ -257,38 +257,3 @@ router.afterEach(() => {
   closeMobileMenu();
 });
 </script>
-
-<style scoped>
-/* Mobile Menu */
-.mobile-menu {
-  border-top: 1px solid rgba(255,255,255,.08);
-  background: rgba(22,33,60,.98);
-  backdrop-filter: blur(12px);
-  padding: 12px 0 20px;
-  animation: slideDown 0.18s ease;
-}
-@keyframes slideDown {
-  from { opacity: 0; transform: translateY(-10px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-.mobile-nav-user {
-  display: flex; align-items: center; gap: 12px;
-  padding: 12px 0; margin-bottom: 8px;
-  border-bottom: 1px solid rgba(255,255,255,.08);
-}
-.mobile-nav-link {
-  display: block; width: 100%;
-  padding: 11px 4px;
-  font-size: 0.9rem; font-weight: 500;
-  color: rgba(255,255,255,.8);
-  text-decoration: none;
-  border: none; background: none; cursor: pointer;
-  text-align: left;
-  border-bottom: 1px solid rgba(255,255,255,.05);
-  transition: color 0.18s;
-}
-.mobile-nav-link:hover, .mobile-nav-link.router-link-active { color: #fff; }
-.mobile-nav-link.accent { color: var(--gold); }
-.mobile-nav-link.danger { color: #fc8181; }
-.mobile-nav-divider { height: 1px; background: rgba(255,255,255,.08); margin: 8px 0; }
-</style>

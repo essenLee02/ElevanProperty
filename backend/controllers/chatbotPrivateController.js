@@ -1702,6 +1702,35 @@ class ConversationQualifier {
         'kapan survey-nya', 'kapan viewing-nya',
       ]),
 
+      /* ── Q9c: Viewing time-of-day & specific hour ──
+       * Saat customer mengusulkan waktu survey ("boleh siang", "besok pagi",
+       * "nanti sore", "tanggal 5"), AI menanyakan JAM spesifik. Aturan tafsir:
+       *  - ada "ini"/"nanti"/"hari ini"  → HARI INI
+       *  - ada "besok"/"lusa"            → sesuai kata itu
+       *  - hanya time-of-day (mis. "boleh siang") tanpa hari → default BESOK
+       *  - "malam" → di luar jam survey (pagi–sore), AI tolak halus + minta jam pagi–sore
+       */
+      viewingTimeOfDay: (() => {
+        if (/\bmalam\b/i.test(custText))  return 'malam';
+        if (/\bpagi\b/i.test(custText))   return 'pagi';
+        if (/\bsiang\b/i.test(custText))  return 'siang';
+        if (/\bsore\b/i.test(custText))   return 'sore';
+        return null;
+      })(),
+      viewingIsNight: /\bmalam\b/i.test(custText),
+      viewingDayRef: (() => {
+        if (/\bnanti\b|\bhari\s+ini\b|\bsekarang\b|(?:pagi|siang|sore|malam)\s+ini\b|\bini\s+(?:pagi|siang|sore|malam)\b/i.test(custText)) return 'hari ini';
+        if (/\blusa\b/i.test(custText))  return 'lusa';
+        if (/\bbesok\b/i.test(custText)) return 'besok';
+        return null;
+      })(),
+      hasViewingHour: /\b(jam|pukul)\s*\d{1,2}(?:[.:]\d{2})?\b/i.test(custText)
+                   || /\b(jam|pukul)\s*(satu|dua|tiga|empat|lima|enam|tujuh|delapan|sembilan|sepuluh|sebelas|dua\s*belas)\b/i.test(custText),
+      aiAskedViewingHour: this.#has(aiText, [
+        'mau viewing jam berapa', 'survey jam berapa', 'survei jam berapa',
+        'viewing jam berapa', 'jam berapa', 'pukul berapa', 'what time',
+      ]),
+
       /* ── Q10: Lease duration (sewa only) ── */
       hasLeaseDuration: this.#has(custText, [
         '1 tahun', '2 tahun', '3 tahun', '6 bulan', 'setahun', 'dua tahun',
@@ -1870,6 +1899,7 @@ class ConversationQualifier {
         'aiAskedDecisionMaker', 'aiAskedLeaseDuration', 'aiAskedPaymentTerms',
         'aiAskedApartmentPrefs',
         'wantsViewingScheduled', 'hasViewingDate', 'aiAskedViewingDate',
+        'viewingTimeOfDay', 'viewingIsNight', 'viewingDayRef', 'hasViewingHour', 'aiAskedViewingHour',
         // Q14 type-specific slots
         'hasCheckInDate', 'hasCheckOutDate', 'hasRoomType', 'hasBreakfastPref',
         'hasPrivatePool', 'hasRentalPeriod', 'hasKosType', 'hasBathroomType',
@@ -2428,7 +2458,8 @@ class ConversationQualifier {
        *  (b) AI hasn't asked for the date yet (!aiAskedViewingDate)
        *  (c) customer hasn't volunteered a specific date (!hasViewingDate)
        * NOT fired when customer prefers catalog only (wantsCatalogOnly). */
-      if (profile.wantsViewingScheduled && !profile.hasViewingDate && !profile.aiAskedViewingDate) {
+      if (profile.wantsViewingScheduled && !profile.hasViewingDate && !profile.aiAskedViewingDate
+          && !profile.viewingTimeOfDay) {
         const ct = profile._custText || '';
         // Personalize: extract who they're bringing to the viewing
         const withM = ct.match(/koordinasikan?\s+sama\s+([\w\s-]+?)(?:\s*\.|,|\?|$)/i)
@@ -2438,6 +2469,12 @@ class ConversationQualifier {
         return isId
           ? `Baik, Kak. Kira-kira kapan mau dijadwalkan survey-nya${bersama}? 📅`
           : `Got it! When would you like to schedule the viewing${bersama}? 📅`;
+      }
+
+      /* ── Q9c: Viewing hour — customer usulkan hari/waktu, minta JAM spesifik ── */
+      {
+        const q9c = ConversationQualifier.#buildViewingHourQuestion(profile, isId);
+        if (q9c) return q9c;
       }
 
       /* ── Q10: Lease duration (sewa only, duration not volunteered) ── */
@@ -2683,7 +2720,8 @@ class ConversationQualifier {
     }
 
     /* ── Q9b: Viewing date (same logic as summary mode) ── */
-    if (profile.wantsViewingScheduled && !profile.hasViewingDate && !profile.aiAskedViewingDate) {
+    if (profile.wantsViewingScheduled && !profile.hasViewingDate && !profile.aiAskedViewingDate
+        && !profile.viewingTimeOfDay) {
       const ct = profile._custText || '';
       const withM = ct.match(/koordinasikan?\s+sama\s+([\w\s-]+?)(?:\s*\.|,|\?|$)/i)
                  || ct.match(/sama\s+(istri|suami|pasangan|teman(?:-teman)?|keluarga|orang\s+tua)\b/i);
@@ -2692,6 +2730,12 @@ class ConversationQualifier {
       return isId
         ? `Baik, Kak. Kira-kira kapan mau dijadwalkan survey-nya${bersama}? 📅`
         : `Got it! When would you like to schedule the viewing${bersama}? 📅`;
+    }
+
+    /* ── Q9c: Viewing hour — customer sudah usulkan hari/waktu, minta JAM spesifik ── */
+    {
+      const q9c = ConversationQualifier.#buildViewingHourQuestion(profile, isId);
+      if (q9c) return q9c;
     }
 
     /* ── Q7: Red flags (if not captured at Q4) ── */
@@ -3131,6 +3175,42 @@ class ConversationQualifier {
     // Return 'UNKNOWN' (not 'Disebutkan') so the summary line is suppressed
     // when no specific duration was stated by the customer.
     return 'UNKNOWN';
+  }
+
+  /**
+   * Q9c — Pertanyaan JAM viewing. Dipanggil setelah customer mengusulkan hari/waktu
+   * survey (mis. "boleh siang", "besok pagi", "tanggal 5") tapi belum sebut JAM spesifik.
+   * Aturan tafsir hari (lihat profile.viewingDayRef):
+   *   - "ini"/"nanti"/"hari ini"      → hari ini
+   *   - "besok"/"lusa"                → sesuai kata
+   *   - hanya time-of-day tanpa hari  → default BESOK ("boleh siang" = besok siang)
+   * "malam" = di luar jam survey → tolak halus, minta jam pagi–sore.
+   * Return string pertanyaan, atau null jika belum waktunya bertanya.
+   */
+  static #buildViewingHourQuestion(profile = {}, isId = true) {
+    // Hanya dalam konteks viewing (AI sudah tanya decision-maker / tanggal survey)
+    const inViewingCtx = profile.aiAskedDecisionMaker || profile.aiAskedViewingDate;
+    if (!inViewingCtx) return null;
+    // Customer sudah usulkan hari ATAU time-of-day, tapi belum sebut jam, & AI belum tanya
+    const proposedTiming = profile.viewingTimeOfDay || profile.hasViewingDate;
+    if (!proposedTiming || profile.hasViewingHour || profile.aiAskedViewingHour) return null;
+
+    // Malam → di luar jam survey (pagi–sore)
+    if (profile.viewingIsNight) {
+      return isId
+        ? `Mohon maaf, Kak — survey biasanya hanya bisa pagi sampai sore. Kira-kira Kakak bisanya jam berapa (pagi–sore)? ⏰`
+        : `Apologies, Kak — viewings are usually only available from morning to evening. What time (morning–evening) works for you? ⏰`;
+    }
+
+    // Susun frasa hari + waktu. Default hari = besok bila hanya time-of-day disebut.
+    const tod    = profile.viewingTimeOfDay;                   // pagi/siang/sore/null
+    const dayRef = profile.viewingDayRef || (tod ? 'besok' : '');
+    const phraseId = [dayRef, tod].filter(Boolean).join(' ');  // "besok siang"
+    const forId    = phraseId ? ` untuk ${phraseId}` : '';
+    const forEn    = phraseId ? ` for ${phraseId}`   : '';
+    return isId
+      ? `Baik, Kak${forId} — kira-kira mau viewing jam berapa? ⏰`
+      : `Got it, Kak${forEn} — what time would you like the viewing? ⏰`;
   }
 
   /**

@@ -1,0 +1,93 @@
+/* =========================================================
+   ELEVAN PROPERTY — PROFILE PAGE
+   Fully scoped under .profile-section: it redefines several
+   generic names (.alert, .btn-primary, .input-password-wrapper,
+   .required, .section-divider, .back-link) that also exist in
+   style.css / elevan-form.css, so every rule is nested under the
+   page root to avoid leaking onto other pages.
+   ========================================================= */
+
+.profile-section {
+  min-height: calc(100vh - 80px);
+  padding: 40px 0;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  display: flex;
+  align-items: center;
+}
+
+.profile-section .profile-card { background: white; border-radius: 16px; padding: 40px 32px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08); }
+
+.profile-section .profile-header { text-align: center; margin-bottom: 28px; }
+.profile-section .profile-header h2 { font-size: 28px; margin: 0 0 8px; color: #2d3748; }
+.profile-section .profile-header p { color: #718096; margin: 0; }
+
+/* ── Form ────────────────────────────────────────────────── */
+.profile-section .profile-form .form-group { margin-bottom: 18px; }
+.profile-section .profile-form label { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-weight: 500; color: #2d3748; font-size: 14px; }
+.profile-section .required { color: #e53e3e; font-size: 14px; }
+.profile-section .badge-locked { font-size: 11px; font-weight: 400; color: #718096; background: #edf2f7; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+
+.profile-section .profile-form input {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 14px;
+  border: 1px solid #cbd5e0;
+  border-radius: 8px;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+.profile-section .profile-form input:focus { border-color: #4299e1; box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.15); }
+.profile-section .profile-form input:disabled { background-color: #edf2f7; cursor: not-allowed; color: #718096; }
+.profile-section .form-control-static { background-color: #edf2f7 !important; color: #718096; }
+
+/* ── Password wrapper ────────────────────────────────────── */
+.profile-section .input-password-wrapper { position: relative; }
+.profile-section .input-password-wrapper input { padding-right: 48px; }
+.profile-section .btn-toggle-password {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; cursor: pointer; font-size: 18px;
+  padding: 0; line-height: 1; opacity: 0.7; transition: opacity 0.2s;
+}
+.profile-section .btn-toggle-password:hover { opacity: 1; }
+
+/* ── Field hint ──────────────────────────────────────────── */
+.profile-section .field-hint { margin: 5px 0 0; font-size: 12px; color: #a0aec0; }
+
+/* ── Divider ─────────────────────────────────────────────── */
+.profile-section .section-divider { position: relative; text-align: center; margin: 8px 0 22px; }
+.profile-section .section-divider::before { content: ''; position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: #e2e8f0; }
+.profile-section .section-divider span { position: relative; background: white; padding: 0 12px; font-size: 12px; font-weight: 600; color: #a0aec0; text-transform: uppercase; letter-spacing: 0.05em; }
+
+/* ── Submit button ───────────────────────────────────────── */
+.profile-section .btn-primary {
+  width: 100%; padding: 12px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white; font-weight: 600; border: none; border-radius: 8px;
+  cursor: pointer; font-size: 15px; transition: opacity 0.2s;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.profile-section .btn-primary:hover:not(:disabled) { opacity: 0.92; }
+.profile-section .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* ── Spinner ─────────────────────────────────────────────── */
+.profile-section .spinner { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; }
+
+/* ── Footer ──────────────────────────────────────────────── */
+.profile-section .profile-footer { margin-top: 18px; text-align: center; }
+.profile-section .back-link { color: #4299e1; font-weight: 600; text-decoration: none; font-size: 14px; }
+.profile-section .back-link:hover { text-decoration: underline; }
+
+/* ── Alert ───────────────────────────────────────────────── */
+.profile-section .alert { padding: 12px 16px; border-radius: 8px; margin-bottom: 18px; font-size: 14px; }
+.profile-section .alert-danger  { background-color: #fed7d7; color: #742a2a; border: 1px solid #feb2b2; }
+.profile-section .alert-success { background-color: #c6f6d5; color: #22543d; border: 1px solid #9ae6b4; }
+.profile-section .alert-warning { background-color: #fefcbf; color: #744210; border: 1px solid #faf089; }
+
+/* ── Loading ─────────────────────────────────────────────── */
+.profile-section .loading-spinner { text-align: center; padding: 40px 20px; color: #718096; }
+
+/* ── Responsive ──────────────────────────────────────────── */
+@media (max-width: 576px) {
+  .profile-section .profile-card { padding: 30px 20px; }
+}

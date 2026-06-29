@@ -17,12 +17,37 @@
     <link rel="stylesheet" href="/assets/css/lineicons.css" />
 
     <!-- Design System -->
-    <!-- NB: Bootstrap 5.3.8, jQuery 4.0.0 & Font Awesome 7.2.0 dimuat global
-         lewat src/App.vue (lihat VENDOR_STYLES / VENDOR_SCRIPTS di sana). -->
+    <!-- NB: jQuery 4.0.0 + Function_Path tetap dimuat lewat src/App.vue
+         (lihat VENDOR_SCRIPTS). Bootstrap & Font Awesome dimuat statis di sini
+         agar tersedia untuk SEMUA .vue tanpa import ulang. -->
     <link rel="stylesheet" href="/style.css" />
+
+    <!-- Shared component & page CSS (diekstrak dari masing-masing .vue
+         agar reusable lintas components/views) -->
+    <link rel="stylesheet" href="/assets/css/elevan-components.css" />
+    <link rel="stylesheet" href="/assets/css/elevan-list.css" />
+    <link rel="stylesheet" href="/assets/css/elevan-form.css" />
+    <link rel="stylesheet" href="/assets/css/elevan-facility-form.css" />
+    <link rel="stylesheet" href="/assets/css/elevan-navbar.css" />
+    <link rel="stylesheet" href="/assets/css/elevan-modal.css" />
+    <link rel="stylesheet" href="/assets/css/elevan-chatbot.css" />
+    <link rel="stylesheet" href="/assets/css/elevan-home.css" />
+    <link rel="stylesheet" href="/assets/css/elevan-rumah123.css" />
+    <link rel="stylesheet" href="/assets/css/elevan-profile.css" />
+
+    <!-- Bootstrap 5.3.8 CSS (satu file saja; .min/.rtl/.map TIDAK perlu di-link) -->
+    <link rel="stylesheet" href="/assets/bootstrap_5_3_8/css/bootstrap.css" />
+
+    <!-- Font Awesome 7.2.0 (ikon) -->
+    <link rel="stylesheet" href="/assets/fontawesome_7_2_0_web/css/all.min.css" />
   </head>
   <body>
     <div id="app"></div>
+
+    <!-- Bootstrap 5.3.8 JS bundle (sudah termasuk Popper). Cukup satu file;
+         bundle.js / esm.js / *.map adalah duplikat/peta sumber. -->
+    <script defer src="/assets/bootstrap_5_3_8/js/bootstrap.bundle.min.js"></script>
+
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

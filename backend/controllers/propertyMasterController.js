@@ -402,7 +402,10 @@ class PropertyMasterController extends GeneralController {
         property_id:      p.property_id,
         title:            p.title,
         price:            p.price,
-        price_display:    p.price != null ? 'Rp ' + Number(p.price).toLocaleString('id-ID') : '-',
+        price_display:    p.price != null
+          ? 'Rp ' + Number(p.price).toLocaleString('id-ID') + (['Cash', 'Negotiable'].includes(p.price_type) ? ' (' + p.price_type + ')' : '/' + p.price_type)
+          : '-',
+        price_type:       p.price_type,
         building_type:    p.building_type,
         transaction_type: p.transaction_type,
         kpr_status:       p.kpr_status,
