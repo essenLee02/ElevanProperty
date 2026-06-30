@@ -2368,8 +2368,8 @@ class ConversationQualifier {
    * @returns {string|null}
    */
   /**
-   * mode = 'catalog' → Ask only core Q0–Q4 + Q8 (fast path to listings)
-   * mode = 'summary' → Ask full Q0–Q12 (complete lead brief before handoff)
+   * mode = 'summary' → Ask full Q0–Q12 (used by both catalog and summary modes)
+   * mode = 'catalog' → (legacy, no longer used) same as 'summary' but skips Q5–Q12
    */
   static getNextQuestion(profile, lang = 'id', priceAnchors = null, mode = 'catalog') {
     const isId = lang === 'id';
@@ -3967,8 +3967,8 @@ class ChatbotPrivateService {
     });
 
     // ── CHECK MODE: RESPOND_CATALOG_RUN ─────────────────────────────────────
-    // OFF (default) → Full Q1–Q12 qualification flow → show structured brief
-    // ON            → Ask core Q0–Q4 only → show catalog listing
+    // OFF (default) → Full Q1–Q12 flow → show structured brief only
+    // ON            → Full Q1–Q12 flow → show summary brief + catalog listing
     const showCatalogDirect = String(process.env.RESPOND_CATALOG_RUN || 'OFF').toUpperCase() === 'ON';
 
     // ── Shared: fetch price anchors for Q3 (needed in both modes) ────────────
@@ -4056,27 +4056,22 @@ class ChatbotPrivateService {
 
     // ════════════════════════════════════════════════════════════════════════
     //  MODE B — CATALOG (RESPOND_CATALOG_RUN=ON)
-    //  Ask core Q0–Q4 + Q8 only, then show property listings.
+    //  Ask full Q1–Q12 (same depth as summary mode), then show summary + catalog.
     // ════════════════════════════════════════════════════════════════════════
 
-    // ── Core 4 gate: keep asking until basic info collected ──────────────────
-    const hasAllFour = !!(
-      profile.buildingType && profile.transactionType &&
-      profile.location     && profile.budget
+    // ── Full Q flow — same question depth as summary mode ────────────────────
+    const nextQuestion = ConversationQualifier.getNextQuestion(
+      profile, lang, priceAnchors, 'summary'
     );
-    const shouldList = hasAllFour || profile.aiCount >= 5;
-
-    if (!shouldList) {
-      const nextQuestion = ConversationQualifier.getNextQuestion(
-        profile, lang, priceAnchors, 'catalog'
-      );
-      if (nextQuestion) {
-        console.log(`[PrivateAgent/CatalogMode] Asking Q (aiCount=${profile.aiCount})`);
-        return this.#wrap(builder.qualificationQuestion(nextQuestion), {
-          skillInfo, filters, qualificationMode: true,
-        });
-      }
+    if (nextQuestion) {
+      console.log(`[PrivateAgent/CatalogMode] Asking Q (aiCount=${profile.aiCount})`);
+      return this.#wrap(builder.qualificationQuestion(nextQuestion), {
+        skillInfo, filters, qualificationMode: true,
+      });
     }
+
+    // All Q answered → build summary brief + fetch listings in parallel
+    const brief = ConversationQualifier.buildAgentBrief(profile, filters, history, userMessage);
 
     // ── Fetch listings (Rumah123 + catalog) ──────────────────────────────────
     const [rumah123Listings, context] = await Promise.all([
@@ -4088,11 +4083,11 @@ class ChatbotPrivateService {
 
     const catalogMatches = this.resolveCatalogMatches(context);
 
-    let reply;
+    let catalogReply;
     if (rumah123Listings.length > 0 || catalogMatches.length > 0) {
-      reply = builder.exactMatch({ rumah123Listings, catalogMatches, filters: context.filters });
+      catalogReply = builder.exactMatch({ rumah123Listings, catalogMatches, filters: context.filters });
     } else {
-      reply = builder.alternative({
+      catalogReply = builder.alternative({
         alternatives : context.alternatives,
         rumah123Listings,
         filters      : context.filters,
@@ -4100,20 +4095,13 @@ class ChatbotPrivateService {
       });
     }
 
-    // ── Q8 mandatory: append move-in question before signature ───────────────
-    // IMPORTANT: Always detect language from the CURRENT message, not the session.
-    // This ensures consistency: if customer writes in Indonesian, questions are in Indonesian.
-    // Even if previous messages were in English, this message's language takes precedence.
-    if (!profile.hasMoveInDate && !profile.aiAskedMoveIn) {
-      const currentLang = LanguageDetector.detect(userMessage, history);
-      const moveInQ   = currentLang === 'id'
-        ? '\n\nOmong-omong, rencananya masuk atau pindah bulan apa? 📅'
-        : '\n\nBy the way, what month are you planning to move in? 📅';
-      const insertBefore = currentLang === 'id' ? '\n\nSalam hangat,' : '\n\nWarm regards,';
-      reply = reply.includes(insertBefore)
-        ? reply.replace(insertBefore, moveInQ + insertBefore)
-        : reply + moveInQ;
-    }
+    // ── Combine: summary brief (body only) + catalog ─────────────────────────
+    const summaryFull = builder.agentBrief(brief);
+    const sigMarker   = lang === 'id' ? '\n\nSalam hangat,' : '\n\nWarm regards,';
+    const briefBody   = summaryFull.includes(sigMarker)
+      ? summaryFull.substring(0, summaryFull.lastIndexOf(sigMarker))
+      : summaryFull;
+    const reply = briefBody + '\n\n---\n\n' + catalogReply;
 
     return this.#wrap(reply, {
       skillInfo,

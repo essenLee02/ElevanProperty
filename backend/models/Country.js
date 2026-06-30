@@ -20,6 +20,7 @@ const Country = sequelize.define('Country', {
   name: {
     type: DataTypes.STRING(100),
     allowNull: false,
+    unique: true,
     comment: 'Nama negara, mis. Indonesia, Malaysia'
   },
   status: {

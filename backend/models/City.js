@@ -31,6 +31,7 @@ const City = sequelize.define('City', {
   name: {
     type: DataTypes.STRING(100),
     allowNull: false,
+    unique: true,
     comment: 'Nama kota, mis. Surabaya, Malang, Denpasar'
   },
   status: {

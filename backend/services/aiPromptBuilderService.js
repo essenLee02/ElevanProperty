@@ -131,26 +131,41 @@ function extractQualificationState(history = [], currentMessage = '') {
       if (summaryStart === -1) summaryStart = ALL.length - 1;  // none yet → only current
     }
 
-    // ── Boundary B: latest customer message that switches type or flips tx ───
+    // ── Boundary B: latest customer message that switches type, tx, OR city ──
     // Scans ALL (incl. current message). A switch is only counted once a prior
-    // type/tx has been established — the first mention is the initial choice.
+    // value has been established — the first mention is the initial choice.
+    //
+    // LOCATION RULE: if the customer switches from one city to another
+    // (e.g. "di Surabaya" → "di Bali") everything resets to Q1, just like a
+    // property-type or transaction-type change. All three dimensions anchor the
+    // search — switching any one abandons the prior context.
+    const locOfP0 = (txt) => {
+      // Reuse CITY_RE (defined two lines above in this function scope)
+      const m = CITY_RE.exec((txt || '').toLowerCase());
+      return m ? m[0].trim() : null;
+    };
+
     let switchStart   = 0;
     let switchType    = null;   // previous type, for the change banner
     {
       let runType = null;
       let runTx   = null;
+      let runLoc  = null;
       for (let i = 0; i < ALL.length; i++) {
         if (!QS_CUST_ROLES.has(ALL[i].role)) continue;
-        const t  = typeOfP0(ALL[i].message);
-        const tx = txOfP0(ALL[i].message);
-        const typeFlipped = t  && runType && t  !== runType;
-        const txFlipped   = tx && runTx   && tx !== runTx;
-        if (typeFlipped || txFlipped) {
+        const t   = typeOfP0(ALL[i].message);
+        const tx  = txOfP0(ALL[i].message);
+        const loc = locOfP0(ALL[i].message);
+        const typeFlipped = t   && runType && t   !== runType;
+        const txFlipped   = tx  && runTx   && tx  !== runTx;
+        const locFlipped  = loc && runLoc  && loc !== runLoc;
+        if (typeFlipped || txFlipped || locFlipped) {
           switchStart = i;
           switchType  = runType;   // remember what they switched away from
         }
-        if (t)  runType = t;
-        if (tx) runTx   = tx;
+        if (t)   runType = t;
+        if (tx)  runTx   = tx;
+        if (loc) runLoc  = loc;
       }
     }
 

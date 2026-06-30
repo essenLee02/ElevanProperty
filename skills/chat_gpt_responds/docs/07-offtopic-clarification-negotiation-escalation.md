@@ -106,6 +106,41 @@ answers in specific contexts:
 - "dekat pantai" → coastal property preference → not blocked (landmark guard)
 - "mau sewa villa untuk liburan" → `villa` is property word → not blocked
 
+### ⚠️ Q-Flow Context Guard — JANGAN blokir jawaban atas pertanyaan yang sudah AI tanya
+
+**Aturan paling kritis:** Jika AI **sudah mengajukan pertanyaan kualifikasi** (Q1–Q12, Q_FAC, Q11,
+Q5, Q6, dll.), maka jawaban customer atas pertanyaan itu **BUKAN off-topic** — walau mengandung
+kata yang muncul di daftar 82 topik di atas.
+
+```
+AI bertanya:  "Fasilitas apa yang Anda inginkan?"
+Customer:     "Ada gym, kolam renang, sama jacuzzi"   → ✅ VALID — jawaban Q_FAC
+Customer:     "Mau ada restoran dan bar lounge"       → ✅ VALID — preferensi fasilitas
+Customer:     "Termasuk yoga room?"                   → ✅ VALID — pertanyaan fasilitas
+Customer:     "Bathtub ada gak?"                      → ✅ VALID — pertanyaan fasilitas
+Customer:     "Yang ada kitchen set, teras, sama view gunung" → ✅ VALID
+
+AI bertanya:  "Ada yang pasti tidak cocok?" (Q5)
+Customer:     "Jangan yang dekat jalan ramai, bising" → ✅ VALID — red flag Q5
+Customer:     "Yang banyak cafe dan resto di sekitarnya" → ✅ VALID — preferensi lingkungan
+
+AI bertanya:  "Furnished atau kosong?" (Q11)
+Customer:     "Semi furnished, pokok ada dapur dan kasur" → ✅ VALID — jawaban furnishing
+```
+
+**Kapan AI boleh membalas dengan redirect "saya hanya bisa membantu properti":**
+Hanya jika customer jelas-jelas membahas topik yang TIDAK ADA hubungannya dengan properti
+saat ini — bukan sebagai jawaban atas pertanyaan AI:
+```
+Customer:     "Bisa tolong rekomendasikan restoran bakso yang enak?"  → ❌ off-topic
+Customer:     "Gimana cara masak rendang yang benar?"                 → ❌ off-topic
+Customer:     "Mau pesan tiket pesawat ke Bali"                      → ❌ off-topic
+```
+
+**Prinsip:** Jika AI yang **memulai topik** (bertanya tentang fasilitas, budget, lokasi, dll.),
+maka customer yang **menjawab** topik itu TIDAK pernah off-topic. AI hanya perlu menolak pesan
+yang jelas memulai topik baru di luar properti, bukan jawaban atas pertanyaan AI sendiri.
+
 ### Daily-life small talk (even when it mentions "rumah")
 
 Casual chatter about everyday events is **not** a property query — do NOT answer it with a

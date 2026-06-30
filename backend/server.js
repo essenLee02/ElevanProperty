@@ -96,7 +96,7 @@ app.post('/', (req, res) => {
   }
 
   // Fallback jika MASSEGE_TERMINAL tidak dikenali
-  return res.status(process.env.HTTP_OK).json({
+  return res.status(parseInt(process.env.HTTP_OK) || 200).json({
     success : true,
     message : 'Webhook diterima. Set MASSEGE_TERMINAL=FONNTE|TIMELINESAI|KIRIMI di .env untuk routing.'
   });
@@ -180,6 +180,12 @@ async function ensureRequiredDatabaseColumns() {
 sequelize.sync()
   .then(async () => {
     await ensureRequiredDatabaseColumns();
+
+    // Refresh location keyword cache from cities table so the chatbot keyword
+    // filter recognises every city in the DB, not just the static fallback list.
+    const { initLocationCache } = require('./utils/propertyKeywordFilter');
+    await initLocationCache();
+
     console.log('Database connected and synced');
     console.log('Environment file loaded from:', path.resolve(__dirname, '.env'));
     console.log('OpenAI key configured:', Boolean(process.env.OPENAI_API_KEY));

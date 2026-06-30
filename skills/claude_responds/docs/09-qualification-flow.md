@@ -76,13 +76,51 @@ This prevents old-session answers from polluting the current search's QUALIFICAT
 
 **⛔ Stale budget must never leak across a boundary.** A numeric/ambiguous budget from an abandoned search (e.g. an old `0-1600000` waiting for unit clarification) is dropped when a new search starts — the backend keeps a numeric budget only if a price digit actually appears in the ACTIVE session. So after *"Hi.. mau sewa apartemen di malang"* (no number), the AI must **NOT** ask "harga 0-1600000 maksudnya dalam ribu/juta?" — that budget belonged to the old search. Re-ask Q3 by category for the new search. (A category budget like `menengah` has no digit and is preserved correctly.)
 
-**Business rule (type/tx/both change OR greeting restart → Q1):** Any of these resets the flow to Q1 and abandons the previous conversation — never mix old and new answers, never carry the old budget, location, date, or furnishing into the new search.
+**Business rule — THREE triggers that all reset to Q1:**
+
+| Trigger | Example | What happens |
+|---|---|---|
+| Building type changes | "tadinya villa, sekarang mau hotel" | Full reset → ask Q1 for new type |
+| Transaction type flips | "eh bukan beli, mau sewa aja" | Full reset → ask Q1 |
+| **City/location changes** | "tadinya Surabaya, tapi mau Bali aja" | **Full reset → ask Q1** |
+| Greeting + fresh intent | "Halo, mau cari apartemen" (restart) | Full reset → ask Q1 |
+
+When any of these fires: abandon ALL prior Q2–Q12 answers, never carry old budget/date/furnishing. Acknowledge in one sentence ("Oke, saya alihkan ke [tipe baru]/[kota baru] ya 😊"), then ask the smallest unanswered ❓.
 
 **Example A (summary):** Customer answered Q4 = "bersama istri" in a villa search → summary sent → now searches apartment. Phase 1 scans ACTIVE_ALL only, so "bersama istri" is NOT picked up. Q4 shows ❓ in the new search.
 
 **Example B (abandoned switch — THE critical fix):** Customer was filling a villa search (Surabaya, masuk 26 Juni, full furnished, …) but never got a summary, then types "Mau cari penyewaan hotel". Phase 0 sets `activeStart` to the hotel message. Surabaya / 26 Juni / furnishing are NOT carried over. The AI correctly asks Q2 (location) for the hotel search — it does **not** jump to Q10 or fabricate a summary from the abandoned villa data.
 
 ⚠️ **Why this matters:** Without this boundary, a stale AI question ("Rencananya sewa berapa lama?") from the abandoned search mis-pairs with the new opening line, storing `leaseDuration = "Mau cari penyewaan hotel"`, and the leaked location/date/furnishing produce a bogus summary. The switch boundary eliminates both failures.
+
+---
+
+## Session TTL & Reset Rules
+
+### CHATBOT_COOKIE_TTL_MINUTES
+
+The session has a time-to-live set by `CHATBOT_COOKIE_TTL_MINUTES` in the environment.
+
+| Situation | Behavior |
+|---|---|
+| TTL still active | AI keeps responding normally; history is preserved |
+| TTL expired, summary NOT yet sent | Backend creates a fresh session → empty history → Q1 is asked from scratch |
+| TTL expired, summary WAS sent | Same as above: fresh session → Q1 from scratch; customer starts a new search |
+| Customer sends ANY message after TTL expiry | Always triggers Q1 regardless of prior conversation state |
+
+**AI side:** You will see an empty QUALIFICATION STATE (all ❓) when TTL has expired. Treat this as a fresh customer — ask Q1 as if it's the very first message.
+
+---
+
+## Q1 Non-Property Gate
+
+**Rule:** If the customer's VERY FIRST message in a session contains **no property-related content**, the backend deflects with one sentence and does NOT call the AI. This prevents off-topic conversations from consuming AI resources.
+
+**What counts as property-related:** any mention of property type (rumah, villa, apartemen, kos, ruko, hotel, gudang, kantor, toko…), transaction (sewa, beli, kontrak…), location intent (di mana, di kota, area…), or property qualifiers (harga, budget, kamar, fasilitas, KPR…).
+
+**If AI IS called on the first message (gate passed):** This means the message already contains some property signal. Proceed with Q1 normally — extract whatever is known and ask for what's missing.
+
+**If the gate fires silently (not your turn):** The backend has already replied with a redirect. You will see that redirect as the last assistant message in history. On the next customer message, proceed normally.
 
 ---
 

@@ -1,6 +1,9 @@
 const path = require('path');
 const fs = require('fs');
 
+// DB models — loaded lazily inside getDbProperties() to avoid circular-import issues
+// at module load time. Require is cached by Node, so repeated calls are free.
+
 // URUTAN PENTING: Tipe lebih spesifik harus dicek SEBELUM tipe yang lebih umum.
 // Contoh masalah jika urutan salah:
 //   'house' keyword matches "warehouse" (substring!)
@@ -833,9 +836,108 @@ function mergePropertyCatalog(dbProperties = []) {
   return merged;
 }
 
+/**
+ * Format a numeric price + price_type (from `properties` table) to an Indonesian
+ * human-readable string that parsePropertyPrice() can later parse back to a value.
+ *
+ * price_type values: Night | Daily | Weekly | Monthly | Yearly | Cash | Negotiable | Others
+ */
+function formatDbPrice(price, priceType) {
+  if (!price) return '';
+  const num = parseFloat(String(price));
+  if (!num || isNaN(num)) return '';
+
+  let formatted;
+  if (num >= 1_000_000_000) {
+    const v = num / 1_000_000_000;
+    formatted = parseFloat(v.toFixed(2)) + ' miliar';
+  } else if (num >= 1_000_000) {
+    const v = num / 1_000_000;
+    formatted = parseFloat(v.toFixed(1)) + ' juta';
+  } else if (num >= 1_000) {
+    const v = num / 1_000;
+    formatted = parseFloat(v.toFixed(0)) + ' ribu';
+  } else {
+    formatted = String(num);
+  }
+
+  switch ((priceType || '').toLowerCase()) {
+    case 'monthly':    return formatted + '/bulan';
+    case 'yearly':     return formatted + '/tahun';
+    case 'night':      return formatted + '/malam';
+    case 'daily':      return formatted + '/hari';
+    case 'weekly':     return formatted + '/minggu';
+    case 'negotiable': return formatted + ' nego';
+    default:           return formatted;
+  }
+}
+
+/**
+ * Query active (status=1) properties from the database, including city/province
+ * names, first image URL, and facility names. Returns the same normalized shape as
+ * loadJsonProperties() so all downstream filter/sort functions work unchanged.
+ *
+ * Falls back to [] on any DB error so getSourceProperties() can then use the JSON catalog.
+ */
+async function getDbProperties() {
+  try {
+    const { Property, PropertyImage, PropertyFacility, Facility, City, Province } = require('../models');
+
+    const rows = await Property.findAll({
+      where: { status: 1 },
+      include: [
+        { model: City,     as: 'city',     attributes: ['name'], required: false },
+        { model: Province, as: 'province', attributes: ['name'], required: false },
+        { model: PropertyImage,    as: 'images',    attributes: ['url'], required: false },
+        {
+          model: PropertyFacility, as: 'facilities', attributes: ['facility_id'], required: false,
+          include: [
+            { model: Facility, as: 'facility', attributes: ['name'], required: false, where: { status: 1 } }
+          ]
+        }
+      ]
+    });
+
+    const normalized = rows.map(p => {
+      const d = p.toJSON();
+      return {
+        id             : d.property_id,
+        title          : d.title || '',
+        description    : d.description || '',
+        price          : formatDbPrice(d.price, d.price_type),
+        location       : d.city?.name || '',
+        province       : d.province?.name || '',
+        city           : d.city?.name || '',
+        district       : d.district || '',
+        address        : d.address || '',
+        buildingArea   : d.building_area || '',
+        landArea       : d.land_area || '',
+        buildingType   : (d.building_type || '').toLowerCase(),
+        transactionType: (d.transaction_type || '').toLowerCase(),
+        facilities     : (d.facilities || []).map(f => f.facility?.name).filter(Boolean).join(', '),
+        imageUrl       : (d.images || [])[0]?.url || '',
+        status         : 'available',
+        bedrooms       : d.bed_rooms   || 0,
+        bathrooms      : d.bath_rooms  || 0,
+        furnishedStatus: d.furnished_status || ''
+      };
+    });
+
+    console.log(`[PropertyRecommendationService] Loaded ${normalized.length} properties from database.`);
+    return normalized;
+  } catch (err) {
+    console.error('[PropertyRecommendationService] getDbProperties() failed:', err.message);
+    return [];
+  }
+}
+
 async function getSourceProperties() {
-  // JSON catalog is the single source for portfolio and chatbot recommendations.
-  // No database or dummy generator is used here.
+  const dbProperties = await getDbProperties();
+  if (dbProperties.length > 0) {
+    // DB has live data: DB first (priority), JSON catalog as gap-fill fallback (deduped)
+    return mergePropertyCatalog(dbProperties);
+  }
+  // DB empty or unreachable → fall back to JSON catalog only
   return loadJsonProperties();
 }
 
@@ -846,9 +948,11 @@ function parsePropertyPrice(property = {}) {
     ? 'year'
     : /bulan|month|monthly|\/bulan/.test(text)
       ? 'month'
-      : /malam|night|daily|hari|harian|\/malam/.test(text)
-        ? 'night'
-        : '';
+      : /minggu|week|weekly|\/minggu/.test(text)
+        ? 'week'
+        : /malam|night|daily|hari|harian|\/malam/.test(text)
+          ? 'night'
+          : '';
 
   if (!value) return { value: null, period, annualValue: null };
   const annualValue = period === 'year' ? value : period === 'month' ? value * 12 : null;
@@ -864,6 +968,7 @@ function budgetMatches(property = {}, budget = null) {
   if (budget.period === 'year') comparable = parsed.annualValue;
   if (budget.period === 'month' && parsed.period === 'year') comparable = Math.round(parsed.value / 12);
   if (budget.period === 'month' && parsed.period === 'month') comparable = parsed.value;
+  if (budget.period === 'week'  && parsed.period === 'week')  comparable = parsed.value;
   if (budget.period === 'night' && parsed.period === 'night') comparable = parsed.value;
 
   if (!comparable) return false;

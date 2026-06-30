@@ -21,6 +21,7 @@ const Location = sequelize.define('Location', {
   name: {
     type: DataTypes.STRING(100),
     allowNull: false,
+    unique: true,
     comment: 'Nama lokasi rujukan, mis. Pasar Besar, Kebun Binatang, Indomaret'
   },
   status: {

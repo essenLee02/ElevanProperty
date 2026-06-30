@@ -26,6 +26,7 @@ const Province = sequelize.define('Province', {
   name: {
     type: DataTypes.STRING(100),
     allowNull: false,
+    unique: true,
     comment: 'Nama provinsi, mis. Jawa Timur, DKI Jakarta'
   },
   status: {

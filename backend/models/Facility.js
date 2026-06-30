@@ -21,6 +21,7 @@ const Facility = sequelize.define('Facility', {
   name: {
     type: DataTypes.STRING(100),
     allowNull: false,
+    unique: true,
     comment: 'Nama fasilitas, mis. AC, Kolam Renang, CCTV'
   },
   description: {

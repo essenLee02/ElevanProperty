@@ -18,6 +18,10 @@ const {
 } = require('../services/rumah123ContextService');
 const chatbotPrivateController = require('./chatbotPrivateController');
 const { getSkillRegistryStatus } = require('../services/skillPromptService');
+const { hasPropertyKeyword } = require('../utils/propertyKeywordFilter');
+
+// Matches all assistant/bot roles stored in chat history
+const QS_AI_ROLE = /^(assistant|ai|bot)$/i;
 
 class ChatbotController {
   static #cookieTtlMinutes() {
@@ -132,6 +136,18 @@ class ChatbotController {
       await saveUserMessage(session.id, payload.message, 'website_chatbot', { location: payload.location });
 
       history = await getConversationHistory(session.id, 12);
+
+      // ── Q1 Non-Property Gate ──────────────────────────────────────────────
+      // If this is the very first message in the session (no prior AI turns)
+      // and the message has zero property-related content, do NOT call the AI.
+      // Respond with a single redirect and stop — avoid engaging off-topic chats.
+      const priorAiTurns = history.filter(m => QS_AI_ROLE.test(m.role)).length;
+      if (priorAiTurns === 0 && !hasPropertyKeyword(payload.message)) {
+        const deflect = 'Halo! 😊 Saya khusus membantu pencarian properti — rumah, apartemen, villa, kos, ruko, dan lainnya. Silakan ceritakan properti apa yang Anda cari 🏠';
+        await saveAssistantMessage(session.id, deflect, 'website_chatbot', { source: 'q1_gate' });
+        return res.json({ success: true, reply: deflect, sessionId: session.id, source: 'q1_gate' });
+      }
+
       recommendationContext = await buildRecommendationContextForLLM(payload.message, history);
 
       let rumah123Block = '';

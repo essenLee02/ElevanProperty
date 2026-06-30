@@ -27,6 +27,15 @@ function resolveLocationAndSource(locationOrSource = '', sourceMaybe = '') {
   };
 }
 
+/** Read CHATBOT_COOKIE_TTL_MINUTES from env (same clamping logic as chatbotController). */
+function _cookieTtlMs() {
+  const mins = Number(process.env.CHATBOT_COOKIE_TTL_MINUTES || 20);
+  const clamped = Number.isFinite(mins) && mins > 0
+    ? Math.min(Math.max(Math.round(mins), 1), 1440)
+    : 20;
+  return clamped * 60 * 1000;
+}
+
 async function findOrCreateSession(name, phone, locationOrSource = '', sourceMaybe = '') {
   const normalizedName = normalizeName(name);
   const normalizedPhone = normalizePhone(phone);
@@ -43,6 +52,20 @@ async function findOrCreateSession(name, phone, locationOrSource = '', sourceMay
   // reconnect by phone and name, then update the location.
   if (!session && normalizedLocation) {
     session = await ChatSession.findOne({ where: { normalizedName, normalizedPhone } });
+  }
+
+  // ── Server-side TTL enforcement ───────────────────────────────────────────
+  // If a session exists but the last activity was longer ago than the TTL,
+  // the session is expired. Null it out so a fresh session is created below,
+  // giving the customer an empty history → Q1 is asked again from scratch.
+  // This mirrors what the frontend cookie expiry does client-side, but ensures
+  // the backend also resets when the customer returns after a long pause.
+  if (session && session.lastMessageAt) {
+    const idleMs = Date.now() - new Date(session.lastMessageAt).getTime();
+    if (idleMs > _cookieTtlMs()) {
+      console.log(`[SessionService] Session ${session.id} expired (idle ${Math.round(idleMs / 60000)} min > TTL ${Math.round(_cookieTtlMs() / 60000)} min) — creating fresh session.`);
+      session = null;  // triggers CREATE below → empty history → Q1 restart
+    }
   }
 
   if (!session) {

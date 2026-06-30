@@ -283,32 +283,66 @@ function hasPropertyKeyword(message) {
    5. EKSTRAKSI LOKASI, TIPE, TRANSAKSI
 ══════════════════════════════════════════════════════════════════════════════ */
 
-const INDONESIA_LOCATIONS = [
+// Static fallback — used before initLocationCache() loads DB data on startup.
+// Sorted longest-first so multi-word names ("jakarta selatan") match before
+// their sub-strings ("jakarta") in linear scans.
+const _LOCATION_FALLBACK = [
   // Jabodetabek
-  'jakarta', 'jakarta selatan', 'jakarta utara', 'jakarta barat',
-  'jakarta timur', 'jakarta pusat',
-  'bogor', 'depok', 'tangerang', 'tangerang selatan', 'bekasi',
-  'cibubur', 'karawang', 'purwakarta', 'sukabumi',
-  'cirebon', 'serang', 'cilegon',
+  'jakarta selatan', 'jakarta utara', 'jakarta barat', 'jakarta timur', 'jakarta pusat',
+  'jakarta', 'tangerang selatan', 'bogor', 'depok', 'tangerang', 'bekasi',
+  'cibubur', 'karawang', 'purwakarta', 'sukabumi', 'cirebon', 'serang', 'cilegon',
   // BSD & Alam Sutera area
-  'serpong', 'bsd', 'alam sutera', 'bintaro', 'lebak bulus',
-  'pondok indah', 'kemang', 'menteng', 'kelapa gading',
+  'alam sutera', 'tangerang selatan', 'lebak bulus', 'pondok indah', 'kelapa gading',
+  'serpong', 'bintaro', 'kemang', 'menteng', 'bsd',
   // Jawa
-  'surabaya', 'bandung', 'semarang', 'yogyakarta', 'malang', 'solo',
-  'surakarta', 'sidoarjo', 'mojokerto', 'madiun', 'kediri',
+  'surabaya', 'bandung', 'semarang', 'yogyakarta', 'malang', 'surakarta',
+  'sidoarjo', 'mojokerto', 'madiun', 'kediri', 'solo',
   // Bali & NTB
-  'bali', 'denpasar', 'seminyak', 'kuta', 'ubud', 'sanur',
-  'canggu', 'nusa dua', 'jimbaran', 'lombok', 'mataram',
+  'nusa dua', 'denpasar', 'seminyak', 'canggu', 'jimbaran', 'mataram',
+  'bali', 'kuta', 'ubud', 'sanur', 'lombok',
   // Sumatra
-  'medan', 'palembang', 'pekanbaru', 'padang', 'batam',
-  'banda aceh', 'bandar lampung', 'jambi', 'bengkulu',
+  'banda aceh', 'bandar lampung', 'pekanbaru', 'palembang', 'padang', 'medan', 'batam',
+  'jambi', 'bengkulu',
   // Kalimantan
   'balikpapan', 'samarinda', 'pontianak', 'banjarmasin',
   // Sulawesi
-  'makassar', 'manado', 'palu', 'kendari', 'gorontalo',
+  'makassar', 'manado', 'gorontalo', 'kendari', 'palu',
   // Lainnya
-  'ambon', 'jayapura', 'sorong', 'kupang',
+  'jayapura', 'ambon', 'sorong', 'kupang',
 ];
+
+// Runtime cache — replaced by initLocationCache() after DB connects.
+// Mutable let so all consumers (extractLocationFromMessage, etc.) pick up
+// the refreshed list without needing to be re-required.
+let _locationCache = [..._LOCATION_FALLBACK];
+
+/**
+ * Refresh _locationCache from the `cities` table (status=1).
+ * Called once at server startup after sequelize.sync().
+ * Falls back silently to the static list if the DB query fails.
+ */
+async function initLocationCache() {
+  try {
+    const { City } = require('../models');
+    const rows = await City.findAll({ where: { status: 1 }, attributes: ['name'] });
+    if (rows.length === 0) return; // table empty → keep static fallback
+
+    // Normalize to lowercase, deduplicate, sort longest-first so multi-word
+    // names always match before their substrings in linear scans.
+    const dbNames = [...new Set(rows.map(r => r.name.toLowerCase().trim()))];
+    dbNames.sort((a, b) => b.length - a.length);
+
+    // Merge: DB names first (authoritative), then any fallback entry not already covered.
+    const covered = new Set(dbNames);
+    const extras = _LOCATION_FALLBACK.filter(f => !covered.has(f));
+    _locationCache = [...dbNames, ...extras];
+
+    console.log(`[LocationCache] Loaded ${dbNames.length} cities from DB (${extras.length} fallback extras kept).`);
+  } catch (err) {
+    console.warn('[LocationCache] initLocationCache() failed — using static fallback:', err.message);
+  }
+}
+
 
 /**
  * Ekstrak lokasi dari pesan.
@@ -324,14 +358,14 @@ function extractLocationFromMessage(message) {
   const match = lower.match(diPattern);
   if (match) {
     const candidate = match[1].trim();
-    const found = INDONESIA_LOCATIONS.find(loc =>
+    const found = _locationCache.find(loc =>
       candidate.includes(loc) || loc.includes(candidate.substring(0, 8))
     );
     if (found) return found;
   }
 
   // Cek langsung nama kota dalam pesan
-  for (const loc of INDONESIA_LOCATIONS) {
+  for (const loc of _locationCache) {
     if (lower.includes(loc)) return loc;
   }
 
@@ -390,7 +424,7 @@ const PROPERTY_QUESTION_PATTERNS = [
   /lokasi\s+(apa|mana|yang|di)/, /area\s+(mana|apa)/, /wilayah\s+(mana|apa)/,
   /tipe\s+properti/, /jenis\s+properti/, /furnished|furnish|furnitur/,
   /kamar\s+(tidur|mandi)/, /berapa\s+kamar/, /luas\s+(berapa|bangunan|tanah)/,
-  /fasilitas\s+(apa|yang|tertentu|tambahan|khusus|wajib)/, /ada\s+fasilitas/,
+  /\bfasilitas\b/, /ada\s+fasilitas/,
   /kapan\s+(masuk|pindah|rencan)/, /bulan\s+apa/, /ada\s+yang\s+ingin.*tanyakan/,
   /masih\s+(ada|butuh|perlu)/, /selain\s+itu/, /rencananya\s+masuk/,
   /masuk\s+bulan/, /pindah\s+bulan/, /sewa\s+untuk\s+berapa/, /berapa\s+lama/,
@@ -544,6 +578,14 @@ function isPropertyContextContinuation(message, history = []) {
 
   const lower = message.toLowerCase().trim();
 
+  // ── Sinyal konteks dihitung lebih awal — dibutuhkan oleh smart CLEAR_NON_PROPERTY ──
+  // Dipindah ke sini agar bypass CLEAR_NON_PROPERTY bisa menggunakannya.
+  // Catatan: `hasPropertyCtx` (panggil hasPropertyKeyword per item history) masih
+  // dihitung di bawah karena lebih mahal dan tidak dibutuhkan di sini.
+  const recentHistory      = history.slice(-6);
+  const inPropertyFlow     = isInPropertyFlow(history);
+  const hasRecentPropertyQ = hasRecentPropertyQuestionIn(recentHistory);
+
   // ── Obrolan harian non-properti → tolak SEGERA (sebelum cek fasilitas/landmark) ──
   // Frasa seperti "mati listrik", "wifi mati", "macet", "rumahku banjir" adalah
   // obrolan pribadi, bukan jawaban kualifikasi — walau menyebut "rumah"/"wifi"/"di jalan".
@@ -564,7 +606,7 @@ function isPropertyContextContinuation(message, history = []) {
     || (/\b(survey|survei)\b/i.test(lower) && /\b(kapan|jadwal|bisa|mau|boleh|properti|rumah|unit)\b/i.test(lower))
     || (/\b(jadwalkan|jadwal\s+kunjungan)\b/i.test(lower) && /\b(properti|rumah|unit|viewing|survey|survei)\b/i.test(lower));
 
-  const hasPropertyFacility = /\b(fasilitas|gym|fitness|kolam\s*renang|kolam|renang|parkir|garasi|carport|taman|playground|play\s*ground|kids?\s*zone|kids?\s*club|keamanan|cctv|ac|wifi|internet|lift|elevator|rooftop|balkon|balcony|view|pemandangan|clubhouse|sport|olahraga|water\s*heater|mushola|jogging)\b/i.test(lower);
+  const hasPropertyFacility = /\b(fasilitas|gym|fitness|kolam\s*renang|kolam|renang|parkir|garasi|carport|taman|playground|play\s*ground|kids?\s*zone|kids?\s*club|keamanan|cctv|ac|wifi|internet|lift|elevator|rooftop|balkon|balcony|view|pemandangan|clubhouse|sport|olahraga|water\s*heater|mushola|jogging|jacuzzi|bathtub|bak\s+mandi|yoga|sauna|steam|spa|dapur|kitchen|laundry|mesin\s+cuci|teras|terrace|shower|tennis|badminton|futsal|basket|barbecue|bbq|gerbang|smart\s+home|smart\s+tv|lemari|wardrobe|kasur|sofa|kompor|kulkas|springbed|dispenser|game\s+room|billiard|private\s+pool|infinity\s+pool|kolam\s+ikan|taman\s+bermain|genset|generator|security\s+guard|satpam|intercom|gate\s+system|one\s+gate|bar\s+lounge|wine\s+cellar)\b/i.test(lower);
   const isLandmarkAnswer    = /\b(dekat|deket|near|close\s+to|di\s+jalan|di\s+sekitar|samping|next\s+to|beside|sebelah)\b/i.test(lower);
   // Jawaban QM (motivation / why now — house pilot). Frasa life-event ini bukan kata
   // properti, tapi jelas jawaban atas "apa yang membuat Kak mulai cari rumah?".
@@ -614,6 +656,28 @@ function isPropertyContextContinuation(message, history = []) {
   // Skip jika pesan sudah punya konten properti (landmark/fasilitas/motivasi/preferensi/
   // amenity sekitar) — mis. "banyak cafe, resto dan warung" = patokan lokasi, bukan kuliner.
   if (!hasPropertyContent) {
+    // ── CONTEXT-AWARE BYPASS ─────────────────────────────────────────────────
+    // Ketika percakapan JELAS sudah dalam Q-flow properti (≥2 pertanyaan AI) DAN AI
+    // baru saja mengajukan pertanyaan properti, jawaban customer tentang fasilitas /
+    // preferensi TIDAK boleh diblokir walau mengandung kata seperti "restoran/cafe/gym".
+    // Contoh valid yang harus LOLOS:
+    //   "Ada gym dan restoran di dalam?"    → preferensi fasilitas, bukan pesan makanan
+    //   "Mau yang ada kolam renang + yoga"  → preferensi fasilitas
+    //   "Ada kitchen set, jacuzzi, teras?"  → preferensi fasilitas (jacuzzi, teras baru ditambah)
+    //   "Yang banyak cafe di sekitarnya"    → preferensi lokasi/lingkungan
+    // Hanya blokir jika JELAS-JELAS bukan properti (order makanan, beli tiket, dll.)
+    if (inPropertyFlow && hasRecentPropertyQ && lower.length <= 150) {
+      const OBVIOUSLY_OFF_TOPIC = [
+        /\b(pesan\s+makanan|order\s+makanan|gofood|grabfood|shopeefood|mau\s+makan\s+di|lagi\s+di\s+restoran)\b/i,
+        /\b(tiket\s+(pesawat|kereta|bus|kapal)|booking\s+tiket|paket\s+wisata|tur\s+wisata)\b/i,
+        /\b(beli\s+(hp|laptop|iphone|gadget)|harga\s+(hp|laptop|iphone|samsung))\b/i,
+        /\b(nonton\s+film|bioskop|tiket\s+konser|nonton\s+drakor)\b/i,
+        /\b(resep\s+(masakan|kue)|cara\s+masak\s+|masak\s+(apa|gimana))\b/i,
+      ];
+      if (!OBVIOUSLY_OFF_TOPIC.some(p => p.test(lower))) return true;
+      return false;
+    }
+
     const CLEAR_NON_PROPERTY = [
       /\b(makanan|minuman|kuliner|restoran|cafe|kafe|masak|resep|menu|makan|bakso|mie|nasi|ayam|sate|soto|jajan|ngopi|kopi|camilan|gorengan|warteg)\b/,
       /\b(kendaraan|mobil|motor|sepeda|tiket|travel|wisata|hotel liburan|penginapan wisata)\b/,
@@ -628,8 +692,6 @@ function isPropertyContextContinuation(message, history = []) {
   }
 
   // ── Periksa 5 pesan terakhir apakah ada konteks properti ─────────────────
-  const recentHistory   = history.slice(-6);
-
   // ── PRIORITY fast paths — sebelum cek hasPropertyCtx ─────────────────────
   // Pola ini sangat spesifik sebagai jawaban Q10 (durasi sewa), sehingga aman
   // dilewatkan bahkan jika AI message belum tersimpan ke DB (race condition).
@@ -658,9 +720,8 @@ function isPropertyContextContinuation(message, history = []) {
   //     percakapan jelas in-flow walau frasa pertanyaan terakhir tak terdaftar &
   //     kata TIPE sudah keluar window. Ini safety net untuk jawaban pendek malas
   //     ("Boleh..", "Terserah") di tengah Q-flow.
-  const hasPropertyCtx        = history.some(item => hasPropertyKeyword(item.message || ''));
-  const hasRecentPropertyQ    = hasRecentPropertyQuestionIn(recentHistory);
-  const inPropertyFlow        = isInPropertyFlow(history);
+  // hasRecentPropertyQ + inPropertyFlow sudah dihitung di awal fungsi
+  const hasPropertyCtx = history.some(item => hasPropertyKeyword(item.message || ''));
   if (!hasPropertyCtx && !hasRecentPropertyQ && !inPropertyFlow) return false;
 
   // ── Fast path: Jawaban yang SANGAT jelas sebagai lanjutan — tidak perlu cek AI question ──
@@ -713,7 +774,7 @@ function isPropertyContextContinuation(message, history = []) {
     return true;
 
   // 3) Jawaban lokasi / area
-  for (const loc of INDONESIA_LOCATIONS) {
+  for (const loc of _locationCache) {
     if (lower.includes(loc)) return true;
   }
   if (/\b(di\s+\w+)\b/.test(lower)) return true;  // "di jakarta", "di mana saja"
@@ -880,7 +941,9 @@ module.exports = {
   extractLocationFromMessage,
   extractPropertyTypeFromMessage,
   extractTransactionTypeFromMessage,
+  initLocationCache,
   PROPERTY_TYPES,
   STANDALONE_KEYWORDS,
-  INDONESIA_LOCATIONS,
+  // Getter so callers always read the live cache, not a stale snapshot.
+  get INDONESIA_LOCATIONS() { return _locationCache; },
 };
