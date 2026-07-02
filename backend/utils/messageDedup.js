@@ -26,7 +26,7 @@ const MAX_ENTRIES  = 1000;
 // processed twice within 90 seconds. Covers Fonnte webhook double-delivery
 // and polling+webhook overlap where message IDs differ but content is identical.
 const _contentSeen = new Map();
-const CONTENT_TTL_MS = 90 * 1000;   // 90 seconds
+const CONTENT_TTL_MS = 5 * 60 * 1000;   // 5 menit (catch resend manual & restart)
 
 // Synthetic id prefixes that are NOT stable across retries — never dedup these.
 const _SYNTHETIC_PREFIXES = ['fonnte_', 'wati_', 'dialog_', 'dialog360_'];

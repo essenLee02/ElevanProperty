@@ -26,7 +26,10 @@
 
 'use strict';
 
-const { generateWhatsappReplyWithProviderFallback } = require('./aiProviderService');
+const {
+  generateWhatsappReplyWithProviderFallback,
+  generateWhatsappExternalAIFallback,
+} = require('./aiProviderService');
 const { getWhatsappPropertyContext }                = require('../utils/whatsappPropertyContext');
 const { buildRecommendationContextForLLM,
         extractPropertyFilters }                    = require('./propertyRecommendationService');
@@ -405,14 +408,15 @@ async function generateWhatsAppAIReply(params) {
     // Lazy require untuk hindari circular dependency
     const { generatePrivateTerminalMassege } = require('../controllers/chatbotPrivateController');
 
-    const recommendationContext = await buildRecommendationContextForLLM(message, history);
-
+    // Do NOT pre-load recommendation context here — the private agent loads property
+    // data only when all Q1-Q12 are answered and it's about to show the summary/catalog.
+    // Loading 8831 properties on every Q-flow message wastes DB round-trips.
     const result = await generatePrivateTerminalMassege({
       session,
       history,
       userMessage          : message,
       agentName,
-      recommendationContext,
+      recommendationContext: null,
       externalError        : new Error('ChatGPT and Claude unavailable for WhatsApp reply'),
     });
 
@@ -424,14 +428,26 @@ async function generateWhatsAppAIReply(params) {
       provider      : 'private_agent',
       contextSource,
     };
-  } catch (err) {
-    console.error('[WhatsAppAI] Private Agent also failed:', err.message);
+  } catch (privateErr) {
+    console.error('[WhatsAppAI] Private Agent also failed:', privateErr.message);
+
+    // Jika primary=private dan Private Agent gagal → coba external AI (Claude → ChatGPT → QWEN)
+    if (primaryProvider === 'private') {
+      try {
+        console.warn('[WhatsAppAI] primary=private & Private Agent failed → trying external AI fallback');
+        const aiResult = await generateWhatsappExternalAIFallback(
+          session, history, message, enrichedPropertyCtx, { facilityContext, cityContext }
+        );
+        return { reply: aiResult.reply, provider: aiResult.provider, contextSource };
+      } catch (extErr) {
+        console.error('[WhatsAppAI] External AI fallback also failed:', extErr.message);
+      }
+    }
 
     // ── Last resort ────────────────────────────────────────────────────────────
-    const name  = session?.name || 'Pelanggan';
-    const agent = agentName    || process.env.APP_NAME || 'Elevan Property';
+    const name = session?.name || 'Pelanggan';
     return {
-      reply: `Halo *${name}*! 👋\n\nTerima kasih telah menghubungi saya. Saya akan segera membalas pesan Anda dengan informasi properti yang sesuai.\n\nMohon tunggu sebentar 🙏`,
+      reply         : `Halo *${name}*! 👋\n\nTerima kasih telah menghubungi saya. Saya akan segera membalas pesan Anda dengan informasi properti yang sesuai.\n\nMohon tunggu sebentar 🙏`,
       provider      : 'fallback_generic',
       contextSource : 'none',
     };

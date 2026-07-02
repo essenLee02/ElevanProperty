@@ -10,13 +10,18 @@ const {
 const { sanitizeEnvValue, maskSecret } = require('./openaiService');
 
 const CLAUDE_MESSAGES_URL = 'https://api.anthropic.com/v1/messages';
-const DEFAULT_CLAUDE_MODEL = 'claude-haiku-4-5';
-const DEFAULT_CLAUDE_API_VERSION = '2023-06-01';
+
+function _waSource() {
+  const t = String(process.env.MESSAGE_TERMINAL || '').toUpperCase();
+  if (t === 'KIRIMI')      return 'kirimi_whatsapp';
+  if (t === 'TIMELINESAI') return 'timelinesai_whatsapp';
+  return 'fonnte_whatsapp';
+}
 
 function getClaudeConfig() {
   const apiKey = sanitizeEnvValue(process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY);
-  const model = sanitizeEnvValue(process.env.CLAUDE_MODEL) || DEFAULT_CLAUDE_MODEL;
-  const apiVersion = sanitizeEnvValue(process.env.CLAUDE_API_VERSION) || DEFAULT_CLAUDE_API_VERSION;
+  const model = sanitizeEnvValue(process.env.CLAUDE_MODEL);
+  const apiVersion = sanitizeEnvValue(process.env.CLAUDE_API_VERSION);
   const maxTokens = Number(process.env.CLAUDE_MAX_TOKENS || 1200);
 
   return {
@@ -130,7 +135,7 @@ async function generateClaudeWhatsappReply(session, history, userMessage, proper
   return callClaudeMessagesAPI(buildWhatsappReplyPrompt(session, history, userMessage, propertyContext, 'claude', extraContext), {
     system: getProjectSkillInstruction('claude'),
     metadata: {
-      source: 'fonnte_whatsapp',
+      source: _waSource(),
       channel: 'whatsapp',
       sessionId: String(session.id || ''),
       provider: 'claude'

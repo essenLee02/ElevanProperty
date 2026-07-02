@@ -878,8 +878,26 @@ function formatDbPrice(price, priceType) {
  * loadJsonProperties() so all downstream filter/sort functions work unchanged.
  *
  * Falls back to [] on any DB error so getSourceProperties() can then use the JSON catalog.
+ *
+ * Cache: results are cached in-memory for DB_PROPS_CACHE_TTL_MS (5 min) to prevent
+ * repeated heavy JOIN queries on every chat message. Call clearDbPropertiesCache()
+ * after admin creates/updates a property to force refresh.
  */
+let _dbPropertiesCache = null;
+let _dbPropertiesCacheTime = 0;
+const DB_PROPS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+function clearDbPropertiesCache() {
+  _dbPropertiesCache = null;
+  _dbPropertiesCacheTime = 0;
+}
+
 async function getDbProperties() {
+  const now = Date.now();
+  if (_dbPropertiesCache !== null && (now - _dbPropertiesCacheTime) < DB_PROPS_CACHE_TTL_MS) {
+    return _dbPropertiesCache;
+  }
+
   try {
     const { Property, PropertyImage, PropertyFacility, Facility, City, Province } = require('../models');
 
@@ -923,6 +941,8 @@ async function getDbProperties() {
       };
     });
 
+    _dbPropertiesCache = normalized;
+    _dbPropertiesCacheTime = now;
     console.log(`[PropertyRecommendationService] Loaded ${normalized.length} properties from database.`);
     return normalized;
   } catch (err) {
@@ -1355,5 +1375,6 @@ module.exports = {
   parsePropertyPrice,
   budgetMatches,
   propertyMatchesCoreVisibleRequest,
-  getVisibleMatchesFromAlternatives
+  getVisibleMatchesFromAlternatives,
+  clearDbPropertiesCache
 };

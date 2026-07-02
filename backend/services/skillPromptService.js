@@ -39,7 +39,7 @@ const SKILL_GROUPS = {
 function normalizeProvider(provider = 'shared') {
   const value = String(provider || 'shared').toLowerCase().trim();
 
-  if (['chatgpt', 'chat_gpt', 'openai', 'gpt'].includes(value)) return 'chatgpt';
+  if (['chatgpt', 'chat_gpt', 'openai', 'gpt', 'qwen', 'deepseek'].includes(value)) return 'chatgpt';
   if (['claude', 'anthropic'].includes(value)) return 'claude';
   if (['private', 'private_agent', 'local'].includes(value)) return 'private_agent';
 
@@ -237,6 +237,8 @@ function getSkillRegistryStatus() {
     skillsRoot: path.relative(PROJECT_ROOT, SKILLS_ROOT),
     providerFolderMapping: {
       chatgpt: 'skills/chat_gpt_responds',
+      qwen: 'skills/chat_gpt_responds',   // qwen → chatgpt skill set
+      deepseek: 'skills/chat_gpt_responds',
       claude: 'skills/claude_responds',
       private_agent: ['skills/chat_gpt_responds', 'skills/claude_responds']
     },

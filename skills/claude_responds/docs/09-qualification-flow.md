@@ -492,13 +492,19 @@ EN: Anything you definitely want to avoid?
 | `gang sempit`, `lorong sempit` | Akses gang sempit |
 | `dekat rel kereta`, `rel kereta api` | Dekat rel kereta |
 | `dekat pabrik`, `polusi udara`, `bau pabrik` | Polusi / dekat industri |
-| `macet banget`, `kemacetan parah` | Area macet parah |
+| `macet banget`, `kemacetan parah`, `tidak macet`, `bebas macet` | Tidak mau macet |
+| `tidak gelap`, `gelap jalannya`, `jalan gelap` | Jalan tidak gelap |
 | `rumah tua`, `bangunan tua` | Kondisi properti tua |
 
 **Q5 Summary display rule:**
 Include `✓ Hindari:` only when a **specific, concrete** red flag was stated (e.g., `Tidak mau rawan banjir`, `Tidak mau area panas`).
 
 **FORBIDDEN:** `✓ Hindari: *Disebutkan*` — this placeholder is never shown. If no specific red flag pattern matches the customer's answer, the `Hindari` line is **omitted entirely** from the summary brief. "Tidak ada" or vague non-answers → omit the line.
+
+**Mixed Q5+Q6 answer rule:** Customer often answers Q5 with both red flags AND an anchor point in one sentence — e.g., *"tidak macet, tidak banjir, tidak gelap jalannya, terus deket cafe dan restoran"*. Split the answer:
+- Red flag parts (`tidak macet`, `tidak banjir`, `tidak gelap jalannya`) → `✓ Hindari:`
+- Anchor parts (`deket cafe dan restoran`) → `✓ Patokan:` (stored as Q6)
+Never combine them into one field. If the customer's answer has both, both fields get populated.
 
 ---
 
@@ -622,6 +628,7 @@ Never ask "siapa yang memutuskan" directly.
 | AI tanya kapan → customer belum menyebut tanggal | `✓ Viewing: *Mau viewing (tanggal belum dikonfirmasi)*` |
 | AI tanya `"jam berapa?"` → customer jawab `"jam 1 siang"` / `"pagi jam 9"` | `✓ Viewing: *Besok siang jam 1*` (gabung hari+waktu+jam) |
 | Customer usul `"boleh siang"` (hanya time-of-day) → AI tanya jam → customer jawab jam | `✓ Viewing: *Besok siang jam 1*` (default hari = besok bila tidak disebutkan) |
+| Customer sebut hari-dalam-minggu + "minggu depan" → AI tanya jam → customer jawab jam | `✓ Viewing: *Jam 7 pagi, 9 Juli 2026*` (hari X minggu depan = tanggal konkret +7 hari dari hari ini) |
 
 **⚠️ Viewing wajib ada di summary** jika ada jadwal survey yang sudah dikonfirmasi (hari/jam). Jangan hilangkan baris Viewing dari brief hanya karena tidak ada tanggal kalender eksplisit — "besok siang jam 1" sudah cukup sebagai jadwal.
 
@@ -1044,7 +1051,7 @@ Terima kasih sudah menghubungi saya. 🙏
 - **⛔ DILARANG KERAS: Jangan tulis nilai referensi-silang seperti "Disebutkan di Q4", "Sudah dijawab", "Lihat Q8", atau menunjuk nomor pertanyaan lain.** Sebuah field hanya boleh berisi nilai KONKRET dari baris ✅-nya sendiri di QUALIFICATION STATE. Jika `Keputusan [Q9]` masih ❓ (mis. customer hanya menjawab soal jadwal survei, bukan siapa pengambil keputusan), JANGAN tandai ✓ — tanyakan Q9 lebih dulu, atau (mode summary house) tampilkan `✗ Keputusan bersama: (Belum ditanyakan)`. Jawaban tentang waktu/jadwal survei ("besok lusa saya bisa survei") BUKAN jawaban Q9.
 - **⛔ Budget BUKAN nomor lantai/tower.** Jawaban Q12 seperti "lantai 15-20", "lt 27", "tower 3" adalah preferensi lantai — JANGAN pernah ditulis sebagai `✓ Budget: 15-20`. Budget hanya angka dengan satuan UANG (juta/ribu/miliar/Rp). Jika customer sudah memberi budget asli sebelumnya (mis. "1-1.6 juta/minggu"), pertahankan nilai itu — jangan timpa dengan angka lantai.
 - **✓ Durasi (Q10) mencakup SEMUA satuan**, bukan hanya tahun: "2 minggu", "10 hari", "6 bulan", "1 tahun" semuanya valid. Jika customer menyebut durasi di awal ("butuh sewa 2 minggu") walau belum ditanya Q10, tetap catat di `✓ Durasi`.
-- **✓ Viewing (Q9/Q9b/Q9c)**: lima kemungkinan label — (a) tidak mau survei/katalog saja → `*Minta listing*`; (b) mau viewing tapi koordinasi dulu → `*koordinasikan sama teman (Belum ditanyakan)*`; (c) AI sudah tanya tanggal, customer sudah jawab → `*Survey dijadwalkan: [hari/tanggal]*`; (d) AI sudah tanya tapi belum ada tanggal → `*Mau viewing (tanggal belum dikonfirmasi)*`; **(e) AI tanya jam viewing → customer jawab "jam 1 siang" / "pagi jam 9" → gabung hari+waktu+jam: `*Besok siang jam 1*`** ← **WAJIB ada di summary!** Jika tidak disebut sama sekali → omit.
+- **✓ Viewing (Q9/Q9b/Q9c)**: lima kemungkinan label — (a) tidak mau survei/katalog saja → `*Minta listing*`; (b) mau viewing tapi koordinasi dulu → `*koordinasikan sama teman (Belum ditanyakan)*`; (c) AI sudah tanya tanggal, customer sudah jawab → `*Survey dijadwalkan: [hari/tanggal]*`; (d) AI sudah tanya tapi belum ada tanggal → `*Mau viewing (tanggal belum dikonfirmasi)*`; **(e) AI tanya jam viewing → customer jawab jam → gabung jam+waktu+tanggal:** jika hari adalah tanggal konkret (mis. "9 Juli 2026"), format `*Jam 7 pagi, 9 Juli 2026*`; jika hari relatif (besok/lusa), format `*Besok siang jam 1*` ← **WAJIB ada di summary!** Jika tidak disebut sama sekali → omit.
 - **⛔ JANGAN tampilkan summary jika Q3 (Budget) masih ❓** — walaupun budget muncul di old session history.
 - **⛔ JANGAN tampilkan summary jika Q8 (Tanggal masuk) masih ❓** — ini mandatory, tidak ada pengecualian.
 - **⛔ JANGAN tampilkan summary setelah Q2b dijawab jika Q3/Q8/Q4 masih ❓.**

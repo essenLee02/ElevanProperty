@@ -549,7 +549,14 @@ function extractQualificationState(history = [], currentMessage = '') {
     if (!state.leaseDuration && /sewa\s+(?:untuk\s+)?berapa lama|berapa lama.*sewa|durasi\s+sewa/.test(aiText)) {
       const looksLikeDate = new RegExp(`\\b\\d{1,2}\\s+(?:${MONTH_ID}|${MONTH_EN})\\b`, 'i').test(custResp);
       if (!looksLikeDate) {
-        state.leaseDuration = custResp;
+        // Extract clean "N unit" — strip filler like "Butuh ... sewa, Kak" → "10 hari"
+        const durMatch = custResp.match(/\b(\d+)\s*(hari|malam|minggu|bulan|tahun|day|night|week|month|year)s?\b/i);
+        if (durMatch) {
+          const uMap = { hari:'hari',day:'hari',malam:'malam',night:'malam',minggu:'minggu',week:'minggu',bulan:'bulan',month:'bulan',tahun:'tahun',year:'tahun' };
+          state.leaseDuration = `${durMatch[1]} ${uMap[durMatch[2].toLowerCase()] || durMatch[2].toLowerCase()}`;
+        } else {
+          state.leaseDuration = custResp;
+        }
       }
       // If it looks like a date: leave leaseDuration null so Q10 gets re-asked with clearer hint
     }
@@ -590,7 +597,7 @@ function extractQualificationState(history = [], currentMessage = '') {
       // the "no preference / standard" case that detectFacilities misses.
     }
     // Q5 — red flags
-    if (!state.redFlags && /pasti tidak cocok|hadap barat|gang sempit|rumah tua/.test(aiText)) {
+    if (!state.redFlags && /pasti tidak cocok|ingin dihindari|yang\s+dihindari|hadap barat|gang sempit|rumah tua|rawan banjir|rel kereta/.test(aiText)) {
       state.redFlags = custResp;
     }
     // Q12 — apartment preference

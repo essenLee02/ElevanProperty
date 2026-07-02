@@ -354,17 +354,38 @@ async function processIncomingMessage(body, agent) {
     return;
   }
 
-  // ── Dedup guard layer 1: stable messageId (webhook retries) ─────────
+  // ── Dedup guard layer 1: stable messageId (in-memory, cepat) ────────
   if (_isAlreadyProcessed(messageId)) {
-    console.log(`[KIRIMI DEDUP] ⚠️  Pesan sudah diproses (ID), skip: ${messageId}`);
+    console.log(`[KIRIMI DEDUP] ⚠️  Pesan sudah diproses (ID cache), skip: ${messageId}`);
     return;
   }
   _markProcessed(messageId);
 
-  // ── Dedup guard layer 2: content-based (same sender+text within 90s) ─
+  // ── Dedup guard layer 2: DB check (survive server restart / nodemon) ──
+  // Cek messageId di ChatMessage.metadata — mencegah double-process setelah restart.
+  if (messageId && !/^sim_/.test(messageId)) {
+    const safeId = String(messageId).replace(/[^A-Za-z0-9_\-]/g, '');
+    if (safeId) {
+      try {
+        const { Op } = require('sequelize');
+        const dbDup = await ChatMessage.findOne({
+          where : { channel: 'whatsapp', metadata: { [Op.like]: `%"messageId":"${safeId}"%` } },
+          attributes: ['id'],
+        });
+        if (dbDup) {
+          console.log(`[KIRIMI DEDUP DB] ⚠️  messageId sudah ada di DB, skip: ${safeId}`);
+          return;
+        }
+      } catch (dedupErr) {
+        console.warn('[KIRIMI DEDUP DB] Query gagal, lanjut tanpa DB dedup:', dedupErr.message);
+      }
+    }
+  }
+
+  // ── Dedup guard layer 3: content-based (same sender+text within 5 min) ─
   const normSender = normalizePhone(sender);
   if (_isContentDup(normSender, message)) {
-    console.log(`[KIRIMI DEDUP] ⚠️  Konten sama dari ${normSender} dalam 90s, skip.`);
+    console.log(`[KIRIMI DEDUP] ⚠️  Konten sama dari ${normSender} dalam 5 menit, skip.`);
     return;
   }
   _markContentDup(normSender, message);

@@ -9,8 +9,14 @@ const {
   buildPreferenceExtractionPrompt
 } = require('./aiPromptBuilderService');
 
-const DEFAULT_CHATGPT_MODEL = 'gpt-5.4-mini';
 const OPENAI_RESPONSES_URL = 'https://api.openai.com/v1/responses';
+
+function _waSource() {
+  const t = String(process.env.MESSAGE_TERMINAL || '').toUpperCase();
+  if (t === 'KIRIMI')      return 'kirimi_whatsapp';
+  if (t === 'TIMELINESAI') return 'timelinesai_whatsapp';
+  return 'fonnte_whatsapp';
+}
 
 function sanitizeEnvValue(value) {
   return String(value || '')
@@ -122,7 +128,7 @@ function normalizeChatGPTError(error) {
 
 function getChatGPTConfig() {
   const apiKey = sanitizeEnvValue(process.env.OPENAI_API_KEY);
-  const model = sanitizeEnvValue(process.env.OPENAI_MODEL) || DEFAULT_CHATGPT_MODEL;
+  const model = sanitizeEnvValue(process.env.OPENAI_MODEL);
 
   return {
     apiKey,
@@ -207,7 +213,7 @@ async function generateChatGPTWhatsappReply(session, history, userMessage, prope
   return callChatGPTResponseAPI(buildWhatsappReplyPrompt(session, history, userMessage, propertyContext, 'chatgpt', extraContext), {
     store: true,
     metadata: {
-      source: 'fonnte_whatsapp',
+      source: _waSource(),
       channel: 'whatsapp',
       sessionId: String(session.id || ''),
       provider: 'chatgpt'

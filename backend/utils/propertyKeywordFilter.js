@@ -494,15 +494,21 @@ const PROPERTY_QUESTION_PATTERNS = [
 // fasilitas/landmark yang kebetulan ada) supaya AI tidak menjawab obrolan pribadi dengan
 // pertanyaan kualifikasi. Contoh nyata: "Rumahku barusan mati listrik".
 // Catatan: 'banjir' dikecualikan jika diikuti "kanal" (Banjir Kanal = nama tempat asli).
-// "banjir" generik (obrolan harian), KECUALI bila dipakai sebagai PREFERENSI red-flag
-// (hindari/bebas/anti/rawan/jauh dari banjir) — itu jawaban Q5 yang valid, bukan curhat.
+// "banjir" / "macet" generik (obrolan harian), KECUALI bila dipakai sebagai PREFERENSI
+// red-flag (tidak macet, bebas banjir, hindari kemacetan) — itu jawaban Q5 yang valid.
 const BANJIR_DAILY = /\bbanjir\b(?!\s*kanal)/;
 const FLOOD_AVOID_PREFERENCE = /\b(bebas|tidak|tdk|anti|hindari|terhindar(?:i)?|menghindari|jauh\s+dari|aman\s+dari|rawan|jangan|ga\s+mau|gak\s+mau|nggak\s+mau|enggak\s+mau)\b[\s\w]*\bbanjir\b/i;
+
+// "macet"/"kemacetan" sebagai preferensi (jawaban Q5) bukan obrolan kemacetan.
+// Contoh valid Q5: "tidak macet", "bebas macet", "hindari kemacetan", "anti macet".
+const MACET_DAILY = /\b(macet|kemacetan)\b/;
+const MACET_AVOID_PREFERENCE = /\b(bebas|tidak|tdk|anti|hindari|terhindar(?:i)?|menghindari|jauh\s+dari|aman\s+dari|jangan|ga\s+mau|gak\s+mau|nggak\s+mau|enggak\s+mau)\b[\s\w]*\b(macet|kemacetan)\b/i;
 
 const DAILY_LIFE_OFFTOPIC = [
   /\b(mati\s+listrik|listrik\s+(mati|padam)|pemadaman|\bpln\b|byar\s*pet|mati\s+lampu|lampu\s+(mati|padam))\b/,
   /\b(wifi\s+(mati|lemot|lambat|lelet)|internet\s+(mati|lemot|lambat|down)|sinyal\s+(jelek|hilang|ilang|lemah)|pulsa\s+habis|kuota\s+habis)\b/,
-  /\b(macet|kemacetan|gempa|longsor|kebakaran|kebanjiran|badai|angin\s+kencang)\b/,
+  MACET_DAILY,
+  /\b(gempa|longsor|kebakaran|kebanjiran|badai|angin\s+kencang)\b/,
   BANJIR_DAILY,
 ];
 
@@ -510,9 +516,10 @@ const DAILY_LIFE_OFFTOPIC = [
 function isDailyLifeOffTopic(lower) {
   for (const p of DAILY_LIFE_OFFTOPIC) {
     if (!p.test(lower)) continue;
-    // Pengecualian: "banjir" sebagai preferensi menghindari banjir (red-flag Q5)
-    // bukan obrolan harian — mis. "tempat yang terhindari dari banjir".
+    // Pengecualian: "banjir"/"macet" sebagai preferensi menghindari (red-flag Q5)
+    // bukan obrolan harian — "tidak macet, tidak banjir" = jawaban kualifikasi valid.
     if (p === BANJIR_DAILY && FLOOD_AVOID_PREFERENCE.test(lower)) continue;
+    if (p === MACET_DAILY  && MACET_AVOID_PREFERENCE.test(lower)) continue;
     return true;
   }
   return false;
@@ -615,8 +622,9 @@ function isPropertyContextContinuation(message, history = []) {
   const isMotivationAnswer  = /\b(pindah|pindahan|mutasi|relokasi|relocat|kontrak\s+(habis|abis)|ngontrak|keluarga\s+(nambah|bertambah)|nambah\s+anak|anak\s+(masuk|sekolah)|sekolah\s+anak|investasi|invest|disewakan|pensiun|menikah|nikah|kerja\s+baru|pindah\s+kerja|mutasi\s+kerja|menetap|growing\s+family|relocation|moving|job\s+(relocat|transfer)|dinas|perjalanan\s+dinas|ditugaskan|penugasan|tugas\s+(kerja|dinas|kantor)|kerja\s+(dinas|sementara|sebentar)|pindah\s+tugas|liburan|berlibur|vacation|holiday|staycation|wisata|honeymoon|bulan\s+madu|business\s+trip|work\s+trip|workation)\b/i.test(lower);
   // Jawaban preferensi Q5/Q6 (red-flags / lokasi): jalan, akses, orientasi, suasana.
   // Contoh: "Saya mau jalan lebar, access strategis", "yang tenang tidak bising".
-  const isPreferenceAnswer  = /\b(jalan\s+(raya|lebar|besar|utama|kecil)|akses|access|strategis|hook|pojok|sudut|menghadap|hadap\s+(timur|barat|utara|selatan|matahari)|jalan\s+ramai|bising|tenang|sepi|aman|nyaman|asri|sejuk|rindang|pepohonan|pohon|hijau|teduh)\b/i.test(lower)
-                              || FLOOD_AVOID_PREFERENCE.test(lower);
+  const isPreferenceAnswer  = /\b(jalan\s+(raya|lebar|besar|utama|kecil)|akses|access|strategis|hook|pojok|sudut|menghadap|hadap\s+(timur|barat|utara|selatan|matahari)|jalan\s+ramai|bising|tenang|sepi|aman|nyaman|asri|sejuk|rindang|pepohonan|pohon|hijau|teduh|gelap|terang|pencahayaan)\b/i.test(lower)
+                              || FLOOD_AVOID_PREFERENCE.test(lower)
+                              || MACET_AVOID_PREFERENCE.test(lower);
   // Preferensi LINGKUNGAN/amenity di sekitar (positif): "banyak cafe, resto dan warung",
   // "dekat mall/kampus/pasar". Kata kuliner di sini = patokan lokasi, BUKAN pesan makanan.
   const isAmenityVicinity   = /\b(banyak|dekat|deket|near|area|kawasan|lingkungan|sekitar|deketan|berdekatan|akses\s+ke)\b/i.test(lower) &&

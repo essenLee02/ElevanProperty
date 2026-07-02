@@ -1803,7 +1803,10 @@ class ConversationQualifier {
         const noViewing =
           /(lihat|liat)\s+(katalog|listing|pilihan)/i.test(custText) ||
           /katalog\s*(nya)?\s*(aja|saja|dulu)/i.test(custText) ||
-          /(ga|gak|engga|enggak|nggak|tidak|tdk|ndak)\s*(ada|punya|sempat)?\s*waktu\s*(untuk|buat)?\s*(survey|survei|viewing|lihat)/i.test(custText);
+          /(ga|gak|engga|enggak|nggak|tidak|tdk|ndak)\s*(ada|punya|sempat)?\s*waktu\s*(untuk|buat)?\s*(survey|survei|viewing|lihat)/i.test(custText) ||
+          /(ga|gak|engga|enggak|nggak|tidak|tdk|ndak)\s*mau\s*(viewing|survey|survei)/i.test(custText) ||
+          /(minta|kasih|kirim|send)\s*(list|listing|katalog|daftar)/i.test(custText) ||
+          /(list|listing|katalog|daftar)\s*(aja|saja|only|dulu)/i.test(custText);
         if (noViewing) return false;
         return /\b(viewing|survey|survei|kunjungan)\s+kapan\b/i.test(custText) ||
                /\bkapan\s+(?:bisa|boleh|mau)\s*(?:viewing|survey|survei|kunjungan)\b/i.test(custText) ||
@@ -1847,6 +1850,18 @@ class ConversationQualifier {
         if (/\bnanti\b|\bhari\s+ini\b|\bsekarang\b|(?:pagi|siang|sore|malam)\s+ini\b|\bini\s+(?:pagi|siang|sore|malam)\b/i.test(custText)) return 'hari ini';
         if (/\blusa\b/i.test(custText))  return 'lusa';
         if (/\bbesok\b/i.test(custText)) return 'besok';
+        // "minggu depan" (next week) = +7 hari dari hari ini → resolve ke tanggal konkret
+        if (/\bminggu\s+depan\b/i.test(custText)) {
+          const d = new Date(); d.setDate(d.getDate() + 7);
+          const M = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+          return `${d.getDate()} ${M[d.getMonth()]} ${d.getFullYear()}`;
+        }
+        // "selasa depan", "rabu depan", dll (hari + depan tanpa "minggu")
+        if (/\b(senin|selasa|rabu|kamis|jumat|sabtu|ahad)\s+depan\b/i.test(custText)) {
+          const d = new Date(); d.setDate(d.getDate() + 7);
+          const M = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+          return `${d.getDate()} ${M[d.getMonth()]} ${d.getFullYear()}`;
+        }
         return null;
       })(),
       hasViewingHour: /\b(jam|pukul)\s*\d{1,2}(?:[.:]\d{2})?\b/i.test(custText)
@@ -3470,6 +3485,17 @@ class ConversationQualifier {
    * Return string pertanyaan, atau null jika belum waktunya bertanya.
    */
   static #buildViewingHourQuestion(profile = {}, isId = true) {
+    // Jangan tanya jam viewing jika customer eksplisit menolak viewing / minta listing saja
+    const ct = profile._custText || '';
+    const viewingRefused =
+      /(ga|gak|engga|enggak|nggak|tidak|tdk|ndak)\s*mau\s*(viewing|survey|survei)/i.test(ct) ||
+      /(minta|kasih|kirim|send)\s*(list|listing|katalog|daftar)/i.test(ct) ||
+      /(list|listing|katalog|daftar)\s*(aja|saja|only|dulu)/i.test(ct) ||
+      /(lihat|liat)\s+(katalog|listing|pilihan)/i.test(ct) ||
+      /katalog\s*(nya)?\s*(aja|saja|dulu)/i.test(ct) ||
+      /(ga|gak|engga|enggak|nggak|tidak|tdk|ndak)\s*(ada|punya|sempat)?\s*waktu\s*(untuk|buat)?\s*(survey|survei|viewing|lihat)/i.test(ct);
+    if (viewingRefused) return null;
+
     // Hanya dalam konteks viewing (AI sudah tanya decision-maker / tanggal survey)
     const inViewingCtx = profile.aiAskedDecisionMaker || profile.aiAskedViewingDate;
     if (!inViewingCtx) return null;
@@ -3506,17 +3532,29 @@ class ConversationQualifier {
       /katalog\s*(nya)?\s*(aja|saja|dulu)/.test(custText) ||
       /langsung\s+(katalog|listing|rekomendasi)/.test(custText) ||
       /tanpa\s+(survey|survei|viewing|lihat\s+lokasi)/.test(custText) ||
-      /(ga|gak|engga|enggak|nggak|tidak|tdk|ndak)\s*(ada|punya|sempat)?\s*waktu\s*(untuk|buat)?\s*(survey|survei|viewing|lihat)/.test(custText);
+      /(ga|gak|engga|enggak|nggak|tidak|tdk|ndak)\s*(ada|punya|sempat)?\s*waktu\s*(untuk|buat)?\s*(survey|survei|viewing|lihat)/.test(custText) ||
+      /(ga|gak|engga|enggak|nggak|tidak|tdk|ndak)\s*mau\s*(viewing|survey|survei)/i.test(custText) ||
+      /(minta|kasih|kirim|send)\s*(list|listing|katalog|daftar)/i.test(custText) ||
+      /(list|listing|katalog|daftar)\s*(aja|saja|only|dulu)/i.test(custText);
     if (wantsCatalogOnly) return 'Minta listing';
 
     // AI asked for viewing HOUR and customer gave a specific time ("jam 1 siang")
-    // Triggered by Q9c "mau viewing jam berapa?" — builds "Besok siang jam 1" label.
+    // Triggered by Q9c "mau viewing jam berapa?" — builds "Besok siang jam 1" label,
+    // or "Jam 7 pagi, 9 Juli 2026" when dayRef is a resolved calendar date.
     if ((profile.aiAskedViewingHour || profile.aiAskedDecisionMaker) && profile.hasViewingHour) {
       const tod    = profile.viewingTimeOfDay;
       const dayRef = profile.viewingDayRef || (tod ? 'besok' : '');
       const dayRefCap = dayRef ? dayRef.charAt(0).toUpperCase() + dayRef.slice(1) : '';
       const hourM  = custText.match(/\bjam\s*(\d{1,2}(?:[.:]\d{2})?)\b/i);
       const hourStr = hourM ? `jam ${hourM[1]}` : '';
+      // Resolved date (contains month name, e.g. "9 Juli 2026") → "Jam 7 pagi, 9 Juli 2026"
+      const MONTHS_LO = ['januari','februari','maret','april','mei','juni','juli','agustus','september','oktober','november','desember'];
+      const isResolvedDate = dayRef && MONTHS_LO.some(m => dayRef.toLowerCase().includes(m));
+      if (isResolvedDate && hourStr) {
+        const hourCap = hourStr.charAt(0).toUpperCase() + hourStr.slice(1);
+        const todPart = tod ? ` ${tod}` : '';
+        return `${hourCap}${todPart}, ${dayRefCap}`;
+      }
       const parts  = [dayRefCap, tod, hourStr].filter(Boolean);
       return parts.length ? parts.join(' ') : 'Sudah dikonfirmasi';
     }
@@ -3577,6 +3615,12 @@ class ConversationQualifier {
     if (/gang sempit|narrow/.test(custText))         flags.push('Tidak mau gang sempit');
     if (/banjir|flood/.test(custText))               flags.push('Tidak mau banjir');
     if (/tua|old building/.test(custText))           flags.push('Tidak mau bangunan tua');
+    if (/tidak\s+macet|bebas\s+macet|anti\s+macet|hindari\s+macet|sering\s+macet|macet\s+(banget|parah)|kemacetan/.test(custText))
+                                                     flags.push('Tidak mau macet');
+    if (/tidak\s+gelap|gelap.{0,15}jalan|jalan.{0,15}gelap|tidak\s+terang/.test(custText))
+                                                     flags.push('Jalan tidak gelap');
+    if (/\bdekat\s+rel\b|\brel\s+kereta\b|train\s+track/.test(custText))
+                                                     flags.push('Tidak mau dekat rel kereta');
     // Return 'UNKNOWN' (not 'Disebutkan') so the brief suppresses the "Hindari"
     // line when no specific red flag pattern is matched from the customer text.
     return flags.length ? flags.join(', ') : 'UNKNOWN';
@@ -3972,8 +4016,11 @@ class ChatbotPrivateService {
     const showCatalogDirect = String(process.env.RESPOND_CATALOG_RUN || 'OFF').toUpperCase() === 'ON';
 
     // ── Shared: fetch price anchors for Q3 (needed in both modes) ────────────
+    // Only fetch when BOTH location AND type are known — avoids a heavy DB query
+    // on every early Q-flow message. getDbProperties() is now cached (5-min TTL)
+    // so repeated calls after the first cache-warm are cheap.
     let priceAnchors = null;
-    if (filters.location || filters.buildingType) {
+    if (filters.location && filters.buildingType) {
       try {
         const catalogProps = await searchProperties(filters);
         const withPrice    = catalogProps.filter(p => p.price && p.price !== '-');
