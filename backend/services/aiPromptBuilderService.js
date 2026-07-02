@@ -1428,24 +1428,25 @@ function buildWhatsappReplyPrompt(session, history, userMessage, propertyContext
     ? `\n⚠️ FORCED REPLY LANGUAGE: Bahasa Indonesia\nCustomer ini berbicara dalam Bahasa Indonesia. SELALU balas dalam Bahasa Indonesia — termasuk ketika pesan terbaru adalah jawaban singkat, angka, nama bulan, atau tanggal seperti "Juni 2026", "2-4 juta/seminggu", "iya", "1 tahun". JANGAN beralih ke Bahasa Inggris dalam kondisi apapun.\n`
     : `\n⚠️ FORCED REPLY LANGUAGE: English\nThe customer is writing in English. Always reply in English.\n`;
 
-  // ── Detect RESPOND_CATALOG_RUN mode ──────────────────────────────────────
-  const summaryMode = String(process.env.RESPOND_CATALOG_RUN || 'OFF').toUpperCase() !== 'ON';
+  // ── RESPOND_CATALOG_RUN: hanya mengontrol ISI BRIEF — bukan mode interview ─
+  // Q1-Q12 interview SELALU berjalan, apapun nilai RESPOND_CATALOG_RUN.
+  //   OFF (default) → brief summary saja, tanpa rekomendasi katalog
+  //   ON            → brief summary + rekomendasi properti dari catalog context
+  const showCatalogAfterBrief = String(process.env.RESPOND_CATALOG_RUN || 'OFF').toUpperCase() === 'ON';
 
   // ── Build server-side qualification state (prevents repeated questions) ──
-  // This is computed from full history BEFORE calling the AI. The AI receives
-  // an authoritative ✅/❓ checklist so it never re-asks an answered question,
-  // even if raw history is long and early answers are hard to spot.
-  const qualState      = summaryMode ? extractQualificationState(history, userMessage) : null;
-  const qualStateBlock = qualState   ? buildQualificationStateBlock(qualState)          : '';
+  // Selalu dihitung — Q1-Q12 selalu aktif.
+  const qualState      = extractQualificationState(history, userMessage);
+  const qualStateBlock = qualState ? buildQualificationStateBlock(qualState) : '';
 
-  // ── Summary mode: inject full Q1–Q12 qualification instructions ──────────
-  const summaryModeInstructions = summaryMode ? `
+  // ── Q1-Q12 qualification instructions — selalu diinjeksi ─────────────────
+  const summaryModeInstructions = `
 
-## QUALIFICATION MODE (RESPOND_CATALOG_RUN=OFF)
+## QUALIFICATION MODE
 
-You are currently in QUALIFICATION MODE. This means:
+You are conducting a property qualification interview. This means:
 
-1. ❌ DO NOT show property listings or catalog.
+1. ❌ DO NOT show property listings or catalog DURING Q1–Q12 questions.
 2. ✅ Ask Q1–Q12 qualification questions, in order, ONE question per message.
 3. ✅ Only after ALL mandatory questions are answered → show the structured brief below.
 4. ✅ Never skip Q8 (move-in date) — it is MANDATORY.
@@ -1593,11 +1594,11 @@ Baik, permintaan utama Anda sudah saya catat, sebagai berikut 📝 🔥
 
 
 
-Saya akan segera menghubungi Anda dengan rekomendasi properti yang paling sesuai! 🏠
+${showCatalogAfterBrief
+  ? `[Setelah brief di atas, LANJUTKAN LANGSUNG tanpa jeda — tampilkan rekomendasi properti dari "Backend property catalog context". Jika ada exact match tampilkan dulu. Jika tidak ada, sampaikan tidak ada yang persis cocok lalu tampilkan alternatif terdekat. Gunakan format yang jelas dan mudah dibaca di WhatsApp.]`
+  : `Saya akan segera menghubungi Anda dengan rekomendasi properti yang paling sesuai! 🏠
 
-Terima kasih sudah menghubungi saya. 🙏
-
-
+Terima kasih sudah menghubungi saya. 🙏`}
 
 Salam hangat,
 ${resolvedAgentName}
@@ -1619,13 +1620,15 @@ ${resolvedAppName}
 - **⛔ Q9 nilai "Mandiri"** — jika customer memutuskan sendiri, tampilkan persis: "Mandiri". Jangan tulis "Solo (mandiri)", "Solo", atau varian lain.
 - One question per message only.
 - Maximum 12 AI messages before showing brief (even if incomplete).
-- Never show catalog, Rumah123 listings, or property details in this mode.
+- ${showCatalogAfterBrief
+    ? 'JANGAN tampilkan catalog selama Q1–Q12. Setelah brief ditampilkan (semua Q wajib ✅), LANJUTKAN dengan rekomendasi dari property catalog context.'
+    : 'Never show catalog, Rumah123 listings, or property details. Setelah brief, cukup pesan konfirmasi saja — tanpa catalog.'}
 
 ### Tanda Tangan / Signature
 ⛔ **JANGAN tambahkan** "Salam hangat," atau nama/tanda tangan agen di akhir pertanyaan kualifikasi Q1–Q12 MANAPUN.
 ⛔ **JANGAN akhiri pertanyaan dengan "Salam hangat," nama agen, atau nama perusahaan** — akhiri pertanyaan LANGSUNG setelah kalimat tanya atau emoji terakhir.
 ✅ Tanda tangan HANYA boleh ada satu kali — di dalam summary brief final (sudah termasuk dalam template di atas), dan TIDAK di tempat lain.
-` : '';
+`;
 
   return `${getProjectSkillInstruction(provider)}
 ${forcedLangInstruction}
@@ -1641,15 +1644,14 @@ Recent conversation history for context only. Use the customer profile identity 
 ${formatConversationHistory(history)}
 
 Backend property catalog context for this latest WhatsApp message:
-${summaryMode ? '(Not used in qualification mode — ask Q1–Q12 first)' : (propertyContext || 'No backend property catalog context is available.')}
+${showCatalogAfterBrief ? (propertyContext || 'No backend property catalog context is available.') : '(Property catalog hidden during Q1–Q12 interview — akan digunakan setelah brief jika RESPOND_CATALOG_RUN=ON)'}
 ${extraContext.facilityContext || ''}
 ${extraContext.cityContext || ''}
 Latest WhatsApp customer message. This is the highest-priority instruction:
 ${userMessage}
 
 Task:
-${summaryMode
-    ? `Lihat QUALIFICATION STATE di atas (✅ = sudah dijawab, ❓ = belum dijawab).
+Lihat QUALIFICATION STATE di atas (✅ = sudah dijawab, ❓ = belum dijawab).
 Kemudian:
 0. ⛔ NON-PROPERTY MESSAGE — Jika pesan terbaru BUKAN tentang properti (misalnya: permintaan teknis, file, kode program, topik tidak relevan), balas HANYA dengan: "Maaf, saya hanya bisa membantu terkait pencarian properti. Ada yang bisa saya bantu untuk kebutuhan properti Anda? 🏠"
 1. ⚠️ JIKA ADA BANNER "SUMMARY SUDAH DIKIRIM" DI QUALIFICATION STATE: Customer memulai pencarian baru.
@@ -1663,20 +1665,15 @@ Kemudian:
    — Khusus Q2b (Riwayat pencarian): Jawaban seperti "Belum pernah.", "belum pernah cek", "belum lihat", "sudah lihat 3" adalah jawaban Q2b yang VALID → AKUI singkat ("Oke, belum ada referensi sebelumnya 👌") → lanjut ke Q3 (Budget). JANGAN tanya Q2b lagi.
    — Jika QUALIFICATION STATE menampilkan ⏭️ untuk Q2b → customer sudah pernah menjawab tapi tidak cocok pattern — TETAP skip Q2b, lanjut ke Q berikutnya.
 4. Jika pesan terbaru mengandung informasi baru → catat, lalu tanyakan pertanyaan ❓ berikutnya.
-5. Jika semua pertanyaan wajib (Q1 tx, building type, Q2 lokasi, Q3 budget, Q4 penghuni, Q5 red flags, Q6 patokan lokasi, Q7 area alternatif, Q8 tanggal) sudah ✅ DAN tidak ada banner ⚠️ → tampilkan structured brief.
-⛔ JANGAN tampilkan listing properti dalam mode ini.
+5. Jika semua pertanyaan wajib (Q1 tx, building type, Q2 lokasi, Q3 budget, Q4 penghuni, Q5 red flags, Q6 patokan lokasi, Q7 area alternatif, Q8 tanggal) sudah ✅ DAN tidak ada banner ⚠️ → tampilkan structured brief.${showCatalogAfterBrief ? '\n   Setelah brief: LANJUTKAN dengan rekomendasi dari property catalog context (RESPOND_CATALOG_RUN=ON).' : ''}
+⛔ JANGAN tampilkan listing properti SELAMA proses interview Q1-Q12 (sebelum brief).
 ⛔ JANGAN tanya ulang pertanyaan yang sudah ✅ di QUALIFICATION STATE.
 ⛔ SATU pertanyaan per pesan — jangan gabungkan dua pertanyaan.
 ⛔ Q3 Budget: JANGAN tanya langsung — gunakan 2 harga kontras sebagai pilihan reaksi.
 ⛔ Pesan ambigu ("cari properti", "ada properti?") tanpa tipe/transaksi → tanyakan Q1: "Mau sewa atau beli? Dan tipe propertinya apa?"
 ⛔ JANGAN tampilkan summary jika Q3 (Budget) atau Q8 (Tanggal masuk) masih ❓ di QUALIFICATION STATE — walaupun budget/tanggal muncul di raw conversation history dari sesi lama.
 ⛔ JANGAN tampilkan summary jika ada banner ⚠️ di atas, atau jika ada field ❓ yang belum dijawab.
-⛔ Field ❓ di QUALIFICATION STATE = BELUM dijawab di sesi aktif ini. ABAIKAN semua nilai budget/tanggal/penghuni/furnitur dari percakapan sebelumnya (sesi lama) — itu bukan jawaban untuk sesi ini.`
-    : `Create the final WhatsApp reply using only the backend property catalog context above.
-If exact matches are available, recommend exact matches directly.
-If no exact match is available, say that no exact match is available and then present only the backend alternatives.
-⛔ JANGAN tambahkan "Salam hangat," atau tanda tangan agen di akhir pesan — platform sudah menangani tanda tangan secara terpisah.`
-  }`;
+⛔ Field ❓ di QUALIFICATION STATE = BELUM dijawab di sesi aktif ini. ABAIKAN semua nilai budget/tanggal/penghuni/furnitur dari percakapan sebelumnya (sesi lama) — itu bukan jawaban untuk sesi ini.`;
 }
 
 function buildIntentDetectionPrompt(message, provider = 'shared') {
