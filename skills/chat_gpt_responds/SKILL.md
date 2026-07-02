@@ -3,6 +3,7 @@ name: chatgpt-property-response-skill
 provider: ChatGPT (OpenAI)
 version: v6.1 — 2026-06-08
 synced-with: claude_responds/SKILL.md
+description: Skill for generating consistent multilingual property-assistant responses for Elevan Property conversations.
 ---
 
 # ChatGPT — Elevan Property Response Skill

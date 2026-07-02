@@ -1,5 +1,5 @@
 ---
-name: claude-property-response-skill
+name: property-response-skill
 provider: Claude (Anthropic)
 version: v6.1 — 2026-06-08
 synced-with: chat_gpt_responds/SKILL.md
