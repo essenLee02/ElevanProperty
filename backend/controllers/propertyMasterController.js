@@ -385,7 +385,8 @@ class PropertyMasterController extends GeneralController {
 
       if (search)           where.title            = { [Op.like]: `%${search}%` };
       if (filterTxType)     where.transaction_type = filterTxType;
-      if (filterBuildType)  where.building_type    = filterBuildType;
+      // Support multiple building types (comma-separated)
+      if (filterBuildType)  where.building_type    = { [Op.in]: filterBuildType.split(',').map(t => t.trim()) };
       if (filterCityId)     where.city_id          = filterCityId;
       if (filterProvinceId) where.province_id      = filterProvinceId;
 

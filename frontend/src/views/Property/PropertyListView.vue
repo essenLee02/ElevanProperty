@@ -30,11 +30,36 @@
             <option v-for="t in TRANSACTION_TYPES" :key="t.value" :value="t.value">{{ t.label }}</option>
           </select>
         </div>
-        <div class="select-wrapper">
-          <select v-model="filterBuilding" class="filter-select" @change="loadData(1)">
-            <option value="">Semua Tipe</option>
-            <option v-for="b in BUILDING_TYPES" :key="b.value" :value="b.value">{{ b.label }}</option>
-          </select>
+        <div class="filter-building-wrapper">
+          <button
+            class="filter-building-toggle"
+            @click="showBuildingFilter = !showBuildingFilter"
+            :class="{ active: filterBuilding.length > 0 }"
+          >
+            {{ filterBuilding.length > 0 ? `Tipe (${filterBuilding.length})` : 'Semua Tipe' }}
+            <i :class="['fa-solid', showBuildingFilter ? 'fa-chevron-up' : 'fa-chevron-down']"></i>
+          </button>
+          <div v-if="showBuildingFilter" class="filter-building-dropdown">
+            <div class="checkbox-group">
+              <label v-for="b in BUILDING_TYPES" :key="b.value" class="checkbox-item">
+                <input
+                  type="checkbox"
+                  :value="b.value"
+                  :checked="filterBuilding.includes(b.value)"
+                  @change="toggleBuildingType(b.value)"
+                />
+                <span>{{ b.label }}</span>
+              </label>
+            </div>
+            <div class="filter-building-actions">
+              <button v-if="filterBuilding.length > 0" class="btn-reset" @click="clearBuildingFilter">
+                Hapus Filter
+              </button>
+              <button class="btn-apply" @click="applyBuildingFilter">
+                Terapkan
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -130,7 +155,8 @@
   const actionLoading     = ref(null);
   const search            = ref('');
   const filterTransaction = ref('');
-  const filterBuilding    = ref('');
+  const filterBuilding    = ref([]);          // Multi-select: array of building types
+  const showBuildingFilter = ref(false);      // Dropdown toggle untuk checkbox group
   const fnReady           = ref(false);        // true setelah Function_Path siap
   const tableHost         = ref(null);
   const pagerHost         = ref(null);
@@ -191,12 +217,13 @@
     isLoading.value = true;
     clearAlert();
     try {
-      const result = await getPropertyList({
+      const params = {
         page,
         search:           search.value,
         transaction_type: filterTransaction.value || undefined,
-        building_type:    filterBuilding.value    || undefined
-      });
+        building_type:    filterBuilding.value.length > 0 ? filterBuilding.value.join(',') : undefined
+      };
+      const result = await getPropertyList(params);
       if (result?.isSuccess === 1) {
         const rows = result.data.response.properties || [];
         // Siapkan nilai tampil untuk kolom tipe bangunan (price_display sudah formatnya dari backend)
@@ -223,6 +250,24 @@
   const onSearchInput = () => {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => loadData(1), 400);
+  };
+
+  const toggleBuildingType = (value) => {
+    const index = filterBuilding.value.indexOf(value);
+    if (index > -1) {
+      filterBuilding.value.splice(index, 1);
+    } else {
+      filterBuilding.value.push(value);
+    }
+  };
+
+  const clearBuildingFilter = () => {
+    filterBuilding.value = [];
+  };
+
+  const applyBuildingFilter = async () => {
+    showBuildingFilter.value = false;
+    await loadData(1);
   };
 
   /* ── Aksi: toggle status (block/unblock) ────────────────────────── */
@@ -342,3 +387,215 @@
     if (pagerHost.value) $(pagerHost.value).off('.cfProperty');
   });
 </script>
+
+<style scoped>
+.filter-building-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: auto;
+}
+
+.filter-building-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #333;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  min-width: 130px;
+}
+
+.filter-building-toggle:hover {
+  background: #eeeeee;
+  border-color: #bbb;
+}
+
+.filter-building-toggle.active {
+  background: #e8f4f8;
+  border-color: #1e90ff;
+  color: #1e90ff;
+  font-weight: 500;
+}
+
+.filter-building-toggle i {
+  font-size: 12px;
+  transition: transform 0.2s ease;
+}
+
+.filter-building-dropdown {
+  position: fixed;
+  top: auto;
+  left: 50%;
+  right: auto;
+  margin-top: 0;
+  margin-left: 0;
+  transform: translateX(-50%);
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  min-width: 240px;
+  max-width: 90vw;
+  width: fit-content;
+  max-height: 400px;
+}
+
+.checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 8px 0;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s ease;
+  border-bottom: 1px solid #f5f5f5;
+}
+
+.checkbox-item:hover {
+  background: #f9f9f9;
+}
+
+.checkbox-item:last-child {
+  border-bottom: none;
+}
+
+.checkbox-item input[type="checkbox"] {
+  cursor: pointer;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: #1e90ff;
+}
+
+.checkbox-item span {
+  font-size: 14px;
+  color: #333;
+}
+
+.filter-building-actions {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid #f5f5f5;
+  background: #fafafa;
+  border-radius: 0 0 6px 6px;
+}
+
+.btn-reset {
+  flex: 1;
+  padding: 8px 12px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #666;
+  transition: all 0.2s ease;
+}
+
+.btn-reset:hover {
+  background: #f5f5f5;
+  border-color: #bbb;
+}
+
+.btn-apply {
+  flex: 1;
+  padding: 8px 12px;
+  background: #1e90ff;
+  border: 1px solid #1e90ff;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  color: white;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.btn-apply:hover {
+  background: #1873cc;
+  border-color: #1873cc;
+}
+
+.btn-apply:active {
+  transform: scale(0.98);
+}
+
+@media (max-width: 1024px) {
+  .filter-building-dropdown {
+    max-width: calc(100vw - 32px);
+  }
+}
+
+@media (max-width: 768px) {
+  .filter-building-wrapper {
+    position: relative;
+  }
+
+  .filter-building-toggle {
+    font-size: 13px;
+    padding: 8px 12px;
+    min-width: auto;
+  }
+
+  .filter-building-dropdown {
+    max-width: calc(100vw - 24px);
+    width: calc(100vw - 24px);
+  }
+
+  .checkbox-group {
+    max-height: 300px;
+  }
+}
+
+@media (max-width: 480px) {
+  .filter-building-toggle {
+    font-size: 12px;
+    padding: 8px 10px;
+    gap: 6px;
+  }
+
+  .filter-building-dropdown {
+    max-width: calc(100vw - 20px);
+    width: calc(100vw - 20px);
+    min-width: calc(100vw - 20px);
+  }
+
+  .checkbox-item {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  .checkbox-group {
+    max-height: 250px;
+  }
+
+  .filter-building-actions {
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 12px;
+  }
+
+  .btn-reset,
+  .btn-apply {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+}
+</style>
