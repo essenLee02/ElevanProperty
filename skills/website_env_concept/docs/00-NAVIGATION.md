@@ -16,13 +16,13 @@
 | 03 | `03-database-design-and-models.md` | Skema tabel + model Sequelize |
 | 04 | `04-auth-and-agents.md` | JWT, login/register, agent, normalisasi telepon, token per-agent |
 | 05 | `05-backend-api-and-services.md` | Semua route, controller, service, util |
-| 06 | `06-ai-integration-system.md` | Rantai AI (ChatGPT→Claude→Private), whatsappAIService, prompt builder, skill loader |
+| 06 | `06-ai-integration-system.md` | Provider AI (QWEN/Claude/ChatGPT/DeepSeek → Private, tanpa cross-AI), whatsappAIService, prompt builder, skill loader |
 | 07 | `07-frontend-and-modules.md` | Vue 3, router/auth guard, semua modul halaman, Facility, vendor global (App.vue) |
 | 08 | `08-fonnte-whatsapp-integration.md` | Fonnte multi-agent (implementasi: webhook, per-agent token, flow) |
 | 09 | `09-whatsapp-terminal-multiagent.md` | Terminal multi-agent: Fonnte + Kirimi + TimelinesAI, MASSEGE_TERMINAL, gate, routing |
 | 10 | `10-qualification-flow-and-ai-prompt-builder.md` | Q1–Q12, extractQualificationState, state block, findNextQuestion, summary |
 | 11 | `11-private-agent-whatsapp-format.md` | ResponseBuilderWhatsApp, format WA vs web, footer agent, image markdown |
-| 12 | `12-rumah123-and-apify.md` | Data properti live (Apify) + fallback JSON + whatsappPropertyContext |
+| 12 | `12-rumah123-and-apify.md` | Data properti backend-driven (DB dari extended_v3) + Apify live + dynamic rules |
 | 13 | `13-google-sheets-integration.md` | Setup Google Sheets, service, logging contact form (non-blocking) |
 | 14 | `14-external-integrations-s3-email.md` | S3, Email, dan integrasi eksternal lain |
 | 15 | `15-deployment-and-troubleshooting.md` | Deploy checklist, NGROK, start command, troubleshoot |
@@ -38,7 +38,10 @@
 - **Route API apa saja?** → 05 (route + service + util)
 - **Tabel database?** → 03 (skema) → 01 (struktur)
 - **Tambah agent WhatsApp?** → 04 (token per-agent) → 03 (kolom users)
-- **RESPOND_CATALOG_RUN / mode?** → 06 → 10
+- **RESPOND_CATALOG_RUN (Q1–Q12 selalu jalan; OFF=brief, ON=+katalog)?** → 06 → 10
+- **AI provider (QWEN/Claude/ChatGPT/DeepSeek → Private)?** → 06
+- **Data properti backend-driven / DB extended_v3?** → 12 → 03
+- **ngrok auto-start?** → 15 → 02
 
 ---
 

@@ -2,7 +2,7 @@
 
 > File ini khusus mendokumentasikan `ResponseBuilderWhatsApp` dan
 > `generateResponseForTerminalMassege()` — format response Private Agent
-> yang dioptimalkan untuk WhatsApp (Fonnte, WATI, 360dialog).
+> yang dioptimalkan untuk WhatsApp (Fonnte, Kirimi, TimelinesAI).
 >
 > Untuk website chatbot, lihat `06-ai-system-and-skill-loader.md`.
 

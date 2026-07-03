@@ -2,10 +2,16 @@
 
 ## Purpose
 
-When `RESPOND_CATALOG_RUN=OFF` (default), the WhatsApp AI runs in **discovery conversation mode**:
+WhatsApp AI **SELALU** menjalankan **discovery conversation mode** (Q1–Q12), apa pun
+nilai `RESPOND_CATALOG_RUN`:
 - Ask Q1–Q12 in order to build a complete customer profile
 - Show structured brief to agent once all required fields are collected
 - Never re-ask a question that already has a ✅ answer
+
+> **Arti `RESPOND_CATALOG_RUN` (baru):** flag ini **tidak** lagi mematikan Q1–Q12.
+> Ia hanya menentukan isi SETELAH brief: `OFF` → cukup summary/brief saja;
+> `ON` → brief + katalog rekomendasi dari property context. (Dulu keliru dipakai
+> sebagai toggle seluruh mode.)
 
 This system is 100% server-side. The AI never has to guess from raw history — it receives
 an authoritative checklist extracted by `extractQualificationState()`.
@@ -176,7 +182,7 @@ The complete AI system prompt. Structure:
 ⚠️ FORCED REPLY LANGUAGE: Bahasa Indonesia
 Reply in Indonesian. Do not switch to English.
 
-[SUMMARY MODE INSTRUCTIONS — if RESPOND_CATALOG_RUN=OFF]
+[QUALIFICATION MODE INSTRUCTIONS — SELALU aktif; RESPOND_CATALOG_RUN hanya mengatur isi setelah brief]
   DISCOVERY CONVERSATION RULES:
   - Ask one question at a time
   - Q1-Q12 priority order
@@ -337,5 +343,5 @@ long flows). "belum pernah lihat" = hard Q2b-answered → never re-ask. Multi-ty
 **8. Summary humanizes type** (`apartment` → "Apartemen"), includes `✓ Fasilitas` & `✓ Budget`, and
 uses the dynamic `${agentName}` / `${appName}` signature (never hardcode names).
 
-All of this runs identically across Fonnte / ChakraHQ / TimelinesAI via the shared `whatsappAIService` —
+All of this runs identically across Fonnte / Kirimi / TimelinesAI via the shared `whatsappAIService` —
 see `09-whatsapp-terminal-multiagent.md` (multi-agent pipeline).

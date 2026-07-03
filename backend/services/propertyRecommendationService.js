@@ -77,15 +77,22 @@ function getKnownLocations() {
     .sort((a, b) => String(b).length - String(a).length);
 }
 
-// ─── JSON Property Loader ────────────────────────────────────────────────────
-// Reads indonesia_property_36_provinces_flat.json from backend/asset/json_data/
-// (single source of truth — backend serves this file, frontend proxies to it).
-// Normalises each record to the camelCase shape expected by the downstream
-// filter / search functions. Result is cached after first load.
+// ─── JSON Property Loader (FALLBACK ONLY) ────────────────────────────────────
+// Reads indonesia_property_extended_v3.json from backend/asset/json_data/.
+//
+// PENTING: Ini HANYA fallback contoh data. Sumber utama adalah database
+// (model Property + PropertyImage + PropertyFacility + PropertyLocation) yang
+// merupakan salinan dari indonesia_property_extended_v3.json. Loader ini
+// dipanggil LAZY (saat dibutuhkan saja), tidak di-load saat server start —
+// sehingga tidak ada lagi "Loaded N properties" saat startup. Trigger pemuatan:
+//   1. Halaman /about (aboutController → searchProperties)
+//   2. Chatbot setelah "Start Chat" (chatbotController → buildRecommendationContextForLLM)
+//   3. Terminal message saat pemberian summary (fonnte/kirimi/timelinesAI controllers)
+// Hasil di-cache setelah pemuatan pertama.
 
 const JSON_DATA_PATH = path.resolve(
   __dirname,
-  '../asset/json_data/indonesia_property_36_provinces_flat.json'
+  '../asset/json_data/indonesia_property_extended_v3.json'
 );
 
 let _jsonPropertiesCache = null;
@@ -118,7 +125,7 @@ function loadJsonProperties() {
       status: 'available'
     }));
 
-    console.log(`[PropertyRecommendationService] Loaded ${_jsonPropertiesCache.length} properties from JSON file.`);
+    console.log(`[PropertyRecommendationService] Loaded ${_jsonPropertiesCache.length} fallback properties from extended_v3 JSON (lazy).`);
     return _jsonPropertiesCache;
   } catch (err) {
     console.error('[PropertyRecommendationService] Failed to load JSON file:', err.message);
@@ -126,8 +133,11 @@ function loadJsonProperties() {
   }
 }
 
-// Expose as fallbackProperties for backward-compatible module.exports reference.
-const fallbackProperties = loadJsonProperties();
+// LAZY fallback accessor. TIDAK di-load saat module-load (server start) — hanya
+// terpanggil saat about/chatbot/terminal benar-benar butuh contoh data & DB kosong.
+function getFallbackProperties() {
+  return loadJsonProperties();
+}
 
 
 
@@ -819,7 +829,7 @@ function isRecommendationRequest(message = '') {
 }
 
 function mergePropertyCatalog(dbProperties = []) {
-  const source = [...dbProperties, ...fallbackProperties];
+  const source = [...dbProperties, ...getFallbackProperties()];
   const seen = new Set();
   const merged = [];
 
@@ -1132,7 +1142,15 @@ async function getAlternatives(filters = {}) {
     // A1: Type + transaction + location (tanpa budget — relaksasi harga saja)
     add(filterProperties(source, { buildingType: bt, transactionType: tt, location: loc }));
 
-    // A2: Type + transaction (relaksasi lokasi — masih kota / area lain)
+    // A1b: Type + location (relaksasi transaksi TAPI tetap di kota yang diminta).
+    // Prioritas: pertahankan KOTA customer dulu sebelum melebar ke kota lain.
+    // Contoh: "sewa hotel di Madiun" tak ada → tawarkan hotel di Madiun (jual/booking),
+    // BUKAN langsung hotel di kota lain.
+    if (result.length < 4 && loc) {
+      add(filterProperties(source, { buildingType: bt, location: loc }));
+    }
+
+    // A2: Type + transaction (relaksasi lokasi — kota / area lain, LAST RESORT lokasi)
     if (result.length < 4) {
       add(filterProperties(source, { buildingType: bt, transactionType: tt }));
     }
@@ -1314,6 +1332,12 @@ async function buildRecommendationContextForLLM(message = '', history = []) {
     ? `(NOTE: No properties found at original budget. Budget range was expanded to find the closest matches. Inform customer that exact budget is unavailable but present these as the nearest alternatives.)`
     : '';
 
+  // ── DYNAMIC STRICT RESPONSE RULES ─────────────────────────────────────────
+  // Aturan TIDAK boleh hardcode kota/tipe contoh (mis. Surabaya→Malang, house→hotel).
+  // Dibangun dari permintaan NYATA customer (tipe + transaksi + lokasi) supaya AI
+  // fokus & relevan: "sewa hotel di Madiun" → saran hotel sewa di Madiun, BUKAN Bali.
+  const rules = buildDynamicResponseRules(filters, { hasExactMatches: exactMatches.length > 0 });
+
   return {
     filters,
     exactMatches,
@@ -1334,24 +1358,72 @@ async function buildRecommendationContextForLLM(message = '', history = []) {
       alternatives.length ? `Alternative properties from backend catalog (${alternatives.length}):` : '',
       alternatives.length ? formatPropertyRecommendation(alternatives, { limit: 8 }) : '',
       '',
-      'STRICT RESPONSE RULES FOR CHATGPT / CLAUDE / PRIVATE AGENT:',
-      '- If Exact matching properties contains one or more items, do NOT say "no exact match", "tidak ada exact match", or similar wording.',
-      '- The final answer must be created using this backend catalog context.',
-      '- Do not recommend properties that are not listed in Exact matching properties or Alternative properties.',
-      '- If exact matches exist, list exact matches first and do not show unrelated alternatives.',
-      '- The latest customer message has priority over older history.',
-      '- If the requested building type is house, do not recommend hotel unless no house alternatives are provided and you clearly explain it.',
-      '- If the requested location is Surabaya, do not recommend Malang unless no Surabaya alternatives are provided and you clearly explain it.',
-      '- If the customer asks for rental houses in Surabaya, do not recommend hotels in Malang.',
-      '- If no exact match exists, apologize briefly and then present the closest alternatives.',
-      '- If the customer gives a budget range, respect the budget when exact matches exist; otherwise explain if alternatives are outside the range.',
-      '- After listing options, ask one short follow-up question only.'
+      ...rules,
     ].filter(Boolean).join('\n')
   };
 }
 
+/**
+ * Bangun STRICT RESPONSE RULES yang DINAMIS dari permintaan customer.
+ * Tidak ada kota/tipe hardcode — semua mengacu ke filters aktual sehingga saran
+ * yang dihasilkan AI fokus pada tipe + transaksi + kota yang benar-benar diminta.
+ *
+ * Contoh output untuk "sewa hotel di Madiun":
+ *   - Customer meminta: sewa hotel di Madiun. Semua rekomendasi WAJIB fokus ke ini.
+ *   - Hanya rekomendasikan tipe "hotel" ...
+ *   - Hanya rekomendasikan properti di "Madiun" ...
+ *
+ * @param {object} filters
+ * @param {{hasExactMatches:boolean}} opts
+ * @returns {string[]}
+ */
+function buildDynamicResponseRules(filters = {}, opts = {}) {
+  const typeLabel = filters.buildingType    ? humanBuildingType(filters.buildingType)      : '';
+  const txLabel   = filters.transactionType ? humanTransactionType(filters.transactionType) : '';
+  const locLabel  = (filters.location || '').trim();
+
+  const requestLabel = [txLabel, typeLabel, locLabel ? `di ${locLabel}` : '']
+    .filter(Boolean).join(' ').trim() || 'properti yang diminta customer';
+
+  const rules = [
+    'STRICT RESPONSE RULES (dynamic — fokus pada permintaan customer ini, JANGAN pakai contoh kota/tipe lain):',
+    `- Customer meminta: ${requestLabel}. SEMUA rekomendasi WAJIB fokus pada permintaan ini.`,
+  ];
+
+  if (typeLabel) {
+    rules.push(
+      `- Hanya rekomendasikan properti bertipe "${typeLabel}". JANGAN tawarkan tipe lain ` +
+      `kecuali BENAR-BENAR tidak ada "${typeLabel}" di katalog, dan Anda jelaskan alasannya secara eksplisit.`
+    );
+  }
+  if (locLabel) {
+    rules.push(
+      `- Hanya rekomendasikan properti di kota/area "${locLabel}". JANGAN tawarkan properti di kota lain ` +
+      `kecuali tidak ada satu pun di "${locLabel}"; jika terpaksa, sebutkan JELAS bahwa itu di luar "${locLabel}".`
+    );
+  }
+  if (txLabel) {
+    rules.push(
+      `- Hanya untuk transaksi "${txLabel}". JANGAN campur dengan transaksi lain (mis. jual vs sewa/booking).`
+    );
+  }
+
+  rules.push(
+    '- Jawaban HANYA boleh memakai properti yang tercantum di "Exact matching properties" atau "Alternative properties" di atas. DILARANG mengarang listing.',
+    opts.hasExactMatches
+      ? '- Karena ada Exact matching properties: JANGAN katakan "tidak ada"/"no exact match". Tampilkan exact matches lebih dulu, jangan tampilkan alternatif tak relevan.'
+      : `- Tidak ada exact match: minta maaf singkat, nyatakan dengan jelas bahwa "${requestLabel}" belum tersedia, lalu tawarkan alternatif TERDEKAT yang mempertahankan tipe & kota yang sama bila memungkinkan.`,
+    '- Pesan customer TERBARU lebih diprioritaskan daripada riwayat lama.',
+    '- Jika customer memberi rentang budget: hormati budget saat ada exact match; jika alternatif di luar budget, katakan dengan jujur.',
+    '- Setelah menampilkan opsi, ajukan tepat SATU pertanyaan lanjutan yang singkat.'
+  );
+
+  return rules;
+}
+
 module.exports = {
-  fallbackProperties,
+  getFallbackProperties,
+  loadJsonProperties,
   mergePropertyCatalog,
   searchProperties,
   formatPropertyRecommendation,

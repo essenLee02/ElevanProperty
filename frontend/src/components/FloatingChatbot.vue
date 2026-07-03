@@ -51,13 +51,13 @@ import { getChatbotConfig, sendChatbotMessage } from '../services/chatbotApi';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const PHONE_ALLOWED_REGEX        = /[^0-9+\-\s]/g;
-const JSON_DATA_URL              = '/json_data/indonesia_property_36_provinces_flat.json';
 const PROFILE_COOKIE_NAME        = 'propertyChatProfile';
 const DEFAULT_COOKIE_TTL_MINUTES = 20;
 const DEFAULT_COOKIE_TTL_SECONDS = DEFAULT_COOKIE_TTL_MINUTES * 60;
 
-/** Maximum properties sent as context on the first chat message */
-const CONTEXT_SAMPLE_SIZE = 50;
+// Catatan: frontend TIDAK lagi me-load katalog properti dari JSON. Backend yang
+// membangun property context dari database (buildRecommendationContextForLLM)
+// setiap kali pesan chatbot dikirim — jadi tidak perlu mengirim sampel dari sini.
 
 // ─── MessageFormatter ─────────────────────────────────────────────────────────
 /**
@@ -177,9 +177,6 @@ const draft             = ref('');
 const errorMessage      = ref('');
 const messagesContainer = ref(null);
 
-/** Prevents re-sending the property context JSON payload on every subsequent message */
-const contextSentOnce = ref(false);
-
 const profileCookieTtlSeconds = ref(DEFAULT_COOKIE_TTL_SECONDS);
 const profileCookieTtlMinutes = ref(DEFAULT_COOKIE_TTL_MINUTES);
 
@@ -268,7 +265,6 @@ function resetChatProfile(message = '') {
   deleteCookie(PROFILE_COOKIE_NAME);
   Object.assign(profile, { name: '', phone: '', location: '' });
   profileReady.value    = false;
-  contextSentOnce.value = false;
   messages.value        = createInitialMessages();
   if (message) errorMessage.value = message;
 }
@@ -337,151 +333,6 @@ function ensureProfileCookieIsValid() {
   return true;
 }
 
-// ─── Property Context Helpers ─────────────────────────────────────────────────
-
-/**
- * Lowercase and normalise a string for keyword matching (strips punctuation, collapses spaces).
- *
- * @param {string} value
- * @returns {string}
- */
-function normalizeSearchText(value) {
-  return String(value || '').toLowerCase().replace(/[^a-z0-9\s]/gi, ' ').replace(/\s+/g, ' ').trim();
-}
-
-/**
- * Concatenate all searchable text fields of a property record into one string.
- *
- * @param {object} property
- * @returns {string}
- */
-function propertySearchText(property) {
-  return normalizeSearchText([
-    property.title,
-    property.description,
-    property.price,
-    property.address,
-    property.building_type,
-    property.transaction_type,
-    property.location?.province,
-    property.location?.city,
-    property.location?.area,
-    Array.isArray(property.facilities) ? property.facilities.join(' ') : property.facilities,
-  ].filter(Boolean).join(' '));
-}
-
-/**
- * Score a property record against the user's first message for relevance ranking.
- * Additive scoring: token matches (+1 each), transaction type (+4–5), building type (+5).
- *
- * @param {object} property
- * @param {string} message
- * @returns {number}
- */
-function scorePropertyForMessage(property, message) {
-  const query      = normalizeSearchText(message);
-  const searchable = propertySearchText(property);
-
-  // Token match score (+1 per matched token of ≥4 chars)
-  let score = query.split(' ')
-    .filter(t => t.length >= 4)
-    .reduce((acc, token) => acc + (searchable.includes(token) ? 1 : 0), 0);
-
-  // Transaction type bonus
-  if (/sewa|rent/.test(query) && property.transaction_type === 'rent') score += 5;
-  if (/jual|beli|sale|purchase/.test(query) && ['sale', 'purchase'].includes(property.transaction_type)) score += 4;
-
-  // Building type bonus — each entry is [queryPattern, internalType]
-  const TYPE_BOOSTS = [
-    [/rumah|house/,         'house'],
-    [/villa/,               'villa'],
-    [/hotel/,               'hotel'],
-    [/apartemen|apartment/, 'apartment'],
-    [/kos|kost/,            'boarding_house'],
-    [/ruko|shophouse/,      'shophouse'],
-    [/kantor|office/,       'office'],
-    [/gudang|warehouse/,    'warehouse'],
-    [/lainnya|others?/,     'others'],
-  ];
-  TYPE_BOOSTS.forEach(([pattern, type]) => {
-    if (pattern.test(query) && property.building_type === type) score += 5;
-  });
-
-  return score;
-}
-
-/**
- * Extract the minimal set of fields needed for the LLM property context payload.
- * Keeps the payload small while retaining the fields the AI uses for matching.
- *
- * @param {object} property
- * @returns {object}
- */
-function simplifyPropertyForContext(property) {
-  return {
-    id:               property.id,
-    title:            property.title,
-    building_type:    property.building_type,
-    transaction_type: property.transaction_type,
-    price:            property.price,
-    province:         property.location?.province || '',
-    city:             property.location?.city     || '',
-    area:             property.location?.area     || '',
-    facilities:       Array.isArray(property.facilities) ? property.facilities.slice(0, 3).join(', ') : '',
-    building_area:    property.building_area,
-    land_area:        property.land_area,
-  };
-}
-
-/**
- * Load a compact property context sample from the local JSON data file.
- *
- * Strategy:
- *  1. Score all records against the user's first message and take the top CONTEXT_SAMPLE_SIZE.
- *  2. Fall back to an evenly-distributed sample when no relevant matches are found.
- *
- * @param {string} userMessage - The user's first chat message (used for relevance scoring)
- * @returns {Promise<object|null>}
- */
-async function loadPropertyContextSample(userMessage = '') {
-  try {
-    const res = await fetch(JSON_DATA_URL);
-    if (!res.ok) throw new Error(`Property JSON request failed: ${res.status}`);
-
-    const json       = await res.json();
-    const properties = Array.isArray(json.properties) ? json.properties : [];
-
-    let selected = properties
-      .map(p => ({ p, score: scorePropertyForMessage(p, userMessage) }))
-      .filter(({ score }) => score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, CONTEXT_SAMPLE_SIZE)
-      .map(({ p }) => simplifyPropertyForContext(p));
-
-    let selectionStrategy = 'relevant_to_first_message';
-
-    if (!selected.length) {
-      const step = Math.max(1, Math.floor(properties.length / CONTEXT_SAMPLE_SIZE));
-      selected = [];
-      for (let i = 0; i < properties.length && selected.length < CONTEXT_SAMPLE_SIZE; i += step) {
-        selected.push(simplifyPropertyForContext(properties[i]));
-      }
-      selectionStrategy = 'evenly_distributed_sample';
-    }
-
-    return {
-      sourceFile:        'backend/asset/json_data/indonesia_property_36_provinces_flat.json',
-      userLocation:      profile.location,
-      totalRecords:      properties.length,
-      sampleSize:        selected.length,
-      selectionStrategy,
-      properties:        selected,
-    };
-  } catch (_) {
-    return null;
-  }
-}
-
 // ─── Chat Actions ─────────────────────────────────────────────────────────────
 
 /**
@@ -511,8 +362,8 @@ const startChat = () => {
 /**
  * Send the current draft message to the backend chatbot API.
  *
- * On the first message, loads the property context JSON and attaches it to the payload
- * so the AI has relevant catalog data available without needing to call the backend catalog.
+ * Property context TIDAK lagi dikirim dari frontend — backend yang membangun
+ * konteks katalog dari database (buildRecommendationContextForLLM) untuk setiap pesan.
  */
 const sendMessage = async () => {
   if (!draft.value || isSending.value) return;
@@ -527,18 +378,11 @@ const sendMessage = async () => {
 
   isSending.value = true;
   try {
-    let propertyContext = null;
-    if (!contextSentOnce.value) {
-      propertyContext       = await loadPropertyContextSample(`${userText} ${profile.location}`);
-      contextSentOnce.value = true;
-    }
-
     const payload = {
       name:     profile.name,
       phone:    profile.phone,
       location: profile.location,
       message:  userText,
-      ...(propertyContext ? { propertyContext } : {}),
     };
 
     const response = await sendChatbotMessage(payload);

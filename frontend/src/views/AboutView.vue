@@ -110,20 +110,24 @@ function normalizeForCard(item) {
 }
 
 /**
- * Load portfolio records only from the static JSON catalog.
- * No dummy generator or random portfolio function is used on About Us.
+ * Load portfolio records from the BACKEND API (GET /about).
+ * Frontend tidak lagi mem-fetch file JSON — backend yang me-load data dari
+ * database (salinan indonesia_property_extended_v3.json) lalu mengirim portfolios.
  */
 const loadAbout = async () => {
   isLoading.value = true;
 
   try {
-    const res = await fetch('/json_data/indonesia_property_36_provinces_flat.json');
-    if (!res.ok) throw new Error(`Property JSON request failed: ${res.status}`);
+    const res = await api.get('/about');
+    const data = res.data?.data || {};
 
-    const json = await res.json();
-    portfolios.value = Array.isArray(json.properties) ? json.properties : [];
+    if (data.company) {
+      company.value = { ...company.value, ...data.company };
+    }
+
+    portfolios.value = Array.isArray(data.portfolios) ? data.portfolios : [];
   } catch (err) {
-    console.error('Failed to load property JSON:', err);
+    console.error('Failed to load properties from backend:', err);
     portfolios.value = [];
   } finally {
     isLoading.value = false;

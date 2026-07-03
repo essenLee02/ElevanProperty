@@ -27,15 +27,11 @@ export default defineConfig(({ mode }) => {
       host: devHost,
       port: devPort,
       strictPort: toBoolean(env.VITE_DEV_SERVER_STRICT_PORT, true),
-      open: toBoolean(env.VITE_DEV_SERVER_OPEN, false),
-      proxy: {
-        // Proxy /json_data/* ke backend — sumber tunggal dari backend/asset/json_data/
-        // Frontend tidak perlu menyimpan salinan JSON di public/json_data/
-        '/json_data': {
-          target: `http://localhost:${env.PORT || 5005}`,
-          changeOrigin: true
-        }
-      }
+      open: toBoolean(env.VITE_DEV_SERVER_OPEN, false)
+      // Catatan: frontend TIDAK lagi mem-fetch file JSON properti secara langsung.
+      // Semua data properti diambil dari backend via API (src/services/api.js →
+      // http://localhost:5055/api). Backend-lah yang me-load data dari database
+      // (salinan indonesia_property_extended_v3.json). Proxy /json_data dihapus.
     },
     preview: {
       host: previewHost,

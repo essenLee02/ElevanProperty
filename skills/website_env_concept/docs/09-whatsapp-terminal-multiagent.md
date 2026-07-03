@@ -1,11 +1,15 @@
 # 09. WhatsApp Terminal Multi-Agent
-## (fonnteChatController · chakraHQController · timelinesAIChatController)
+## (fonnteChatController · kirimiChatController · timelinesAIChatController)
 
 > Tiga controller yang menangani pesan WhatsApp masuk dari platform berbeda
-> (**Fonnte, ChakraHQ, TimelinesAI**). Semua menggunakan **keyword filter +
+> (**Fonnte, Kirimi, TimelinesAI**). Semua menggunakan **keyword filter +
 > context continuation** agar hanya merespons pesan terkait properti — termasuk
 > jawaban singkat lanjutan percakapan. Pipeline AI-nya identik (whatsappAIService).
-> (WATI/360dialog = legacy, tidak lagi dipakai sebagai terminal platform.)
+> (ChakraHQ/WATI/360dialog = legacy, tidak lagi dipakai sebagai terminal platform.)
+
+> **Dua env yang berbeda:** `MESSAGE_TERMINAL` (satu nilai) = sumber metadata
+> `source` di log AI (`kirimi_whatsapp` / `timelinesai_whatsapp` / `fonnte_whatsapp`).
+> `MASSEGE_TERMINAL` (boleh multi) = platform mana yang di-render ke terminal + routing `POST /`.
 
 ---
 
@@ -14,9 +18,9 @@
 ```
 Customer kirim WA
         ↓
-Platform (Fonnte / ChakraHQ / TimelinesAI)
+Platform (Fonnte / Kirimi / TimelinesAI)
         ↓ webhook
-NGROK → backend POST / atau POST /api/[platform]/webhook
+ngrok → backend POST / atau POST /api/[platform]/webhook
         ↓
 Controller terima payload
         ↓
@@ -37,15 +41,16 @@ hasPropertyKeyword(message)?
 generateWhatsAppAIReply({ session, message, agentName })
     ↓
     [1] getWhatsappPropertyContext(message)
-           → Coba Rumah123 (APIFY + RUMAH123_DATA=ON)
-           → Fallback: backend/asset/json_data/flat.json
+           → Database (model Property + relasi) sebagai sumber utama
+           → Fallback: backend/asset/json_data/indonesia_property_extended_v3.json
+           → Opsional Rumah123 (APIFY + RUMAH123_DATA=ON)
     [2] getConversationHistory(session.id, 10)
-    [3] ChatGPT → Claude (via generateWhatsappReplyWithProviderFallback)
-    [4] Private Agent → generateResponseForTerminalMassege() [fallback]
+    [3] Primary AI (deepseek/qwen/claude/chatgpt) via generateWhatsappReplyWithProviderFallback
+    [4] Private Agent → generateResponseForTerminalMassege() [fallback terjamin]
         ↓
 Simpan AI reply ke DB
         ↓
-Kirim balasan via platform API (Fonnte / ChakraHQ / TimelinesAI)
+Kirim balasan via platform API (Fonnte / Kirimi / TimelinesAI)
         ↓
 LOG RINGKASAN TERMINAL (full response, tidak truncated)
 ```
@@ -129,10 +134,10 @@ if (!isPropertyQuery && !isContinuation) {
 ```env
 # backend/.env
 MASSEGE_TERMINAL=FONNTE                       # Hanya Fonnte log ke terminal
-MASSEGE_TERMINAL=CHAKRAHQ                      # Hanya ChakraHQ
+MASSEGE_TERMINAL=KIRIMI                        # Hanya Kirimi
 MASSEGE_TERMINAL=TIMELINESAI                   # Hanya TimelinesAI
-MASSEGE_TERMINAL=FONNTE,CHAKRAHQ              # Fonnte + ChakraHQ (multi)
-MASSEGE_TERMINAL=FONNTE,CHAKRAHQ,TIMELINESAI # Semua
+MASSEGE_TERMINAL=FONNTE,KIRIMI               # Fonnte + Kirimi (multi)
+MASSEGE_TERMINAL=FONNTE,KIRIMI,TIMELINESAI  # Semua
 ```
 
 `MASSEGE_TERMINAL` hanya mengontrol tampilan terminal. Semua platform tetap memproses dan simpan ke DB.
@@ -183,11 +188,11 @@ app.post('/', (req, res) => {
   const active = (process.env.MASSEGE_TERMINAL || 'FONNTE').toUpperCase().split(',')[0].trim();
   if (active === 'FONNTE')      return FonnteChatController.handleInboundMessage(req, res);
   if (active === 'TIMELINESAI') return TimelinesAIChatController.handleInboundMessage(req, res);
-  if (active === 'CHAKRAHQ')    return ChakraHQController.handleInboundMessage(req, res);
+  if (active === 'KIRIMI')      return KirimiChatController.handleInboundMessage(req, res);
 });
 ```
 > Root `POST /` memakai **nilai pertama** `MASSEGE_TERMINAL` untuk routing webhook
-> tanpa-path. Tiap platform juga punya endpoint sendiri (`/api/chakrahq/webhook`, dst.).
+> tanpa-path. Tiap platform juga punya endpoint sendiri (`/api/kirimi/webhook`, dst.).
 
 ---
 
@@ -240,9 +245,10 @@ getWhatsappPropertyContext(customerMessage)
         ↓
 Extract: location, propertyType, transactionType
         ↓
-RUMAH123_DATA=ON? → getRumah123Listings() via Apify
-        ↓ gagal/kosong atau OFF
-flat JSON: backend/asset/json_data/indonesia_property_36_provinces_flat.json
+Database (model Property + relasi) sebagai sumber utama
+        ↓ (opsional) RUMAH123_DATA=ON → getRumah123Listings() via Apify
+        ↓ fallback bila DB kosong
+JSON: backend/asset/json_data/indonesia_property_extended_v3.json (lazy)
         ↓
 return { contextText, source: 'rumah123'|'flat_json', location, propertyType, transactionType }
 ```
@@ -288,36 +294,33 @@ POST /api/fonnte-chat/poller-stop
 
 ---
 
-## Controller 2 — chakraHQController
+## Controller 2 — kirimiChatController
 
-**File:** `backend/controllers/chakraHQController.js`
-**Endpoint:** `POST /api/chakrahq/webhook` (+ `POST /` bila `MASSEGE_TERMINAL` diawali CHAKRAHQ)
-**Format:** Meta WhatsApp Cloud API (bukan format flat ala Fonnte).
+**File:** `backend/controllers/kirimiChatController.js`
+**Endpoint:** `POST /api/kirimi/webhook` (+ `POST /` bila `MASSEGE_TERMINAL` diawali KIRIMI)
+**Kredensial:** akun `KIRIMI_USER_CODE` + `KIRIMI_SECRET` (`.env`); device per-agent
+di `users.kirimi_device_id` (mis. `D-3OCA6`).
 
 ### Inbound (webhook)
-`extractFields()` mendukung 3 bentuk payload:
-- **Meta pass-through**: `entry[].changes[].value.{messages,contacts,metadata}`
-- **Chakra MessagePayload**: `{ message:{...}, contacts:[{wa_id, profile.name}], messageId }`
-- **Legacy/simple** (fallback defensif): `{ phone/pengirim, pesan/message }`
+Payload Kirimi memuat pengirim (nomor customer), teks pesan, dan device_id tujuan
+(dipakai untuk mencocokkan agent lewat `users.kirimi_device_id`).
 
-Teks di `message.text.body`; pengirim `message.from`/`contacts[0].wa_id`.
-
-### Send (session message — hanya dalam 24 jam setelah pesan customer)
+### Send
 ```
-POST https://api.chakrahq.com/v1/ext/plugin/whatsapp/{pluginId}/api/{apiVersion}/{phoneNumberId}/messages
-Authorization: Bearer {chakra_hq_token}   ← per-agent (users.chakra_hq_token)
-Body: { messaging_product:"whatsapp", to, type:"text", text:{ body } }
+POST https://api.kirimi.id/v1/send-message
+Body: { user_code, secret, device_id, receiver, message }
+# Opsional: /v1/send-message-fast (KIRIMI_SEND_FAST=true, tanpa efek mengetik)
 ```
-Konfigurasi `.env`: `CHAKRAHQ_PLUGIN_ID`, `CHAKRAHQ_PHONE_NUMBER_ID`,
-`CHAKRAHQ_API_VERSION` (lihat WhatsApp Setup di dashboard ChakraHQ).
+Opsi `.env`: `KIRIMI_API_URL`, `KIRIMI_SEND_FAST`, `KIRIMI_TIMEOUT_MS`,
+`KIRIMI_RETRY_COUNT`, `KIRIMI_RETRY_DELAY_MS`.
 
 ### API Endpoints
 ```
-POST /api/chakrahq/webhook
-POST /api/chakrahq/simulate
-GET  /api/chakrahq/status
-GET  /api/chakrahq/agents
-GET  /api/chakrahq/check-api
+POST /api/kirimi/webhook
+POST /api/kirimi/simulate
+GET  /api/kirimi/agents
+GET  /api/kirimi/status
+GET  /api/kirimi/check-api
 ```
 
 ---
@@ -339,9 +342,9 @@ Detail field/endpoint spesifik: lihat `timelinesAIChatController.js`.
 ```javascript
 // backend/utils/terminalSwitch.js
 isTerminalActive('FONNTE')  // → boolean
-isTerminalActive('CHAKRAHQ')
+isTerminalActive('KIRIMI')
 isTerminalActive('TIMELINESAI')
-getActiveTerminals()        // → ['FONNTE'] | ['FONNTE','CHAKRAHQ','TIMELINESAI'] | ...
+getActiveTerminals()        // → ['FONNTE'] | ['FONNTE','KIRIMI','TIMELINESAI'] | ...
 
 // backend/services/sessionService.js
 getConversationHistory(sessionId, limit)  // Used untuk context continuation check
@@ -353,10 +356,10 @@ getConversationHistory(sessionId, limit)  // Used untuk context continuation che
 
 ```bash
 # Status semua agent
-curl http://localhost:5005/api/fonnte-chat/status
+curl http://localhost:5055/api/fonnte-chat/status
 
 # Simulate pesan properti (test full pipeline)
-curl -X POST http://localhost:5005/api/fonnte-chat/simulate \
+curl -X POST http://localhost:5055/api/fonnte-chat/simulate \
   -H "Content-Type: application/json" \
   -d '{"sender":"628213311936","message":"sewa rumah 3 kamar surabaya","name":"Test"}'
 
@@ -365,13 +368,13 @@ curl -X POST http://localhost:5005/api/fonnte-chat/simulate \
 # 2. Lalu kirim: "saya beli" → harus dibalas (continuation dari langkah 1)
 
 # Test non-property (harus diabaikan)
-curl -X POST http://localhost:5005/ \
+curl -X POST http://localhost:5055/ \
   -H "Content-Type: application/json" \
   -d '{"sender":"628xxx","name":"Test","message":"cari bebek goreng","device":"628xxx","inboxid":"T1"}'
 # Terminal: "📥 Disimpan, tidak dibalas"
 
 # Test context continuation (harus dibalas jika ada history properti)
-curl -X POST http://localhost:5005/ \
+curl -X POST http://localhost:5055/ \
   -H "Content-Type: application/json" \
   -d '{"sender":"628xxx","name":"Test","message":"saya beli","device":"628xxx","inboxid":"T2"}'
 # Jika ada history property: dibalas; jika history kosong: diabaikan

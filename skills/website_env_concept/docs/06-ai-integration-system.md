@@ -1,31 +1,50 @@
 # 06. AI Integration System
 
-## 3-Layer Fallback Architecture
+## Provider Fallback Architecture (single primary → Private Agent)
+
+`AI_PRIMARY_PROVIDER` memilih **satu** AI eksternal sebagai primary. Jika primary
+gagal, sistem **TIDAK** melompat ke AI eksternal lain — langsung jatuh ke
+**Private Agent** (chatbotPrivateController) yang selalu memberi jawaban.
+
+```
+AI_PRIMARY_PROVIDER=qwen      → QWEN     → Private Agent
+AI_PRIMARY_PROVIDER=claude    → Claude   → Private Agent
+AI_PRIMARY_PROVIDER=chatgpt   → ChatGPT  → Private Agent
+AI_PRIMARY_PROVIDER=deepseek  → DeepSeek → Private Agent   (baru)
+AI_PRIMARY_PROVIDER=private   → Private Agent (langsung, tanpa AI eksternal)
+```
+
+Pengecualian: bila primary = `private` dan Private Agent gagal, ada rantai
+darurat eksternal (`executeExternalAIFallbackChain`): DeepSeek → Claude → ChatGPT → QWEN.
 
 ```
 Customer Message (WhatsApp or Website)
      ↓
-[PRE-QUALIFICATION GATE]  ← Extract Q1-Q12 state from history
-     ↓ (if state incomplete)
-Return qualification question immediately (no AI called)
-     ↓ (if RESPOND_CATALOG_RUN=OFF and state complete)
-Show summary brief (Private Agent, no AI called)
-     ↓ (if RESPOND_CATALOG_RUN=ON)
-ChatGPT ──[quota/key error]──→ Claude
-                                    ↓
-                         [invalid key/error]
-                                    ↓
-                        Private Agent (chatbotPrivateController)
-                        (local logic, guaranteed response)
+[Q1–Q12 QUALIFICATION]  ← extractQualificationState dari history (SELALU jalan)
+     ↓ (jika ada pertanyaan wajib belum terjawab)
+Ajukan pertanyaan berikutnya (brief interview, belum tampilkan katalog)
+     ↓ (jika semua pertanyaan wajib ✅ → tampilkan structured brief)
+     ↓ (RESPOND_CATALOG_RUN=OFF) brief saja → selesai
+     ↓ (RESPOND_CATALOG_RUN=ON)  brief + katalog rekomendasi
+     ↓
+[PRIMARY AI] ──[quota/key/network error]──→ Private Agent (jawaban terjamin)
 ```
 
 Toggle via `backend/.env`:
 ```env
-AI_PRIMARY_PROVIDER=chatgpt          # or 'claude' to make Claude primary
-ENABLE_CLAUDE_FALLBACK=true
+AI_PRIMARY_PROVIDER=deepseek         # qwen | claude | chatgpt | deepseek | private
+ENABLE_CLAUDE_FALLBACK=true          # efektif = toggle global Claude (on/off)
 ENABLE_CHATBOT_PRIVATE_CONTROLLER=true
-RESPOND_CATALOG_RUN=OFF              # OFF = Q1-Q12 mode; ON = catalog mode
+RESPOND_CATALOG_RUN=OFF              # OFF = brief saja ; ON = brief + katalog
 ```
+
+> **PENTING — arti RESPOND_CATALOG_RUN (baru):** Q1–Q12 **SELALU** dijalankan
+> apa pun nilainya. Flag ini hanya menentukan isi SETELAH brief:
+> `OFF` → cukup summary/brief saja; `ON` → brief + katalog rekomendasi.
+> (Dulu flag ini keliru dipakai sebagai toggle seluruh mode.)
+
+> **Larangan:** dilarang membuat `const` hardcode untuk nama model AI. Semua nama
+> model dibaca dari `.env` (`OPENAI_MODEL`, `CLAUDE_MODEL`, `QWEN_MODEL`, `DEEPSEEK_MODEL`).
 
 ---
 
@@ -56,10 +75,12 @@ generateWhatsAppAIReply({
    - `buildFacilityContextBlock()` — always injected (facility names from DB)
    - `buildCityContextBlock()` — injected only when message is location-related
    - Cached 5 minutes, parallel fetch. See doc 16 for full details.
-3.5. **Check `RESPOND_CATALOG_RUN`**:
-   - `OFF` → call `aiPromptBuilderService.buildWhatsappReplyPrompt()` → Private Agent
-   - `ON` → call ChatGPT → Claude → Private Agent
-4. **Get property context** (`getWhatsappPropertyContext`)
+3.5. **Check `RESPOND_CATALOG_RUN`** (hanya memengaruhi isi SETELAH brief):
+   - `OFF` → setelah semua Q1–Q12 wajib ✅ → tampilkan brief saja
+   - `ON` → setelah brief → lanjutkan dengan katalog rekomendasi dari property context
+   - Q1–Q12 tetap dijalankan pada kedua nilai; AI provider dipilih oleh `AI_PRIMARY_PROVIDER`
+4. **Get property context** (`getWhatsappPropertyContext`) — sumber utama **database**
+   (model Property + relasi), fallback JSON `indonesia_property_extended_v3.json`
 5. **Build full prompt** (`buildWhatsappReplyPrompt`) with Q1-Q12 state + facility + city context injected
 6. **Call AI provider chain** → return reply
 
@@ -189,26 +210,34 @@ Assembles complete prompt injected to ChatGPT or Claude:
 
 ## aiProviderService.js
 
-### `executeAIProviderWithFallback(taskName, chatGPTFn, claudeFn)`
+### `executeAIProviderWithFallback(taskName, chatGPTFn, claudeFn, qwenFn, deepseekFn)`
 
-1. Read `AI_PRIMARY_PROVIDER` from env
-2. Call primary provider function
-3. On failure (429 quota, 401 invalid key, network error) → call fallback
-4. Returns `{ reply, provider, primaryProvider, fallbackUsed, fallbackProvider, primaryError }`
+1. Read `AI_PRIMARY_PROVIDER` from env (`getPrimaryAIProvider`)
+2. `PROVIDER_ORDER` = **satu provider per key** — `{ qwen:['qwen'], claude:['claude'], chatgpt:['chatgpt'], deepseek:['deepseek'] }`.
+   Tidak ada cross-AI: bila primary gagal, caller menjatuhkan ke Private Agent.
+3. `avail` mengecek key/config tiap provider: `canUseChatGPT / canUseClaude / canUseQwen / canUseDeepSeek`
+4. Returns `{ reply, provider, primaryProvider, fallbackUsed, fallbackProvider, primaryError, providerErrors }`
 
-Three wrapper functions for different use cases:
+Helpers: `getPrimaryAIProvider`, `getAIProviderOrder`, `isClaudeEnabled`,
+`checkAIProviderConfig` (status semua provider termasuk deepseek).
+
+`executeExternalAIFallbackChain(...)` — dipakai HANYA saat `AI_PRIMARY_PROVIDER=private`
+dan Private Agent gagal; urutan darurat: **DeepSeek → Claude → ChatGPT → QWEN**.
+
+Empat wrapper (masing-masing meneruskan `deepseekFn`):
 - `generateChatbotReplyWithProviderFallback` — website chatbot
 - `generateContactReplyWithProviderFallback` — contact form
 - `generateWhatsappReplyWithProviderFallback` — WhatsApp (all platforms)
+- `generateWhatsappExternalAIFallback` — rantai darurat saat primary=private
 
-### AI Error Handling
+### AI Error Handling (no cross-AI)
 
 | Error | Behavior |
 |---|---|
-| OpenAI 429 (quota exceeded) | Falls back to Claude |
-| OpenAI 401 (invalid key) | Falls back to Claude |
-| Claude 401 (invalid/placeholder key) | Falls back to Private Agent |
-| All providers fail | Returns 502 with error message |
+| Primary 429 (quota) / 401 (key) / network | Jatuh ke **Private Agent** (bukan AI eksternal lain) |
+| DeepSeek 402/429 | Ditandai kuota, jatuh ke Private Agent |
+| Provider key kosong/invalid | Provider di-skip; jatuh ke Private Agent |
+| Private Agent juga gagal | Returns 502 with error message |
 | `ENABLE_CHATBOT_PRIVATE_CONTROLLER=false` | Returns 502 (no private fallback) |
 
 ---
@@ -224,11 +253,33 @@ Three wrapper functions for different use cases:
 
 ## Claude Integration (`claudeService.js`)
 
-- Model: `claude-haiku-4-5-20251001` (from `CLAUDE_MODEL` env)
+- Model: dari `CLAUDE_MODEL` env (mis. `claude-3-haiku`)
 - Key: `ANTHROPIC_API_KEY`
 - API version: `2023-06-01`
-- Max tokens: 1200 (`CLAUDE_MAX_TOKENS`)
+- Max tokens: `CLAUDE_MAX_TOKENS`
 - Implementation: **raw axios HTTP** (not Anthropic SDK)
+
+---
+
+## QWEN Integration (`qwenService.js`)
+
+- OpenAI-compatible (DashScope / Bailian). Base URL: `QWEN_BASE_URL`
+  (International: `https://dashscope-intl.aliyuncs.com/compatible-mode/v1`)
+- Key: `QWEN_API_KEY` (standar `sk-...`, atau Bailian `sk-ws-...` + `QWEN_APP_ID`)
+- Model: `QWEN_MODEL` (mis. `qwen3-vl-flash`) · Max tokens: `QWEN_MAX_TOKENS`
+
+---
+
+## DeepSeek Integration (`deepseekService.js`) — baru
+
+- OpenAI-compatible. Endpoint: `${DEEPSEEK_BASE_URL}/v1/chat/completions`
+  (default base `https://api.deepseek.com`)
+- Key: `DEEPSEEK_API_KEY` · Model: `DEEPSEEK_MODEL` (mis. `deepseek-chat`)
+- Param dinamis dari `.env`: `DEEPSEEK_MAX_TOKENS`, `DEEPSEEK_TEMPERATURE`, `DEEPSEEK_TOP_P`
+- System prompt = skill `chat_gpt_responds` (via `getProjectSkillInstruction('deepseek')`)
+- Implementation: **raw axios HTTP**. Log `[DEEPSEEK REQUEST]` menampilkan model +
+  max_tokens + temperature + top_p + source (kirimi/timelinesai/fonnte)
+- Fungsi: `generateDeepSeekContactReply / ChatbotReply / WhatsappReply`, `checkDeepSeekConfig`
 
 ---
 
@@ -311,5 +362,8 @@ skills/
 `loadProjectSkillPrompt(provider)`:
 - Reads all `.md` files from the appropriate folder
 - Combines them with section headers
-- Truncates to 36000 characters total
-- Provider values: `'chatgpt'` → `chat_gpt_responds/`, `'claude'` → `claude_responds/`
+- Truncates via `SKILL_MAX_*` env
+- Provider mapping (`normalizeProvider`):
+  - `'claude'` → `claude_responds/`
+  - `'chatgpt' | 'openai' | 'gpt' | 'qwen' | 'deepseek'` → `chat_gpt_responds/`
+  - (QWEN & DeepSeek berbagi skill `chat_gpt_responds` — tidak perlu paket tambahan)

@@ -1,9 +1,9 @@
 ---
 name: elevan-property-system
-description: Elevan Property — Node.js+Express backend, Vue 3 frontend, MySQL, AI chatbot (ChatGPT→Claude→Private Agent), WhatsApp multi-agent (Fonnte/Kirimi/TimelinesAI), JWT auth, Rumah123 via Apify, property keyword filter + context-aware continuation, Q1–Q12 qualification, ResponseBuilderWhatsApp.
-version: 9.0
+description: Elevan Property — Node.js+Express backend, Vue 3 frontend, MySQL (Sequelize v6), AI chatbot multi-provider (QWEN/Claude/ChatGPT/DeepSeek → Private Agent), WhatsApp multi-agent (Fonnte/Kirimi/TimelinesAI), JWT auth, backend-driven property data (DB dari extended_v3), Rumah123 via Apify, Q1–Q12 qualification, dynamic response rules, ngrok auto-start.
+version: 10.0
 status: production
-updated: 2026-06-23
+updated: 2026-07-03
 ---
 
 # Elevan Property — System Documentation
@@ -22,13 +22,13 @@ WhatsApp terminal platforms aktif: **Fonnte, Kirimi, TimelinesAI**.
 03-database-design-and-models.md               ← skema tabel + model Sequelize
 04-auth-and-agents.md                          ← JWT, login/register, token per-agent
 05-backend-api-and-services.md                 ← semua route, controller, service, util
-06-ai-integration-system.md                    ← ChatGPT→Claude→Private, whatsappAIService, skill loader
+06-ai-integration-system.md                    ← QWEN/Claude/ChatGPT/DeepSeek→Private, whatsappAIService, skill loader
 07-frontend-and-modules.md                     ← Vue 3, router/guard, modul halaman, Facility, vendor global
 08-fonnte-whatsapp-integration.md              ← Fonnte multi-agent (implementasi)
 09-whatsapp-terminal-multiagent.md             ← terminal: Fonnte + Kirimi + TimelinesAI, MASSEGE_TERMINAL
 10-qualification-flow-and-ai-prompt-builder.md ← Q1–Q12, state extractor, prompt builder
 11-private-agent-whatsapp-format.md            ← ResponseBuilderWhatsApp, format WA, footer agent
-12-rumah123-and-apify.md                       ← data properti live + fallback JSON
+12-rumah123-and-apify.md                       ← data properti backend-driven (DB extended_v3) + Apify live
 13-google-sheets-integration.md                ← Google Sheets logging contact form
 14-external-integrations-s3-email.md           ← S3, email, integrasi lain
 15-deployment-and-troubleshooting.md           ← deploy, NGROK, troubleshoot
@@ -61,30 +61,35 @@ WhatsApp terminal platforms aktif: **Fonnte, Kirimi, TimelinesAI**.
 | Fonnte | Kirim WA contact form + fonnteChatController multi-agent |
 | Kirimi | kirimiChatController multi-agent (device_id per-agent, shared account) |
 | TimelinesAI | timelinesAIChatController multi-agent |
-| ChatGPT | AI primary (chatbot / WA) |
-| Claude | AI fallback |
-| Private Agent | Fallback terjamin (web: chatbot; WA: terminal message) |
+| QWEN / Claude / ChatGPT / DeepSeek | AI primary (dipilih `AI_PRIMARY_PROVIDER`, satu saja) |
+| Private Agent | Fallback terjamin tiap primary (web: chatbot; WA: terminal message) |
 | Google Sheets | Backup submission contact form |
-| Apify/Rumah123 | Data properti live |
-| MASSEGE_TERMINAL | Pilih platform mana yang log ke terminal (FONNTE,KIRIMI,TIMELINESAI) |
+| Apify/Rumah123 | Data properti live (opsional, di atas DB) |
+| Database (Sequelize v6) | Sumber utama data properti (salinan extended_v3) |
+| ngrok | Auto-start tunnel dev dari terminal backend (ENABLE_NGROK) |
+| MESSAGE_TERMINAL | Sumber metadata `source` log AI (satu platform) |
+| MASSEGE_TERMINAL | Platform mana yang log ke terminal (FONNTE,KIRIMI,TIMELINESAI) |
 
 ## Key Environment Variables
 
 ```env
-# AI
-AI_PRIMARY_PROVIDER=private        # chatgpt | claude | private
+# AI — satu primary → Private Agent (tanpa cross-AI). DILARANG hardcode nama model di kode.
+AI_PRIMARY_PROVIDER=deepseek       # qwen | claude | chatgpt | deepseek | private
 ENABLE_CLAUDE_FALLBACK=true        ENABLE_CHATBOT_PRIVATE_CONTROLLER=true
-OPENAI_API_KEY / OPENAI_MODEL=gpt-4o-mini
-ANTHROPIC_API_KEY / CLAUDE_MODEL=claude-haiku-4-5
-RESPOND_CATALOG_RUN=OFF            # OFF = Q1–Q12 + summary ; ON = katalog
+OPENAI_MODEL / ANTHROPIC(CLAUDE_MODEL) / QWEN_MODEL / DEEPSEEK_MODEL  (semua dari .env)
+DEEPSEEK_BASE_URL / DEEPSEEK_TEMPERATURE / DEEPSEEK_TOP_P / *_MAX_TOKENS
+RESPOND_CATALOG_RUN=OFF            # OFF = brief saja ; ON = brief + katalog (Q1–Q12 SELALU jalan)
 
-# WhatsApp (per-agent token di tabel users untuk Fonnte; per-device untuk Kirimi)
+# WhatsApp
 FONNTE_TOKEN  TIMELINESAI_API_KEY
 KIRIMI_USER_CODE / KIRIMI_SECRET / users.kirimi_device_id (per-agent)
-MASSEGE_TERMINAL=FONNTE,KIRIMI,TIMELINESAI
+MESSAGE_TERMINAL=KIRIMI            MASSEGE_TERMINAL=FONNTE,KIRIMI,TIMELINESAI
 
-# Data properti
+# Data properti (backend-driven: DB dulu, JSON extended_v3 fallback)
 RUMAH123_DATA=OFF   APIFY_API_TOKEN
+
+# ngrok / Server
+ENABLE_NGROK=true                  PORT=5055   (frontend VITE_BACKEND_PORT=5055)
 
 # Auth & DB
 ACCESS_TOKEN_SECRET / REFRESH_TOKEN_SECRET (RAHASIA)
@@ -92,5 +97,5 @@ ACCESS_TOKEN_EXPIRY=5m / REFRESH_TOKEN_EXPIRY=1d / BCRYPT_SALT_ROUNDS=10
 DB_HOST / DB_USER / DB_PASSWORD / DB_NAME=db_property / DB_DIALECT=mysql
 ```
 
-> RAHASIA — jangan echo/commit: OPENAI/ANTHROPIC/FONNTE/KIRIMI/TIMELINESAI keys,
+> RAHASIA — jangan echo/commit: OPENAI/ANTHROPIC/QWEN/DEEPSEEK/FONNTE/KIRIMI/TIMELINESAI keys,
 > APIFY_API_TOKEN, ACCESS/REFRESH_TOKEN_SECRET.

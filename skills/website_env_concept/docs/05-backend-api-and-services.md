@@ -52,10 +52,10 @@
 | **POST** | **/api/fonnte-chat/webhook** | **fonnteChatController.handleInboundMessage (MAIN)** |
 | POST | /api/fonnte-chat/chaining | fonnteChatController.handleChainingWebhook |
 | POST | /api/fonnte-chat/webhook-raw | fonnteChatController.webhookRawCatcher |
-| POST | /api/wati/webhook | watiChatController.handleInboundMessage |
-| POST | /api/wati/webhook-raw | watiChatController.webhookRawCatcher |
-| POST | /api/dialog-chat/webhook | dialogChatController.handleInboundMessage |
-| POST | /api/dialog-chat/webhook-raw | dialogChatController.webhookRawCatcher |
+| POST | /api/kirimi/webhook | kirimiChatController.handleInboundMessage |
+| POST | /api/kirimi/webhook-raw | kirimiChatController.webhookRawCatcher |
+| POST | /api/timelinesai/webhook | timelinesAIChatController.handleInboundMessage |
+| POST | /api/timelinesai/webhook-raw | timelinesAIChatController.webhookRawCatcher |
 
 ### WhatsApp Admin Routes — Require verifyToken
 | Method | Path | Controller |
@@ -70,19 +70,17 @@
 | POST | /api/fonnte-chat/poller-start | fonnteChatController.startPoller |
 | POST | /api/fonnte-chat/poller-stop | fonnteChatController.stopPoller |
 | GET | /api/fonnte-chat/check-fonnte-api | fonnteChatController.checkFonnteApi |
-| POST | /api/wati/simulate | watiChatController.simulateInboundMessage |
-| GET | /api/wati/debug-info | watiChatController.getDebugInfo |
-| GET | /api/wati/agents/list | watiChatController.getRegisteredAgents |
-| GET | /api/wati/agent-chats/:agentName | watiChatController.getAgentChats |
-| GET | /api/wati/chat-history/:sessionId | watiChatController.getChatHistory |
-| GET | /api/wati/status | watiChatController.getWatiStatus |
-| POST | /api/dialog-chat/setup-webhook | dialogChatController.setupWebhook |
-| POST | /api/dialog-chat/simulate | dialogChatController.simulateInboundMessage |
-| GET | /api/dialog-chat/debug-info | dialogChatController.getDebugInfo |
-| GET | /api/dialog-chat/status | dialogChatController.getDialogStatus |
-| GET | /api/dialog-chat/agents | dialogChatController.getAgentsWithDialog |
-| GET | /api/dialog-chat/agent-chats/:agentName | dialogChatController.getAgentChats |
-| GET | /api/dialog-chat/chat-history/:sessionId | dialogChatController.getChatHistory |
+| POST | /api/kirimi/simulate | kirimiChatController.simulateInboundMessage |
+| GET | /api/kirimi/debug-info | kirimiChatController.getDebugInfo |
+| GET | /api/kirimi/agents | kirimiChatController.getAgentsWithKirimi |
+| GET | /api/kirimi/agent-chats/:agentName | kirimiChatController.getAgentChats |
+| GET | /api/kirimi/chat-history/:sessionId | kirimiChatController.getChatHistory |
+| GET | /api/kirimi/status | kirimiChatController.getKirimiStatus |
+| GET | /api/kirimi/check-api | kirimiChatController.checkKirimiApi |
+| POST | /api/timelinesai/simulate | timelinesAIChatController.simulateInboundMessage |
+| GET | /api/timelinesai/agents | timelinesAIChatController.getRegisteredAgents |
+| GET | /api/timelinesai/status | timelinesAIChatController.getStatus |
+| — | Master data | facility / property / country / province / city / location (+ property-location) CRUD, semua verifyToken |
 
 ### Utility Routes
 | Method | Path | Notes |
@@ -127,21 +125,23 @@ module.exports = SomeController;
 ## Services (`backend/services/`)
 
 ### aiProviderService.js
-- `executeAIProviderWithFallback(taskName, chatGPTFn, claudeFn)` — ChatGPT → Claude fallback
+- `executeAIProviderWithFallback(taskName, chatGPTFn, claudeFn, qwenFn, deepseekFn)` — 1 primary → Private Agent
+- `getPrimaryAIProvider()` / `getAIProviderOrder()` / `canUseChatGPT|Claude|Qwen|DeepSeek()`
 - `generateChatbotReplyWithProviderFallback(session, history, message, context)` — website chatbot
 - `generateContactReplyWithProviderFallback(contactPayload)` — contact form
 - `generateWhatsappReplyWithProviderFallback(session, history, message, context)` — all WA platforms
-- `checkAIProviderConfig()` — returns status of both providers
-- Returns `{ reply, provider, primaryProvider, fallbackUsed, fallbackProvider, primaryError }`
+- `generateWhatsappExternalAIFallback(...)` — rantai darurat saat primary=private
+- `checkAIProviderConfig()` — status semua provider (chatgpt/claude/qwen/deepseek)
+- Returns `{ reply, provider, primaryProvider, fallbackUsed, fallbackProvider, primaryError, providerErrors }`
 
 ### whatsappAIService.js (NEW — unified for all 3 WA platforms)
 - `generateWhatsAppAIReply({ session, history, message, agentName, contextSource })` — main entry
 - `buildQualifyReply(filters, message, agentName, contextSource, history)` — pre-qualification gate
 - `isIndonesian(message, history)` — language detection with history fallback
 - `agentSignature(agentName, isId)` — builds agent signature block
-- Controlled by `RESPOND_CATALOG_RUN` env var:
-  - `OFF` (default): Q1–Q12 qualification mode (no AI provider called)
-  - `ON`: catalog listing mode (ChatGPT → Claude)
+- `RESPOND_CATALOG_RUN` mengatur isi SETELAH brief (Q1–Q12 SELALU jalan):
+  - `OFF` (default): brief/summary saja
+  - `ON`: brief + katalog rekomendasi (primary AI → Private Agent)
 
 ### aiPromptBuilderService.js (CORE — WhatsApp prompt assembly)
 - `extractQualificationState(history, currentMessage)` — 4-phase Q1–Q12 extraction
@@ -226,14 +226,30 @@ isPropertyContextContinuation(msg, history):
 Controls which platform's logs appear in terminal:
 ```env
 MASSEGE_TERMINAL=FONNTE                       # only Fonnte shows in terminal
-MASSEGE_TERMINAL=FONNTE,CHAKRAHQ              # Fonnte + ChakraHQ
-MASSEGE_TERMINAL=FONNTE,CHAKRAHQ,TIMELINESAI  # all active platforms
+MASSEGE_TERMINAL=FONNTE,KIRIMI               # Fonnte + Kirimi
+MASSEGE_TERMINAL=FONNTE,KIRIMI,TIMELINESAI  # all active platforms
 ```
 
 ### whatsappPropertyContext.js
 
 Priority order for property data in WhatsApp AI responses:
-1. Rumah123 live data (Apify) — if `APIFY_API_TOKEN` set AND `RUMAH123_DATA=ON`
-2. Fallback: `backend/asset/json_data/indonesia_property_36_provinces_flat.json`
+1. **Database** (model Property + relasi) via `propertyRecommendationService` — sumber utama
+2. Fallback: `backend/asset/json_data/indonesia_property_extended_v3.json` (lazy)
+3. Opsional Rumah123 live data (Apify) — if `APIFY_API_TOKEN` set AND `RUMAH123_DATA=ON`
 
 Returns `{ contextText, source: 'rumah123'|'flat_json'|'none', location, propertyType, transactionType }`
+
+### ngrokService.js (baru)
+
+`startNgrok(port)` / `stopNgrok()` — jalankan `ngrok http <port>` sebagai child process
+saat `ENABLE_NGROK=true`; parse URL dari output JSON, cetak ke terminal backend, dan
+matikan saat SIGINT/SIGTERM. Lihat doc 15.
+
+### propertyRecommendationService.js — backend-driven + lazy
+
+- `getSourceProperties()` DB-first (`getDbProperties` JOIN Property+Image+Facility+Location);
+  fallback `loadJsonProperties()` (extended_v3, **lazy** — tidak di-load saat startup).
+- `buildRecommendationContextForLLM()` membangun **dynamic response rules** dari filter
+  nyata customer (`buildDynamicResponseRules`) — tanpa hardcode kota; alternatif
+  memprioritaskan kota yang sama sebelum melebar.
+- `GET /api/about` (aboutController) memakai service ini → portfolios DB-driven.

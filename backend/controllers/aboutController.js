@@ -1,7 +1,9 @@
-const { fallbackProperties, searchProperties } = require('../services/propertyRecommendationService');
+const { getFallbackProperties, searchProperties } = require('../services/propertyRecommendationService');
 
 exports.index = async (req, res) => {
   const { transactionType, buildingType, location } = req.query;
+  // searchProperties = DB-first (model Property + relasi). JSON extended_v3 hanya
+  // dipakai (lazy) kalau DB kosong / query tidak menghasilkan apa pun.
   const portfolios = await searchProperties({ transactionType, buildingType, location });
 
   return res.json({
@@ -18,7 +20,7 @@ exports.index = async (req, res) => {
         transactionTypes: ['sale', 'rent', 'purchase'],
         buildingTypes: ['house', 'apartment', 'hotel', 'villa', 'boarding_house', 'shophouse', 'office', 'warehouse', 'others']
       },
-      portfolios: portfolios.length ? portfolios : fallbackProperties
+      portfolios: portfolios.length ? portfolios : getFallbackProperties()
     }
   });
 };
