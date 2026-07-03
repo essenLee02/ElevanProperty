@@ -295,6 +295,13 @@ class LanguageDetector {
   ];
 
   static isOffTopic(message = '') {
+    const raw = String(message || '').trim();
+
+    // Guard 0: URL / file path detection — REJECT immediately (not property context)
+    // Covers: "http://...", "https://...", "C:\path\to\file", "/path/to/file", "git@..."
+    if (/^(https?:\/\/|file:\/\/|[a-zA-Z]:\\|\/|git@)/i.test(raw)) return true;
+    if (/\.(js|ts|jsx|tsx|py|java|cpp|sql|json|yml|yaml|env|md|txt)$/i.test(raw)) return true;
+
     const text = this.#normalize(message);
 
     // Guard 1: Proximity preposition → always a location anchor answer (Q6), never off-topic.

@@ -97,12 +97,19 @@ function logProviderFallback(taskName, fromProvider, toProvider, reason) {
   });
 }
 
-// Urutan fallback berdasarkan AI_PRIMARY_PROVIDER:
-//   qwen    → QWEN → Private Agent (dihandle oleh caller)
-//   claude  → Claude → Private Agent (dihandle oleh caller)
-//   chatgpt → ChatGPT → Private Agent (dihandle oleh caller)
-//   private → throw (caller langsung pakai Private Agent)
-// Setiap provider hanya mencoba dirinya sendiri. Jika gagal → throw → caller fallback ke Private Agent.
+// ═════════════════════════════════════════════════════════════════════════════
+// PROVIDER FALLBACK — Tingkatkan penggunaan AI
+// ═════════════════════════════════════════════════════════════════════════════
+// AI_PRIMARY_PROVIDER:
+//   qwen     → Try QWEN → Error? → Fallback Private Agent
+//   claude   → Try Claude → Error? → Fallback Private Agent
+//   chatgpt  → Try ChatGPT → Error? → Fallback Private Agent
+//   deepseek → Try DeepSeek → Error? → Fallback Private Agent
+//   private  → Private Agent only (no external AI)
+//
+// Fallback otomatis jika primary provider error (token, billing, API, timeout).
+// Private Agent selalu tersedia sebagai fallback terakhir.
+// ═════════════════════════════════════════════════════════════════════════════
 const PROVIDER_ORDER = {
   qwen     : ['qwen'],
   claude   : ['claude'],
@@ -132,15 +139,17 @@ async function executeAIProviderWithFallback(taskName, chatGPTFn, claudeFn, qwen
   const providerErrors  = [];
   const primaryProvider = order[0];
 
+  console.log(`[AI Provider] Trying primary provider: ${primaryProvider} (fallback to Private Agent if error)`);
+
   for (const providerName of order) {
     if (!avail[providerName]()) {
-      logProviderSkipped(providerName, taskName, `${providerName} not available.`);
+      logProviderSkipped(providerName, taskName, `${providerName} not available (no API key or not configured).`);
       continue;
     }
 
     if (providerErrors.length > 0) {
       const prev = providerErrors[providerErrors.length - 1];
-      logProviderFallback(taskName, prev.provider, providerName, prev.message);
+      logProviderFallback(taskName, prev.provider, providerName, `${prev.provider} failed → trying ${providerName}`);
     }
 
     try {

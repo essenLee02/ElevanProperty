@@ -345,8 +345,17 @@ async function generateWhatsAppAIReply(params) {
 
   // ── Step 3.5: CHECK AI_PRIMARY_PROVIDER ───────────────────────────────────
   //
-  // AI_PRIMARY_PROVIDER: 'chatgpt' | 'claude' | 'qwen' | 'private'
-  //   private = skip all external AI → use Private Agent only
+  // AI_PRIMARY_PROVIDER: 'chatgpt' | 'claude' | 'qwen' | 'deepseek' | 'private'
+  //
+  // ✨ PROVIDER FALLBACK (Tingkatkan penggunaan AI):
+  //   QWEN    → Try QWEN     → Error? → Fallback Private Agent
+  //   Claude  → Try Claude   → Error? → Fallback Private Agent
+  //   ChatGPT → Try ChatGPT  → Error? → Fallback Private Agent
+  //   DeepSeek→ Try DeepSeek → Error? → Fallback Private Agent
+  //   private → Private Agent only (skip all external AI)
+  //
+  // Fallback otomatis jika primary provider gagal (token error, billing, API error, timeout).
+  // Private Agent selalu tersedia sebagai backup terakhir.
   //
   // AI selalu menjalankan Q1-Q12 interview. RESPOND_CATALOG_RUN hanya mengontrol
   // apakah setelah brief ditampilkan, rekomendasi catalog juga ikut ditampilkan atau tidak.
