@@ -218,8 +218,44 @@ sequelize.sync()
         console.log('[FONNTE POLLER] ℹ️  Dinonaktifkan via FONNTE_POLLING_ENABLED=false');
       }
 
-      // ─── Kirimi startup hint ───────────────────────────────────────────
-      if (activeTerminals.includes('KIRIMI')) {
+      // ─── ngrok auto-start (opsional, ENABLE_NGROK=true di .env) ────────
+      // Jalan sebagai child process backend — URL tunnel muncul di terminal
+      // yang sama, tidak perlu window ngrok.exe terpisah.
+      if (String(process.env.ENABLE_NGROK || 'false').toLowerCase() === 'true') {
+        const { startNgrok } = require('./services/ngrokService');
+        console.log('[NGROK] Starting tunnel...');
+        startNgrok(port)
+          .then((url) => {
+            console.log('');
+            console.log('╔══════════════════════════════════════════════════════════════╗');
+            console.log('║  NGROK ACTIVE                                                 ║');
+            console.log(`║  ${url.padEnd(62)}║`);
+            console.log('╚══════════════════════════════════════════════════════════════╝');
+            if (activeTerminals.includes('KIRIMI')) {
+              console.log('');
+              console.log('╔══════════════════════════════════════════════════════════════╗');
+              console.log('║  KIRIMI ACTIVE — set webhook URL di Kirimi Dashboard:        ║');
+              console.log(`║  ${(url + '/api/kirimi/webhook').padEnd(62)}║`);
+              console.log(`║  (Server port: ${String(port).padEnd(46)}║`);
+              console.log('║  Device webhook: Kirimi Dashboard → Device → Detail          ║');
+              console.log('╚══════════════════════════════════════════════════════════════╝');
+              console.log('');
+            }
+          })
+          .catch((err) => {
+            console.error('[NGROK] Gagal start:', err.message);
+            if (activeTerminals.includes('KIRIMI')) {
+              console.log('');
+              console.log('╔══════════════════════════════════════════════════════════════╗');
+              console.log('║  KIRIMI ACTIVE — set webhook URL di Kirimi Dashboard:        ║');
+              console.log(`║  https://<ngrok-url>/api/kirimi/webhook                      ║`);
+              console.log(`║  (Server port: ${String(port).padEnd(46)}║`);
+              console.log('║  Device webhook: Kirimi Dashboard → Device → Detail          ║');
+              console.log('╚══════════════════════════════════════════════════════════════╝');
+              console.log('');
+            }
+          });
+      } else if (activeTerminals.includes('KIRIMI')) {
         console.log('');
         console.log('╔══════════════════════════════════════════════════════════════╗');
         console.log('║  KIRIMI ACTIVE — set webhook URL di Kirimi Dashboard:        ║');
@@ -245,3 +281,16 @@ sequelize.sync()
     console.error('Failed to sync database:', err);
     process.exit(1);
   });
+
+// Matikan ngrok child process saat backend di-stop (Ctrl+C / nodemon restart)
+// agar tidak ada proses ngrok orphan yang tetap jalan di background.
+function shutdownNgrok() {
+  try {
+    const { stopNgrok } = require('./services/ngrokService');
+    stopNgrok();
+  } catch {
+    // ngrokService belum pernah dipakai — abaikan
+  }
+}
+process.on('SIGINT', () => { shutdownNgrok(); process.exit(0); });
+process.on('SIGTERM', () => { shutdownNgrok(); process.exit(0); });
