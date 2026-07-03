@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Jul 03, 2026 at 09:40 AM
+-- Generation Time: Jul 03, 2026 at 11:03 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.1.25
 
@@ -204,7 +204,27 @@ INSERT INTO `chat_messages` (`id`, `chatSessionId`, `user_id`, `role`, `message`
 (157, 1, 'LFGKT49002', 'customer', 'C:\\Users\\nigel\\Documents\\Elevan_Property\\backend\\models\\Property.js', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1783059995085\",\"platform\":\"kirimi\"}', '2026-07-03 06:26:35', '2026-07-03 06:26:35'),
 (158, 1, 'LFGKT49002', 'ai', 'Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"flat_json\"}', '2026-07-03 06:26:38', '2026-07-03 06:26:38'),
 (159, 15, 'LFGKT49002', 'customer', 'Mau dikirim ke kota mana ya kak, saya bantu perkirakan harga sampai rumah kaka 😊🙏', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1783061659761\",\"platform\":\"kirimi\"}', '2026-07-03 06:54:19', '2026-07-03 06:54:19'),
-(160, 15, 'LFGKT49002', 'ai', 'Halo Kak, saya asisten dari *LEO FELIX* (*Elevan Property*). Saya bantu catat kebutuhannya dulu ya. Untuk rumahnya, rencananya mau *beli* atau *sewa*, Kak? 🏠', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"flat_json\"}', '2026-07-03 06:54:21', '2026-07-03 06:54:21');
+(160, 15, 'LFGKT49002', 'ai', 'Halo Kak, saya asisten dari *LEO FELIX* (*Elevan Property*). Saya bantu catat kebutuhannya dulu ya. Untuk rumahnya, rencananya mau *beli* atau *sewa*, Kak? 🏠', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"flat_json\"}', '2026-07-03 06:54:21', '2026-07-03 06:54:21'),
+(161, 1, 'LFGKT49002', 'customer', 'Hi... Mau booking villa di surabaya', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1783066871716\",\"platform\":\"kirimi\"}', '2026-07-03 08:21:11', '2026-07-03 08:21:11'),
+(162, 1, 'LFGKT49002', 'ai', 'Sudah lihat berapa Villa di *Surabaya*? Apa yang membuat belum cocok dari yang sudah dilihat?', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"flat_json\"}', '2026-07-03 08:21:15', '2026-07-03 08:21:15'),
+(163, 1, 'LFGKT49002', 'customer', 'Saya belum pernah lihat.. Cuma saya cari villa di kawasan yang tidak banjir, tidak panas dan tempatnya dingin', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1783066928509\",\"platform\":\"kirimi\"}', '2026-07-03 08:22:08', '2026-07-03 08:22:08'),
+(164, 1, 'LFGKT49002', 'ai', 'Untuk *Villa* sewa di *kawasan*, Kak lebih prefer yang *terjangkau*, *menengah*, atau *eksklusif*? 💰', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"flat_json\"}', '2026-07-03 08:22:09', '2026-07-03 08:22:09'),
+(165, 1, 'LFGKT49002', 'customer', 'Cari yang murah, Kak', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1783067035210\",\"platform\":\"kirimi\"}', '2026-07-03 08:23:55', '2026-07-03 08:23:55'),
+(166, 1, 'LFGKT49002', 'ai', 'Rencananya masuk atau pindah bulan apa? 📅', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"flat_json\"}', '2026-07-03 08:23:56', '2026-07-03 08:23:56'),
+(167, 1, 'LFGKT49002', 'customer', 'Bulan 9, Kak', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1783067055820\",\"platform\":\"kirimi\"}', '2026-07-03 08:24:15', '2026-07-03 08:24:15'),
+(168, 1, 'LFGKT49002', 'ai', 'Nanti akan tinggal bersama siapa saja? Biar saya bisa carikan yang pas jumlah kamarnya 🛏️', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"flat_json\"}', '2026-07-03 08:24:17', '2026-07-03 08:24:17'),
+(169, 1, 'LFGKT49002', 'customer', 'Dengan keluarga', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1783067070923\",\"platform\":\"kirimi\"}', '2026-07-03 08:24:30', '2026-07-03 08:24:30'),
+(170, 1, 'LFGKT49002', 'ai', 'Untuk furnitur, lebih prefer yang sudah *furnished*, *semi-furnished*, atau *kosongan* saja? 🛋️', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"flat_json\"}', '2026-07-03 08:24:32', '2026-07-03 08:24:32'),
+(171, 1, 'LFGKT49002', 'customer', 'yang semi aja.. Pokok ada fasilitas standar, Kak. Tambahin ada kulkas dan 10 spring bed', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1783067108115\",\"platform\":\"kirimi\"}', '2026-07-03 08:25:08', '2026-07-03 08:25:08'),
+(172, 1, 'LFGKT49002', 'ai', 'Ada lokasi atau tempat tertentu yang jadi patokan? Misalnya dekat sekolah anak, mal, wisata, kawasan tertentu, atau jalan tertentu? 📍', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"flat_json\"}', '2026-07-03 08:25:09', '2026-07-03 08:25:09'),
+(173, 1, 'LFGKT49002', 'customer', 'Enggak ada, Kak.', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1783067123031\",\"platform\":\"kirimi\"}', '2026-07-03 08:25:23', '2026-07-03 08:25:23'),
+(174, 1, 'LFGKT49002', 'ai', 'Selain lokasi *kawasan*, apakah Anda mau pilihan lokasi lainnya? 🗺️', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"flat_json\"}', '2026-07-03 08:25:24', '2026-07-03 08:25:24'),
+(175, 1, 'LFGKT49002', 'customer', 'Enggak mau', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1783067135781\",\"platform\":\"kirimi\"}', '2026-07-03 08:25:35', '2026-07-03 08:25:35'),
+(176, 1, 'LFGKT49002', 'ai', 'Sewa villa-nya per *malam*, per *minggu*, atau per *bulan*? ⏱️', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"flat_json\"}', '2026-07-03 08:25:36', '2026-07-03 08:25:36'),
+(177, 1, 'LFGKT49002', 'customer', 'saya mau booking 4 hari 3 malem kak', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1783067168021\",\"platform\":\"kirimi\"}', '2026-07-03 08:26:08', '2026-07-03 08:26:08'),
+(178, 1, 'LFGKT49002', 'ai', 'Perlu villa dengan *private pool*? Atau shared pool juga oke? 🏊', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"flat_json\"}', '2026-07-03 08:26:09', '2026-07-03 08:26:09'),
+(179, 1, 'LFGKT49002', 'customer', 'Private pool yang besar', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1783067192630\",\"platform\":\"kirimi\"}', '2026-07-03 08:26:32', '2026-07-03 08:26:32'),
+(180, 1, 'LFGKT49002', 'ai', 'Baik, semua sudah saya catat! 📝 🔥 Prioritas Tinggi\n\n✓ Rencana: *Booking*\n✓ Tipe: *Villa*\n✓ Lokasi: *kawasan*\n✓ Budget: *Terjangkau (Rp 10.000.000 - Rp 30.000.000 /bln)*\n✓ Durasi menginap: *4 hari*\n✓ Keputusan bersama: *Disebutkan di Q4*\n✓ Furnitur: *Semi furnished*\n✓ Fasilitas: *Kolam renang, Private Pool*\n✓ Hindari: *Tidak mau banjir*\n✓ Patokan lokasi: *Enggak ada, Kak.*\n\nSaya akan segera menghubungi Anda dengan rekomendasi properti yang paling sesuai! 🏠\nTerima kasih sudah menghubungi saya. 🙏\n\nSalam hangat,\n*LEO FELIX*\n*Elevan Property*', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"flat_json\"}', '2026-07-03 08:26:35', '2026-07-03 08:26:35');
 
 -- --------------------------------------------------------
 
@@ -1926,7 +1946,20 @@ INSERT INTO `logs` (`id`, `action`, `details`, `level`, `createdAt`, `updatedAt`
 (318, 'PAGE_VIEW', 'Navigated from /property/edit/YREFLRP3194 to /property', 'info', '2026-07-03 07:39:08', '2026-07-03 07:39:08'),
 (319, 'PAGE_VIEW', 'Navigated from /property to /property/edit/ASQQNTY2324', 'info', '2026-07-03 07:39:11', '2026-07-03 07:39:11'),
 (320, 'PAGE_VIEW', 'Navigated from /property/edit/ASQQNTY2324 to /property', 'info', '2026-07-03 07:39:24', '2026-07-03 07:39:24'),
-(321, 'PAGE_VIEW', 'Navigated from /property to /property/edit/ARDZPF37238', 'info', '2026-07-03 07:39:27', '2026-07-03 07:39:27');
+(321, 'PAGE_VIEW', 'Navigated from /property to /property/edit/ARDZPF37238', 'info', '2026-07-03 07:39:27', '2026-07-03 07:39:27'),
+(322, 'PAGE_VIEW', 'Navigated from /property/edit/ARDZPF37238 to /facility', 'info', '2026-07-03 08:01:33', '2026-07-03 08:01:33'),
+(323, 'PAGE_VIEW', 'Navigated from /facility to /property', 'info', '2026-07-03 08:01:34', '2026-07-03 08:01:34'),
+(324, 'PAGE_VIEW', 'Navigated from /property to /property/add', 'info', '2026-07-03 08:07:09', '2026-07-03 08:07:09'),
+(325, 'PAGE_VIEW', 'Navigated from /property/add to /facility', 'info', '2026-07-03 08:07:12', '2026-07-03 08:07:12'),
+(326, 'PAGE_VIEW', 'Navigated from /facility to /property', 'info', '2026-07-03 08:07:12', '2026-07-03 08:07:12'),
+(327, 'PAGE_VIEW', 'Navigated from / to /login', 'info', '2026-07-03 08:09:02', '2026-07-03 08:09:02'),
+(328, 'PAGE_VIEW', 'Navigated from / to /login', 'info', '2026-07-03 08:10:16', '2026-07-03 08:10:16'),
+(329, 'PAGE_VIEW', 'Navigated from / to /property', 'info', '2026-07-03 08:10:18', '2026-07-03 08:10:18'),
+(330, 'PAGE_VIEW', 'Navigated from / to /login', 'info', '2026-07-03 08:12:25', '2026-07-03 08:12:25'),
+(331, 'PAGE_VIEW', 'Navigated from / to /property', 'info', '2026-07-03 08:12:41', '2026-07-03 08:12:41'),
+(332, 'PAGE_VIEW', 'Navigated from / to /property', 'info', '2026-07-03 08:14:30', '2026-07-03 08:14:30'),
+(333, 'PAGE_VIEW', 'Navigated from / to /login', 'info', '2026-07-03 08:14:39', '2026-07-03 08:14:39'),
+(334, 'PAGE_VIEW', 'Navigated from / to /property', 'info', '2026-07-03 08:15:00', '2026-07-03 08:15:00');
 
 -- --------------------------------------------------------
 
@@ -99952,7 +99985,7 @@ CREATE TABLE `users` (
 
 INSERT INTO `users` (`id`, `user_id`, `name`, `birthdate`, `phone`, `username`, `password`, `refresh_token`, `status`, `privilege`, `fonnte_token`, `kirimi_device_id`, `created_date`, `created_by`, `updated_date`, `update_by`) VALUES
 (1, 'SA6EDRU001', 'NIGEL KUNCORO', '1998-05-04', '082233556796', 'nigel123', '$2b$10$Rld5zga/CswkKyQPgPi6GO./sa5.OuVwgApiGxbZmCRudUD9TNHD2', NULL, 1, 'agent', 'm5HDmV4hAYRFBgTdkfDR', NULL, '2026-05-22 03:26:55', 'Self-Register', '2026-06-25 07:17:43', 'nigel123'),
-(2, 'LFGKT49002', 'LEO FELIX', '2000-05-25', '0881036588874', 'leon123', '$2b$10$cFCdDf7g5ZxzPWpLG0WQrOPWbdNGNVfAiWrtfts.f98cg2Ju3bRum', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJMRkdLVDQ5MDAyIiwidXNlck5hbWUiOiJMRU8gRkVMSVgiLCJ1c2VybmFtZSI6Imxlb24xMjMiLCJwcml2aWxlZ2UiOiJhZ2VudCIsImlhdCI6MTc4MzA2NDM2NCwiZXhwIjoxNzgzMTUwNzY0fQ.8oWQZKIS8wEaZKI9DZIPPxPvT7lsBzmCvU2fJy-L5B4', 1, 'agent', 'PiBSZQXu6HKWhKkEDu9e', 'D-3OCA6', '2026-05-25 10:05:33', 'Self-Register', '2026-07-03 07:39:24', 'leon123'),
+(2, 'LFGKT49002', 'LEO FELIX', '2000-05-25', '0881036588874', 'leon123', '$2b$10$cFCdDf7g5ZxzPWpLG0WQrOPWbdNGNVfAiWrtfts.f98cg2Ju3bRum', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJMRkdLVDQ5MDAyIiwidXNlck5hbWUiOiJMRU8gRkVMSVgiLCJ1c2VybmFtZSI6Imxlb24xMjMiLCJwcml2aWxlZ2UiOiJhZ2VudCIsImlhdCI6MTc4MzA2NjM2MiwiZXhwIjoxNzgzMTUyNzYyfQ.iSDFjfPFF13lNGQIIVsKzjZdZjSKgeOoQzYMtFOJQwE', 1, 'agent', 'PiBSZQXu6HKWhKkEDu9e', 'D-3OCA6', '2026-05-25 10:05:33', 'Self-Register', '2026-07-03 08:12:42', 'leon123'),
 (3, 'CEMPL3Z003', 'CLARENCE MARIO', '1993-03-24', '0821-1136-7154', 'clarence123', '$2b$10$jvnn536K239gxQRcOqNIauJxZxTq9iBcJYLWDstvTItZGkAIsA07e', NULL, 1, 'agent', NULL, NULL, '2026-05-26 01:56:29', 'Self-Register', '2026-06-29 06:22:00', 'clarence123'),
 (4, 'DTDE8RX004', 'DESY TALIM', '1995-08-27', '0821-1331-8191', 'desy54321', '$2b$10$ZCZK0Lzlenn2y1ni3gtITOdJs9GISQcG1eatRxh0PEBKk0BXwyhNq', NULL, 1, 'agent', NULL, NULL, '2026-05-26 01:57:21', 'Self-Register', '2026-06-26 13:57:22', 'desy54321'),
 (5, 'ITJMESP005', 'OTNIEL TJANDRA ISHAK', '2000-05-12', '+62881036588874', 'otniel', '$2b$10$lIUrzLSMMu3QmBzKNKHVQ.TSmluhqm9uU7KH9Yl/17AzOguAuoIsK', NULL, 1, 'agent', NULL, NULL, '2026-05-26 01:58:48', 'Self-Register', '2026-07-03 07:18:29', 'otniel'),
@@ -100155,7 +100188,7 @@ ALTER TABLE `whatsapp_inbound_messages`
 -- AUTO_INCREMENT for table `chat_messages`
 --
 ALTER TABLE `chat_messages`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=161;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=181;
 
 --
 -- AUTO_INCREMENT for table `chat_sessions`
@@ -100191,7 +100224,7 @@ ALTER TABLE `facilities`
 -- AUTO_INCREMENT for table `logs`
 --
 ALTER TABLE `logs`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=322;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=335;
 
 --
 -- AUTO_INCREMENT for table `properties`

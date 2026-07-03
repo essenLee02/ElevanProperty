@@ -51,9 +51,9 @@ const TRANSACTION_TYPES = {
   sale: ['jual', 'sale', 'sell', 'dijual', 'beli', 'buy', 'purchase', 'membeli']
 };
 
-// Base location keywords. The complete location list is expanded dynamically
-// from indonesia_property_36_provinces_flat.json so chatbot search follows
-// the same JSON catalog used by About Us.
+// Static fallback — dipakai HANYA sebelum initCityCache() berhasil memuat data
+// dari tabel `cities` saat startup, atau bila query DB gagal. Sumber kebenaran
+// lokasi adalah database (model City.js), bukan daftar ini.
 const FALLBACK_LOCATION_KEYWORDS = [
   'Malang', 'Batu', 'Surabaya', 'Sidoarjo', 'Madiun', 'Semarang', 'Yogyakarta', 'Bandung',
   'Jakarta', 'Bogor', 'Depok', 'Tangerang', 'Bekasi', 'Solo', 'Serang', 'Cilegon',
@@ -65,6 +65,34 @@ const FALLBACK_LOCATION_KEYWORDS = [
   'Manokwari', 'Lhokseumawe', 'Langsa', 'Sabang', 'Meulaboh'
 ];
 
+// Runtime cache — diisi oleh initCityCache() dari tabel `cities` (status=1) saat
+// server startup (lihat server.js). Sampai cache ini terisi, getKnownLocations()
+// jatuh ke FALLBACK_LOCATION_KEYWORDS di atas.
+let _dbCities = [];
+
+/**
+ * Muat/refresh daftar kota dari database (model City.js, status=1) sebagai
+ * sumber lokasi UTAMA untuk detectLocation(). Dipanggil sekali saat startup
+ * (mirror pola initFacilityCache() / propertyKeywordFilter.initLocationCache()).
+ * Gagal secara halus ke FALLBACK_LOCATION_KEYWORDS bila query DB error/kosong.
+ */
+async function initCityCache() {
+  try {
+    const { City } = require('../models');
+    const rows = await City.findAll({ where: { status: 1 }, attributes: ['name'], raw: true });
+    // DB menyimpan nama kota UPPERCASE (mis. "SURABAYA"). Title-case di sini agar
+    // tampilan summary/chat tetap konsisten dengan sebelumnya ("Surabaya"), sementara
+    // pencocokan regex tetap case-insensitive.
+    _dbCities = rows
+      .map((r) => String(r.name || '').trim())
+      .filter(Boolean)
+      .map((name) => name.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()));
+    console.log(`[CityCache] Loaded ${_dbCities.length} cities from DB (for detectLocation()).`);
+  } catch (err) {
+    console.warn('[CityCache] initCityCache() failed — using hardcoded fallback:', err.message);
+  }
+}
+
 function getKnownLocations() {
   const dynamicLocations = loadJsonProperties().flatMap((property) => [
     property.province,
@@ -73,7 +101,11 @@ function getKnownLocations() {
     property.location
   ]).filter(Boolean);
 
-  return [...new Set([...FALLBACK_LOCATION_KEYWORDS, ...dynamicLocations])]
+  // Prioritas: kota dari database (otoritatif) → JSON katalog fallback →
+  // daftar hardcode statis (dipakai hanya sebelum initCityCache() berjalan).
+  const cityNames = _dbCities.length ? _dbCities : FALLBACK_LOCATION_KEYWORDS;
+
+  return [...new Set([...cityNames, ...dynamicLocations])]
     .sort((a, b) => String(b).length - String(a).length);
 }
 
@@ -282,7 +314,12 @@ function cleanLocationCandidate(value = '') {
 const NON_LOCATION_AFTER_DI = new RegExp(
   '^(lantai|lantainya|tower|menara|gedung|unit|kamar|lt|atas|bawah|tengah|pojok|sudut|' +
   'sini|sana|situ|dalam|luar|depan|belakang|samping|sebelah|tengahnya|mana|manapun|' +
-  'mana[\\s-]*saja|mana[\\s-]*aja|sekitar|area)\\b', 'i'
+  'mana[\\s-]*saja|mana[\\s-]*aja|sekitar|area|' +
+  // Kata generik tempat/lingkungan yang BUKAN nama kota. Tanpa guard ini,
+  // "villa di kawasan yang tidak banjir" salah terbaca lokasi "kawasan" dan
+  // menimpa kota asli (mis. Surabaya) yang sudah tertangkap di pesan sebelumnya.
+  'kawasan|daerah|wilayah|lingkungan|komplek|kompleks|perumahan|cluster|klaster|' +
+  'tempat|lokasi|kota|kotanya|pinggir|pinggiran|pusat|dekat|deket|situasi|suasana)\\b', 'i'
 );
 
 function detectLocation(message = '') {
@@ -343,6 +380,20 @@ const _FACILITY_MAP = [
   ['Mushola',        ['mushola', 'musholla', 'masjid']],
   ['Concierge',      ['concierge']],
   ['Laundry',        ['laundry']],
+  // ── Ditambahkan sesuai 11 fasilitas baru di database (2026-07-03) ──────────
+  // DB augmentation (_dbFacilities) hanya cocokkan substring NAMA INGGRIS-nya
+  // (mis. "bedroom", "yard"), jadi sinonim Indonesia berikut wajib ada di sini
+  // supaya chatbotPrivateController.js (via detectFacilities) tetap mengenali
+  // jawaban customer dalam Bahasa Indonesia.
+  ['Kamar Tidur',    ['kamar tidur', 'bedroom']],
+  ['Halaman',        ['halaman', 'yard', 'halaman kecil']],
+  ['Perlengkapan Mandi', ['perlengkapan mandi', 'toiletries', 'sabun mandi', 'shampo hotel']],
+  ['Handuk',         ['handuk', 'towel', 'towels']],
+  ['Ruang Keluarga', ['ruang keluarga', 'family room']],
+  ['Meja',           ['meja belajar', 'meja makan', 'meja', 'table']],
+  ['Area Usaha',     ['area usaha', 'business area']],
+  ['Area Toko',      ['area toko', 'retail area']],
+  ['Lampu',          ['lampu', 'lighting', 'penerangan']],
 ];
 
 // ─── DB-backed facility vocabulary (bilingual augmentation) ──────────────────
@@ -1498,6 +1549,8 @@ module.exports = {
   detectBudget,
   detectFacilities,
   initFacilityCache,
+  initCityCache,
+  getKnownLocations,
   stripCommercialUsePhrases,
   detectCommercialUse,
   detectUseCase,

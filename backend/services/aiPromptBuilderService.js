@@ -613,17 +613,29 @@ function extractQualificationState(history = [], currentMessage = '') {
     }
 
     // Q_FAC — facilities (opsional). AI tanya fasilitas → customer jawab apapun → catat.
-    // "standar", "biasa", "tidak ada", "terserah" = tidak ada preferensi spesifik → simpan 'standar'
-    // agar AI tidak mengulangi pertanyaan fasilitas (field ❓ yang sudah dijawab).
-    if ((!state.facilities || (Array.isArray(state.facilities) && !state.facilities.length)) &&
-        /fasilitas|amenity|amenities|facility|kolam|gym|parking|parkir/i.test(aiText) &&
-        custResp.trim()) {
+    // Dua kasus penanda 'standar':
+    //   (1) EKSPLISIT minta standar ("fasilitas standar", "yang standar", "biasa aja")
+    //       → tambahkan marker 'standar' MESKIPUN customer juga sebut item spesifik
+    //         (mis. "pokok fasilitas standar, tambahin kulkas & spring bed"). Ini bikin
+    //         summary menggabungkan fasilitas standar + item spesifik.
+    //   (2) TANPA preferensi ("tidak ada", "terserah", "bebas") DAN belum ada item
+    //       spesifik → set ['standar'] saja.
+    if (custResp.trim() &&
+        /fasilitas|amenity|amenities|facility|kolam|gym|parking|parkir|furnish|perabot|kelengkapan/i.test(aiText + ' ' + custResp)) {
       const custLo = custResp.toLowerCase();
-      if (/\b(standar|biasa|standard|gak ada|tidak ada|apa saja|terserah|bebas|gapapa|ga pa pa|ngga ada|engga ada)\b/i.test(custLo)) {
+      const wantsStandardExplicit = /\b(standar|standard)\b|fasilitas\s+(?:yang\s+)?(?:standar|biasa|umum)|(?:yang\s+)?biasa\s+(?:aja|saja)/i.test(custLo);
+      const noPreference = /\b(gak ada|tidak ada|apa saja|terserah|bebas|gapapa|ga pa pa|ngga ada|engga ada|standar apa? aja)\b/i.test(custLo);
+      const prev = Array.isArray(state.facilities) ? state.facilities : [];
+      const hasStdMarker = prev.some(f => String(f).toLowerCase() === 'standar');
+
+      if (wantsStandardExplicit && !hasStdMarker) {
+        // Sisipkan marker 'standar' di DEPAN agar summary tetap tahu ada permintaan
+        // fasilitas standar, sambil mempertahankan item spesifik yang sudah tertangkap.
+        state.facilities = ['standar', ...prev];
+      } else if (noPreference && prev.length === 0) {
         state.facilities = ['standar'];
       }
-      // Specific facilities already captured by Phase 1 detectFacilities; this only covers
-      // the "no preference / standard" case that detectFacilities misses.
+      // Item spesifik lain sudah ditangkap Phase 1 detectFacilities di atas.
     }
     // Q5 — red flags
     if (!state.redFlags && /pasti tidak cocok|ingin dihindari|yang\s+dihindari|hadap barat|gang sempit|rumah tua|rawan banjir|rel kereta/.test(aiText)) {

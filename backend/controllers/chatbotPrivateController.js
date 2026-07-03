@@ -3340,27 +3340,59 @@ class ConversationQualifier {
         // is gated on the anchor having actually been ASKED (aiAskedAnchorPoint) —
         // otherwise "deket <kota>" (a location phrase) and joined multi-message text
         // produce a garbage anchor. If never asked → UNKNOWN (shown as "Belum ditanyakan").
+        // Jawaban negatif ("enggak ada", "bebas", "terserah") dinormalkan jadi
+        // "Bebas (jawaban asli)" agar agent tahu customer fleksibel soal patokan.
         value : qualState.anchorPoint
-          ? this.#capitalizeFirst(qualState.anchorPoint)
+          ? this.#normalizeAnchorPoint(qualState.anchorPoint)
           : ((profile.hasAnchorPoint && profile.aiAskedAnchorPoint) ? this.#extractAnchorPoint(custText) : 'UNKNOWN'),
         source: (qualState.anchorPoint || (profile.hasAnchorPoint && profile.aiAskedAnchorPoint)) ? 'stated' : 'UNKNOWN',
       },
       facilities: (() => {
-        // (a) Specific facilities the customer requested (gym, kolam renang, dll.)
-        if (Array.isArray(filters.facilities) && filters.facilities.length) {
-          return { value: filters.facilities.join(', '), isStandard: false, source: 'stated' };
+        // Gabungkan fasilitas SPESIFIK (yang customer sebut eksplisit) dengan fasilitas
+        // STANDAR (bila customer bilang "fasilitas standar"). Contoh nyata:
+        //   "pokok fasilitas standar, tambahin kulkas & 10 spring bed" + "private pool"
+        //   → Kolam renang, Kulkas, Kasur + [standar villa: AC, WiFi, Peralatan dapur, …]
+        const specific = [];
+        const pushUnique = (arr) => {
+          (arr || []).forEach(f => {
+            const v = String(f).trim();
+            if (!v || v.toLowerCase() === 'standar') return; // 'standar' = penanda, bukan nama fasilitas
+            if (!specific.some(x => x.toLowerCase() === v.toLowerCase())) specific.push(v);
+          });
+        };
+        pushUnique(filters.facilities);
+        pushUnique(qualState.facilities);
+
+        // Apakah customer minta fasilitas standar (penanda 'standar' di qualState)?
+        const wantsStandard = Array.isArray(qualState.facilities)
+          && qualState.facilities.some(f => String(f).toLowerCase() === 'standar');
+
+        let stdItems = [];
+        if (wantsStandard) {
+          // Furnishing hint: qualState (Phase 1) sering null saat customer bilang
+          // "semi aja" tanpa kata "furnish". Fallback ke #extractFurnishing(custText)
+          // yang mengenali "semi"/"full"/"kosongan" agar tier standar sesuai.
+          const furnHint = qualState.furnishing || filters.furnishing
+            || (profile.hasFurnishing ? this.#extractFurnishing(custText) : '');
+          const stdList = ConversationQualifier.#getStandardFacilitiesByType(
+            filters.buildingType, furnHint
+          );
+          if (stdList) stdItems = stdList.split(',').map(s => s.trim()).filter(Boolean);
         }
-        // (b) qualState accumulated facilities (Phase 1 detectFacilities or Phase 2 standar)
-        if (Array.isArray(qualState.facilities) && qualState.facilities.length) {
-          if (qualState.facilities.length === 1 && qualState.facilities[0] === 'standar') {
-            // Customer said "standar/biasa/terserah" → inject standard list by type + furnishing
-            const stdList = ConversationQualifier.#getStandardFacilitiesByType(
-              filters.buildingType, qualState.furnishing || filters.furnishing || ''
-            );
-            if (stdList) return { value: stdList, isStandard: true, source: 'stated' };
-            return { value: 'UNKNOWN', isStandard: false, source: 'UNKNOWN' };
-          }
-          return { value: qualState.facilities.join(', '), isStandard: false, source: 'stated' };
+
+        // Item spesifik DULU (prioritas kata customer), lalu standar yang belum tercakup.
+        const merged = [...specific];
+        stdItems.forEach(s => {
+          if (!merged.some(x => x.toLowerCase() === s.toLowerCase())) merged.push(s);
+        });
+
+        if (merged.length) {
+          // isStandard = true HANYA bila murni standar (customer tak sebut item spesifik).
+          return {
+            value     : merged.join(', '),
+            isStandard: wantsStandard && specific.length === 0,
+            source    : 'stated',
+          };
         }
         return { value: 'UNKNOWN', isStandard: false, source: 'UNKNOWN' };
       })(),
@@ -3426,6 +3458,18 @@ class ConversationQualifier {
    * Shown when customer answers Q_FAC with "standar/biasa/terserah".
    * Returns null when no meaningful standard list exists for the type.
    */
+  /**
+   * Fasilitas STANDAR per tipe properti saat sewa/booking.
+   * Dipakai saat customer bilang "fasilitas standar / biasa / terserah / tidak tahu".
+   * Basis: tabel fasilitas standar Elevan Property (per tipe). Untuk tipe hunian
+   * (house/apartment/villa/condo/boarding_house/mansion), furnishing full/semi
+   * menambah perabot/elektronik. Tipe komersial (ruko/kantor/gudang/toko) tidak
+   * bergantung furnishing.
+   *
+   * @param {string} buildingType - key katalog (house, apartment, villa, dst.)
+   * @param {string} furnishing   - 'full'/'semi'/'' (opsional)
+   * @returns {string|null} daftar fasilitas dipisah koma, atau null bila tak dikenali
+   */
   static #getStandardFacilitiesByType(buildingType, furnishing) {
     const type = (buildingType || '').toLowerCase();
     const furn = (furnishing || '').toLowerCase();
@@ -3433,23 +3477,52 @@ class ConversationQualifier {
     const isSemi = /semi/.test(furn);
 
     if (type === 'house' || type === 'kontrakan') {
-      if (isFull) return 'AC, Kitchen set, Lemari, Tempat Tidur, TV, Kulkas, CCTV, Kamar Mandi, One gate system';
-      if (isSemi) return 'AC, Kitchen set, CCTV camera, Lemari, Kamar Mandi, Kulkas, One gate system';
-      return 'Kamar Mandi, One gate system';
+      const base = 'Kamar Tidur, Kamar Mandi, Listrik, Air, Dapur, Ruang Tamu, Carport/Garasi, One gate system';
+      if (isFull) return `AC, Kitchen set, Lemari, Tempat Tidur, TV, Kulkas, CCTV, ${base}`;
+      if (isSemi) return `AC, Kitchen set, Lemari, Kulkas, CCTV, ${base}`;
+      return base;
     }
     if (type === 'apartment') {
-      if (isFull) return 'AC, Kitchen set, Lemari, Tempat Tidur, TV, Kulkas, Microwave, Kamar Mandi';
-      if (isSemi) return 'AC, Kitchen set, Lemari, Kamar Mandi';
-      return 'Kamar Mandi';
+      const base = 'Kamar Tidur, Kamar Mandi, AC, Dapur/Pantry, Listrik, Air, Lift, Keamanan 24 jam, Parkir';
+      if (isFull) return `Kitchen set, Lemari, Tempat Tidur, TV, Kulkas, Microwave, ${base}`;
+      if (isSemi) return `Kitchen set, Lemari, ${base}`;
+      return base;
+    }
+    if (type === 'condo') {
+      const base = 'Kamar Tidur, Kamar Mandi, AC, Dapur, WiFi, Parkir, Keamanan, Kolam renang/Gym';
+      if (isFull) return `Kitchen set, Lemari, Tempat Tidur, TV, Kulkas, ${base}`;
+      if (isSemi) return `Kitchen set, Lemari, ${base}`;
+      return base;
     }
     if (type === 'boarding_house') {
-      if (isFull) return 'AC, Kasur, Lemari, Kamar Mandi dalam, WiFi, Meja belajar';
-      if (isSemi) return 'AC, Kamar Mandi dalam';
-      return 'Kamar Mandi';
+      const base = 'Tempat Tidur, Lemari, Meja, Listrik, Air, WiFi, Kamar Mandi';
+      if (isFull) return `AC, ${base}, Akses dapur`;
+      if (isSemi) return `AC, ${base}`;
+      return base;
     }
     if (type === 'villa') {
-      if (isFull) return 'AC, Kitchen set, Kolam renang, TV, Kulkas, Lemari, Kamar Mandi';
-      return 'AC, Kitchen set, Kolam renang, Kamar Mandi';
+      const base = 'Kamar Tidur, Kamar Mandi, Peralatan Dapur, AC, WiFi, Ruang Keluarga, Parkir, Taman, CCTV, One gate system, Kolam renang';
+      if (isFull) return `TV, Kulkas, Lemari, Tempat Tidur, ${base}`;
+      if (isSemi) return `Kulkas, ${base}`;
+      return base;
+    }
+    if (type === 'hotel' || type === 'kondotel') {
+      return 'Tempat Tidur, Kamar Mandi, AC, TV, WiFi, Handuk, Perlengkapan mandi, Housekeeping, Resepsionis';
+    }
+    if (type === 'mansion') {
+      return 'Banyak Kamar Tidur, Beberapa Kamar Mandi, Garasi, Taman, Ruang Keluarga Besar, Dapur, AC, Keamanan';
+    }
+    if (type === 'shophouse' || type === 'ruko') {
+      return 'Bangunan Utama, Listrik, Air, Area Parkir, Toilet, Area Usaha';
+    }
+    if (type === 'office' || type === 'kantor') {
+      return 'Ruang Kerja, Listrik, AC, Internet, Toilet, Parkir, Keamanan';
+    }
+    if (type === 'warehouse' || type === 'gudang') {
+      return 'Area Gudang, Listrik, Air, Akses Kendaraan, Area Bongkar Muat, Keamanan';
+    }
+    if (type === 'store' || type === 'toko') {
+      return 'Area Toko, Listrik, Lampu, Air, Toilet, Area Display';
     }
     return null;
   }
@@ -3680,6 +3753,10 @@ class ConversationQualifier {
     if (/bising|noisy|ramai/.test(custText))         flags.push('Tidak mau bising/ramai');
     if (/gang sempit|narrow/.test(custText))         flags.push('Tidak mau gang sempit');
     if (/banjir|flood/.test(custText))               flags.push('Tidak mau banjir');
+    // "tidak panas / tidak gerah / jangan panas / no heat" — customer wants a cool
+    // spot; capture as an avoid-item so it isn't dropped from the summary.
+    if (/(?:tidak|gak|ga|ngga|enggak|jangan|anti|hindari|bukan)\s+(?:yang\s+)?panas|\bgerah\b|\bpengap\b|too hot|not hot/.test(custText))
+                                                     flags.push('Tidak mau panas');
     if (/tua|old building/.test(custText))           flags.push('Tidak mau bangunan tua');
     if (/tidak\s+macet|bebas\s+macet|anti\s+macet|hindari\s+macet|sering\s+macet|macet\s+(banget|parah)|kemacetan/.test(custText))
                                                      flags.push('Tidak mau macet');
@@ -3738,6 +3815,21 @@ class ConversationQualifier {
     if (!str) return str;
     const s = str.trim();
     return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+
+  /**
+   * Normalisasi jawaban patokan lokasi (Q6). Jika customer menjawab NEGATIF /
+   * fleksibel ("enggak ada", "tidak ada", "bebas", "terserah", "gak ada patokan"),
+   * tampilkan cukup "Bebas" (tanpa membubuhkan jawaban mentah customer — itu
+   * hanya menduplikasi arti "tidak ada" dan bikin baris summary berantakan).
+   * Selain kasus negatif, kembalikan jawaban apa adanya (kapital awal).
+   */
+  static #normalizeAnchorPoint(raw = '') {
+    const s = String(raw).trim();
+    if (!s) return 'UNKNOWN';
+    const NEG = /^(?:eng?gak?|ngga|nggak|tidak|gak|ga|kagak|ndak|blm|belum|no|none|nope|bebas|terserah|fleksibel|flexible|free)\b|(?:ga|gak|tidak|enggak|belum|tanpa|no)\s+ada|tidak\s+ada\s+patokan|bebas\s+(?:aja|saja)?|terserah/i;
+    if (NEG.test(s)) return 'Bebas';
+    return this.#capitalizeFirst(s);
   }
 
   /**

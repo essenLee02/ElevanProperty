@@ -188,8 +188,13 @@ sequelize.sync()
 
     // Load facility master (bilingual) so detectFacilities recognises every
     // facility registered in the DB, not just the hardcoded Indonesian map.
-    const { initFacilityCache } = require('./services/propertyRecommendationService');
+    const { initFacilityCache, initCityCache } = require('./services/propertyRecommendationService');
     await initFacilityCache();
+
+    // Load city master (cities table) so detectLocation()/getKnownLocations()
+    // in propertyRecommendationService.js recognise every active city in the
+    // DB, not just the hardcoded FALLBACK_LOCATION_KEYWORDS list.
+    await initCityCache();
 
     console.log('Database connected and synced');
     console.log('Environment file loaded from:', path.resolve(__dirname, '.env'));
