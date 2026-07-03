@@ -15,11 +15,12 @@
 
 const { Op } = require('sequelize');
 
-let City, Facility;
+let City, Facility, Location;
 try {
   const models = require('../models');
   City     = models.City;
   Facility = models.Facility;
+  Location = models.Location;
 } catch (_) {
   // Models may not be available in some test contexts
 }
@@ -33,6 +34,7 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const _cache = {
   cities    : { data: null, ts: 0 },
   facilities: { data: null, ts: 0 },
+  locations : { data: null, ts: 0 },
 };
 
 function _isStale(key) {
@@ -101,6 +103,61 @@ async function getFacilityNames() {
     console.warn('[aiContextService] getFacilityNames failed:', err.message);
     return _cache.facilities.data || [];
   }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   LOCATION / LANDMARK LOADER (anchor points — Q6 patokan lokasi)
+══════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Load all active landmark/anchor names from the `locations` table (cached).
+ * These are the reference points customers use as anchors ("dekat Grand City Mall",
+ * "dekat Alfamaret", "dekat Apotek") — mix of Indonesian & English terms.
+ *
+ * @returns {Promise<string[]>}
+ */
+async function getLocationNames() {
+  if (!_isStale('locations')) return _cache.locations.data;
+
+  if (!Location) return [];
+
+  try {
+    const rows = await Location.findAll({
+      attributes: ['name'],
+      where     : { status: 1 },
+      order     : [['name', 'ASC']],
+      raw       : true,
+    });
+
+    const names = rows.map(r => String(r.name || '').trim()).filter(Boolean);
+    _cache.locations = { data: names, ts: Date.now() };
+    return names;
+  } catch (err) {
+    console.warn('[aiContextService] getLocationNames failed:', err.message);
+    return _cache.locations.data || [];
+  }
+}
+
+/**
+ * Detect which landmark/anchor names (from DB) appear in the given text.
+ * Case-insensitive, word-boundary aware. Handles "GANG SEMPIT" from "ALLEY/GANG SEMPIT".
+ *
+ * @param {string}   text
+ * @param {string[]} locationNames - Array from getLocationNames()
+ * @returns {string[]}
+ */
+function detectLocationsInText(text, locationNames = []) {
+  if (!text || !locationNames.length) return [];
+  const normalized = text.toUpperCase();
+  return locationNames.filter(name => {
+    // Some DB names carry a slash alias ("ALLEY/GANG SEMPIT") — match any alias part.
+    return String(name).toUpperCase().split('/').some(part => {
+      const p = part.trim();
+      if (p.length < 3) return false;
+      const re = new RegExp(`(^|[^A-Z0-9])${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^A-Z0-9]|$)`);
+      return re.test(normalized);
+    });
+  });
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -193,20 +250,75 @@ async function buildFacilityContextBlock() {
   const names = await getFacilityNames();
   if (!names.length) return '';
 
-  // Group roughly by category to help AI contextualise
+  // Bilingual glossary: DB stores facility names in ENGLISH; customers usually type
+  // Indonesian. The AI must map BOTH languages to the same facility so recognition
+  // works whether the customer says "balkon" or "balcony", "kolam renang" or "pool".
   return `
-## FACILITY REFERENCE (from database — ${names.length} facilities)
+## FACILITY REFERENCE (from database — ${names.length} facilities) — BILINGUAL
 
-The following facilities are registered in the property platform. When a customer
-mentions any of these by name or similar term, recognise it as a facility request.
-If a customer asks for a facility NOT in this list, still attempt to help but flag
-that it may not be searchable in the catalog.
+Facility names below are stored in ENGLISH (DB casing). Customers may mention them in
+**Indonesian OR English** — treat both as the SAME facility. Common ID↔EN mapping:
+- kolam renang = swimming pool = pool · balkon = balcony · taman = garden
+- keamanan/satpam/cctv = security/cctv · parkir = parking · lift = elevator
+- dapur = kitchen · kulkas = refrigerator/fridge · mesin cuci = washing machine
+- kasur/ranjang = bed · lemari = wardrobe/closet · pemanas air = water heater
+- sarapan = breakfast · pusat kebugaran = gym/fitness · mushola = prayer room
 
-Registered facilities (use these exact names when quoting):
+Registered facilities (canonical DB names — quote these when confirming):
 ${names.join(' | ')}
 
-When a customer mentions facilities (e.g. "ada kolam renang?", "perlu parkir motor",
-"mau yang ada gym"), acknowledge specifically which ones match from the list above.
+Rules:
+1. When a customer mentions a facility in Indonesian or English, match it to the
+   canonical name above and confirm specifically (e.g. "Siap, yang ada kolam renang (pool) ✅").
+2. If a requested facility is NOT in this list, still help but note it may not be
+   searchable in the catalog.
+3. Never invent facilities that are not registered.
+`;
+}
+
+/**
+ * Build landmark/anchor-point (locations) reference block for the AI prompt.
+ *
+ * Lets the AI recognise Q6 "patokan lokasi" answers ("dekat Grand City Mall",
+ * "deket Alfamaret", "dekat apotek 24 jam") against the DB `locations` master.
+ * Bilingual: DB mixes Indonesian & English landmark terms.
+ *
+ * @param {string} userMessage
+ * @param {Array}  history
+ * @returns {Promise<string>}
+ */
+async function buildLocationContextBlock(userMessage, history = []) {
+  const names = await getLocationNames();
+  if (!names.length) return '';
+
+  const recentText = [
+    userMessage,
+    ...(history || [])
+      .filter(m => m.role === 'user' || m.role === 'customer')
+      .slice(-4)
+      .map(m => m.message || ''),
+  ].join(' ');
+
+  const detected = detectLocationsInText(recentText, names);
+  const matchedBlock = detected.length
+    ? `\nDetected landmark/anchor mentions in conversation: ${detected.join(', ')}\n`
+    : '';
+
+  return `
+## LANDMARK / ANCHOR REFERENCE (from database — ${names.length} anchor types) — BILINGUAL
+
+These are valid "patokan lokasi" (anchor points) customers use to describe WHERE they
+want a property, in Indonesian OR English (mall, sekolah/school, apotek/pharmacy,
+bandara/airport, stasiun/station, pasar/market, rumah sakit/hospital, minimarket, etc.).
+${matchedBlock}
+Registered anchor types:
+${names.join(' | ')}
+
+Rules:
+1. When a customer answers Q6 with any of these (or a similar term in either language),
+   treat it as a VALID anchor point — do NOT re-ask the location/area question.
+2. Preserve the customer's exact phrasing in the summary ("Patokan lokasi: dekat PTC").
+3. A named place (e.g. "Grand City Mall", "PTC", "Tunjungan Plaza") also counts as an anchor.
 `;
 }
 
@@ -243,8 +355,9 @@ async function buildCityContextBlock(userMessage, history = []) {
     : '';
 
   return `
-## CITY REFERENCE (from database — ${cityNames.length} cities in Indonesia)
+## CITY REFERENCE (from database — ${cityNames.length} cities in Indonesia) — BILINGUAL
 
+City names are Indonesian; accept English framing too ("in Surabaya" = "di Surabaya").
 ${matchedBlock}
 All city names registered in the platform:
 ${cityNames.join(' | ')}
@@ -273,9 +386,10 @@ City matching rules:
 async function loadAIContextBlocks(userMessage, history = []) {
   const locationTopic = isLocationTopic(userMessage);
 
-  const [facilityContext, cityContext, cityNames] = await Promise.all([
+  const [facilityContext, cityContext, locationContext, cityNames] = await Promise.all([
     buildFacilityContextBlock(),
-    locationTopic ? buildCityContextBlock(userMessage, history) : Promise.resolve(''),
+    locationTopic ? buildCityContextBlock(userMessage, history)     : Promise.resolve(''),
+    locationTopic ? buildLocationContextBlock(userMessage, history) : Promise.resolve(''),
     getCityNames(),
   ]);
 
@@ -284,7 +398,7 @@ async function loadAIContextBlocks(userMessage, history = []) {
     cityNames,
   );
 
-  return { facilityContext, cityContext, detectedCities };
+  return { facilityContext, cityContext, locationContext, detectedCities };
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -295,16 +409,20 @@ async function loadAIContextBlocks(userMessage, history = []) {
 function invalidateCache() {
   _cache.cities     = { data: null, ts: 0 };
   _cache.facilities = { data: null, ts: 0 };
+  _cache.locations  = { data: null, ts: 0 };
 }
 
 module.exports = {
   getCityNames,
   getFacilityNames,
+  getLocationNames,
   detectCitiesInText,
   detectFacilitiesInText,
+  detectLocationsInText,
   isLocationTopic,
   buildFacilityContextBlock,
   buildCityContextBlock,
+  buildLocationContextBlock,
   loadAIContextBlocks,
   invalidateCache,
 };

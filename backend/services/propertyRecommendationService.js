@@ -321,6 +321,9 @@ const _FACILITY_MAP = [
   ['Carport',        ['carport']],
   ['Garasi',         ['garasi', 'garage']],
   ['Taman',          ['taman', 'garden']],
+  // "Perlengkapan dapur" (peralatan/alat masak) dicek SEBELUM 'Dapur' & 'Kitchen set'
+  // supaya jawaban "ada perlengkapan dapur" tampil utuh, bukan dipangkas jadi "Dapur".
+  ['Perlengkapan Dapur', ['perlengkapan dapur', 'peralatan dapur', 'alat dapur', 'alat masak', 'perabot dapur', 'perkakas dapur']],
   ['Kitchen set',    ['kitchen set', 'kichen set', 'kitchenset', 'kitchen']],
   ['Dapur',          ['dapur', 'pantry']],
   // Perabot / elektronik (relevan utk sewa furnished/semi)
@@ -342,18 +345,73 @@ const _FACILITY_MAP = [
   ['Laundry',        ['laundry']],
 ];
 
+// ─── DB-backed facility vocabulary (bilingual augmentation) ──────────────────
+// Master `facilities` menyimpan nama fasilitas dalam BAHASA INGGRIS (BALCONY, CCTV,
+// BUSINESS CENTER, …). Hardcoded _FACILITY_MAP di atas kaya sinonim BAHASA INDONESIA.
+// initFacilityCache() memuat nama DB sekali saat startup agar detectFacilities juga
+// mengenali fasilitas apa pun yang terdaftar di master (long-tail + istilah Inggris),
+// tanpa mengubah tanda-tangan sinkron fungsi. Digabung dengan map ID → bilingual.
+let _dbFacilities = [];  // [{ lower, label }], diurutkan terpanjang dulu
+
+function _titleCaseFacility(s) {
+  return String(s || '').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+async function initFacilityCache() {
+  try {
+    const { Facility } = require('../models');
+    const rows = await Facility.findAll({ where: { status: 1 }, attributes: ['name'], raw: true });
+    _dbFacilities = rows
+      .map((r) => String(r.name || '').trim())
+      .filter((n) => n.length >= 4)  // ≥4 char: hindari noise pendek (AC/BAR/BED) yang sudah dicakup map ID
+      .map((n) => ({ lower: n.toLowerCase(), label: _titleCaseFacility(n) }))
+      .sort((a, b) => b.lower.length - a.lower.length);
+    console.log(`[FacilityCache] Loaded ${_dbFacilities.length} facilities from DB (bilingual augmentation).`);
+  } catch (err) {
+    console.warn('[FacilityCache] initFacilityCache() failed — using hardcoded map only:', err.message);
+  }
+}
+
 function detectFacilities(message = '') {
   const text = normalizeText(message);
-  const out = [];
+  const out  = [];
+  const coveredKeywords = new Set();  // keyword ID/EN yang sudah match dari map (untuk dedup DB)
+
   for (const [label, keywords] of _FACILITY_MAP) {
-    // Word-boundary match so short tokens like "ac" don't match "macet"/"kapasitas".
-    const hit = keywords.some((k) => {
+    let matched = false;
+    for (const k of keywords) {
+      // Word-boundary match so short tokens like "ac" don't match "macet"/"kapasitas".
       const esc = k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      return new RegExp(`(^|\\W)${esc}(\\W|$)`, 'i').test(text);
-    });
-    if (hit) out.push(label);
+      if (new RegExp(`(^|\\W)${esc}(\\W|$)`, 'i').test(text)) {
+        matched = true;
+        coveredKeywords.add(k.toLowerCase());
+      }
+    }
+    if (matched) out.push(label);
   }
-  return out;
+
+  // Augmentasi DB: kenali fasilitas master (Inggris) yang tidak ada di map ID.
+  // Lewati yang sudah terwakili keyword map (mis. "balcony"→Balkon, "pool"→Kolam renang)
+  // agar tidak dobel ID/EN. Diurutkan terpanjang dulu; frasa spesifik ("backup generator")
+  // menang atas kata umum ("generator") yang jadi substring-nya.
+  const addedDbLowers = [];
+  for (const { lower, label } of _dbFacilities) {
+    if (out.includes(label) || coveredKeywords.has(lower)) continue;
+    // Lewati jika istilah ini hanya bagian dari fasilitas DB yang sudah dipilih.
+    if (addedDbLowers.some((sel) => sel.includes(lower))) continue;
+    const esc = lower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp(`(^|\\W)${esc}(\\W|$)`, 'i').test(text)) {
+      out.push(label);
+      addedDbLowers.push(lower);
+    }
+  }
+
+  // "Perlengkapan Dapur" sudah mencakup dapur & kitchen set — buang label generik
+  // yang ikut ter-match dari kata "dapur"/"kitchen" agar tidak dobel di summary.
+  let result = out.includes('Perlengkapan Dapur')
+    ? out.filter((l) => l !== 'Dapur' && l !== 'Kitchen set')
+    : out;
+  return [...new Set(result)];
 }
 
 function parseNumberToken(token = '') {
@@ -1439,6 +1497,7 @@ module.exports = {
   findWithExpandedBudget,
   detectBudget,
   detectFacilities,
+  initFacilityCache,
   stripCommercialUsePhrases,
   detectCommercialUse,
   detectUseCase,

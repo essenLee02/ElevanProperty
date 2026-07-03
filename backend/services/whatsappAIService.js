@@ -324,13 +324,15 @@ async function generateWhatsAppAIReply(params) {
     budget  : filters.budget?.text || 'set',
   });
 
-  // ── Step 3.2: LOAD AI CONTEXT BLOCKS (facilities + cities from DB) ──────────
+  // ── Step 3.2: LOAD AI CONTEXT BLOCKS (facilities + cities + landmarks from DB) ─
   let facilityContext = '';
   let cityContext     = '';
+  let locationContext = '';
   try {
     const ctx = await loadAIContextBlocks(message, history);
     facilityContext = ctx.facilityContext || '';
     cityContext     = ctx.cityContext     || '';
+    locationContext = ctx.locationContext || '';
     if (ctx.detectedCities.length) {
       console.log('[WhatsAppAI] 🏙️ Detected cities in message:', ctx.detectedCities.join(', '));
     }
@@ -338,8 +340,8 @@ async function generateWhatsAppAIReply(params) {
     console.warn('[WhatsAppAI] Context blocks load failed:', err.message);
   }
 
-  // Append facility + city context to propertyCtx so it reaches all AI providers
-  const enrichedPropertyCtx = [propertyCtx, facilityContext, cityContext].filter(Boolean).join('\n\n');
+  // Append facility + city + landmark context to propertyCtx so it reaches all AI providers
+  const enrichedPropertyCtx = [propertyCtx, facilityContext, cityContext, locationContext].filter(Boolean).join('\n\n');
 
   // ── Step 3.5: CHECK AI_PRIMARY_PROVIDER ───────────────────────────────────
   //
@@ -368,7 +370,7 @@ async function generateWhatsAppAIReply(params) {
         history,
         message,
         propertyCtx,
-        { facilityContext, cityContext }
+        { facilityContext, cityContext, locationContext }
       );
       return {
         reply         : result.reply,

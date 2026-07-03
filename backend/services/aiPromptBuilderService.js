@@ -11,6 +11,42 @@ const QS_CUST_ROLES = new Set(['user', 'customer']);
 const QS_AI_ROLES   = new Set(['assistant', 'ai', 'bot']);
 
 /**
+ * Normalisasi jawaban durasi sewa/booking menjadi "N unit" yang rapi.
+ * Menangani:
+ *   - angka + unit  : "10 hari", "2 minggu"          → "10 hari", "2 minggu"
+ *   - prefix "se-"  : "seminggu", "sebulan", "setahun" → "1 minggu", "1 bulan", "1 tahun"
+ *   - angka kata    : "dua minggu", "tiga bulan"       → "2 minggu", "3 bulan"
+ * Filler seperti "Saya booking ... aja, Kak" diabaikan; hanya durasi bersih diambil.
+ * @returns {string|null} "N unit" atau null bila tidak ada durasi terdeteksi.
+ */
+function normalizeDuration(text = '') {
+  const t = String(text || '').toLowerCase();
+  const uMap = {
+    hari: 'hari', day: 'hari', days: 'hari',
+    malam: 'malam', night: 'malam', nights: 'malam',
+    minggu: 'minggu', pekan: 'minggu', week: 'minggu', weeks: 'minggu',
+    bulan: 'bulan', month: 'bulan', months: 'bulan',
+    tahun: 'tahun', thn: 'tahun', year: 'tahun', years: 'tahun',
+  };
+  const unitRe = 'hari|malam|minggu|pekan|bulan|tahun|thn|day|days|night|nights|week|weeks|month|months|year|years';
+
+  // 1) angka + unit — "2 minggu", "10 hari"
+  const numMatch = t.match(new RegExp(`\\b(\\d+)\\s*(${unitRe})\\b`, 'i'));
+  if (numMatch) return `${numMatch[1]} ${uMap[numMatch[2].toLowerCase()]}`;
+
+  // 2) prefix "se-" menempel — "seminggu", "sebulan", "setahun", "sehari", "semalam"
+  const seMatch = t.match(new RegExp(`\\bse(${unitRe})\\b`, 'i'));
+  if (seMatch) return `1 ${uMap[seMatch[1].toLowerCase()]}`;
+
+  // 3) angka kata + unit — "dua minggu", "tiga bulan"
+  const WORD_NUM = { se:1, satu:1, dua:2, tiga:3, empat:4, lima:5, enam:6, tujuh:7, delapan:8, sembilan:9, sepuluh:10 };
+  const wordMatch = t.match(new RegExp(`\\b(${Object.keys(WORD_NUM).join('|')})\\s+(${unitRe})\\b`, 'i'));
+  if (wordMatch) return `${WORD_NUM[wordMatch[1].toLowerCase()]} ${uMap[wordMatch[2].toLowerCase()]}`;
+
+  return null;
+}
+
+/**
  * Extract which Q1–Q12 fields have been answered from conversation history.
  * Runs server-side so the AI gets an authoritative checklist — it does NOT
  * have to guess from raw history text (which fails when history is truncated).
@@ -549,14 +585,7 @@ function extractQualificationState(history = [], currentMessage = '') {
     if (!state.leaseDuration && /sewa\s+(?:untuk\s+)?berapa lama|berapa lama.*sewa|durasi\s+sewa/.test(aiText)) {
       const looksLikeDate = new RegExp(`\\b\\d{1,2}\\s+(?:${MONTH_ID}|${MONTH_EN})\\b`, 'i').test(custResp);
       if (!looksLikeDate) {
-        // Extract clean "N unit" — strip filler like "Butuh ... sewa, Kak" → "10 hari"
-        const durMatch = custResp.match(/\b(\d+)\s*(hari|malam|minggu|bulan|tahun|day|night|week|month|year)s?\b/i);
-        if (durMatch) {
-          const uMap = { hari:'hari',day:'hari',malam:'malam',night:'malam',minggu:'minggu',week:'minggu',bulan:'bulan',month:'bulan',tahun:'tahun',year:'tahun' };
-          state.leaseDuration = `${durMatch[1]} ${uMap[durMatch[2].toLowerCase()] || durMatch[2].toLowerCase()}`;
-        } else {
-          state.leaseDuration = custResp;
-        }
+        state.leaseDuration = normalizeDuration(custResp) || custResp;
       }
       // If it looks like a date: leave leaseDuration null so Q10 gets re-asked with clearer hint
     }
@@ -1647,6 +1676,7 @@ Backend property catalog context for this latest WhatsApp message:
 ${showCatalogAfterBrief ? (propertyContext || 'No backend property catalog context is available.') : '(Property catalog hidden during Q1–Q12 interview — akan digunakan setelah brief jika RESPOND_CATALOG_RUN=ON)'}
 ${extraContext.facilityContext || ''}
 ${extraContext.cityContext || ''}
+${extraContext.locationContext || ''}
 Latest WhatsApp customer message. This is the highest-priority instruction:
 ${userMessage}
 

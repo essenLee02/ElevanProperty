@@ -64,7 +64,7 @@ const provinceMasterController   = require('../controllers/provinceMasterControl
 const cityMasterController       = require('../controllers/cityMasterController');
 const propertyMasterController   = require('../controllers/propertyMasterController');
 const locationMasterController   = require('../controllers/locationMasterController');
-const propertyLocationController  = require('../controllers/propertyLocationController');
+// ⚠️ propertyLocationController merged into propertyMasterController
 
 const { verifyToken, requirePrivilege } = require('../middleware/verifyToken');
 
@@ -251,12 +251,13 @@ router.delete('/property/delete/:property_id',        verifyToken, propertyMaste
 /* ══════════════════════════════════════════════════════════════════════════════
    PROPERTY-LOCATION RELATIONSHIPS (Butuh login)
    Menghubungkan property dengan nearby location anchors (landmarks)
+   ⚠️ MERGED: Semua method dipindahkan ke propertyMasterController
 ══════════════════════════════════════════════════════════════════════════════ */
 
-router.get('/property/:property_id/locations',              verifyToken, propertyLocationController.getPropertyLocations);
-router.post('/property/:property_id/locations',             verifyToken, propertyLocationController.addLocationToProperty);
-router.post('/property/:property_id/locations/bulk',        verifyToken, propertyLocationController.bulkAddLocations);
-router.delete('/property/:property_id/locations/:location_id', verifyToken, propertyLocationController.removeLocationFromProperty);
+router.get('/property/:property_id/locations',              verifyToken, propertyMasterController.getPropertyLocations);
+router.post('/property/:property_id/locations',             verifyToken, propertyMasterController.addLocationToProperty);
+router.post('/property/:property_id/locations/bulk',        verifyToken, propertyMasterController.bulkAddLocations);
+router.delete('/property/:property_id/locations/:location_id', verifyToken, propertyMasterController.removeLocationFromProperty);
 
 /* ══════════════════════════════════════════════════════════════════════════════
    MASTER DATA — LOCATION (Butuh login)

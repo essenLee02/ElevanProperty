@@ -425,6 +425,26 @@ class PropertyFormatter {
     return MAP[type] || type || (lang === 'id' ? 'Tersedia' : 'Available');
   }
 
+  /** Tipe yang transaksi sewanya adalah "booking" (menginap jangka pendek). */
+  static isBookingType(buildingType = '') {
+    return ['hotel', 'kondotel', 'villa'].includes((buildingType || '').toLowerCase());
+  }
+
+  /**
+   * Verba rencana untuk summary/pertanyaan. Untuk hotel/kondotel/villa yang disewa,
+   * gunakan "Booking" (bukan "Sewa") supaya cocok dengan kata customer ("booking hotel").
+   * @returns {string} "Booking" | "Sewa" | "Beli" | ""
+   */
+  static planLabel(buildingType = '', transactionType = '', lang = 'en') {
+    if (transactionType === 'rent') {
+      return this.isBookingType(buildingType) ? 'Booking' : (lang === 'id' ? 'Sewa' : 'Rent');
+    }
+    if (transactionType === 'sale' || transactionType === 'purchase') {
+      return lang === 'id' ? 'Beli' : 'Buy';
+    }
+    return '';
+  }
+
   /**
    * Format a single Rumah123 listing as a numbered markdown block.
    * Includes: image, location, price, type, specs, agent contact, and Rumah123 URL.
@@ -1082,11 +1102,11 @@ class ResponseBuilderWhatsApp {
       return `✓ ${label}: *${field.value}*${src}`;
     };
 
-    const txLabel = brief.transactionType?.value === 'rent'
-      ? (isId ? 'Sewa' : 'Rent')
-      : brief.transactionType?.value === 'sale'
-        ? (isId ? 'Beli' : 'Buy')
-        : brief.transactionType?.value;
+    // Booking-aware plan label: hotel/villa/kondotel + rent → "Booking" (sesuai kata customer).
+    const txLabel = ['rent', 'sale', 'purchase'].includes(brief.transactionType?.value)
+      ? PropertyFormatter.planLabel(brief.buildingType?.value, brief.transactionType?.value, this.#lang)
+      : brief.transactionType?.value;
+    const isBookingPlan = txLabel === 'Booking';
 
     if (txLabel && brief.transactionType?.value !== 'UNKNOWN') {
       lines.push(`✓ ${isId ? 'Rencana' : 'Plan'}: *${txLabel}*`);
@@ -1102,7 +1122,9 @@ class ResponseBuilderWhatsApp {
     if (budL) lines.push(budL);
     const movL = fmt(isId ? 'Masuk' : 'Move-in', brief.moveInDate);
     if (movL) lines.push(movL);
-    const durL = fmt(isId ? 'Durasi sewa' : 'Lease duration', brief.leaseDuration);
+    const durLabel = isBookingPlan ? (isId ? 'Durasi menginap' : 'Stay duration')
+                                    : (isId ? 'Durasi sewa'    : 'Lease duration');
+    const durL = fmt(durLabel, brief.leaseDuration);
     if (durL) lines.push(durL);
     const dmL  = fmt(isId ? 'Keputusan bersama' : 'Decision maker', brief.decisionMaker);
     if (dmL) lines.push(dmL);
@@ -1172,11 +1194,9 @@ class ResponseBuilderWhatsApp {
       ? `✓ ${label}: *${field.value}*`
       : `✗ ${label}: *${notAsked}*`;
 
-    const txLabel = brief.transactionType?.value === 'rent'
-      ? (isId ? 'Sewa' : 'Rent')
-      : brief.transactionType?.value === 'sale'
-        ? (isId ? 'Beli' : 'Buy')
-        : null;
+    const txLabel = ['rent', 'sale', 'purchase'].includes(brief.transactionType?.value)
+      ? PropertyFormatter.planLabel(brief.buildingType?.value, brief.transactionType?.value, this.#lang)
+      : null;
     const typeHuman = (brief.buildingType && brief.buildingType.value !== 'UNKNOWN' && brief.buildingType.value != null)
       ? PropertyFormatter.humanBuildingType(brief.buildingType.value, this.#lang)
       : null;
@@ -2246,11 +2266,18 @@ class ConversationQualifier {
     if (!txKey) return null;
 
     const M = 1e6, B = 1e9, K = 1e3;
-    // Tabel referensi harga wajar Indonesia (2026). period: 'month'=/bln, 'night'=/malam,
-    // 'year'=/thn, ''=harga jual. Tier eksklusif bersifat open-ended (ditampilkan "+").
+    // Tabel referensi HARGA WAJAR Indonesia 2025–2026, dipisah per transaksi:
+    //   Beli   → 'sale'  (period '')
+    //   Kontrak tahunan → House, Ruko, Gudang   (period 'year')
+    //   Sewa bulanan    → Apartment, Condo, Office, Store, Mansion (period 'month')
+    //   Sewa kamar      → Kost (period 'month') + kontrak bangunan (period 'year')
+    //   Booking         → Hotel (per malam) & Villa (per malam) + opsi long-stay
+    // period: 'month'=/bln, 'night'=/malam, 'year'=/thn, ''=harga jual.
+    // Tier eksklusif bersifat open-ended (ditampilkan "+").
     const TIERS = {
       house: {
-        rent: { terjangkau: [2*M, 6*M],     menengah: [6*M, 15*M],    eksklusif: [15*M, 50*M],   period: 'month' },
+        // Sewa rumah = KONTRAK TAHUNAN
+        rent: { terjangkau: [20*M, 60*M],   menengah: [60*M, 180*M],  eksklusif: [180*M, 600*M], period: 'year' },
         sale: { terjangkau: [350*M, 900*M], menengah: [900*M, 3*B],   eksklusif: [3*B, 15*B],    period: '' },
       },
       apartment: {
@@ -2262,35 +2289,45 @@ class ConversationQualifier {
         sale: { terjangkau: [700*M, 1.5*B], menengah: [1.5*B, 5*B],   eksklusif: [5*B, 20*B],    period: '' },
       },
       hotel: {
-        rent: { terjangkau: [100*M, 500*M], menengah: [500*M, 2*B],   eksklusif: [2*B, 10*B],    period: 'month' },
+        // Booking kamar PER MALAM (default). Long-stay = sewa/kontrak hotel penuh per TAHUN.
+        rent: { byPeriod: {
+          night: { terjangkau: [200*K, 800*K], menengah: [800*K, 2*M],  eksklusif: [2*M, 10*M],  period: 'night' },
+          year:  { terjangkau: [100*M, 500*M], menengah: [500*M, 3*B],  eksklusif: [3*B, 50*B],  period: 'year' },
+        } },
         sale: { terjangkau: [5*B, 20*B],    menengah: [20*B, 100*B],  eksklusif: [100*B, 500*B], period: '' },
       },
       villa: {
-        // Sewa villa punya DUA mode: bulanan (long-stay) & harian (vacation). Dipilih via periodHint.
+        // Booking HARIAN (default, vacation) + sewa BULANAN (long-stay).
         rent: { byPeriod: {
-          month: { terjangkau: [15*M, 50*M], menengah: [50*M, 150*M], eksklusif: [150*M, 500*M], period: 'month' },
-          night: { terjangkau: [1.5*M, 4*M], menengah: [4*M, 10*M],   eksklusif: [10*M, 40*M],   period: 'night' },
+          night: { terjangkau: [1*M, 3*M],   menengah: [3*M, 8*M],     eksklusif: [8*M, 30*M],   period: 'night' },
+          month: { terjangkau: [10*M, 30*M], menengah: [30*M, 100*M],  eksklusif: [100*M, 500*M], period: 'month' },
         } },
         sale: { terjangkau: [800*M, 3*B],   menengah: [3*B, 10*B],    eksklusif: [10*B, 100*B],  period: '' },
       },
       boarding_house: {
-        rent: { terjangkau: [600*K, 1.8*M], menengah: [1.8*M, 3.5*M], eksklusif: [3.5*M, 10*M],  period: 'month' },
+        // Sewa KAMAR per bulan (default) + KONTRAK bangunan penuh per tahun.
+        rent: { byPeriod: {
+          month: { terjangkau: [600*K, 1.8*M], menengah: [1.8*M, 3.5*M], eksklusif: [3.5*M, 10*M], period: 'month' },
+          year:  { terjangkau: [30*M, 80*M],   menengah: [80*M, 300*M],  eksklusif: [300*M, 2*B],  period: 'year' },
+        } },
         sale: { terjangkau: [500*M, 2*B],   menengah: [2*B, 8*B],     eksklusif: [8*B, 50*B],    period: '' },
       },
       shophouse: {
-        rent: { terjangkau: [30*M, 100*M],  menengah: [100*M, 300*M], eksklusif: [300*M, 1*B],   period: 'year' },
+        // Sewa ruko = KONTRAK TAHUNAN
+        rent: { terjangkau: [30*M, 100*M],  menengah: [100*M, 300*M], eksklusif: [300*M, 1.5*B], period: 'year' },
         sale: { terjangkau: [1*B, 2.5*B],   menengah: [2.5*B, 7*B],   eksklusif: [7*B, 25*B],    period: '' },
       },
       office: {
-        rent: { terjangkau: [50*M, 200*M],  menengah: [200*M, 800*M], eksklusif: [800*M, 5*B],   period: 'year' },
+        rent: { terjangkau: [4*M, 15*M],    menengah: [15*M, 60*M],   eksklusif: [60*M, 500*M],  period: 'month' },
         sale: { terjangkau: [1*B, 5*B],     menengah: [5*B, 20*B],    eksklusif: [20*B, 200*B],  period: '' },
       },
       warehouse: {
-        rent: { terjangkau: [50*M, 200*M],  menengah: [200*M, 800*M], eksklusif: [800*M, 5*B],   period: 'year' },
+        // Sewa gudang = KONTRAK TAHUNAN
+        rent: { terjangkau: [30*M, 100*M],  menengah: [100*M, 500*M], eksklusif: [500*M, 5*B],   period: 'year' },
         sale: { terjangkau: [1*B, 4*B],     menengah: [4*B, 15*B],    eksklusif: [15*B, 100*B],  period: '' },
       },
       store: {
-        rent: { terjangkau: [20*M, 80*M],   menengah: [80*M, 300*M],  eksklusif: [300*M, 2*B],   period: 'year' },
+        rent: { terjangkau: [1*M, 8*M],     menengah: [8*M, 30*M],    eksklusif: [30*M, 200*M],  period: 'month' },
         sale: { terjangkau: [500*M, 2*B],   menengah: [2*B, 6*B],     eksklusif: [6*B, 25*B],    period: '' },
       },
       mansion: {
@@ -2315,10 +2352,18 @@ class ConversationQualifier {
     let entry = row[txKey] || TIERS.others[txKey] || null;
     if (!entry) return null;
 
-    // Mode periode ganda (villa sewa): pilih bulanan vs harian dari periodHint.
+    // Mode periode ganda. byPeriod bisa punya kombinasi { night, month, year }:
+    //   hotel   : night (booking, default) + year  (sewa hotel penuh)
+    //   villa   : night (booking, default) + month (sewa bulanan)
+    //   kost    : month (sewa kamar, default) + year (kontrak bangunan)
+    // Pilih long-stay HANYA jika customer eksplisit menyebut bulan/tahun/kontrak;
+    // "seminggu"/booking singkat tetap pakai night. Default = night bila ada, else month, else year.
     if (entry.byPeriod) {
-      const wantMonthly = /month|bulan|year|tahun|thn/i.test(periodHint || '');
-      entry = wantMonthly ? entry.byPeriod.month : entry.byPeriod.night;
+      const bp = entry.byPeriod;
+      const hint = String(periodHint || '');
+      if (/year|tahun|thn|kontrak|tahunan/i.test(hint) && bp.year)        entry = bp.year;
+      else if (/month|bulan|bulanan/i.test(hint) && bp.month)             entry = bp.month;
+      else                                                                entry = bp.night || bp.month || bp.year;
     }
     return entry;
   }
@@ -2447,8 +2492,12 @@ class ConversationQualifier {
     // Not fired for commercial types, bookings, or when district is already known.
     const LARGE_CITIES_SET = ['surabaya', 'jakarta', 'bandung', 'medan', 'semarang', 'makassar', 'palembang', 'tangerang'];
     const isCommercialType  = ['shophouse', 'office', 'warehouse', 'store'].includes(type);
+    // Booking (hotel/kondotel/villa) & customer yang sudah menyebut patokan lokasi
+    // (anchorPoint, mis. "dekat PTC") TIDAK ditanya area lagi — redundant dengan Q6.
     if (loc && !profile.hasDistrict && !profile.aiAskedDistrict
         && !isCommercialType
+        && !PropertyFormatter.isBookingType(type)
+        && !profile.hasAnchorPoint
         && LARGE_CITIES_SET.some(c => loc.toLowerCase().includes(c))) {
       let exDistrict;
       if (loc.toLowerCase().includes('surabaya'))
@@ -2690,8 +2739,11 @@ class ConversationQualifier {
         if (q9c) return q9c;
       }
 
-      /* ── Q10: Lease duration (sewa only, duration not volunteered) ── */
-      if (tx === 'rent' && !profile.hasLeaseDuration && !profile.aiAskedLeaseDuration) {
+      /* ── Q10: Lease duration (sewa only, duration not volunteered) ──
+         Booking (hotel/kondotel/villa) TIDAK ditanya durasi sewa generik di sini —
+         durasi menginap ditangani lewat check-in/check-out (jumlah malam) di Q14. */
+      if (tx === 'rent' && !PropertyFormatter.isBookingType(type)
+          && !profile.hasLeaseDuration && !profile.aiAskedLeaseDuration) {
         return isId
           ? `Rencananya sewa untuk berapa lama? ⏱️`
           : `How long are you planning to lease? ⏱️`;
@@ -2722,7 +2774,10 @@ class ConversationQualifier {
       if ((type === 'hotel' || (type === 'kondotel' && tx === 'rent'))) {
         if (!profile.hasCheckInDate && !profile.aiAskedCheckIn)
           return isId ? `Rencananya check-in tanggal berapa? 📅` : `What is your planned check-in date? 📅`;
-        if (!profile.hasCheckOutDate && !profile.aiAskedCheckOut)
+        // Skip check-out kalau check-in DAN durasi/malam sudah diketahui — check-out
+        // dihitung otomatis (mis. check-in 16 Juli + 1 minggu = 23 Juli). Jangan tanya lagi.
+        if (!profile.hasCheckOutDate && !profile.aiAskedCheckOut
+            && !(profile.hasCheckInDate && profile.hasLeaseDuration))
           return isId ? `Check-out tanggal berapa? (atau berapa malam?) 🌙` : `Check-out date? (or how many nights?) 🌙`;
         if (!profile.hasRoomType && !profile.aiAskedRoomType)
           return isId ? `Tipe kamar yang diinginkan? *Standard*, *Deluxe*, *Suite*, atau *Family room*? 🛏️` : `Preferred room type? *Standard*, *Deluxe*, *Suite*, or *Family room*? 🛏️`;
@@ -3257,10 +3312,14 @@ class ConversationQualifier {
         source: profile.hasAlternativeArea ? 'stated' : 'UNKNOWN',
       },
       redFlags: {
-        value : profile.hasRedFlags
-          ? this.#extractRedFlags(custText)
-          : 'UNKNOWN',
-        source: profile.hasRedFlags ? 'stated' : 'UNKNOWN',
+        // Prefer qualState.redFlags — jawaban PENUH customer ke Q5 (Phase 2, session-scoped),
+        // mis. "balkon tidak hadap matahari terbenam, akses jalan lancar, tidak banjir".
+        // #extractRedFlags(custText) hanya ringkasan kasar (sering memangkas jadi 1 item),
+        // jadi dipakai hanya sebagai fallback bila qualState.redFlags kosong.
+        value : qualState.redFlags
+          ? this.#capitalizeFirst(qualState.redFlags)
+          : (profile.hasRedFlags ? this.#extractRedFlags(custText) : 'UNKNOWN'),
+        source: (qualState.redFlags || profile.hasRedFlags) ? 'stated' : 'UNKNOWN',
       },
       preferences: {
         // Preferensi POSITIF lingkungan/suasana (sejuk, rindang, asri, tenang, dll).

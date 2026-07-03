@@ -13,7 +13,7 @@
 const { Op }       = require('sequelize');
 const {
   Property, PropertyImage, PropertyFacility,
-  City, Province, Country, Facility, User
+  City, Province, Country, Facility, User, PropertyLocation, Location
 } = require('../models');
 const { HTTP }     = require('../utils/httpStatus');
 const { sendSuccess, sendError } = require('../utils/responseFormat');
@@ -167,6 +167,7 @@ class PropertyMasterController extends GeneralController {
         city_id,
         province_id,
         country_id,
+        user_id:              createdBy,   // pemilik = agent yang membuat (untuk katalog per user login)
         title:                String(title).trim(),
         description:          description ? String(description).trim() : null,
         price:                PropertyMasterController.#num(price),
@@ -376,6 +377,12 @@ class PropertyMasterController extends GeneralController {
       const filterProvinceId = req.query.province_id      ? String(req.query.province_id).trim()       : '';
 
       const where = { status: { [Op.ne]: 3 } };
+      // Scope katalog ke user yang login: hanya properti milik agent tsb
+      // (properties.user_id = users.user_id dari token auth). Halaman /property
+      // & konteks AI hanya menampilkan listing milik user yang sedang login.
+      const loginUserId = req.user?.userId || null;
+      if (loginUserId) where.user_id = loginUserId;
+
       if (search)           where.title            = { [Op.like]: `%${search}%` };
       if (filterTxType)     where.transaction_type = filterTxType;
       if (filterBuildType)  where.building_type    = filterBuildType;
@@ -572,6 +579,170 @@ class PropertyMasterController extends GeneralController {
     } catch (error) {
       console.error('[PROPERTY TOGGLE ERROR]', error.message);
       return sendError(res, HTTP.INTERNAL_SERVER_ERROR, null, 'Gagal mengubah status properti');
+    }
+  }
+
+  /* ──────────────────────────────────────────────────────────────────────────
+     PROPERTY LOCATIONS (dari propertyLocationController)
+  ────────────────────────────────────────────────────────────────────────── */
+
+  /**
+   * GET /api/property/:property_id/locations
+   * Get all locations linked to a property
+   */
+  static async getPropertyLocations(req, res) {
+    try {
+      const { property_id } = req.params;
+
+      const property = await Property.findOne({ where: { property_id } });
+      if (!property) {
+        return sendError(res, HTTP.NOT_FOUND, null, 'Property not found');
+      }
+
+      const locations = await PropertyLocation.findAll({
+        where: { property_id },
+        include: [
+          {
+            model: Location,
+            as: 'location',
+            attributes: ['location_id', 'name', 'status'],
+          },
+        ],
+        order: [['created_date', 'DESC']],
+      });
+
+      return sendSuccess(res, HTTP.OK, { locations }, 'Locations retrieved successfully');
+    } catch (err) {
+      console.error('[PropertyMasterController] getPropertyLocations error:', err.message);
+      return sendError(res, HTTP.INTERNAL_SERVER_ERROR, null, 'Failed to fetch property locations');
+    }
+  }
+
+  /**
+   * POST /api/property/:property_id/locations
+   * Add a single location to a property
+   * Body: { location_id: string }
+   */
+  static async addLocationToProperty(req, res) {
+    try {
+      const { property_id } = req.params;
+      const { location_id } = req.body;
+      const userId = req.user?.userId || 'system';
+
+      if (!location_id) {
+        return sendError(res, HTTP.BAD_REQUEST, null, 'location_id wajib diisi');
+      }
+
+      const property = await Property.findOne({ where: { property_id } });
+      if (!property) {
+        return sendError(res, HTTP.NOT_FOUND, null, 'Properti tidak ditemukan');
+      }
+
+      const location = await Location.findOne({ where: { location_id } });
+      if (!location) {
+        return sendError(res, HTTP.NOT_FOUND, null, 'Lokasi tidak ditemukan');
+      }
+
+      const existing = await PropertyLocation.findOne({ where: { property_id, location_id } });
+      if (existing) {
+        return sendError(res, HTTP.CONFLICT, null, 'Lokasi sudah terhubung ke properti ini');
+      }
+
+      const propLoc = await PropertyLocation.create({
+        property_id,
+        location_id,
+        created_date: new Date(),
+        created_by: userId,
+      });
+
+      console.log(`[PROPERTY LOCATION] ✅ ADD — ${property_id} | Location: ${location_id} | By: ${userId}`);
+
+      return sendSuccess(res, HTTP.CREATED, { propertyLocation: propLoc }, 'Lokasi berhasil ditambahkan ke properti');
+    } catch (err) {
+      console.error('[PropertyMasterController] addLocationToProperty error:', err.message);
+      return sendError(res, HTTP.INTERNAL_SERVER_ERROR, null, 'Gagal menambahkan lokasi ke properti');
+    }
+  }
+
+  /**
+   * DELETE /api/property/:property_id/locations/:location_id
+   * Remove a location from a property
+   */
+  static async removeLocationFromProperty(req, res) {
+    try {
+      const { property_id, location_id } = req.params;
+
+      const propLoc = await PropertyLocation.findOne({ where: { property_id, location_id } });
+      if (!propLoc) {
+        return sendError(res, HTTP.NOT_FOUND, null, 'Relasi properti-lokasi tidak ditemukan');
+      }
+
+      await propLoc.destroy();
+
+      console.log(`[PROPERTY LOCATION] 🗑️  REMOVE — ${property_id} | Location: ${location_id}`);
+
+      return sendSuccess(res, HTTP.OK, {}, 'Lokasi berhasil dihapus dari properti');
+    } catch (err) {
+      console.error('[PropertyMasterController] removeLocationFromProperty error:', err.message);
+      return sendError(res, HTTP.INTERNAL_SERVER_ERROR, null, 'Gagal menghapus lokasi dari properti');
+    }
+  }
+
+  /**
+   * POST /api/property/:property_id/locations/bulk
+   * Bulk add multiple locations to a property
+   * Body: { location_ids: string[] }
+   */
+  static async bulkAddLocations(req, res) {
+    try {
+      const { property_id } = req.params;
+      const { location_ids = [] } = req.body;
+      const userId = req.user?.userId || 'system';
+
+      if (!Array.isArray(location_ids) || location_ids.length === 0) {
+        return sendError(res, HTTP.BAD_REQUEST, null, 'location_ids array wajib diisi');
+      }
+
+      const property = await Property.findOne({ where: { property_id } });
+      if (!property) {
+        return sendError(res, HTTP.NOT_FOUND, null, 'Properti tidak ditemukan');
+      }
+
+      const locations = await Location.findAll({ where: { location_id: location_ids } });
+      if (locations.length !== location_ids.length) {
+        return sendError(res, HTTP.NOT_FOUND, null, 'Satu atau lebih lokasi tidak ditemukan');
+      }
+
+      const existing = await PropertyLocation.findAll({
+        where: { property_id, location_id: location_ids },
+      });
+      const existingIds = existing.map(e => e.location_id);
+
+      const newLocationIds = location_ids.filter(id => !existingIds.includes(id));
+
+      if (newLocationIds.length === 0) {
+        return sendSuccess(res, HTTP.OK, { added: 0 }, 'Semua lokasi sudah terhubung ke properti ini');
+      }
+
+      const propLocs = await PropertyLocation.bulkCreate(
+        newLocationIds.map(loc_id => ({
+          property_id,
+          location_id: loc_id,
+          created_date: new Date(),
+          created_by: userId,
+        }))
+      );
+
+      console.log(`[PROPERTY LOCATION] ✅ BULK ADD — ${property_id} | ${propLocs.length} locations | By: ${userId}`);
+
+      return sendSuccess(
+        res, HTTP.CREATED,
+        { added: propLocs.length, propertyLocations: propLocs },
+        `${propLocs.length} lokasi berhasil ditambahkan ke properti`
+      );
+    } catch (err) {
+      console.error('[PropertyMasterController] bulkAddLocations error:', err.message);
+      return sendError(res, HTTP.INTERNAL_SERVER_ERROR, null, 'Gagal bulk tambah lokasi');
     }
   }
 

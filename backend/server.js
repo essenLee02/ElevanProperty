@@ -186,6 +186,11 @@ sequelize.sync()
     const { initLocationCache } = require('./utils/propertyKeywordFilter');
     await initLocationCache();
 
+    // Load facility master (bilingual) so detectFacilities recognises every
+    // facility registered in the DB, not just the hardcoded Indonesian map.
+    const { initFacilityCache } = require('./services/propertyRecommendationService');
+    await initFacilityCache();
+
     console.log('Database connected and synced');
     console.log('Environment file loaded from:', path.resolve(__dirname, '.env'));
     console.log('OpenAI key configured:', Boolean(process.env.OPENAI_API_KEY));

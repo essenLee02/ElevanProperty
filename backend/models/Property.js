@@ -35,6 +35,12 @@ const Property = sequelize.define('Property', {
     allowNull: false,
     comment: 'FK ke countries.country_id — negara lokasi'
   },
+  user_id: {
+    type: DataTypes.STRING(50),
+    allowNull: false,
+    defaultValue: null,
+    comment: 'FK ke users.user_id — pemilik/agent properti. Filter katalog per user login (/property & konteks AI).'
+  },
   title: {
     type: DataTypes.STRING(100),
     allowNull: false,
@@ -175,6 +181,7 @@ const Property = sequelize.define('Property', {
     { fields: ['city_id'] },
     { fields: ['province_id'] },
     { fields: ['country_id'] },
+    { fields: ['user_id'] },
     { fields: ['building_type'] },
     { fields: ['transaction_type'] },
     { fields: ['status'] },

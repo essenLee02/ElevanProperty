@@ -364,33 +364,44 @@ EN: For *[Type]* *[to rent/to buy]* in *[area]*, would you prefer
 | Property | Transaksi | Terjangkau | Menengah | Eksklusif |
 |---|---|---|---|---|
 | House | Beli | Rp 350–900 jt | Rp 900 jt–3 M | Rp 3–15 M+ |
-| House | Sewa | Rp 2–6 jt/bln | Rp 6–15 jt/bln | Rp 15–50 jt/bln |
+| House | Sewa/Kontrak | Rp 20–60 jt/thn | Rp 60–180 jt/thn | Rp 180–600 jt+/thn |
 | Apartment | Beli | Rp 350–800 jt | Rp 800 jt–2,5 M | Rp 2,5–10 M+ |
 | Apartment | Sewa | Rp 2–5 jt/bln | Rp 5–15 jt/bln | Rp 15–50 jt/bln |
-| Condo | Beli | Rp 700 jt–1,5 M | Rp 1,5–5 M | Rp 5–20 M+ |
-| Condo | Sewa | Rp 4–10 jt/bln | Rp 10–30 jt/bln | Rp 30–100 jt+/bln |
-| Hotel | Beli | Rp 5–20 M | Rp 20–100 M | Rp 100–500 M+ |
-| Hotel | Sewa | Rp 100–500 jt/bln | Rp 500 jt–2 M/bln | Rp 2–10 M+/bln |
+| Hotel | Beli (bangunan) | Rp 5–20 M | Rp 20–100 M | Rp 100–500 M+ |
+| Hotel | Booking kamar | Rp 200–800 rb/malam | Rp 800 rb–2 jt/malam | Rp 2–10 jt+/malam |
+| Hotel | Sewa/kontrak penuh | Rp 100–500 jt/thn | Rp 500 jt–3 M/thn | Rp 3–50 M+/thn |
 | Villa | Beli | Rp 800 jt–3 M | Rp 3–10 M | Rp 10–100 M+ |
-| Villa | Sewa bulanan | Rp 15–50 jt/bln | Rp 50–150 jt/bln | Rp 150–500 jt+/bln |
-| Villa | Sewa harian | Rp 1,5–4 jt/malam | Rp 4–10 jt/malam | Rp 10–40 jt+/malam |
+| Villa | Booking harian | Rp 1–3 jt/malam | Rp 3–8 jt/malam | Rp 8–30 jt+/malam |
+| Villa | Sewa bulanan | Rp 10–30 jt/bln | Rp 30–100 jt/bln | Rp 100–500 jt+/bln |
 | Boarding House / Kost | Beli | Rp 500 jt–2 M | Rp 2–8 M | Rp 8–50 M+ |
 | Boarding House / Kost | Sewa kamar | Rp 600 rb–1,8 jt/bln | Rp 1,8–3,5 jt/bln | Rp 3,5–10 jt/bln |
+| Boarding House / Kost | Kontrak bangunan | Rp 30–80 jt/thn | Rp 80–300 jt/thn | Rp 300 jt–2 M+/thn |
 | Shophouse / Ruko | Beli | Rp 1–2,5 M | Rp 2,5–7 M | Rp 7–25 M+ |
-| Shophouse / Ruko | Sewa | Rp 30–100 jt/thn | Rp 100–300 jt/thn | Rp 300 jt–1 M+/thn |
+| Shophouse / Ruko | Sewa/Kontrak | Rp 30–100 jt/thn | Rp 100–300 jt/thn | Rp 300 jt–1,5 M+/thn |
 | Office | Beli | Rp 1–5 M | Rp 5–20 M | Rp 20–200 M+ |
-| Office | Sewa | Rp 50–200 jt/thn | Rp 200–800 jt/thn | Rp 800 jt–5 M+/thn |
+| Office | Sewa | Rp 4–15 jt/bln | Rp 15–60 jt/bln | Rp 60–500 jt+/bln |
 | Warehouse | Beli | Rp 1–4 M | Rp 4–15 M | Rp 15–100 M+ |
-| Warehouse | Sewa | Rp 50–200 jt/thn | Rp 200–800 jt/thn | Rp 800 jt–5 M+/thn |
+| Warehouse | Sewa | Rp 30–100 jt/thn | Rp 100–500 jt/thn | Rp 500 jt–5 M+/thn |
 | Store | Beli | Rp 500 jt–2 M | Rp 2–6 M | Rp 6–25 M+ |
-| Store | Sewa | Rp 20–80 jt/thn | Rp 80–300 jt/thn | Rp 300 jt–2 M+/thn |
+| Store | Sewa | Rp 1–8 jt/bln | Rp 8–30 jt/bln | Rp 30–200 jt+/bln |
+| Condo | Beli | Rp 700 jt–1,5 M | Rp 1,5–5 M | Rp 5–20 M+ |
+| Condo | Sewa | Rp 4–10 jt/bln | Rp 10–30 jt/bln | Rp 30–100 jt+/bln |
 | Mansion | Beli | Rp 5–20 M | Rp 20–100 M | Rp 100–500 M+ |
-| Mansion | Sewa | Rp 30–100 jt/bln | Rp 100–300 jt/bln | Rp 300 jt–2 M+/bln |
+| Mansion | Sewa/Kontrak | Rp 30–100 jt/bln | Rp 100–300 jt/bln | Rp 300 jt–2 M+/bln |
 
 Standard level mapping: **Affordable → Mid-range → Luxury** = **Terjangkau → Menengah → Eksklusif**.
+
+**Basis transaksi per tipe (WAJIB dipakai konsisten di pertanyaan & summary):**
+- **Booking** (per malam) → Hotel, Villa. Katakan "booking", bukan "sewa".
+- **Sewa kamar** (per bulan) → Kost.
+- **Kontrak tahunan** (per tahun) → House, Ruko/Shophouse, Warehouse.
+- **Sewa bulanan** (per bulan) → Apartment, Condo, Office, Store, Mansion.
+- **Beli** (harga aset) → semua tipe.
+
 Notes: *Condo* = unit premium (apartemen kelas atas). *Store* = unit toko; *Shophouse/Ruko* =
-ruko (usaha + bisa hunian). Villa sewa: harian (vacation) vs bulanan (long-stay) — server pilih
-band sesuai periode yang disebut customer (malam → harian, bulan → bulanan).
+ruko (usaha + bisa hunian). Hotel & Villa punya mode ganda: booking harian (default) vs
+sewa/kontrak jangka panjang — server pilih band sesuai periode yang disebut customer
+(malam → booking harian; bulan/tahun/kontrak → long-stay).
 
 **Customer may still answer freely** — a category (`terjangkau`/`menengah`/`eksklusif`/
 `mahal`/`murah`/`harga kompetitif`) OR a number/range (`2 juta`, `5jt`, `2-3juta/minggu`,
