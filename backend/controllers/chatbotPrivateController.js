@@ -35,6 +35,98 @@ const { hasPropertyKeyword,
         isPropertyContextContinuation }       = require('../utils/propertyKeywordFilter');
 const { extractQualificationState }           = require('../services/aiPromptBuilderService');
 
+// ─── Location Landmarks (per kota, untuk Q2c sub-area & Q6 anchor point) ─────
+// Setiap kota di database `cities` bisa punya landmark/kawasan khasnya sendiri.
+// Map ini dipakai supaya AI bertanya contoh area yang RELEVAN untuk kota customer,
+// bukan hanya contoh generik ("pusat kota, area selatan") atau hardcode Surabaya-only.
+// Key HARUS lowercase (dicocokkan via `loc.toLowerCase().includes(key)`).
+// Kota yang TIDAK ada di map ini tetap jalan normal — fallback ke contoh generik.
+const LOCATION_LANDMARKS = {
+  // Jawa Timur
+  'surabaya' : ['Pakuwon', 'Darmo', 'Rungkut', 'Gubeng', 'Tunjungan', 'Citraland', 'Manyar', 'Kertajaya', 'MERR', 'Wiyung', 'Wonokromo'],
+  'malang'   : ['Soekarno Hatta', 'Ijen', 'Dinoyo', 'Lowokwaru', 'Suhat', 'UB', 'UM', 'Arjosari', 'Blimbing'],
+  'batu'     : ['Jatim Park', 'Batu Night Spectacular', 'Selecta', 'Alun-Alun Batu', 'Songgoriti', 'Oro Oro Ombo'],
+  'madiun'   : ['Pahlawan Street Center', 'Alun-Alun Madiun', 'Kartoharjo', 'Manguharjo', 'Mejayan'],
+  'sidoarjo' : ['Gedangan', 'Waru', 'Buduran', 'Krian', 'Alun-Alun Sidoarjo'],
+  'gresik'   : ['Kebomas', 'Manyar', 'GKB', 'Alun-Alun Gresik'],
+  'kediri'   : ['Simpang Lima Gumul', 'Mojoroto', 'Pare'],
+  'jember'   : ['Alun-Alun Jember', 'Sumbersari', 'Tanggul'],
+
+  // DKI Jakarta & sekitar
+  'jakarta'  : ['SCBD', 'Sudirman', 'Thamrin', 'Senayan', 'Kemang', 'Kelapa Gading', 'Pantai Indah Kapuk', 'Kuningan', 'Tebet', 'Menteng'],
+  'bekasi'   : ['Grand Wisata', 'Summarecon Bekasi', 'Harapan Indah', 'Kemang Pratama', 'Jababeka'],
+  'depok'    : ['Margonda', 'UI', 'Sawangan', 'Cinere', 'Cimanggis'],
+  'bogor'    : ['Sentul City', 'Bogor Nirwana', 'Yasmin', 'Cibinong', 'Tajur'],
+  'tangerang': ['BSD City', 'Alam Sutera', 'Gading Serpong', 'Bintaro', 'Serpong', 'Karawaci', 'Cikokol'],
+
+  // Jawa Barat
+  'bandung'  : ['Dago', 'Buah Batu', 'Antapani', 'Pasteur', 'Setiabudi', 'Ciumbuleuit', 'Kopo'],
+  'cirebon'  : ['Alun-Alun Kejaksan', 'Kesambi', 'Plumbon'],
+
+  // Jawa Tengah & DIY
+  'semarang' : ['Banyumanik', 'Tembalang', 'Gajahmungkur', 'Simpang Lima', 'Candi'],
+  'solo'     : ['Manahan', 'Solo Baru', 'Kartasura', 'Palur', 'Laweyan', 'Klewer'],
+  'surakarta': ['Manahan', 'Solo Baru', 'Kartasura', 'Palur', 'Laweyan', 'Klewer'],
+  'yogyakarta': ['Malioboro', 'UGM', 'Sleman', 'Kaliurang', 'Gejayan', 'Seturan', 'Bantul', 'Kotagede'],
+
+  // Banten
+  'serang'   : ['Cipocok', 'Ciruas', 'Kasemen', 'Alun-Alun Serang'],
+  'lebak'    : ['Rangkasbitung', 'Sajira', 'Malingping', 'Sawarna'],
+  'cilegon'  : ['Krakatau', 'Merak', 'Ciwandan', 'PCI'],
+
+  // Bali & Nusa Tenggara
+  'denpasar' : ['Sanur', 'Renon', 'Panjer', 'Sunset Road'],
+  'badung'   : ['Kuta', 'Seminyak', 'Canggu', 'Nusa Dua', 'Jimbaran', 'Uluwatu'],
+  'mataram'  : ['Cakranegara', 'Sekarbela', 'Ampenan'],
+
+  // Sumatera
+  'medan'    : ['Medan Baru', 'Medan Sunggal', 'Medan Petisah', 'Setiabudi Medan', 'Polonia'],
+  'palembang': ['Ilir Barat', 'Ilir Timur', 'Jakabaring', 'Kemuning'],
+  'jambi'    : ['Telanaipura', 'Mendalo', 'Paal Merah', 'Simpang Rimbo', 'Mayang'],
+  'kerinci'  : ['Gunung Kerinci', 'Sungai Penuh', 'Kayu Aro'],
+  'padang'   : ['Alun-Alun Padang', 'Pondok', 'Air Tawar'],
+  'pekanbaru': ['Sudirman Pekanbaru', 'Panam', 'Rumbai'],
+  'batam'    : ['Nagoya', 'Batam Center', 'Sekupang'],
+  'bandar lampung': ['Rajabasa', 'Teluk Betung', 'Kemiling', 'Way Halim', 'Sukarame'],
+
+  // Kalimantan
+  'pontianak' : ['Alun-Alun Kapuas', 'Sungai Jawi', 'Siantan'],
+  'banjarmasin': ['Sungai Jingah', 'Banjar Baru', 'Kuin'],
+  'balikpapan': ['Klandasan', 'Sepinggan', 'Gunung Sari'],
+  'samarinda' : ['Air Hitam', 'Sempaja', 'Karang Asam'],
+  'amuntai'   : ['Alabio', 'Danau Panggang', 'Sungai Tabukan'],
+
+  // Sulawesi
+  'makassar' : ['Panakkukang', 'Tamalate', 'Rappocini'],
+  'manado'   : ['Boulevard Manado', 'Malalayang', 'Tuminting'],
+  'palu'     : ['Alun-Alun Palu', 'Tatura', 'Talise'],
+
+  // Papua & Maluku (kota kecil sesuai contoh database)
+  'agats'    : ['Pelabuhan Agats', 'Asmat', 'Bandara Ewer'],
+  'aimas'    : ['Sorong Regency', 'Bandara DEO', 'Klamono'],
+  'ambon'    : ['Alun-Alun Ambon', 'Batu Merah', 'Karang Panjang'],
+  'jayapura' : ['Entrop', 'Abepura', 'Dok II'],
+};
+
+/**
+ * Cari landmark/kawasan untuk sebuah kota (case-insensitive substring match).
+ * Key terpanjang dicek lebih dulu agar "bandar lampung" tidak ke-shadow oleh
+ * substring lain. Return null jika kota tidak ada di map (caller fallback ke
+ * contoh generik "pusat kota, area selatan").
+ *
+ * @param {string} loc - nama kota/lokasi dari filters.location
+ * @returns {string[]|null}
+ */
+function getCityLandmarks(loc) {
+  if (!loc) return null;
+  const lower = String(loc).toLowerCase();
+  const keys = Object.keys(LOCATION_LANDMARKS).sort((a, b) => b.length - a.length);
+  for (const key of keys) {
+    if (lower.includes(key)) return LOCATION_LANDMARKS[key];
+  }
+  return null;
+}
+
 // ─── LanguageDetector ─────────────────────────────────────────────────────────
 
 class LanguageDetector {
@@ -952,6 +1044,39 @@ class ResponseBuilderWhatsApp {
       : `\n\nI am ready to help you find a house, villa, apartment, or other property that suits you.\nWould you like to know more details?\n\n\nWarm regards,\n*${this.#agentName}*\n*${this.#appName}*`;
   }
 
+  /**
+   * Render baris "Hindari" (avoid) + "Prefer" sebagai numbered list berpasangan.
+   * Dipakai bersama oleh agentBrief() dan houseSummary() supaya format konsisten.
+   * Contoh output:
+   *   ✓ Hindari:
+   *   1. *Tempat yang sejuk* : Hindari tempat yang panas
+   *   2. *Lokasi kamar yang hadap sinar matahari terbenam dan terbit*
+   *
+   *   ✓ Prefer:
+   *   1. *Tempat yang sejuk*
+   *
+   * @param {object} brief - brief.avoidItems / brief.preferItems dari buildAgentBrief()
+   * @returns {string[]} - baris siap di-push ke array `lines` (bisa kosong)
+   */
+  #renderAvoidPreferBlock(brief) {
+    const isId = this.#lang === 'id';
+    const out = [];
+    if (Array.isArray(brief.avoidItems) && brief.avoidItems.length) {
+      out.push(`✓ ${isId ? 'Hindari' : 'Avoid'}:`);
+      brief.avoidItems.forEach((item, i) => {
+        const reasonPart = item.reason ? ` : ${item.reason}` : '';
+        out.push(`${i + 1}. *${item.label}*${reasonPart}`);
+      });
+    }
+    if (Array.isArray(brief.preferItems) && brief.preferItems.length) {
+      out.push(`✓ Prefer:`);
+      brief.preferItems.forEach((item, i) => {
+        out.push(`${i + 1}. *${item.label}*`);
+      });
+    }
+    return out;
+  }
+
   exactMatch({ rumah123Listings = [], catalogMatches = [], filters = {} }) {
     const summary  = this.#summarizeRequest(filters);
     const hasR123  = rumah123Listings.length > 0;
@@ -1141,8 +1266,10 @@ class ResponseBuilderWhatsApp {
     if (facL) lines.push(facL);
     const altL = fmt(isId ? 'Area alternatif' : 'Alt. areas', brief.alternativeAreas);
     if (altL) lines.push(altL);
-    const rfL  = fmt(isId ? 'Hindari' : 'Avoid', brief.redFlags);
-    if (rfL) lines.push(rfL);
+    if (brief.apartmentPref && brief.apartmentPref.value !== 'UNKNOWN' && brief.apartmentPref.value != null) {
+      lines.push(`✓ ${isId ? 'Tower/Lantai' : 'Tower/Floor'}: *${brief.apartmentPref.value}*`);
+    }
+    lines.push(...this.#renderAvoidPreferBlock(brief));
     const ancL = fmt(isId ? 'Patokan lokasi' : 'Anchor', brief.anchorPoint);
     if (ancL) lines.push(ancL);
     const viewL = fmt('Viewing', brief.viewingPreference);
@@ -1230,10 +1357,11 @@ class ResponseBuilderWhatsApp {
     }
     lines.push(row(isId ? 'Budget' : 'Budget',              brief.budget));
     lines.push(row(isId ? 'Patokan lokasi' : 'Anchor',      brief.anchorPoint));
-    // Preferensi positif & hal yang dihindari — hanya tampil bila customer menyebutnya
-    // (opsional, jadi tidak ditandai ✗ "Belum ditanyakan" saat kosong).
-    if (known(brief.preferences)) lines.push(`✓ ${isId ? 'Preferensi' : 'Preferences'}: *${brief.preferences.value}*`);
-    if (known(brief.redFlags))    lines.push(`✓ ${isId ? 'Hindari' : 'Avoid'}: *${brief.redFlags.value}*`);
+    // Preferensi tower/lantai/orientasi — hanya tampil untuk apartemen/kondotel bila disebut.
+    if (brief.apartmentPref && known(brief.apartmentPref))
+      lines.push(`✓ ${isId ? 'Tower/Lantai' : 'Tower/Floor'}: *${brief.apartmentPref.value}*`);
+    // Hindari (avoid) & Prefer — numbered list berpasangan (lihat #renderAvoidPreferBlock).
+    lines.push(...this.#renderAvoidPreferBlock(brief));
     // Viewing — opsional, tampil hanya jika jadwal survey sudah dikonfirmasi
     if (known(brief.viewingPreference)) lines.push(`✓ Viewing: *${brief.viewingPreference.value}*`);
 
@@ -2494,31 +2622,25 @@ class ConversationQualifier {
             : `Looking to *${txLabel}* — which city or area do you have in mind? 📍`);
     }
 
-    /* ── Q2c: District/area sub-question for large cities ── */
-    // Only fires when location is a large city but no specific area/district yet mentioned.
-    // Not fired for commercial types, bookings, or when district is already known.
-    const LARGE_CITIES_SET = ['surabaya', 'jakarta', 'bandung', 'medan', 'semarang', 'makassar', 'palembang', 'tangerang'];
+    /* ── Q2c: District/area sub-question for cities with known landmarks ── */
+    // Fires when location has a landmark entry (LOCATION_LANDMARKS) and no specific
+    // area/district yet mentioned. Not fired for commercial types, bookings, or when
+    // district is already known. Landmark examples are city-specific (Q2c & Q6 share
+    // the same LOCATION_LANDMARKS map — see top of file — so adding a new city there
+    // automatically wires up both questions).
     const isCommercialType  = ['shophouse', 'office', 'warehouse', 'store'].includes(type);
+    const cityLandmarks     = getCityLandmarks(loc);
     // Booking (hotel/kondotel/villa) & customer yang sudah menyebut patokan lokasi
     // (anchorPoint, mis. "dekat PTC") TIDAK ditanya area lagi — redundant dengan Q6.
     if (loc && !profile.hasDistrict && !profile.aiAskedDistrict
         && !isCommercialType
         && !PropertyFormatter.isBookingType(type)
         && !profile.hasAnchorPoint
-        && LARGE_CITIES_SET.some(c => loc.toLowerCase().includes(c))) {
-      let exDistrict;
-      if (loc.toLowerCase().includes('surabaya'))
-        exDistrict = isId ? 'Misalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?' : 'For example Pakuwon, Darmo, Rungkut, Gubeng, or another area?';
-      else if (loc.toLowerCase().includes('jakarta'))
-        exDistrict = isId ? 'Misalnya Kebayoran, Menteng, Kelapa Gading, Kemang, atau area lainnya?' : 'For example Kebayoran, Menteng, Kelapa Gading, Kemang, or another area?';
-      else if (loc.toLowerCase().includes('bandung'))
-        exDistrict = isId ? 'Misalnya Dago, Buah Batu, Antapani, Pasteur, atau area lainnya?' : 'For example Dago, Buah Batu, Antapani, Pasteur, or another area?';
-      else if (loc.toLowerCase().includes('semarang'))
-        exDistrict = isId ? 'Misalnya Banyumanik, Tembalang, Gajahmungkur, atau area lainnya?' : 'For example Banyumanik, Tembalang, Gajahmungkur, or another area?';
-      else if (loc.toLowerCase().includes('makassar'))
-        exDistrict = isId ? 'Misalnya Panakkukang, Tamalate, Rappocini, atau area lainnya?' : 'For example Panakkukang, Tamalate, Rappocini, or another area?';
-      else
-        exDistrict = isId ? 'Misalnya pusat kota, area selatan, atau kawasan tertentu?' : 'For example city centre, south area, or a specific neighbourhood?';
+        && cityLandmarks) {
+      const sample = cityLandmarks.slice(0, 4).join(', ');
+      const exDistrict = isId
+        ? `Misalnya ${sample}, atau area lainnya?`
+        : `For example ${sample}, or another area?`;
       return isId
         ? `Di area atau kawasan mana di *${loc}* yang Anda pertimbangkan? 📍\n${exDistrict}`
         : `Which area or neighbourhood in *${loc}* are you considering? 📍\n${exDistrict}`;
@@ -2696,11 +2818,14 @@ class ConversationQualifier {
 
       /* ── Q6: Anchor point (only if not surfaced in Q2) ── */
       if (!profile.hasAnchorPoint && !profile.aiAskedAnchorPoint && loc) {
-        // For Surabaya, mention local landmarks (malls, wisata, kawasan)
-        if (loc.toLowerCase().includes('surabaya')) {
+        // Sebut landmark LOKAL kota customer (mal, kawasan, wisata) bila tersedia di
+        // LOCATION_LANDMARKS — jauh lebih relevan daripada contoh generik untuk semua kota.
+        const marks = getCityLandmarks(loc);
+        if (marks && marks.length) {
+          const sample = marks.slice(0, 3).join(', ');
           return isId
-            ? `Ada lokasi atau tempat tertentu yang jadi patokan? Misalnya dekat Grand City, Pakuwon, wisata mangrove, KBS, sekolah anak, atau jalan tertentu? 📍`
-            : `Any specific location or landmark you'd like to be near? For example Grand City, Pakuwon, Mangrove Wonorejo, KBS, a school, or a specific street? 📍`;
+            ? `Ada lokasi atau tempat tertentu yang jadi patokan? Misalnya dekat ${sample}, sekolah anak, atau jalan tertentu? 📍`
+            : `Any specific location or landmark you'd like to be near? For example ${sample}, a school, or a specific street? 📍`;
         }
         return isId
           ? `Ada lokasi atau tempat tertentu yang jadi patokan? Misalnya dekat sekolah anak, mal, wisata, kawasan tertentu, atau jalan tertentu? 📍`
@@ -3318,22 +3443,44 @@ class ConversationQualifier {
           : 'UNKNOWN',
         source: profile.hasAlternativeArea ? 'stated' : 'UNKNOWN',
       },
-      redFlags: {
-        // Prefer qualState.redFlags — jawaban PENUH customer ke Q5 (Phase 2, session-scoped),
-        // mis. "balkon tidak hadap matahari terbenam, akses jalan lancar, tidak banjir".
-        // #extractRedFlags(custText) hanya ringkasan kasar (sering memangkas jadi 1 item),
-        // jadi dipakai hanya sebagai fallback bila qualState.redFlags kosong.
-        value : qualState.redFlags
-          ? this.#capitalizeFirst(qualState.redFlags)
-          : (profile.hasRedFlags ? this.#extractRedFlags(custText) : 'UNKNOWN'),
-        source: (qualState.redFlags || profile.hasRedFlags) ? 'stated' : 'UNKNOWN',
-      },
-      preferences: {
-        // Preferensi POSITIF lingkungan/suasana (sejuk, rindang, asri, tenang, dll).
-        // Beda dari redFlags (yang dihindari) — ini yang DIINGINKAN customer.
-        value : this.#extractPreferences(custText),
-        source: this.#extractPreferences(custText) !== 'UNKNOWN' ? 'stated' : 'UNKNOWN',
-      },
+      // ─ Hindari (avoid) & Prefer — pasangan berpasangan dari jawaban bebas Q5/Q6/Q12.
+      // Menggantikan dump mentah qualState.redFlags (yang sering berupa kalimat POSITIF,
+      // bukan larangan) dengan interpretasi Hindari↔Prefer yang benar. Lihat
+      // #buildAvoidPreferPairs untuk detail logika pemasangan.
+      ...(() => {
+        const redFlagsSource   = qualState.redFlags || (profile.hasRedFlags ? custText : '');
+        const apartmentPrefRaw = qualState.apartmentPref || '';
+        const { avoid, prefer } = ConversationQualifier.#buildAvoidPreferPairs(redFlagsSource, apartmentPrefRaw);
+        return {
+          avoidItems : avoid,
+          preferItems: prefer,
+          // Legacy single-string fields kept for any other consumer / backward-compat.
+          redFlags: {
+            value : avoid.length ? avoid.map(a => a.label).join(', ') : 'UNKNOWN',
+            source: avoid.length ? 'stated' : 'UNKNOWN',
+          },
+          preferences: {
+            value : prefer.length ? prefer.map(p => p.label).join(', ') : 'UNKNOWN',
+            source: prefer.length ? 'stated' : 'UNKNOWN',
+          },
+        };
+      })(),
+      apartmentPref: (() => {
+        // Q12 — preferensi TOWER / LANTAI / ORIENTASI (khusus apartemen/kondotel/kondominium).
+        // Jawaban customer ke "ada preferensi tower atau lantai? hadap timur, lantai rendah/
+        // tengah/tinggi?". Hanya relevan untuk tipe hunian bertingkat. Untuk tipe lain → null
+        // (baris disembunyikan di summary). Di-normalisasi agar lantai & orientasi terbaca rapi
+        // plus insight (hindari matahari terbit+terbenam = ingin unit sejuk).
+        const isVerticalType = ['apartment', 'condo', 'kondotel'].includes(filters.buildingType);
+        if (!isVerticalType) return { value: null, source: 'UNKNOWN' };
+        const raw = qualState.apartmentPref
+          || (profile.hasApartmentPrefs ? custText : '');
+        const norm = this.#normalizeApartmentPref(raw);
+        return {
+          value : norm || 'UNKNOWN',
+          source: norm ? 'stated' : 'UNKNOWN',
+        };
+      })(),
       anchorPoint: {
         // Prefer qualState.anchorPoint (Phase 2 — exact full customer reply to Q6,
         // e.g. "deket indomaret, cafe dan ubaya"). The raw #extractAnchorPoint fallback
@@ -3784,6 +3931,81 @@ class ConversationQualifier {
     return prefs.length ? prefs.join(', ') : 'UNKNOWN';
   }
 
+  /**
+   * Bangun daftar berpasangan "Hindari" (avoid) + "Prefer" (positive) dari jawaban
+   * bebas customer di Q5/Q6 (redFlags) DAN Q12 (apartmentPref, orientasi matahari).
+   *
+   * MASALAH SEBELUMNYA: qualState.redFlags berisi jawaban MENTAH customer apa adanya
+   * (mis. "Tempat yang sejuk, akses jalan lancar dan tidak banjir..") — ini sering
+   * berupa kalimat POSITIF (apa yang DIINGINKAN), bukan kalimat "Hindari X" yang
+   * sebenarnya. Menampilkannya mentah-mentah di baris "Hindari" salah kaprah: agent
+   * jadi mengira customer bilang "hindari tempat sejuk" (padahal sebaliknya —
+   * customer INGIN tempat sejuk, jadi yang harus dihindari adalah tempat PANAS).
+   *
+   * Setiap preferensi POSITIF yang punya lawan alami (sejuk↔panas, akses lancar↔macet,
+   * dst.) menghasilkan SATU pasangan: baris Hindari pakai kalimat asli customer sebagai
+   * label + anotasi "Hindari [lawannya]"; baris Prefer pakai label yang sama tanpa anotasi.
+   * Statement yang SUDAH berupa larangan eksplisit (banjir, hadap barat, gang sempit, dll.)
+   * masuk Hindari apa adanya, tanpa pasangan Prefer (tidak ada "lawan positif" alami).
+   *
+   * Orientasi matahari (Q12): jika customer minta hindari sinar matahari TERBIT *dan*
+   * TERBENAM sekaligus, itu berarti ingin unit sejuk & bebas silau — dapat SATU pasangan
+   * khusus: Hindari = deskripsi kamar yang dihindari, Prefer = kenyamanan yang dicari.
+   *
+   * @param {string} redFlagsRawText - qualState.redFlags atau custText (jawaban Q5/Q6)
+   * @param {string} apartmentPrefRawText - qualState.apartmentPref (jawaban mentah Q12)
+   * @returns {{avoid: Array<{label:string, reason:string|null}>, prefer: Array<{label:string}>}}
+   */
+  static #buildAvoidPreferPairs(redFlagsRawText = '', apartmentPrefRawText = '') {
+    const avoid = [];
+    const prefer = [];
+    const lower = String(redFlagsRawText || '').toLowerCase();
+
+    // ── Preferensi POSITIF dengan lawan (avoid) alami ─────────────────────────
+    const PAIRS = [
+      { test: /\b(sejuk|adem|dingin|rindang|teduh|asri)\b/,               label: 'Tempat yang sejuk',   avoidReason: 'Hindari tempat yang panas' },
+      { test: /\bakses\s+(jalan\s+)?(lancar|mudah|gampang)\b/,            label: 'Akses jalan lancar',  avoidReason: 'Hindari tempat macet' },
+      { test: /\b(tenang|sepi)\b/,                                       label: 'Suasana tenang',      avoidReason: 'Hindari tempat bising/ramai' },
+      { test: /\baman\b/,                                                label: 'Lingkungan aman',     avoidReason: 'Hindari lingkungan rawan' },
+      { test: /\bjalan\s+(raya\s+)?(lebar|besar|luas)\b/,                 label: 'Jalan lebar',         avoidReason: 'Hindari gang sempit' },
+      { test: /\bstrategis\b/,                                           label: 'Lokasi strategis',    avoidReason: null },
+    ];
+    PAIRS.forEach(p => {
+      if (p.test.test(lower)) {
+        prefer.push({ label: p.label });
+        avoid.push({ label: p.label, reason: p.avoidReason });
+      }
+    });
+
+    // ── Statement yang SUDAH avoid-framed, tanpa lawan Prefer alami ──────────
+    const AVOID_ONLY = [
+      { test: /\bbanjir\b|flood/,                                        label: 'Tidak mau banjir' },
+      { test: /hadap\s+barat|west\s+facing/,                             label: 'Tidak mau hadap barat' },
+      { test: /gang\s+sempit|narrow/,                                    label: 'Tidak mau gang sempit' },
+      { test: /\bbising\b|noisy|\bramai\b/,                              label: 'Tidak mau bising/ramai' },
+      { test: /\btua\b|old\s+building/,                                  label: 'Tidak mau bangunan tua' },
+      { test: /dekat\s+rel\b|rel\s+kereta|train\s+track/,                label: 'Tidak mau dekat rel kereta' },
+      { test: /(?:tidak|gak|ga|ngga|enggak|jangan|anti|hindari|bukan)\s+(?:yang\s+)?panas|\bgerah\b|\bpengap\b|too hot|not hot/, label: 'Tidak mau panas' },
+      { test: /(?:tidak\s+macet|bebas\s+macet|anti\s+macet|hindari\s+macet|sering\s+macet|macet\s+(?:banget|parah)|kemacetan)/, label: 'Tidak mau macet' },
+    ];
+    AVOID_ONLY.forEach(p => {
+      if (p.test.test(lower) && !avoid.some(a => a.label === p.label)) {
+        avoid.push({ label: p.label, reason: null });
+      }
+    });
+
+    // ── Orientasi matahari (Q12) — avoid + prefer reframe ────────────────────
+    const aptLower = String(apartmentPrefRawText || '').toLowerCase();
+    const avoidBothSun = /(?:hindari|menghindari)\b.{0,60}?(?:terbit\s+(?:dan|&|,)?\s*terbenam|terbenam\s+(?:dan|&|,)?\s*terbit)/i.test(aptLower)
+      || (/(?:hindari|menghindari)/.test(aptLower) && /terbit/.test(aptLower) && /terbenam/.test(aptLower));
+    if (avoidBothSun) {
+      avoid.push({ label: 'Lokasi kamar yang hadap sinar matahari terbenam dan terbit', reason: null });
+      prefer.push({ label: 'Tempat yang nyaman dari sinar matahari yang membuat mata terasa silau' });
+    }
+
+    return { avoid, prefer };
+  }
+
   static #extractAnchorPoint(custText) {
     // Specific named landmarks — short normalized form
     if (/dekat sekolah|near school/.test(custText))  return 'Dekat sekolah';
@@ -3825,11 +4047,90 @@ class ConversationQualifier {
    * Selain kasus negatif, kembalikan jawaban apa adanya (kapital awal).
    */
   static #normalizeAnchorPoint(raw = '') {
-    const s = String(raw).trim();
+    let s = String(raw).trim();
     if (!s) return 'UNKNOWN';
     const NEG = /^(?:eng?gak?|ngga|nggak|tidak|gak|ga|kagak|ndak|blm|belum|no|none|nope|bebas|terserah|fleksibel|flexible|free)\b|(?:ga|gak|tidak|enggak|belum|tanpa|no)\s+ada|tidak\s+ada\s+patokan|bebas\s+(?:aja|saja)?|terserah/i;
     if (NEG.test(s)) return 'Bebas';
+    // Buang frasa INSTRUKSI ke AI ("tolong carikan", "carikan yang", "mohon cari") —
+    // ini perintah customer ke bot, BUKAN bagian dari patokan lokasi itu sendiri.
+    // Contoh: "dekat pakuwon, tolong carikan tempat yang dingin dan asri"
+    //       → "dekat pakuwon, tempat yang dingin dan asri" (instruksi dibuang, sisanya dipertahankan).
+    s = s.replace(/\b(?:tolong|mohon|bisa|boleh|coba)?\s*(?:carikan|cariin|cari(?:kan)?in?)\b\s*/gi, ' ')
+         .replace(/\s{2,}/g, ' ')
+         .replace(/^[,\s]+|[,\s]+$/g, '')
+         .trim();
+    if (!s) return 'UNKNOWN';
     return this.#capitalizeFirst(s);
+  }
+
+  /**
+   * Normalisasi jawaban Q12 (preferensi tower/lantai/orientasi apartemen). Merangkum
+   * jawaban customer jadi baris ringkas yang berguna untuk agent, dengan 2 komponen:
+   *   (a) LANTAI  — "lantai antara 12-15" → "Lantai 12-15"; "lantai tinggi"/"rendah"/"tengah".
+   *   (b) ORIENTASI — "hadap timur" → "Hadap timur"; deteksi hindari-matahari.
+   *
+   * Insight khusus: bila customer minta HINDARI sinar matahari TERBIT **dan** TERBENAM,
+   * maksudnya unit tidak kena sinar langsung pagi & sore → customer ingin unit SEJUK.
+   * Ini juga sinyal red-flag "hindari silau/panas" yang perlu agent ketahui.
+   *
+   * @param {string} raw — jawaban mentah customer
+   * @returns {string} ringkasan rapi, atau '' bila tak ada info tower/lantai/orientasi
+   */
+  static #normalizeApartmentPref(raw = '') {
+    const s = String(raw).trim();
+    if (!s) return '';
+    const lower = s.toLowerCase();
+    const parts = [];
+
+    // ── (a) LANTAI ──────────────────────────────────────────────────────────
+    // Range angka: "lantai antara 12-15", "lantai 12 sampai 15", "lantai 12-15"
+    const rangeM = lower.match(/lantai\s*(?:antara\s*)?(\d{1,3})\s*(?:-|–|s\/d|sampai|sd|hingga|ke)\s*(\d{1,3})/i);
+    // Angka tunggal: "lantai 12", "di lantai 8"
+    const singleM = lower.match(/lantai\s*(?:ke[-\s]?)?(\d{1,3})\b/i);
+    // Kata kualitatif: tinggi / rendah / tengah / atas / bawah / dasar
+    const qualM = lower.match(/lantai\s*(tinggi|rendah|tengah|atas|bawah|dasar|paling\s+atas|paling\s+bawah)|(high|low|mid)\s*floor/i);
+    if (rangeM) {
+      parts.push(`Lantai ${rangeM[1]}-${rangeM[2]}`);
+    } else if (singleM) {
+      parts.push(`Lantai ${singleM[1]}`);
+    } else if (qualM) {
+      const q = (qualM[1] || qualM[2] || '').toLowerCase();
+      const map = { high: 'tinggi', low: 'rendah', mid: 'tengah' };
+      parts.push(`Lantai ${this.#capitalizeFirst(map[q] || q)}`.replace('Lantai L', 'Lantai '));
+    } else if (/\btower\s+([a-z0-9]+)\b/i.test(lower)) {
+      const t = lower.match(/\btower\s+([a-z0-9]+)\b/i);
+      parts.push(`Tower ${t[1].toUpperCase()}`);
+    }
+
+    // ── (b) ORIENTASI ───────────────────────────────────────────────────────
+    const avoidSunrise  = /(?:hindari|menghindari|tidak\s+mau|gak?\s+mau|anti|bukan)\b.{0,40}?(?:sinar\s+)?(?:matahari\s+)?(?:terbit|pagi|sunrise|timur)/i.test(lower)
+                          || /(?:matahari|sinar)\s+terbit/i.test(lower) && /(?:hindari|menghindari|tidak|gak?|jangan)/i.test(lower);
+    const avoidSunset   = /(?:hindari|menghindari|tidak\s+mau|gak?\s+mau|anti|bukan)\b.{0,40}?(?:sinar\s+)?(?:matahari\s+)?(?:terbenam|sore|sunset|barat)/i.test(lower)
+                          || /(?:matahari|sinar)\s+terbenam/i.test(lower) && /(?:hindari|menghindari|tidak|gak?|jangan)/i.test(lower);
+    // Deteksi "menghindari ... terbit dan terbenam" bersama (satu klausa)
+    const avoidBothClause = /(?:hindari|menghindari)\b.{0,50}?(?:terbit\s+(?:dan|&|,)?\s*terbenam|terbenam\s+(?:dan|&|,)?\s*terbit)/i.test(lower);
+
+    if (avoidBothClause || (avoidSunrise && avoidSunset)) {
+      parts.push('Hindari sinar matahari terbit & terbenam (ingin unit sejuk)');
+    } else if (avoidSunrise) {
+      parts.push('Hindari sinar matahari terbit (hadap non-timur)');
+    } else if (avoidSunset) {
+      parts.push('Hindari sinar matahari terbenam (hadap non-barat)');
+    } else {
+      // Orientasi eksplisit: "hadap timur/barat/utara/selatan", "east facing", "facing west"
+      const faceM = lower.match(/(?:meng)?hadap\s+(timur|barat|utara|selatan|east|west|north|south)/i)
+                    || lower.match(/(east|west|north|south)[\s-]*facing/i)
+                    || lower.match(/facing\s+(east|west|north|south)/i);
+      if (faceM) {
+        const dir = faceM[1].toLowerCase();
+        const map = { east: 'timur', west: 'barat', north: 'utara', south: 'selatan' };
+        parts.push(`Hadap ${map[dir] || dir}`);
+      }
+    }
+
+    // Fallback: tidak ada komponen terstruktur tapi ada teks → tampilkan mentah (kapital awal)
+    if (!parts.length) return this.#capitalizeFirst(s);
+    return parts.join(', ');
   }
 
   /**

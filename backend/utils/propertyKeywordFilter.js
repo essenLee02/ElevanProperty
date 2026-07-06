@@ -510,6 +510,13 @@ const DAILY_LIFE_OFFTOPIC = [
   MACET_DAILY,
   /\b(gempa|longsor|kebakaran|kebanjiran|badai|angin\s+kencang)\b/,
   BANJIR_DAILY,
+  // ── Broadcast/group-order "PO" (Pre-Order / Purchase Order) — sangat umum di grup
+  // WhatsApp jualan makanan/jajanan ("Open PO untuk Rabu Sore, Degan jelly Rp16.000,
+  // yang mau order tolong list nama"). Dicek UNCONDITIONAL (seperti item lain di atas)
+  // supaya harga (Rp16.000) di dalamnya tidak salah tertangkap sebagai jawaban budget
+  // properti (yang biasanya BYPASS gate panjang-pesan via hasBudgetAnswer/hasStrongAnswerCue).
+  /\bopen\s*po\b|\bpre[\s-]?order\b|\btutup\s*po\b|\bpo\s+(dibuka|closed?|ditutup|tutup)\b/i,
+  /\byang\s+mau\s+order\b|\btolong\s+list\s+nama\b|\blist\s+nama\s+(di\s*bawah|yang\s+mau)\b/i,
 ];
 
 /** Pesan adalah obrolan harian non-properti (mati listrik, banjir, macet, dll)? */
@@ -625,6 +632,17 @@ function isPropertyContextContinuation(message, history = []) {
   const isPreferenceAnswer  = /\b(jalan\s+(raya|lebar|besar|utama|kecil)|akses|access|strategis|hook|pojok|sudut|menghadap|hadap\s+(timur|barat|utara|selatan|matahari)|jalan\s+ramai|bising|tenang|sepi|aman|nyaman|asri|sejuk|rindang|pepohonan|pohon|hijau|teduh|gelap|terang|pencahayaan)\b/i.test(lower)
                               || FLOOD_AVOID_PREFERENCE.test(lower)
                               || MACET_AVOID_PREFERENCE.test(lower);
+  // Jawaban preferensi TOWER / LANTAI / ORIENTASI (khusus apartemen/kondotel/kondominium).
+  // Pertanyaan AI: "ada preferensi tower atau lantai tertentu? hadap timur, lantai rendah/tengah/tinggi?"
+  // Contoh valid yang harus LOLOS (sebelumnya ter-drop karena > 70 char & tanpa sinyal):
+  //   "Hadap menghindari sinar matahari terbenam dan terbit.. Lantai antara 12-15 aja"
+  //   "Tower selatan, lantai tinggi, hadap timur biar dapat sunrise"
+  //   "Lantai rendah aja, hindari matahari sore yang silau"
+  // Catatan: orientasi "hindari matahari terbit+terbenam" = customer ingin unit SEJUK
+  // (tidak kena sinar langsung pagi & sore) — sekaligus red-flag "hindari silau/panas".
+  const isTowerFloorAnswer  = /\b(lantai|tower|penthouse)\b/i.test(lower)
+                              || /\b(hadap|menghadap|menghindari|hindari)\b.{0,30}\b(timur|barat|utara|selatan|matahari|sinar|terbit|terbenam|sunrise|sunset|silau|sore|pagi)\b/i.test(lower)
+                              || /\b(sinar\s+matahari|matahari\s+(terbit|terbenam)|sunrise|sunset)\b/i.test(lower);
   // Preferensi LINGKUNGAN/amenity di sekitar (positif): "banyak cafe, resto dan warung",
   // "dekat mall/kampus/pasar". Kata kuliner di sini = patokan lokasi, BUKAN pesan makanan.
   const isAmenityVicinity   = /\b(banyak|dekat|deket|near|area|kawasan|lingkungan|sekitar|deketan|berdekatan|akses\s+ke)\b/i.test(lower) &&
@@ -645,7 +663,7 @@ function isPropertyContextContinuation(message, history = []) {
   // char saat customer merinci ("semi furnished, pokok ada peralatan dapur, lemari,
   // ranjang"). Kosakata furnitur tidak ada di hasPropertyFacility, jadi perlu sendiri.
   const hasFurnishingAnswer = /\b(furnished|unfurnished|furnish|furnitur|furniture|semi[\s-]?furnish\w*|full[\s-]?furnish\w*|fully[\s-]?furnish\w*|kosongan|perabot(?:an)?|peralatan\s+(dapur|rumah|masak|elektronik)|lemari|ranjang|kasur|tempat\s+tidur|spring\s*bed|springbed|sofa|kompor|kulkas|mesin\s+cuci|dispenser|kitchen\s+set|wardrobe)\b/i.test(lower);
-  const hasPropertyContent  = hasPropertyFacility || isLandmarkAnswer || isMotivationAnswer || isPreferenceAnswer || isAmenityVicinity || isSchedulingRequest;
+  const hasPropertyContent  = hasPropertyFacility || isLandmarkAnswer || isMotivationAnswer || isPreferenceAnswer || isAmenityVicinity || isSchedulingRequest || isTowerFloorAnswer;
   // Sinyal jawaban kualifikasi yang KUAT (budget/nego Q3, furnishing Q11) cukup untuk
   // MELEWATI batas panjang 70-char, tapi SENGAJA tidak melewati screening
   // CLEAR_NON_PROPERTY di bawah — supaya "beli laptop 10 juta" tetap tersaring.
@@ -717,7 +735,7 @@ function isPropertyContextContinuation(message, history = []) {
     // kata TIPE sudah keluar window).
     // Catatan: preferensi/amenity (jalan lebar, banyak cafe) SENGAJA tidak di sini —
     // sinyalnya lebih lemah, diverifikasi via konteks dulu (pattern 15a di bawah).
-    if (hasPropertyFacility || isLandmarkAnswer || isMotivationAnswer || isSchedulingRequest) return true;
+    if (hasPropertyFacility || isLandmarkAnswer || isMotivationAnswer || isSchedulingRequest || isTowerFloorAnswer) return true;
   }
 
   // Context (3 sinyal, salah satu cukup) — dirancang agar alur PANJANG tidak putus:

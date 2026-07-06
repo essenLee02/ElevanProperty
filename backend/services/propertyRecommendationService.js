@@ -763,11 +763,14 @@ function detectBudget(message = '') {
     : '';
 
   // Buang konteks LANTAI/TOWER sebelum parsing angka budget. Tanpa ini, jawaban Q12
-  // "Antara lantai 15-20 aja" salah terbaca sebagai budget "15-20" dan menimpa budget
-  // asli (mis. "1-1.6 juta"). Mencakup: "lantai 15", "lt 27", "tower 3", "floor 15-20",
-  // "lantai 15 sampai 20", "lantai 15 - 20".
+  // "Antara lantai 15-20 aja" ATAU "Lantai antara 12-15 aja" salah terbaca sebagai
+  // budget "15-20"/"12-15" dan menimpa budget asli (mis. "1-1.6 juta") atau memicu
+  // pertanyaan klarifikasi budget yang keliru ("Untuk harga 12-15 — maksudnya ribu/
+  // juta/miliar?"). Mencakup: "lantai 15", "lt 27", "tower 3", "floor 15-20",
+  // "lantai 15 sampai 20", "lantai 15 - 20", DAN "lantai antara 12-15" (konektor
+  // "antara"/"di" boleh muncul di ANTARA kata kunci & angka, bukan cuma sebelumnya).
   const budgetText = text.replace(
-    /\b(lantai|lt|tower|menara|floor|lvl|level)\s*\d+(?:\s*(?:-|–|sampai|s\/d|hingga|ke)\s*\d+)?/gi,
+    /\b(lantai|lt|tower|menara|floor|lvl|level)\s*(?:antara|di)?\s*\d+(?:\s*(?:-|–|sampai|s\/d|hingga|ke)\s*\d+)?/gi,
     ' '
   );
 
