@@ -1,5 +1,5 @@
 const { loadProjectSkillPrompt } = require('./skillPromptService');
-const { detectBudget, detectFacilities, stripCommercialUsePhrases, detectUseCase, isNonResidentialUse } = require('./propertyRecommendationService');
+const { detectBudget, detectFacilities, stripCommercialUsePhrases, detectUseCase, isNonResidentialUse, detectLocation } = require('./propertyRecommendationService');
 const { parseCustomerDate, isDontKnowDateAnswer, WAITING_THE_UPDATE } = require('../utils/customerDateParser');
 
 /* ─── Qualification State Extractor ────────────────────────────────────────── */
@@ -89,7 +89,14 @@ function extractQualificationState(history = [], currentMessage = '') {
   const MONTH_EN = 'january|february|march|april|may|june|july|august|september|october|november|december';
   // \\b word boundaries prevent brand names like "indomaret" from matching "maret"
   const MONTH_RE = new RegExp(`(\\d{1,2}\\s+)?\\b(${MONTH_ID}|${MONTH_EN})\\b(\\s+\\d{4})?`, 'i');
-  const CITY_RE  = /\b(surabaya|malang|bali|denpasar|jakarta|bandung|yogyakarta|jogja|semarang|medan|makassar|sidoarjo|gresik|bekasi|tangerang|depok|bogor|solo|palembang|batam|balikpapan|samarinda|pontianak|manado|kupang|mataram|lombok|batu)\b/i;
+  // City detection now delegates to propertyRecommendationService.detectLocation() —
+  // it covers 649 DB-driven cities + a 200+ city fallback list + alias matching
+  // (sby→Surabaya, jogja→Yogyakarta) + a generic "di X" fallback for unrecognized
+  // towns (e.g. "ngajuk"/"nganjuk"). The previous CITY_RE here was a 28-city hardcoded
+  // whitelist that silently returned no match for anything outside it — causing
+  // state.location to stay null for smaller/misspelled cities even though the
+  // customer clearly stated one, which left the qualification state shown to the
+  // LLM incomplete/inconsistent for the rest of the conversation.
 
   // Month name → number (for date year inference)
   const MONTH_NUMBERS = {
@@ -176,9 +183,8 @@ function extractQualificationState(history = [], currentMessage = '') {
     // property-type or transaction-type change. All three dimensions anchor the
     // search — switching any one abandons the prior context.
     const locOfP0 = (txt) => {
-      // Reuse CITY_RE (defined two lines above in this function scope)
-      const m = CITY_RE.exec((txt || '').toLowerCase());
-      return m ? m[0].trim() : null;
+      const loc = detectLocation(txt || '');
+      return loc ? loc.toLowerCase() : null;
     };
 
     let switchStart   = 0;
@@ -223,6 +229,13 @@ function extractQualificationState(history = [], currentMessage = '') {
   // ── Phase 1: Scan every customer message for content-detectable fields ────
   // Uses ACTIVE_ALL (messages from active session start) to prevent stale
   // Q2–Q12 data from before the last summary from polluting the current search.
+  //
+  // Anchor points are ACCUMULATED (not first-match-wins like other fields) — a
+  // customer often volunteers separate "dekat X" mentions in different answers
+  // (e.g. "dekat stasiun bus" inside a Q2b answer, then later "deket dengan cafe"
+  // inside a Q5 red-flags answer). Both are genuine patokan lokasi and must both
+  // reach the summary, not just whichever happened to match first.
+  const _anchorParts = [];
   for (const msg of ACTIVE_ALL) {
     if (!QS_CUST_ROLES.has(msg.role)) continue;
     const raw  = msg.message || '';
@@ -280,14 +293,12 @@ function extractQualificationState(history = [], currentMessage = '') {
       }
     }
 
-    // Q2 — Location (city)
-    // Guard: strip "kisaran [price]" first — "kisaran" means "range/approximately" in
-    // Indonesian and must NEVER be treated as the city Kisaran (North Sumatra).
-    // e.g. "harganya kisaran 3-6juta/minggu" → remove "kisaran 3-6juta/minggu" before CITY_RE.
+    // Q2 — Location (city). detectLocation() already strips "kisaran [price]" internally
+    // ("kisaran" = range/approximately in Indonesian, must never be read as the city
+    // Kisaran, North Sumatra) — no need to pre-strip it here.
     if (!state.location) {
-      const rawForCity = raw.replace(/\bkisaran\s+[\d.,][\d.,]*\s*(?:juta|ribu|miliar|rb|jt)?[^\s]*/gi, '');
-      const cm = rawForCity.match(CITY_RE);
-      if (cm) state.location = cm[1];
+      const loc = detectLocation(raw);
+      if (loc) state.location = loc;
     }
 
     // Q2c — District / area within large city
@@ -372,13 +383,17 @@ function extractQualificationState(history = [], currentMessage = '') {
     // Q6 — Anchor point (volunteered landmark). Capture "dekat/deket/near X" even
     // when the customer states it inside another answer (e.g. with facilities) and
     // not paired with the Q6 question. Exclude "dekat <kota>" (that's the location).
-    if (!state.anchorPoint) {
+    // Accumulated across ALL messages (see _anchorParts note above the loop).
+    {
       const am = raw.match(/\b(?:dekat|deket|near)\s+([a-z][\w\s,.\/&-]{2,60})/i);
       if (am) {
         const after = am[1].trim();
         const cleaned = after.replace(/\s+(ya|dong|kak|aja|saja|nih|lainnya)\b.*$/i, '').trim();
-        if (cleaned && !CITY_RE.test(after)) {
-          state.anchorPoint = `dekat ${cleaned}`;
+        if (cleaned && !detectLocation(after)) {
+          const phrase = `dekat ${cleaned}`;
+          if (!_anchorParts.some((p) => p.toLowerCase() === phrase.toLowerCase())) {
+            _anchorParts.push(phrase);
+          }
         }
       }
     }
@@ -497,6 +512,11 @@ function extractQualificationState(history = [], currentMessage = '') {
     );
   }
 
+  // Merge accumulated Phase 1 anchor mentions ("dekat stasiun bus" + "deket dengan
+  // cafe" → "dekat stasiun bus, deket dengan cafe"). Phase 2 below may still overwrite
+  // this with a more authoritative, explicitly-asked Q6 answer if one exists.
+  if (_anchorParts.length) state.anchorPoint = _anchorParts.join(', ');
+
   // ── Phase 2: Detect context-dependent Q6/Q7/Q9/Q10 from AI→Customer pairs ─
   // Only meaningful when the AI actually asked the question first.
   // Uses ACTIVE_ALL so old AI→Customer pairs from before the active session
@@ -526,8 +546,11 @@ function extractQualificationState(history = [], currentMessage = '') {
       }
     }
 
-    // Q6 — anchor point
-    if (!state.anchorPoint && /patokan|dekat sekolah|dekat kantor|mall tertentu|anchor|wisata|kawasan tertentu|tempat tertentu.*patokan/.test(aiText)) {
+    // Q6 — anchor point. This is the AUTHORITATIVE source (AI explicitly asked the
+    // dedicated Q6 question) — overrides any Phase 1 accumulated "dekat X" guess,
+    // it does NOT merge with it, since the full Q6 answer already supersedes the
+    // scattered mentions Phase 1 picked up from earlier unrelated answers.
+    if (/patokan|dekat sekolah|dekat kantor|mall tertentu|anchor|wisata|kawasan tertentu|tempat tertentu.*patokan/.test(aiText)) {
       state.anchorPoint = custResp;
     }
     // Q7 — alternative areas

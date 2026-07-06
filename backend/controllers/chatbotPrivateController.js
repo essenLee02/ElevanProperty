@@ -40,6 +40,36 @@ const { extractQualificationState }           = require('../services/aiPromptBui
 const { getCityLandmarks } = require('../utils/locationLandmarks');
 const _languageKeywords = require('../utils/languageKeywords');
 
+// Google Places enrichment — supplies live landmark data for cities NOT in the curated
+// LOCATION_LANDMARKS map. Claude/ChatGPT (third-party LLM providers) already have broad,
+// current world knowledge of places; this fallback controller does not, so it leans on
+// Google Places API to close that gap. See services/googlePlacesService.js for the
+// cache-then-async-refresh design (never blocks the synchronous qualification flow).
+const { getCachedCityLandmarks, warmCityLandmarksCache } = require('../services/googlePlacesService');
+
+/**
+ * Landmark examples for a city, preferring the curated static map (fast, hand-picked)
+ * and falling back to a Google Places-sourced cache when the city isn't curated.
+ *
+ * SYNCHRONOUS — safe to call from getNextQuestion() and other sync code paths. On a
+ * Google-cache miss, fires an async background fetch (not awaited) so the NEXT turn
+ * for this city has real landmark data; this turn still falls back to the generic
+ * "pusat kota, area selatan" phrasing exactly as before Google Places was wired in.
+ *
+ * @param {string} loc
+ * @returns {string[]|null}
+ */
+function getCityLandmarksEnriched(loc) {
+  const curated = getCityLandmarks(loc);
+  if (curated) return curated;
+
+  const fromGoogle = getCachedCityLandmarks(loc);
+  if (fromGoogle) return fromGoogle;
+
+  if (loc) warmCityLandmarksCache(loc).catch(() => {}); // fire-and-forget, never blocks
+  return null;
+}
+
 // ─── LanguageDetector ─────────────────────────────────────────────────────────
 
 class LanguageDetector {
@@ -1726,20 +1756,24 @@ class ConversationQualifier {
       })(),
       viewingIsNight: /\bmalam\b/i.test(custText),
       viewingDayRef: (() => {
-        if (/\bnanti\b|\bhari\s+ini\b|\bsekarang\b|(?:pagi|siang|sore|malam)\s+ini\b|\bini\s+(?:pagi|siang|sore|malam)\b/i.test(custText)) return 'hari ini';
-        if (/\blusa\b/i.test(custText))  return 'lusa';
-        if (/\bbesok\b/i.test(custText)) return 'besok';
+        const M = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+        const dateNDaysFromNow = (n) => {
+          const d = new Date(); d.setDate(d.getDate() + n);
+          return `${d.getDate()} ${M[d.getMonth()]} ${d.getFullYear()}`;
+        };
+        // Resolve relative day words into a concrete calendar date (same treatment as
+        // "minggu depan" below) so the final Viewing summary line shows an unambiguous
+        // date ("7 Juli 2026") instead of a word that goes stale as days pass.
+        if (/\bnanti\b|\bhari\s+ini\b|\bsekarang\b|(?:pagi|siang|sore|malam)\s+ini\b|\bini\s+(?:pagi|siang|sore|malam)\b/i.test(custText)) return dateNDaysFromNow(0);
+        if (/\blusa\b/i.test(custText))  return dateNDaysFromNow(2);
+        if (/\bbesok\b/i.test(custText)) return dateNDaysFromNow(1);
         // "minggu depan" (next week) = +7 hari dari hari ini → resolve ke tanggal konkret
         if (/\bminggu\s+depan\b/i.test(custText)) {
-          const d = new Date(); d.setDate(d.getDate() + 7);
-          const M = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
-          return `${d.getDate()} ${M[d.getMonth()]} ${d.getFullYear()}`;
+          return dateNDaysFromNow(7);
         }
         // "selasa depan", "rabu depan", dll (hari + depan tanpa "minggu")
         if (/\b(senin|selasa|rabu|kamis|jumat|sabtu|ahad)\s+depan\b/i.test(custText)) {
-          const d = new Date(); d.setDate(d.getDate() + 7);
-          const M = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
-          return `${d.getDate()} ${M[d.getMonth()]} ${d.getFullYear()}`;
+          return dateNDaysFromNow(7);
         }
         return null;
       })(),
@@ -2353,7 +2387,7 @@ class ConversationQualifier {
     // the same LOCATION_LANDMARKS map — see top of file — so adding a new city there
     // automatically wires up both questions).
     const isCommercialType  = ['shophouse', 'office', 'warehouse', 'store'].includes(type);
-    const cityLandmarks     = getCityLandmarks(loc);
+    const cityLandmarks     = getCityLandmarksEnriched(loc);
     // Booking (hotel/kondotel/villa) & customer yang sudah menyebut patokan lokasi
     // (anchorPoint, mis. "dekat PTC") TIDAK ditanya area lagi — redundant dengan Q6.
     if (loc && !profile.hasDistrict && !profile.aiAskedDistrict
@@ -2544,7 +2578,7 @@ class ConversationQualifier {
       if (!profile.hasAnchorPoint && !profile.aiAskedAnchorPoint && loc) {
         // Sebut landmark LOKAL kota customer (mal, kawasan, wisata) bila tersedia di
         // LOCATION_LANDMARKS — jauh lebih relevan daripada contoh generik untuk semua kota.
-        const marks = getCityLandmarks(loc);
+        const marks = getCityLandmarksEnriched(loc);
         if (marks && marks.length) {
           const sample = marks.slice(0, 3).join(', ');
           return isId
@@ -3122,14 +3156,17 @@ class ConversationQualifier {
       },
       decisionMaker: {
         // Prefer qualState.decisionMaker (Phase 2 normalized: "Mandiri", "Koordinasi
-        // dengan pasangan", etc.) over extraction from full custText.
-        // Gate fallback by profile flags — hasHouseholdInfo → "Disebutkan di Q4".
+        // dengan pasangan", etc.) over extraction from full custText. Fallback is
+        // gated ONLY by hasDecisionMaker (a real Q9 decision-signal keyword hit) —
+        // household composition (Q4) has no bearing on who decides and must NOT
+        // gate this field (previously caused "Disebutkan di Q4" to appear even when
+        // Q9 was never asked/answered).
         value : qualState.decisionMaker
           ? qualState.decisionMaker
-          : ((profile.hasDecisionMaker || profile.hasHouseholdInfo)
+          : (profile.hasDecisionMaker
               ? this.#extractDecisionMaker(custText, profile)
               : 'UNKNOWN'),
-        source: (qualState.decisionMaker || profile.hasDecisionMaker || profile.hasHouseholdInfo) ? 'stated' : 'UNKNOWN',
+        source: (qualState.decisionMaker || profile.hasDecisionMaker) ? 'stated' : 'UNKNOWN',
       },
       household: {
         value : profile.hasHouseholdInfo
@@ -3197,8 +3234,12 @@ class ConversationQualifier {
         // plus insight (hindari matahari terbit+terbenam = ingin unit sejuk).
         const isVerticalType = ['apartment', 'condo', 'kondotel'].includes(filters.buildingType);
         if (!isVerticalType) return { value: null, source: 'UNKNOWN' };
+        // ⚠️ custText fallback is gated on aiAskedApartmentPrefs (Q12 actually asked) —
+        // without this, ANY earlier mention of "hadap"/"matahari terbenam" answered to
+        // a DIFFERENT question (e.g. Q5 red flags) gets misattributed here as if it
+        // were a Q12 tower/floor answer. Mirrors the anchorPoint gating pattern below.
         const raw = qualState.apartmentPref
-          || (profile.hasApartmentPrefs ? custText : '');
+          || ((profile.hasApartmentPrefs && profile.aiAskedApartmentPrefs) ? custText : '');
         const norm = this.#normalizeApartmentPref(raw);
         return {
           value : norm || 'UNKNOWN',
@@ -3425,7 +3466,12 @@ class ConversationQualifier {
     if (/sama teman(-teman)?|bersama teman|teman-teman|with friends?/.test(custText)) return 'Teman';
     if (/langsung bisa|bisa langsung/.test(custText))     return 'Solo (bisa langsung jadwalkan)';
     if (/koordinasikan?|koordinasi dulu|perlu diskusi/.test(custText)) return 'Perlu koordinasi (joint decision)';
-    if (profile.hasHouseholdInfo) return 'Disebutkan di Q4';
+    // NOTE: previously had `if (profile.hasHouseholdInfo) return 'Disebutkan di Q4';`
+    // here — REMOVED. Household composition (Q4: "siapa saja yang tinggal") has no
+    // bearing on WHO decides (Q9) — that fallback fabricated a decision-maker value
+    // any time Q4 was answered, even when Q9 was never asked or answered with a pure
+    // scheduling reply ("Boleh kak, kapan ya?"). Q9 must stay UNKNOWN until a real
+    // decision-maker signal is found.
     return 'UNKNOWN';
   }
 
@@ -3509,9 +3555,14 @@ class ConversationQualifier {
     // Hanya dalam konteks viewing (AI sudah tanya decision-maker / tanggal survey)
     const inViewingCtx = profile.aiAskedDecisionMaker || profile.aiAskedViewingDate;
     if (!inViewingCtx) return null;
-    // Customer sudah usulkan hari ATAU time-of-day, tapi belum sebut jam, & AI belum tanya
+    // Customer sudah usulkan hari ATAU time-of-day, tapi belum sebut jam
     const proposedTiming = profile.viewingTimeOfDay || profile.hasViewingDate;
-    if (!proposedTiming || profile.hasViewingHour || profile.aiAskedViewingHour) return null;
+    // ⚠️ WAJIB: jangan return null hanya karena aiAskedViewingHour sudah true — itu
+    // dulu menyebabkan AI "menyerah" dan lompat ke pertanyaan lain begitu customer
+    // menjawab vague ("besok sore?" tanpa jam spesifik). Jam viewing WAJIB dikonfirmasi
+    // sebelum lanjut — kalau masih belum ada jam spesifik, tanya ULANG dengan follow-up
+    // singkat, bukan diam-diam melanjutkan ke pertanyaan berikutnya.
+    if (!proposedTiming || profile.hasViewingHour) return null;
 
     // Malam → di luar jam survey (pagi–sore)
     if (profile.viewingIsNight) {
@@ -3520,8 +3571,17 @@ class ConversationQualifier {
         : `Apologies, Kak — viewings are usually only available from morning to evening. What time (morning–evening) works for you? ⏰`;
     }
 
+    const tod = profile.viewingTimeOfDay; // pagi/siang/sore/null
+
+    // Sudah pernah tanya jam sebelumnya TAPI customer masih jawab vague (mis. "besok
+    // sore?" tanpa jam) → follow-up singkat menegaskan waktu yang sudah disebut,
+    // JANGAN ulang pertanyaan penuh (terasa robotic) dan JANGAN pindah topik.
+    if (profile.aiAskedViewingHour) {
+      const todLabel = tod ? this.#capitalizeFirst(tod) : (isId ? 'Itu' : 'That');
+      return isId ? `${todLabel} jam berapa, Kak? 📅` : `What time exactly, Kak? 📅`;
+    }
+
     // Susun frasa hari + waktu. Default hari = besok bila hanya time-of-day disebut.
-    const tod    = profile.viewingTimeOfDay;                   // pagi/siang/sore/null
     const dayRef = profile.viewingDayRef || (tod ? 'besok' : '');
     const phraseId = [dayRef, tod].filter(Boolean).join(' ');  // "besok siang"
     const forId    = phraseId ? ` untuk ${phraseId}` : '';
@@ -3718,13 +3778,23 @@ class ConversationQualifier {
       }
     });
 
-    // ── Orientasi matahari (Q12) — avoid + prefer reframe ────────────────────
+    // ── Orientasi matahari — avoid + prefer reframe ──────────────────────────
+    // Checked across BOTH sources: the customer may state this as a Q5 red-flag
+    // answer ("tidak mau hadap matahari terbenam") — no Q12 ever needed — OR as a
+    // genuine Q12 apartment tower/floor answer. Either way it belongs in Hindari.
+    // Typo-tolerant: "terbena[mr]" catches the common "terbenam"/"terbenar" slip.
     const aptLower = String(apartmentPrefRawText || '').toLowerCase();
-    const avoidBothSun = /(?:hindari|menghindari)\b.{0,60}?(?:terbit\s+(?:dan|&|,)?\s*terbenam|terbenam\s+(?:dan|&|,)?\s*terbit)/i.test(aptLower)
-      || (/(?:hindari|menghindari)/.test(aptLower) && /terbit/.test(aptLower) && /terbenam/.test(aptLower));
-    if (avoidBothSun) {
+    const sunText = `${lower} ${aptLower}`;
+    const AVOID_VERB = '(?:hindari|menghindari|tidak\\s+mau|gak?\\s+mau|nggak\\s+mau|enggak\\s+mau|jangan)';
+    const avoidTerbit    = new RegExp(`${AVOID_VERB}\\b.{0,40}?(?:sinar\\s+)?(?:matahari\\s+)?terbit\\b`, 'i').test(sunText);
+    const avoidTerbenam  = new RegExp(`${AVOID_VERB}\\b.{0,40}?(?:sinar\\s+)?(?:matahari\\s+)?terbena[mr]\\b`, 'i').test(sunText);
+    if (avoidTerbit && avoidTerbenam) {
       avoid.push({ label: 'Lokasi kamar yang hadap sinar matahari terbenam dan terbit', reason: null });
       prefer.push({ label: 'Tempat yang nyaman dari sinar matahari yang membuat mata terasa silau' });
+    } else if (avoidTerbenam) {
+      avoid.push({ label: 'Hindari sinar matahari terbenam (hadap non-barat)', reason: null });
+    } else if (avoidTerbit) {
+      avoid.push({ label: 'Hindari sinar matahari terbit (hadap non-timur)', reason: null });
     }
 
     return { avoid, prefer };
