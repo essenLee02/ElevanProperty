@@ -21,6 +21,8 @@ const sequelize = require('../config/database');
  * - privilege     : level akses / role (nullable)
  * - fonnte_token     : Fonnte token milik agent (untuk kirim WA via Fonnte, nullable)
  * - kirimi_device_id : Device ID Kirimi milik agent (mis. "D-3OCA6"; user_code & secret di .env, nullable)
+ * - email          : alamat email user (nullable)
+ * - catalog_summary : ON = Summary with catalog, OFF = Summary without catalog (nullable)
  */
 const User = sequelize.define('User', {
   user_id: {
@@ -50,6 +52,15 @@ const User = sequelize.define('User', {
   password: {
     type: DataTypes.STRING,
     allowNull: false
+  },
+  email: {
+    type: DataTypes.STRING(200),
+    allowNull: true,
+  },
+  catalog_summary: {
+    type: DataTypes.STRING(5),
+    allowNull: true,
+    defaultValue: null // ON=Summary with catlog, OFF=Summary without catalog
   },
   refresh_token: {
     type: DataTypes.TEXT,

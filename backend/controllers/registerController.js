@@ -22,7 +22,7 @@ class RegisterController extends GeneralController {
   }
 
   static async insertDataAgent(req, res) {
-    const { name, birthdate, phone, username, password, konfirmasi, privilege, createdBy } = req.body;
+    const { name, birthdate, phone, username, password, konfirmasi, privilege, createdBy, email } = req.body;
 
     const requestInfo = {
       ip:    req.ip || req.connection?.remoteAddress || 'unknown',
@@ -58,6 +58,18 @@ class RegisterController extends GeneralController {
       return sendError(res, HTTP.BAD_REQUEST, null, 'Password minimal 6 karakter');
     }
 
+    // Email — opsional, tapi jika diisi harus format valid
+    const cleanEmail = email !== undefined && email !== null ? String(email).trim() : '';
+    if (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      authLog.registerFailed('Format email tidak valid', {
+        ...requestInfo,
+        'HTTP Status':    HTTP.BAD_REQUEST,
+        'Username Input': username,
+        'Email Input':    email
+      });
+      return sendError(res, HTTP.BAD_REQUEST, null, 'Format email tidak valid');
+    }
+
     try {
       const existingUser = await User.findOne({ where: { username: String(username).trim() } });
       if (existingUser) {
@@ -89,6 +101,8 @@ class RegisterController extends GeneralController {
         phone:         phone ? String(phone).trim() : null,
         username:      String(username).trim(),
         password:      hashedPassword,
+        email:         cleanEmail || null,
+        catalog_summary: 'OFF', // default OFF saat register — bisa diubah di halaman profile
         refresh_token: null,
         updated_date:  null,
         update_by:     null,
@@ -107,6 +121,7 @@ class RegisterController extends GeneralController {
         'HTTP Status': HTTP.CREATED,
         'Phone':       newUser.phone    || '(kosong)',
         'Birthdate':   newUser.birthdate || '(kosong)',
+        'Email':       newUser.email    || '(kosong)',
         'Created By':  newUser.created_by,
         'Total Users': totalUsers + 1
       });
@@ -118,6 +133,8 @@ class RegisterController extends GeneralController {
         birthdate:    newUser.birthdate,
         phone:        newUser.phone,
         username:     newUser.username,
+        email:        newUser.email,
+        catalog_summary: newUser.catalog_summary,
         status:       newUser.status,
         privilege:    newUser.privilege,
         created_date: newUser.created_date,

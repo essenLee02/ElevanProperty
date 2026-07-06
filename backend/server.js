@@ -175,6 +175,29 @@ async function ensureRequiredDatabaseColumns() {
     }
   }
 
+  try {
+    const usersTable = await queryInterface.describeTable('users');
+    if (usersTable && !usersTable.email) {
+      await queryInterface.addColumn('users', 'email', {
+        type: DataTypes.STRING(200),
+        allowNull: true
+      });
+      console.log('Database migration completed: added users.email column');
+    }
+    if (usersTable && !usersTable.catalog_summary) {
+      await queryInterface.addColumn('users', 'catalog_summary', {
+        type: DataTypes.STRING(5),
+        allowNull: true,
+        defaultValue: null
+      });
+      console.log('Database migration completed: added users.catalog_summary column');
+    }
+  } catch (error) {
+    if (!String(error.message || '').toLowerCase().includes('no description found')) {
+      console.warn('Users schema check warning:', error.message);
+    }
+  }
+
 }
 
 sequelize.sync()

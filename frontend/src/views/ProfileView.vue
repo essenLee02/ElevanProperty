@@ -76,6 +76,32 @@
                 />
               </div>
 
+              <!-- Email (opsional) -->
+              <div class="form-group">
+                <label for="email">Email</label>
+                <input
+                  id="email"
+                  v-model.trim="form.email"
+                  type="email"
+                  placeholder="nama@email.com"
+                  :disabled="isSubmitting"
+                />
+              </div>
+
+              <!-- Catalog Summary Status (ON/OFF) -->
+              <div class="form-group">
+                <label for="catalogSummary">Catalog Summary Status</label>
+                <select
+                  id="catalogSummary"
+                  v-model="form.catalog_summary"
+                  :disabled="isSubmitting"
+                >
+                  <option value="ON">ON — Summary dengan catalog</option>
+                  <option value="OFF">OFF — Summary tanpa catalog</option>
+                </select>
+                <p class="field-hint">Menentukan apakah ringkasan chatbot menyertakan daftar katalog properti.</p>
+              </div>
+
               <!-- Divider -->
               <div class="section-divider">
                 <span>Keamanan & Integrasi</span>
@@ -109,7 +135,7 @@
                     :type="showPassword ? 'text' : 'password'"
                     placeholder="Masukkan password Anda"
                     :disabled="isSubmitting"
-                    autocomplete="new-password"
+                    autocomplete="off"
                     required
                   />
                   <button
@@ -188,6 +214,8 @@ const form = reactive({
   username:       '',
   phone:          '',
   birthdate:      '',
+  email:          '',
+  catalog_summary: 'OFF',
   password:       '',
   fonnte_token:   '',
   kirimi_device_id: ''
@@ -198,6 +226,8 @@ const originalForm = reactive({
   name:            '',
   phone:           '',
   birthdate:       '',
+  email:           '',
+  catalog_summary: 'OFF',
   fonnte_token:    '',
   kirimi_device_id: ''
 });
@@ -217,13 +247,15 @@ const alertClass = computed(() => {
 });
 
 // Form dianggap "ada perubahan" jika:
-// - Salah satu field (name/phone/birthdate/fonnte_token) berbeda dari original, ATAU
+// - Salah satu field (name/phone/birthdate/email/catalog_summary/fonnte_token/...) berbeda dari original, ATAU
 // - Password sudah diisi
 const hasChanges = computed(() => {
   return (
     form.name            !== originalForm.name            ||
     form.phone           !== originalForm.phone           ||
     form.birthdate       !== originalForm.birthdate       ||
+    form.email           !== originalForm.email           ||
+    form.catalog_summary !== originalForm.catalog_summary ||
     form.fonnte_token     !== originalForm.fonnte_token     ||
     form.kirimi_device_id !== originalForm.kirimi_device_id ||
     form.password.length > 0
@@ -253,6 +285,8 @@ const loadProfile = async () => {
       form.username   = user.username   || '';
       form.phone      = user.phone      || '';
       form.birthdate  = user.birthdate ? user.birthdate.split('T')[0] : '';
+      form.email            = user.email            || '';
+      form.catalog_summary  = user.catalog_summary  || 'OFF';
       form.fonnte_token     = user.fonnte_token     || '';
       form.kirimi_device_id = user.kirimi_device_id || '';
       form.password         = '';
@@ -261,6 +295,8 @@ const loadProfile = async () => {
       originalForm.name             = form.name;
       originalForm.phone            = form.phone;
       originalForm.birthdate        = form.birthdate;
+      originalForm.email            = form.email;
+      originalForm.catalog_summary  = form.catalog_summary;
       originalForm.fonnte_token     = form.fonnte_token;
       originalForm.kirimi_device_id = form.kirimi_device_id;
     } else {
@@ -281,11 +317,14 @@ const loadProfile = async () => {
 };
 
 /* ── Validasi ────────────────────────────────── */
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 const validateForm = () => {
   if (!form.name.trim())     return 'Nama wajib diisi';
   if (!form.phone.trim())    return 'Nomor HP wajib diisi';
   if (!form.password.trim()) return 'Password wajib diisi';
   if (form.password.trim().length < 6) return 'Password minimal 6 karakter';
+  if (form.email.trim() && !EMAIL_REGEX.test(form.email.trim())) return 'Format email tidak valid';
   return '';
 };
 
@@ -311,6 +350,8 @@ const submitUpdate = async () => {
       phone:      form.phone,
       birthdate:  form.birthdate  || null,
       password:   form.password,
+      email:            form.email            || null,
+      catalog_summary:  form.catalog_summary   || null,
       fonnte_token:     form.fonnte_token     || null,
       kirimi_device_id: form.kirimi_device_id || null
       // username TIDAK dikirim — backend mengabaikannya
@@ -326,6 +367,8 @@ const submitUpdate = async () => {
       originalForm.name            = form.name;
       originalForm.phone           = form.phone;
       originalForm.birthdate       = form.birthdate;
+      originalForm.email           = form.email;
+      originalForm.catalog_summary = form.catalog_summary;
       originalForm.fonnte_token     = form.fonnte_token;
       originalForm.kirimi_device_id = form.kirimi_device_id;
       form.password                 = '';

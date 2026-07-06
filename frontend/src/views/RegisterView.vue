@@ -131,6 +131,23 @@
             </div>
           </div>
 
+          <!-- Email -->
+          <div class="form-group">
+            <label class="form-label" for="email">Email</label>
+            <div class="input-icon-wrapper">
+              <i class="fa-regular fa-envelope input-icon"></i>
+              <input
+                id="email"
+                v-model.trim="form.email"
+                type="email"
+                class="form-control"
+                placeholder="nama@email.com"
+                autocomplete="email"
+                :disabled="isSubmitting"
+              />
+            </div>
+          </div>
+
           <!-- Password -->
           <div class="form-group">
             <label class="form-label" for="password">
@@ -233,7 +250,7 @@ const PHONE_REGEX = /[^0-9+\-\s]/g;
 
 /* ── State ─────────────────────────────────────────────── */
 const router       = useRouter();
-const form         = reactive({ name: '', birthdate: '', phone: '', username: '', password: '', konfirmasi: '' });
+const form         = reactive({ name: '', birthdate: '', phone: '', username: '', email: '', password: '', konfirmasi: '' });
 const alert        = reactive({ type: '', message: '' });
 const isSubmitting = ref(false);
 const showPassword = ref(false);
@@ -254,10 +271,13 @@ const clearAlert = () => { alert.type = ''; alert.message = ''; resultUserId.val
 /** Remove non-phone characters from input */
 const sanitizePhone = (e) => { form.phone = String(e?.target?.value || form.phone).replace(PHONE_REGEX, ''); };
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 /* ── Validation ────────────────────────────────────────── */
 const validateForm = () => {
   if (!form.name)                              return 'Nama lengkap wajib diisi';
   if (!form.username)                          return 'Username wajib diisi';
+  if (form.email && !EMAIL_REGEX.test(form.email)) return 'Format email tidak valid';
   if (!form.password)                          return 'Password wajib diisi';
   if (form.password.length < 6)               return 'Password minimal 6 karakter';
   if (!form.konfirmasi)                        return 'Konfirmasi password wajib diisi';
@@ -279,6 +299,7 @@ const submitRegister = async () => {
       birthdate : form.birthdate || null,
       phone     : form.phone    || null,
       username  : form.username,
+      email     : form.email    || null,
       password  : form.password,
       konfirmasi: form.konfirmasi,
       privilege : null,

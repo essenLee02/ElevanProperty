@@ -52,7 +52,7 @@ exports.getCurrentProfile = async (req, res) => {
 
     const user = await User.findOne({
       where: { refresh_token: refreshTokenFromCookie },
-      attributes: ['user_id', 'name', 'username', 'phone', 'birthdate', 'status', 'fonnte_token', 'kirimi_device_id']
+      attributes: ['user_id', 'name', 'username', 'phone', 'birthdate', 'status', 'email', 'catalog_summary', 'fonnte_token', 'kirimi_device_id']
     });
 
     if (!user) {
@@ -78,7 +78,7 @@ exports.updateDataAgent = async (req, res) => {
   const refreshTokenFromCookie = req.cookies ? req.cookies[refreshCookieName] : null;
 
   // username sengaja TIDAK diambil dari body — tidak boleh diupdate
-  const { name, phone, birthdate, password, fonnte_token, kirimi_device_id } = req.body;
+  const { name, phone, birthdate, password, fonnte_token, kirimi_device_id, email, catalog_summary } = req.body;
 
   const requestInfo = {
     ip:    req.ip || req.connection?.remoteAddress || 'unknown',
@@ -124,6 +124,20 @@ exports.updateDataAgent = async (req, res) => {
       return sendError(res, HTTP.BAD_REQUEST, null, 'Password minimal 6 karakter');
     }
 
+    // Email — opsional, tapi jika diisi harus format valid
+    const cleanEmail = email !== undefined && email !== null ? String(email).trim() : '';
+    if (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      return sendError(res, HTTP.BAD_REQUEST, null, 'Format email tidak valid');
+    }
+
+    // Catalog Summary Status — opsional, tapi jika diisi harus 'ON' atau 'OFF'
+    const cleanCatalogSummary = catalog_summary !== undefined && catalog_summary !== null
+      ? String(catalog_summary).trim().toUpperCase()
+      : '';
+    if (cleanCatalogSummary && !['ON', 'OFF'].includes(cleanCatalogSummary)) {
+      return sendError(res, HTTP.BAD_REQUEST, null, 'Catalog Summary Status harus ON atau OFF');
+    }
+
     /* 3. Susun updateFields ─────────────────── */
     const updateFields = {};
 
@@ -154,6 +168,12 @@ exports.updateDataAgent = async (req, res) => {
       : null;
     updateFields.kirimi_device_id = cleanKirimi || null;
 
+    // Email — boleh kosong / null
+    updateFields.email = cleanEmail || null;
+
+    // Catalog Summary Status — boleh kosong / null (ON = Summary with catalog, OFF = Summary without catalog)
+    updateFields.catalog_summary = cleanCatalogSummary || null;
+
     // Metadata update
     updateFields.updated_date = new Date();
     updateFields.update_by    = user.username;
@@ -171,7 +191,7 @@ exports.updateDataAgent = async (req, res) => {
     /* 5. Kembalikan data terbaru (tanpa password) */
     const updatedUser = await User.findOne({
       where: { user_id: user.user_id },
-      attributes: ['user_id', 'name', 'username', 'phone', 'birthdate', 'fonnte_token', 'kirimi_device_id']
+      attributes: ['user_id', 'name', 'username', 'phone', 'birthdate', 'email', 'catalog_summary', 'fonnte_token', 'kirimi_device_id']
     });
 
     // Log ke terminal
