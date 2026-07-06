@@ -164,9 +164,23 @@ async function sendViaFonnte(targetPhone, message, agentToken) {
         timeout,
       });
 
-      if (response.data && response.data.status === false) {
-        const reason = response.data.reason || response.data.detail || 'Fonnte: gagal kirim';
-        throw new Error(reason);
+      const data = response.data || {};
+      // Selalu log respons MENTAH Fonnte agar status kirim transparan (paralel Kirimi/TimelinesAI).
+      console.log(`[FONNTE SEND] API response (${response.status}):`, JSON.stringify(data).substring(0, 300));
+
+      // Deteksi GAGAL dari berbagai kemungkinan bentuk respons Fonnte — bukan hanya
+      // status===false. Mencegah "✅ Terkirim" palsu saat pesan sebenarnya gagal
+      // (device disconnect, nomor tidak terdaftar WA, kuota, dll.).
+      const statusStr = String(data.status ?? data.state ?? '').toLowerCase();
+      const failed =
+        data.status  === false ||
+        data.success === false ||
+        data.sent    === false ||
+        !!data.error ||
+        /fail|gagal|error|invalid|reject|not[\s_-]*connect|disconnect|expired|unauthor/i.test(statusStr) ||
+        /fail|gagal|error|invalid|tidak\s+terkirim|not\s+sent|reject/i.test(String(data.reason || data.detail || data.message || '').toLowerCase());
+      if (failed) {
+        throw new Error(data.reason || data.detail || data.message || statusStr || 'Fonnte: gagal kirim');
       }
 
       if (attempt > 1) {
@@ -230,10 +244,22 @@ async function processIncomingMessage(body, agent) {
   const name      = String(body.name || body.pushname || 'Customer').trim();
   const message   = String(body.message || '').trim();
   const messageId = body.inboxid || body.key || body.id || `fonnte_${Date.now()}`;
+  const fromMe    = body.fromMe === true || String(body.fromMe).toLowerCase() === 'true';
+  const isGroup   = body.isgroup === true || String(body.isgroup).toLowerCase() === 'true' ||
+                     body.is_group === true || String(body.is_group).toLowerCase() === 'true' ||
+                     /@g\.us/i.test(sender);
   const ts        = new Date().toISOString();
 
-  // ── Skip media/non-teks ─────────────────────────────────────────────
+  // ── Skip media/non-teks & pesan kita sendiri ────────────────────────
   if (!message) return;
+  if (fromMe) {
+    console.log(`[FONNTE] Skip pesan keluar (fromMe) ke ${maskPhone(sender)}`);
+    return;
+  }
+  if (isGroup) {
+    console.log(`[FONNTE] Skip pesan grup dari ${maskPhone(sender)}`);
+    return;
+  }
   // Gema pesan AI kita sendiri (footer "Sent via …") → skip (anti-loop).
   if (isOwnEcho(message)) {
     console.log(`[FONNTE] Skip gema pesan AI sendiri dari ${maskPhone(sender)}`);
@@ -242,17 +268,38 @@ async function processIncomingMessage(body, agent) {
 
   // ── Dedup guard layer 1: stable message-ID (Fonnte webhook retries) ─
   if (_isAlreadyProcessed(messageId)) {
-    console.log(`[FONNTE DEDUP] ⚠️  Pesan sudah diproses (ID), skip: ${messageId}`);
+    console.log(`[FONNTE DEDUP] ⚠️  Pesan sudah diproses (ID cache), skip: ${messageId}`);
     return;
   }
   _markProcessed(messageId);
 
-  // ── Dedup guard layer 2: content-based (same sender+text within 90s) ─
+  // ── Dedup guard layer 2: DB check (survive server restart / nodemon) ──
+  // Cek messageId di ChatMessage.metadata — mencegah double-process setelah restart.
+  if (messageId && !/^sim_/.test(String(messageId))) {
+    const safeId = String(messageId).replace(/[^A-Za-z0-9_\-]/g, '');
+    if (safeId) {
+      try {
+        const { Op } = require('sequelize');
+        const dbDup = await ChatMessage.findOne({
+          where : { channel: 'whatsapp', metadata: { [Op.like]: `%"messageId":"${safeId}"%` } },
+          attributes: ['id'],
+        });
+        if (dbDup) {
+          console.log(`[FONNTE DEDUP DB] ⚠️  messageId sudah ada di DB, skip: ${safeId}`);
+          return;
+        }
+      } catch (dedupErr) {
+        console.warn('[FONNTE DEDUP DB] Query gagal, lanjut tanpa DB dedup:', dedupErr.message);
+      }
+    }
+  }
+
+  // ── Dedup guard layer 3: content-based (same sender+text within 5 min) ─
   // Catches cases where Fonnte delivers the same message with different IDs
   // (e.g. webhook + polling race, or Fonnte retry with new inboxid).
   const normSender = normalizePhone(sender);
   if (_isContentDup(normSender, message)) {
-    console.log(`[FONNTE DEDUP] ⚠️  Konten sama dari ${normSender} dalam 90s, skip.`);
+    console.log(`[FONNTE DEDUP] ⚠️  Konten sama dari ${normSender} dalam 5 menit, skip.`);
     return;
   }
   _markContentDup(normSender, message);

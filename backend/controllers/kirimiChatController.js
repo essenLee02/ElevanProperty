@@ -166,6 +166,12 @@ function extractMessage(body = {}) {
       const f = pick(body, ['fromMe', 'data.fromMe', 'key.fromMe', 'message.fromMe']);
       return f === true || String(f).toLowerCase() === 'true';
     })(),
+    isGroup   : (() => {
+      const flag = pick(body, ['isGroup', 'is_group', 'data.isGroup', 'data.is_group']);
+      if (flag === true || String(flag).toLowerCase() === 'true') return true;
+      const jid = pick(body, ['from', 'sender', 'phone', 'data.from', 'data.sender', 'key.remoteJid', 'remoteJid']);
+      return /@g\.us/i.test(String(jid || ''));
+    })(),
   };
 }
 
@@ -339,13 +345,17 @@ async function sendViaKirimi(targetPhone, message, deviceId) {
 ══════════════════════════════════════════════════════════════════════════════ */
 
 async function processIncomingMessage(body, agent) {
-  const { sender, name, message, messageId, fromMe } = extractMessage(body);
+  const { sender, name, message, messageId, fromMe, isGroup } = extractMessage(body);
   const ts = new Date().toISOString();
 
-  // ── Skip pesan kosong & pesan kita sendiri ──────────────────────────
+  // ── Skip pesan kosong, grup & pesan kita sendiri ────────────────────
   if (!message) return;
   if (fromMe) {
     console.log(`[KIRIMI] Skip pesan keluar (fromMe) ke ${maskPhone(sender)}`);
+    return;
+  }
+  if (isGroup) {
+    console.log(`[KIRIMI] Skip pesan grup dari ${maskPhone(sender)}`);
     return;
   }
   // Gema pesan AI kita sendiri (footer "Sent via …") — jangan diproses (anti-loop).

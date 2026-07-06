@@ -156,6 +156,11 @@ function extractMessage(body = {}) {
       'data.account_phone', 'data.connected_phone', 'account_phone'
     ]),
     isGroup     : !!pick(body, ['chat.is_group', 'data.is_group', 'data.chat.is_group', 'is_group']),
+    fromMe      : (() => {
+      const f = pick(body, ['message.fromMe', 'data.fromMe', 'fromMe', 'message.direction', 'data.direction', 'direction']);
+      return f === true || String(f).toLowerCase() === 'true' ||
+        String(f).toLowerCase() === 'sent' || String(f).toLowerCase() === 'outbound';
+    })(),
   };
 }
 
@@ -252,9 +257,11 @@ async function sendViaTimelinesAI(targetPhone, message) {
       const failed =
         data.success === false ||
         data.status  === false ||
+        data.sent    === false ||
         !!data.error  ||
         !!data.detail ||
-        /fail|error|invalid|reject|unauthorized/i.test(statusStr);
+        /fail|gagal|error|invalid|reject|not[\s_-]*connect|disconnect|expired|unauthor/i.test(statusStr) ||
+        /fail|gagal|error|invalid|tidak\s+terkirim|not\s+sent|reject/i.test(String(data.message || '').toLowerCase());
       if (failed) {
         throw new Error(data.error || data.detail || data.message || statusStr || 'TimelinesAI: gagal kirim');
       }
@@ -313,11 +320,15 @@ async function sendViaTimelinesAI(targetPhone, message) {
 ══════════════════════════════════════════════════════════════════════════════ */
 
 async function processIncomingMessage(body, agent) {
-  const { sender, name, message, messageId, isGroup } = extractMessage(body);
+  const { sender, name, message, messageId, isGroup, fromMe } = extractMessage(body);
   const ts = new Date().toISOString();
 
-  // ── Skip media/non-teks & grup ──────────────────────────────────────
+  // ── Skip media/non-teks, grup & pesan kita sendiri ───────────────────
   if (!message) return;
+  if (fromMe) {
+    console.log(`[TIMELINESAI] Skip pesan keluar (fromMe) ke ${maskPhone(sender)}`);
+    return;
+  }
   if (isGroup) {
     console.log(`[TIMELINESAI] Skip pesan grup dari ${maskPhone(sender)}`);
     return;
@@ -330,15 +341,36 @@ async function processIncomingMessage(body, agent) {
 
   // ── Dedup guard layer 1: stable message_uid (webhook retries) ───────
   if (_isAlreadyProcessed(messageId)) {
-    console.log(`[TIMELINESAI DEDUP] ⚠️  Pesan sudah diproses (ID), skip: ${messageId}`);
+    console.log(`[TIMELINESAI DEDUP] ⚠️  Pesan sudah diproses (ID cache), skip: ${messageId}`);
     return;
   }
   _markProcessed(messageId);
 
-  // ── Dedup guard layer 2: content-based (same sender+text within 90s) ─
+  // ── Dedup guard layer 2: DB check (survive server restart / nodemon) ──
+  // Cek messageId di ChatMessage.metadata — mencegah double-process setelah restart.
+  if (messageId && !/^sim_/.test(String(messageId))) {
+    const safeId = String(messageId).replace(/[^A-Za-z0-9_\-]/g, '');
+    if (safeId) {
+      try {
+        const { Op } = require('sequelize');
+        const dbDup = await ChatMessage.findOne({
+          where : { channel: 'whatsapp', metadata: { [Op.like]: `%"messageId":"${safeId}"%` } },
+          attributes: ['id'],
+        });
+        if (dbDup) {
+          console.log(`[TIMELINESAI DEDUP DB] ⚠️  messageId sudah ada di DB, skip: ${safeId}`);
+          return;
+        }
+      } catch (dedupErr) {
+        console.warn('[TIMELINESAI DEDUP DB] Query gagal, lanjut tanpa DB dedup:', dedupErr.message);
+      }
+    }
+  }
+
+  // ── Dedup guard layer 3: content-based (same sender+text within 5 min) ─
   const normSender = normalizePhone(sender);
   if (_isContentDup(normSender, message)) {
-    console.log(`[TIMELINESAI DEDUP] ⚠️  Konten sama dari ${normSender} dalam 90s, skip.`);
+    console.log(`[TIMELINESAI DEDUP] ⚠️  Konten sama dari ${normSender} dalam 5 menit, skip.`);
     return;
   }
   _markContentDup(normSender, message);
