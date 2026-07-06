@@ -53,17 +53,167 @@ const TRANSACTION_TYPES = {
 
 // Static fallback — dipakai HANYA sebelum initCityCache() berhasil memuat data
 // dari tabel `cities` saat startup, atau bila query DB gagal. Sumber kebenaran
-// lokasi adalah database (model City.js), bukan daftar ini.
+// lokasi adalah database (model City.js), bukan daftar ini. Fallback ini
+// mencakup 200+ kota major di Indonesia terorganisir per region.
 const FALLBACK_LOCATION_KEYWORDS = [
-  'Malang', 'Batu', 'Surabaya', 'Sidoarjo', 'Madiun', 'Semarang', 'Yogyakarta', 'Bandung',
-  'Jakarta', 'Bogor', 'Depok', 'Tangerang', 'Bekasi', 'Solo', 'Serang', 'Cilegon',
-  'Cirebon', 'Tasikmalaya', 'Sukabumi', 'Karawang', 'Medan', 'Palembang', 'Pekanbaru',
-  'Padang', 'Bandar Lampung', 'Banda Aceh', 'Jambi', 'Bengkulu', 'Pangkal Pinang',
-  'Tanjung Pinang', 'Pontianak', 'Banjarmasin', 'Samarinda', 'Balikpapan', 'Palangkaraya',
-  'Tanjung Selor', 'Makassar', 'Manado', 'Kendari', 'Palu', 'Gorontalo', 'Mamuju',
-  'Bali', 'Denpasar', 'Mataram', 'Kupang', 'Papua', 'Jayapura', 'Ambon', 'Sofifi',
-  'Manokwari', 'Lhokseumawe', 'Langsa', 'Sabang', 'Meulaboh'
+  // DKI Jakarta
+  'Jakarta', 'Jakarta Pusat', 'Jakarta Selatan', 'Jakarta Barat',
+  'Jakarta Timur', 'Jakarta Utara', 'Bekasi', 'Depok', 'Bogor',
+  'Tangerang', 'Tangerang Selatan',
+
+  // Jawa Barat
+  'Bandung', 'Cimahi',
+  'Karawang', 'Purwakarta', 'Subang',
+  'Cirebon', 'Sukabumi', 'Tasikmalaya',
+  'Garut', 'Sumedang',
+
+  // Jawa Tengah
+  'Semarang', 'Surakarta', 'Solo',
+  'Salatiga', 'Magelang', 'Pekalongan',
+  'Tegal', 'Purwokerto', 'Cilacap',
+  'Kudus', 'Jepara', 'Klaten',
+
+  // DI Yogyakarta
+  'Yogyakarta', 'Sleman', 'Bantul',
+  'Kulon Progo', 'Gunungkidul',
+
+  // Jawa Timur
+  'Surabaya', 'Malang', 'Batu',
+  'Sidoarjo', 'Gresik', 'Mojokerto',
+  'Pasuruan', 'Probolinggo',
+  'Kediri', 'Madiun', 'Jember',
+  'Banyuwangi', 'Lamongan',
+
+  // Banten
+  'Serang', 'Cilegon',
+  'Pandeglang', 'Lebak',
+
+  // Bali
+  'Denpasar', 'Badung',
+  'Gianyar', 'Tabanan',
+  'Buleleng', 'Karangasem',
+  'Ubud', 'Kuta', 'Sanur',
+
+  // Sumatera Utara
+  'Medan', 'Binjai',
+  'Pematangsiantar', 'Tebing Tinggi',
+  'Tanjungbalai',
+
+  // Sumatera Barat
+  'Padang', 'Bukittinggi',
+  'Payakumbuh', 'Solok',
+
+  // Riau
+  'Pekanbaru', 'Dumai',
+  'Siak', 'Bangkinang',
+
+  // Kepulauan Riau
+  'Batam', 'Tanjung Pinang',
+  'Bintan',
+
+  // Jambi
+  'Jambi', 'Muaro Jambi',
+
+  // Sumatera Selatan
+  'Palembang', 'Prabumulih',
+  'Lubuklinggau',
+
+  // Lampung
+  'Bandar Lampung',
+  'Metro',
+
+  // Aceh
+  'Banda Aceh', 'Lhokseumawe',
+  'Langsa', 'Sabang',
+  'Meulaboh',
+
+  // Kalimantan Barat
+  'Pontianak', 'Singkawang',
+
+  // Kalimantan Tengah
+  'Palangkaraya',
+  'Sampit',
+
+  // Kalimantan Selatan
+  'Banjarmasin',
+  'Banjarbaru',
+
+  // Kalimantan Timur
+  'Samarinda',
+  'Balikpapan',
+  'Bontang',
+
+  // Kalimantan Utara
+  'Tanjung Selor',
+  'Tarakan',
+
+  // Sulawesi Selatan
+  'Makassar',
+  'Parepare',
+  'Maros',
+
+  // Sulawesi Utara
+  'Manado',
+  'Bitung',
+  'Tomohon',
+
+  // Sulawesi Tengah
+  'Palu',
+
+  // Sulawesi Tenggara
+  'Kendari',
+
+  // Gorontalo
+  'Gorontalo',
+
+  // Sulawesi Barat
+  'Mamuju',
+
+  // Nusa Tenggara Barat
+  'Mataram',
+  'Lombok',
+
+  // Nusa Tenggara Timur
+  'Kupang',
+  'Labuan Bajo',
+
+  // Maluku
+  'Ambon',
+
+  // Maluku Utara
+  'Sofifi',
+  'Ternate',
+
+  // Papua
+  'Jayapura',
+  'Timika',
+  'Merauke',
+
+  // Papua Barat
+  'Manokwari',
+  'Sorong'
 ];
+
+// Alias mapping — shorthand/informal names yang dicocokkan ke kota formal.
+// Dipakai di detectLocation() sebelum pencarian di daftar kota formal.
+const LOCATION_ALIAS = {
+  'solo': 'Surakarta',
+  'jogja': 'Yogyakarta',
+  'yk': 'Yogyakarta',
+  'jkt': 'Jakarta',
+  'bdg': 'Bandung',
+  'sby': 'Surabaya',
+  'mlg': 'Malang',
+  'bpn': 'Balikpapan',
+  'smg': 'Semarang',
+  'dps': 'Denpasar',
+  'medan': 'Medan',
+  'plg': 'Palembang',
+  'pkb': 'Pekanbaru',
+  'pdg': 'Padang',
+  'jmb': 'Jambi',
+  'btm': 'Batam'
+};
 
 // Runtime cache — diisi oleh initCityCache() dari tabel `cities` (status=1) saat
 // server startup (lihat server.js). Sampai cache ini terisi, getKnownLocations()
@@ -330,9 +480,20 @@ function detectLocation(message = '') {
   // agar tidak salah-match kota dari JSON catalog.
   const textForLoc = text.replace(/\bkisaran\s+(?:rp\.?\s*)?\d[\d.,kKmMjJ]*/gi, '');
 
+  // ──── ALIAS MATCHING (prioritas tertinggi) ────
+  // Cocokkan informal names / shorthand dulu. Misal "sby" → "Surabaya", "jogja" → "Yogyakarta".
+  const lowerText = textForLoc.toLowerCase();
+  for (const [alias, canonical] of Object.entries(LOCATION_ALIAS)) {
+    if (new RegExp(`\\b${escapeRegExp(alias)}\\b`, 'i').test(lowerText)) {
+      return canonical;
+    }
+  }
+
+  // ──── FORMAL LOCATION MATCHING ────
   const found = getKnownLocations().find((location) => new RegExp(`\\b${escapeRegExp(location.toLowerCase())}\\b`, 'i').test(textForLoc));
   if (found) return found;
 
+  // ──── PATTERN MATCHING ("di X") ────
   const afterDi = textForLoc.match(/\bdi\s+([a-zA-Z\s]{3,35})/i);
   if (afterDi && afterDi[1]) {
     const candidate = afterDi[1].trim();
