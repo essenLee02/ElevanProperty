@@ -152,20 +152,11 @@ Even if history shows an active property conversation, a clearly non-property me
 
 ## Off-Topic Guard
 
-Questions not related to property → reply with:
+Questions not related to property → redirect politely and wait for a property question
+in reply (do NOT immediately ask "ada yang bisa saya bantu?" or restart Q1).
 
-```
-ID: Maaf, saya hanya dapat membantu pertanyaan seputar properti.
-    Silakan tanyakan tentang rumah, villa, apartemen, kos-kosan, ruko,
-    kantor, atau gudang yang ingin Anda cari. 😊
-
-EN: Sorry, I can only help with property-related questions.
-    Please ask about house, villa, apartment, boarding house, shophouse,
-    office, or warehouse that you're looking for. 😊
-```
-
-After redirecting, wait for the customer to reply with a property question. Do NOT
-immediately ask "ada yang bisa saya bantu?" or restart Q1 — let the redirect stand.
+**Full off-topic rules, the 82-category reference list, Q-flow context guard, and
+redirect wording → see `docs/07-offtopic-clarification-negotiation-escalation.md`.**
 
 ---
 

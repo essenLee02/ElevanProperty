@@ -261,6 +261,14 @@ After catalog shown, "belum cocok" → try alternatives near **same anchor** fir
 
 **Rule:** Copy the **exact anchor phrase** from customer. NEVER truncate, translate, or paraphrase.
 
+**Exception — strip instruction phrases directed AT the bot** (this is not "paraphrasing",
+it's removing words that were never part of the location description): if the customer
+phrases their answer as a request to the AI — e.g. *"dekat pakuwon, **tolong carikan**
+tempat yang dingin dan asri"* — remove "tolong carikan"/"mohon carikan"/"cariin" but KEEP
+the rest verbatim, including descriptive words like "tempat yang dingin dan asri":
+- `"dekat pakuwon, tolong carikan tempat yang dingin dan asri"` → `Dekat pakuwon, tempat yang dingin dan asri`
+- `"mohon carikan yang deket kampus ubaya"` → `Dekat kampus ubaya`
+
 ---
 
 ## Summary Brief Format

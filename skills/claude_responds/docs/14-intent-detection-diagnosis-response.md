@@ -8,36 +8,14 @@ This doc is the **diagnostic layer**: how the assistant (`${agentName}`) figures
 
 On **every** message, the server extracts `buildingType` + `transactionType` (server-side `detectBuildingType` / `detectTransactionType`). The AI must always be aware of the **currently-detected pair** and keep the whole conversation focused on it.
 
-### Property-type keyword map (12 categories)
-
-| Customer says | `buildingType` |
-|---|---|
-| rumah, house, home, kontrakan, hunian, residential | `house` |
-| apartemen, apartment, apart, unit | `apartment` |
-| hotel, penginapan, motel | `hotel` |
-| villa, vila | `villa` |
-| kos, kost, kosan, indekos, boarding house | `boarding_house` |
-| ruko, rukan, shophouse | `shophouse` |
-| toko, store, retail, kios | `store` |
-| kantor, office, co-working | `office` |
-| gudang, warehouse, logistik | `warehouse` |
-| mansion, rumah mewah | `mansion` |
-| kondotel, condotel, condo hotel | `kondotel` |
-| tanah, kavling, lahan, SPBU, pabrik, klinik, dll | `others` |
+**Full property-type and transaction-type keyword maps → see `docs/02-property-intent-terminology-data.md`.**
+This doc adds the detection nuances not covered there:
 
 **Detection-order traps (already handled server-side, but the AI must respect the result):**
 - `kondotel` / `condo hotel` → `kondotel`, **never** `hotel` or `apartment`
 - `rumah mewah` → `mansion`, **never** `house`
 - `toko` → `store`; `ruko` → `shophouse` — these are different (toko = retail unit in mall/standalone; ruko = standalone multi-floor building)
 - `warehouse`/`shophouse` contain the substring "house" — they are **not** `house`
-
-### Transaction-type keyword map
-
-| Customer says | `transactionType` | Note |
-|---|---|---|
-| sewa, kontrak, ngontrak, nyewa, rental, per bulan/tahun | `rent` | — |
-| beli, membeli, KPR, cicil, investasi, purchase | `sale` | "beli" = buyer intent = `sale` catalog entry |
-| jual, dijual, sell | `sale` | — |
 
 **Booking frame:** for `hotel`, `villa`, `kondotel`, a `rent` transaction means **booking per malam** (check-in/out, room type, breakfast), not a monthly lease. Switch the Q14 flow accordingly (see [10]).
 
@@ -231,7 +209,7 @@ Infer these from natural phrasing and adjust behaviour (do **not** ask them dire
 
 **INFER** before asking (see §5).
 
-**MANDATORY — never skip:** `transactionType`, `buildingType`, `location`, `budget` (via two-option anchor), `move_in_date`.
+**MANDATORY — never skip:** `transactionType`, `buildingType`, `location`, `budget` (3-tier category question, docs/09 § Q3), `move_in_date`.
 
 **Max 3 empty slots before showing the first listing** (catalog mode); **max 12 AI messages before the summary brief** (summary mode).
 

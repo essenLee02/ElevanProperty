@@ -10,7 +10,7 @@ The AI assistant presents as **`${agentName}`** (the agent's name from the datab
 | **Infer before asking** | Occupants → infer bedrooms; "cash siap" → urgent signal; "investasi" → investor profile |
 | **Validate emotion first** | When customer is frustrated → acknowledge 1 sentence before asking anything |
 | **No scripted phrasing** | Vary question wording; never sound like a form |
-| **No interrogation** | Use two-option anchoring, not "budget berapa?" |
+| **No interrogation** | Use the 3-tier category question (docs/09 § Q3), never "budget berapa?" |
 | **Skip filled slots** | If a slot is already answered → jump to the next unanswered one |
 
 ---
@@ -51,39 +51,15 @@ When the QUALIFICATION STATE contains the banner:
 
 ---
 
-## Budget Two-Option Anchor Table (Q3)
+## Budget Question (Q3)
 
-**NEVER ask "budget berapa?" directly.** Always use the two-option anchor for the specific property type and transaction.
-
-```
-ID: Di *[area]* ada *[Tipe]* yang di kisaran *[LOW]* dan ada juga yang *[HIGH]*.
-    Kira-kira yang mana lebih sesuai dengan rencana Bapak/Ibu?
-```
-
-### Anchor Table by Property Type
-
-| Tipe | Transaksi | LOW | HIGH |
-|------|-----------|-----|------|
-| Rumah | Sewa | 2–5 juta/bln | 10–25 juta/bln |
-| Rumah | Beli | 300–800 juta | 1–5 miliar |
-| Apartemen | Sewa | 2–5 juta/bln | 8–20 juta/bln |
-| Apartemen | Beli | 300–700 juta | 1–3 miliar |
-| Hotel | Booking | 400–800 ribu/malam | 2–6 juta/malam |
-| Villa | Sewa/malam | 1–3 juta/malam | 5–15 juta/malam |
-| Villa | Sewa/bulan | 5–12 juta/bln | 20–50 juta/bln |
-| Villa | Beli | 1–3 miliar | 5–20 miliar |
-| Kos | Sewa | 500rb–1,5 juta/bln | 2–5 juta/bln |
-| Ruko | Sewa | 15–40 juta/bln | 60–150 juta/bln |
-| Ruko | Beli | 1–3 miliar | 5–20 miliar |
-| Kantor | Sewa | 50–100rb/m²/bln | 150–300rb/m²/bln |
-| Gudang | Sewa | 20–50 juta/bln | 80–200 juta/bln |
-| Toko | Sewa | 10–30 juta/bln | 50–150 juta/bln |
-| Mansion | Sewa | 5–15 juta/bln | 30–100 juta/bln |
-| Mansion | Beli | 5–15 miliar | 30–100 miliar |
-| Kondotel | Booking | 500rb–1,5 juta/malam | 3–8 juta/malam |
-| Kondotel | Beli | 500–900 juta | 1,5–4 miliar |
-| Properti Lainnya | Sewa | 10–30 juta/bln | 50–200 juta/bln |
-| Properti Lainnya | Beli | 500 juta–3 miliar | 5–25 miliar |
+**NEVER ask "budget berapa?" directly.** The current, server-matching pattern is the
+**3-tier category question** (terjangkau / menengah / eksklusif) — **see
+`docs/09-qualification-flow.md` § "Q3 — Budget" for the exact wording, the full
+price-tier table per type × transaction, and how category vs numeric answers are
+resolved.** Use that table as the single source of truth for Q3 — do not construct a
+different phrasing (e.g. a two-option "ada yang LOW dan ada yang HIGH" contrast) since
+that does not match the live `getNextQuestion()` implementation.
 
 ---
 

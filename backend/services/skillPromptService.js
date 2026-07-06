@@ -101,6 +101,39 @@ function getMarkdownFiles(directoryPath) {
   });
 }
 
+// ─── Conditional Reference Files ──────────────────────────────────────────────
+// Files 16-19 are pure reference/lookup tables (facilities, location-anchor rules,
+// landmark data) — large, and only useful when the conversation actually touches
+// that topic. Concatenating everything in fixed filename order (01, 02, ... 19)
+// means these ALWAYS lose to files 01-15 once the character budget is hit — they
+// never reach the LLM regardless of relevance. Instead, only include them when the
+// recent conversation text matches their trigger, freeing budget for the always-on
+// core docs while still surfacing facility/landmark reference tables exactly when
+// they matter.
+//
+// `context` is optional (recent user message + a few history turns, lowercased).
+// When NOT provided (e.g. skill-status checks that don't have a live conversation),
+// every conditional file is included — preserves prior behavior for those callers.
+const CONDITIONAL_FILE_TRIGGERS = {
+  '16-facilities-reference.md': /\b(fasilitas|facility|facilities|gym|kolam|pool|wifi|ac\b|parkir|parking|dapur|kitchen|furnish|kasur|bed|lemari|wardrobe|balkon|balcony|jacuzzi|sauna|yoga|mushola|laundry|elevator|lift\b)\b/i,
+  '17-location-anchor-recognition.md': /\b(dekat|deket|near|patokan|anchor|landmark|di\s+jalan|di\s+sekitar|kawasan|wisata|mall|mal\b)\b/i,
+  '18-facilities-recognition.md': /\b(fasilitas|facility|facilities|gym|kolam|pool|wifi|ac\b|parkir|parking|dapur|kitchen|furnish)\b/i,
+  '19-landmark-reference.md': /\b(dekat|deket|near|patokan|landmark|kawasan|wisata|mall|mal\b|pakuwon|tunjungan|grand\s*city)\b/i,
+};
+
+function isConditionalFile(filePath) {
+  const name = path.basename(filePath).toLowerCase();
+  return Object.prototype.hasOwnProperty.call(CONDITIONAL_FILE_TRIGGERS, name);
+}
+
+function shouldIncludeConditionalFile(filePath, context) {
+  if (context == null) return true; // no context given → preserve old "include everything" behavior
+  const name = path.basename(filePath).toLowerCase();
+  const trigger = CONDITIONAL_FILE_TRIGGERS[name];
+  if (!trigger) return true;
+  return trigger.test(String(context));
+}
+
 function readSkillFile(filePath) {
   try {
     if (!fs.existsSync(filePath)) return '';
@@ -132,7 +165,10 @@ function trimForPrompt(text, maxCharacters = DEFAULT_MAX_PROJECT_SKILL_CHARACTER
 function loadSkillGroupPrompt(groupKey, options = {}) {
   const maxCharacters = Number(options.maxCharacters || DEFAULT_MAX_RESPONSE_SKILL_CHARACTERS);
   const directories = getExistingSkillDirectories(groupKey);
-  const files = directories.flatMap(getMarkdownFiles);
+  const allFiles = directories.flatMap(getMarkdownFiles);
+  // Conditional reference files (facilities/landmark tables) only load when the
+  // conversation context actually mentions that topic — see CONDITIONAL_FILE_TRIGGERS.
+  const files = allFiles.filter((f) => !isConditionalFile(f) || shouldIncludeConditionalFile(f, options.context));
   const loaded = files.map(readSkillFile).filter(Boolean).join('\n');
 
   if (!loaded.trim()) return '';
@@ -158,20 +194,21 @@ function loadWebsiteEnvSkillPrompt(options = {}) {
 function loadResponseSkillPrompt(provider = 'shared', options = {}) {
   const normalizedProvider = normalizeProvider(provider);
   const maxCharacters = Number(options.maxCharacters || DEFAULT_MAX_RESPONSE_SKILL_CHARACTERS);
+  const context = options.context;
 
   if (normalizedProvider === 'chatgpt') {
-    return loadSkillGroupPrompt('chatgpt', { maxCharacters });
+    return loadSkillGroupPrompt('chatgpt', { maxCharacters, context });
   }
 
   if (normalizedProvider === 'claude') {
-    return loadSkillGroupPrompt('claude', { maxCharacters });
+    return loadSkillGroupPrompt('claude', { maxCharacters, context });
   }
 
   if (normalizedProvider === 'private_agent') {
     return trimForPrompt(
       [
-        loadSkillGroupPrompt('chatgpt', { maxCharacters: Math.floor(maxCharacters / 2) }),
-        loadSkillGroupPrompt('claude', { maxCharacters: Math.floor(maxCharacters / 2) })
+        loadSkillGroupPrompt('chatgpt', { maxCharacters: Math.floor(maxCharacters / 2), context }),
+        loadSkillGroupPrompt('claude', { maxCharacters: Math.floor(maxCharacters / 2), context })
       ].filter(Boolean).join('\n\n'),
       maxCharacters
     );
@@ -180,8 +217,8 @@ function loadResponseSkillPrompt(provider = 'shared', options = {}) {
   // Shared prompt loads both response skills so fallback providers have the same behavior.
   return trimForPrompt(
     [
-      loadSkillGroupPrompt('chatgpt', { maxCharacters: Math.floor(maxCharacters / 2) }),
-      loadSkillGroupPrompt('claude', { maxCharacters: Math.floor(maxCharacters / 2) })
+      loadSkillGroupPrompt('chatgpt', { maxCharacters: Math.floor(maxCharacters / 2), context }),
+      loadSkillGroupPrompt('claude', { maxCharacters: Math.floor(maxCharacters / 2), context })
     ].filter(Boolean).join('\n\n'),
     maxCharacters
   );
@@ -193,7 +230,8 @@ function loadProjectSkillPrompt(options = {}) {
     maxCharacters: Number(options.maxWebsiteCharacters || DEFAULT_MAX_WEBSITE_SKILL_CHARACTERS)
   });
   const responsePrompt = loadResponseSkillPrompt(provider, {
-    maxCharacters: Number(options.maxResponseCharacters || DEFAULT_MAX_RESPONSE_SKILL_CHARACTERS)
+    maxCharacters: Number(options.maxResponseCharacters || DEFAULT_MAX_RESPONSE_SKILL_CHARACTERS),
+    context: options.context
   });
 
   const loaded = [

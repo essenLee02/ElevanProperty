@@ -35,269 +35,21 @@ const { hasPropertyKeyword,
         isPropertyContextContinuation }       = require('../utils/propertyKeywordFilter');
 const { extractQualificationState }           = require('../services/aiPromptBuilderService');
 
-// ─── Location Landmarks (per kota, untuk Q2c sub-area & Q6 anchor point) ─────
-// Setiap kota di database `cities` bisa punya landmark/kawasan khasnya sendiri.
-// Map ini dipakai supaya AI bertanya contoh area yang RELEVAN untuk kota customer,
-// bukan hanya contoh generik ("pusat kota, area selatan") atau hardcode Surabaya-only.
-// Key HARUS lowercase (dicocokkan via `loc.toLowerCase().includes(key)`).
-// Kota yang TIDAK ada di map ini tetap jalan normal — fallback ke contoh generik.
-const LOCATION_LANDMARKS = {
-  // Jawa Timur
-  'surabaya' : ['Pakuwon', 'Darmo', 'Rungkut', 'Gubeng', 'Tunjungan', 'Citraland', 'Manyar', 'Kertajaya', 'MERR', 'Wiyung', 'Wonokromo'],
-  'malang'   : ['Soekarno Hatta', 'Ijen', 'Dinoyo', 'Lowokwaru', 'Suhat', 'UB', 'UM', 'Arjosari', 'Blimbing'],
-  'batu'     : ['Jatim Park', 'Batu Night Spectacular', 'Selecta', 'Alun-Alun Batu', 'Songgoriti', 'Oro Oro Ombo'],
-  'madiun'   : ['Pahlawan Street Center', 'Alun-Alun Madiun', 'Kartoharjo', 'Manguharjo', 'Mejayan'],
-  'sidoarjo' : ['Gedangan', 'Waru', 'Buduran', 'Krian', 'Alun-Alun Sidoarjo'],
-  'gresik'   : ['Kebomas', 'Manyar', 'GKB', 'Alun-Alun Gresik'],
-  'kediri'   : ['Simpang Lima Gumul', 'Mojoroto', 'Pare'],
-  'jember'   : ['Alun-Alun Jember', 'Sumbersari', 'Tanggul'],
-
-  // DKI Jakarta & sekitar
-  'jakarta'  : ['SCBD', 'Sudirman', 'Thamrin', 'Senayan', 'Kemang', 'Kelapa Gading', 'Pantai Indah Kapuk', 'Kuningan', 'Tebet', 'Menteng'],
-  'bekasi'   : ['Grand Wisata', 'Summarecon Bekasi', 'Harapan Indah', 'Kemang Pratama', 'Jababeka'],
-  'depok'    : ['Margonda', 'UI', 'Sawangan', 'Cinere', 'Cimanggis'],
-  'bogor'    : ['Sentul City', 'Bogor Nirwana', 'Yasmin', 'Cibinong', 'Tajur'],
-  'tangerang': ['BSD City', 'Alam Sutera', 'Gading Serpong', 'Bintaro', 'Serpong', 'Karawaci', 'Cikokol'],
-
-  // Jawa Barat
-  'bandung'  : ['Dago', 'Buah Batu', 'Antapani', 'Pasteur', 'Setiabudi', 'Ciumbuleuit', 'Kopo'],
-  'cirebon'  : ['Alun-Alun Kejaksan', 'Kesambi', 'Plumbon'],
-
-  // Jawa Tengah & DIY
-  'semarang' : ['Banyumanik', 'Tembalang', 'Gajahmungkur', 'Simpang Lima', 'Candi'],
-  'solo'     : ['Manahan', 'Solo Baru', 'Kartasura', 'Palur', 'Laweyan', 'Klewer'],
-  'surakarta': ['Manahan', 'Solo Baru', 'Kartasura', 'Palur', 'Laweyan', 'Klewer'],
-  'yogyakarta': ['Malioboro', 'UGM', 'Sleman', 'Kaliurang', 'Gejayan', 'Seturan', 'Bantul', 'Kotagede'],
-
-  // Banten
-  'serang'   : ['Cipocok', 'Ciruas', 'Kasemen', 'Alun-Alun Serang'],
-  'lebak'    : ['Rangkasbitung', 'Sajira', 'Malingping', 'Sawarna'],
-  'cilegon'  : ['Krakatau', 'Merak', 'Ciwandan', 'PCI'],
-
-  // Bali & Nusa Tenggara
-  'denpasar' : ['Sanur', 'Renon', 'Panjer', 'Sunset Road'],
-  'badung'   : ['Kuta', 'Seminyak', 'Canggu', 'Nusa Dua', 'Jimbaran', 'Uluwatu'],
-  'mataram'  : ['Cakranegara', 'Sekarbela', 'Ampenan'],
-
-  // Sumatera
-  'medan'    : ['Medan Baru', 'Medan Sunggal', 'Medan Petisah', 'Setiabudi Medan', 'Polonia'],
-  'palembang': ['Ilir Barat', 'Ilir Timur', 'Jakabaring', 'Kemuning'],
-  'jambi'    : ['Telanaipura', 'Mendalo', 'Paal Merah', 'Simpang Rimbo', 'Mayang'],
-  'kerinci'  : ['Gunung Kerinci', 'Sungai Penuh', 'Kayu Aro'],
-  'padang'   : ['Alun-Alun Padang', 'Pondok', 'Air Tawar'],
-  'pekanbaru': ['Sudirman Pekanbaru', 'Panam', 'Rumbai'],
-  'batam'    : ['Nagoya', 'Batam Center', 'Sekupang'],
-  'bandar lampung': ['Rajabasa', 'Teluk Betung', 'Kemiling', 'Way Halim', 'Sukarame'],
-
-  // Kalimantan
-  'pontianak' : ['Alun-Alun Kapuas', 'Sungai Jawi', 'Siantan'],
-  'banjarmasin': ['Sungai Jingah', 'Banjar Baru', 'Kuin'],
-  'balikpapan': ['Klandasan', 'Sepinggan', 'Gunung Sari'],
-  'samarinda' : ['Air Hitam', 'Sempaja', 'Karang Asam'],
-  'amuntai'   : ['Alabio', 'Danau Panggang', 'Sungai Tabukan'],
-
-  // Sulawesi
-  'makassar' : ['Panakkukang', 'Tamalate', 'Rappocini'],
-  'manado'   : ['Boulevard Manado', 'Malalayang', 'Tuminting'],
-  'palu'     : ['Alun-Alun Palu', 'Tatura', 'Talise'],
-
-  // Papua & Maluku (kota kecil sesuai contoh database)
-  'agats'    : ['Pelabuhan Agats', 'Asmat', 'Bandara Ewer'],
-  'aimas'    : ['Sorong Regency', 'Bandara DEO', 'Klamono'],
-  'ambon'    : ['Alun-Alun Ambon', 'Batu Merah', 'Karang Panjang'],
-  'jayapura' : ['Entrop', 'Abepura', 'Dok II'],
-};
-
-/**
- * Cari landmark/kawasan untuk sebuah kota (case-insensitive substring match).
- * Key terpanjang dicek lebih dulu agar "bandar lampung" tidak ke-shadow oleh
- * substring lain. Return null jika kota tidak ada di map (caller fallback ke
- * contoh generik "pusat kota, area selatan").
- *
- * @param {string} loc - nama kota/lokasi dari filters.location
- * @returns {string[]|null}
- */
-function getCityLandmarks(loc) {
-  if (!loc) return null;
-  const lower = String(loc).toLowerCase();
-  const keys = Object.keys(LOCATION_LANDMARKS).sort((a, b) => b.length - a.length);
-  for (const key of keys) {
-    if (lower.includes(key)) return LOCATION_LANDMARKS[key];
-  }
-  return null;
-}
+// Per-city landmark reference (Q2c sub-area & Q6 anchor point examples) — moved to its
+// own module so this controller file isn't dominated by static data. See file for docs.
+const { getCityLandmarks } = require('../utils/locationLandmarks');
+const _languageKeywords = require('../utils/languageKeywords');
 
 // ─── LanguageDetector ─────────────────────────────────────────────────────────
 
 class LanguageDetector {
-  // ── Indonesian keyword bank ──────────────────────────────────────────────
-  // Grouped for readability; all checked via text.includes() after normalize().
-  static #INDONESIAN_WORDS = [
-    // Core pronouns & intent
-    'saya', 'aku', 'kamu', 'anda', 'mau', 'ingin', 'cari', 'tolong', 'mohon',
-    'silakan', 'boleh', 'bisa', 'tidak', 'belum', 'sudah', 'pernah', 'ada',
-    // Property types (ID)
-    'rumah', 'vila', 'apartemen', 'kos', 'kost', 'kosan', 'indekos', 'ruko',
-    'kantor', 'gudang', 'tanah', 'kavling', 'kaveling', 'lahan', 'properti',
-    'mansion', 'kondotel', 'toko', 'warung', 'spbu', 'pabrik', 'klinik',
-    // Transaction verbs (ID)
-    'sewa', 'beli', 'jual', 'sewakan', 'menyewa', 'membeli', 'kontrakan',
-    'kontrak', 'ngontrak', 'numpang',
-    // Price & budget (ID)
-    'harga', 'berapa', 'budget', 'badget', 'anggaran', 'biaya', 'bayar',
-    'juta', 'ribu', 'miliar', 'rp', 'rupiah', 'dp', 'cicilan', 'kpr',
-    'terjangkau', 'murah', 'ekonomis', 'hemat', 'mahal', 'mewah', 'premium',
-    // Time / date (ID)
-    'seminggu', 'sebulan', 'setahun', 'bulan', 'minggu', 'tahun', 'hari',
-    'besok', 'lusa', 'segera', 'secepatnya', 'kapan', 'pindah', 'masuk',
-    // Month names (ID)
-    'januari', 'februari', 'maret', 'april', 'mei', 'juni',
-    'juli', 'agustus', 'september', 'oktober', 'november', 'desember',
-    // Location & place (ID)
-    'di ', 'dekat', 'deket', 'sekitar', 'wilayah', 'area', 'daerah',
-    'jalan', 'gang', 'perumahan', 'komplek', 'kawasan',
-    // Location anchor / wisata (valid property context)
-    'mangrove', 'wonorejo', 'kenjeran', 'pakuwon', 'citraland',
-    'grand city', 'galaxy mall', 'tunjungan', 'ciputra', 'darmo',
-    // Facilities (ID)
-    'fasilitas', 'kamar', 'dapur', 'parkir', 'garasi', 'kolam', 'taman',
-    'furnished', 'furnish', 'kosongan', 'perabot',
-    // Household composition / Q4 answers (ID)
-    'sendiri', 'sendiran', 'sendirian', 'tinggal', 'bersama', 'istri', 'suami',
-    'anak', 'orangtua', 'orang tua', 'keluarga', 'ayah', 'ibu', 'berdua',
-    'bertiga', 'berempat', 'pasangan',
-    // Qualifier words (ID)
-    'rekomendasi', 'saran', 'pilihan', 'cek', 'lihat', 'tunjukkan', 'bantu',
-    'cocok', 'sesuai', 'bagus', 'bagaimana', 'gimana', 'gimana',
-    // Common informal conjunctions / fillers (confirms Indonesian)
-    'aja', 'nih', 'dong', 'sih', 'deh', 'lah', 'yuk', 'yah', 'udah', 'udah',
-    'kayak', 'kayaknya', 'kira-kira', 'kira kira', 'emang', 'memang',
-  ];
-
-  // ── US English indicator patterns ────────────────────────────────────────
-  // Used to distinguish clearly English messages and lock language = 'en'.
-  static #US_ENGLISH_PATTERNS = [
-    /\bi\s+(want|need|am\s+looking|would\s+like|am\s+searching|am\s+interested)\b/i,
-    /\b(i'm|i've|i'd|i'll|i'm|we're|we've|we'd)\b/i,
-    /\b(can\s+you|could\s+you|please|kindly|looking\s+for|show\s+me)\b/i,
-    /\b(how\s+much|what'?s\s+the\s+price|do\s+you\s+have|any\s+available)\b/i,
-    /\b(bedroom|bathroom|living\s+room|studio|lease|monthly|yearly|per\s+month)\b/i,
-    /\b(affordable|budget-friendly|spacious|furnished|unfurnished|move[\s-]in)\b/i,
-    /\b(neighborhood|nearby|within\s+\d|close\s+to|walking\s+distance)\b/i,
-    /\b(price\s+range|square\s+feet|sq\.?\s*ft|sqm|square\s+meter)\b/i,
-    /\b(east\s+java|west\s+java|central\s+java|bali|jakarta|surabaya)\b.*\b(house|villa|apt|apartment)\b/i,
-    /\b(rent|buy|purchase|sell|sale)\b.{0,30}\b(house|villa|apartment|property)\b/i,
-  ];
-
-  /** Keywords for clearly off-topic subjects (non-property domains) */
-  static #OFF_TOPIC_WORDS = [
-    // ── Kuliner & Makanan (Food & Drinks) ─────────────────────────────────────
-    'kuliner', 'makanan', 'masakan', 'resep masak', 'memasak',
-    'bebek', 'ayam goreng', 'bakso', 'soto', 'rendang', 'nasi goreng',
-    'restaurant', 'restoran', 'cafe', 'kafe', 'warung makan',
-    'snack', 'camilan', 'keripik', 'coklat', 'permen', 'biskuit',
-    'buah-buahan', 'mangga', 'pisang', 'durian', 'sayuran', 'wortel',
-    'daging sapi', 'daging ayam', 'steak', 'barbeque', 'seafood masak',
-    'kopi', 'teh', 'madu', 'boba', 'bubble tea',
-    'bir', 'beer', 'wine', 'whisky', 'cocktail', 'alkohol', 'minuman keras',
-    // ── Film, Musik & Hiburan (Entertainment) ─────────────────────────────────
-    'film', 'movie', 'bioskop', 'sinema', 'netflix', 'streaming video',
-    'serial tv', 'episode serial', 'trailer film', 'nonton film',
-    'musik', 'music', 'konser', 'lagu', 'album musik',
-    'game online', 'video game', 'gaming', 'esports', 'playstation', 'xbox', 'nintendo',
-    'karaoke', 'club malam', 'dugem', 'pesta malam',
-    // ── Olahraga & Aktivitas Fisik (Sports & Physical Activities) ─────────────
-    'olahraga', 'sports', 'sepak bola', 'futsal', 'basket', 'badminton',
-    'tenis', 'lari pagi', 'maraton', 'liga', 'pertandingan', 'stadion',
-    'hiking', 'mendaki', 'pendakian', 'trekking', 'berkemah', 'jalur pendakian',
-    'memancing', 'fishing', 'pancing ikan', 'kolam pemancingan',
-    'pertarungan', 'baku hantam', 'boxing', 'ufc', 'mma',
-    'lomba', 'kompetisi olahraga', 'turnamen',
-    // ── Wisata & Perjalanan (Travel & Tourism) ─────────────────────────────────
-    'wisata', 'tourism', 'tourist', 'travelling', 'traveling', 'backpacker',
-    'tiket pesawat', 'itinerary', 'destinasi wisata', 'paket wisata', 'tur wisata',
-    'pantai', 'beach', 'surfing', 'snorkeling', 'diving',
-    'kebun binatang', 'zoo', 'candi', 'borobudur', 'prambanan',
-    'kuil', 'vihara', 'pura',
-    // ── Pendidikan & Ilmu Pengetahuan (Education & Science) ───────────────────
-    'pendidikan', 'education', 'sekolah', 'universitas',
-    'kuliah', 'semester', 'ujian sekolah', 'skripsi', 'beasiswa', 'pelajar',
-    'biologi', 'fotosintesis', 'genetika',
-    'fisika', 'gravitasi', 'quantum', 'fisika nuklir',
-    'sains', 'penelitian ilmiah', 'laboratorium', 'eksperimen',
-    'sejarah', 'arkeologi', 'peninggalan sejarah',
-    // ── Politik & Konflik (Politics & Conflict) ────────────────────────────────
-    'politik', 'politics', 'pemilu', 'pilpres', 'partai politik', 'kampanye politik',
-    'kondisi ekonomi', 'inflasi', 'gdp', 'pertumbuhan ekonomi',
-    'perang', 'konflik bersenjata', 'militer tempur', 'pasukan perang', 'senjata api',
-    // ── Teknologi & Komputer (Technology & Computing) ─────────────────────────
-    'komputer', 'laptop', 'gadget', 'hardware komputer', 'spesifikasi laptop',
-    'coding', 'programming', 'pemrograman', 'javascript', 'python',
-    'html', 'css', 'debugging', 'algoritma', 'source code', 'github',
-    'robot', 'robotika', 'drone',
-    'blockchain', 'nft', 'defi', 'web3', 'metaverse',
-    'forex', 'foreign exchange', 'mata uang asing', 'kurs valuta',
-    'crypto', 'saham', 'stock', 'trading saham', 'day trading', 'reksa dana',
-    'komoditas', 'commodity', 'crude oil', 'perdagangan internasional',
-    // ── Sosial Media & Kehidupan Pribadi (Social & Personal Life) ─────────────
-    'instagram', 'facebook', 'twitter', 'tiktok', 'youtube', 'snapchat',
-    'follower', 'viral media', 'konten kreator', 'influencer', 'sosial media',
-    'kencan', 'tinder', 'bumble', 'jomblo', 'gebetan', 'pdkt',
-    'romantis', 'percintaan', 'patah hati', 'putus cinta',
-    'ulang tahun pesta', 'pesta ulang', 'acara pesta',
-    'rokok', 'merokok', 'nikotin', 'vape', 'elektrik rokok',
-    // ── Kesehatan & Kedokteran (Health & Medicine) ────────────────────────────
-    'kesehatan umum', 'dokter spesialis', 'penyakit', 'gejala sakit', 'diagnosa',
-    'kedokteran', 'obat-obatan', 'resep dokter', 'klinik kesehatan',
-    'rumah sakit', 'hospital',
-    // ── Hewan & Alam (Animals & Nature) ──────────────────────────────────────
-    'hewan peliharaan', 'anjing', 'kucing', 'hamster', 'kelinci',
-    'hewan liar', 'singa', 'harimau', 'gajah', 'buaya',
-    'hutan rimba', 'satwa liar', 'ekosistem alam',
-    // ── Profesi & Pekerjaan Spesifik (Specific Professions) ──────────────────
-    'tukang ledeng', 'plumber', 'pipa bocor', 'saluran air bocor',
-    'tukang kayu', 'carpenter', 'tukang bangunan lepas',
-    'insinyur mesin', 'teknik mesin', 'teknik elektro',
-    'lowongan kerja', 'loker', 'rekrutmen', 'gaji karyawan', 'karir profesional',
-    'menerjemahkan', 'penerjemah', 'jasa terjemahan',
-    // ── Seni, Desain & Kreativitas (Arts, Design & Creativity) ───────────────
-    'desain grafis', 'graphic design', 'logo design', 'photoshop', 'figma',
-    'menggambar', 'melukis', 'lukisan', 'ilustrasi', 'sketsa',
-    'fashion model', 'model fotografi', 'catwalk', '3d modeling',
-    'mainan', 'toy', 'action figure', 'lego',
-    'boneka', 'wayang', 'sihir', 'sulap', 'santet', 'dukun', 'mistis',
-    // ── Agama & Spiritual (Religion & Spirituality) ──────────────────────────
-    'dewa-dewi', 'teologi', 'ibadah agama',
-    // ── Transportasi & Logistik (Transportation & Logistics) ─────────────────
-    'beli mobil', 'kredit mobil', 'mobil baru', 'motor baru', 'beli motor',
-    'angkutan barang', 'freight', 'logistik', 'jasa angkut barang',
-    'pengiriman barang', 'jasa kurir', 'ekspedisi barang',
-    // ── Belanja & E-commerce (Shopping & E-commerce) ─────────────────────────
-    'belanja online', 'tokopedia', 'shopee', 'lazada', 'bukalapak',
-    'e-commerce', 'marketplace online',
-    // ── Lain-lain (Miscellaneous) ─────────────────────────────────────────────
-    'cuaca', 'weather', 'ramalan cuaca',
-    'pembunuhan', 'kasus kriminal', 'polisi kriminal',
-    'cucian piring', 'cuci piring', 'cucian baju',
-    'perpustakaan', 'library', 'arsip buku',
-    'elektronik', 'handphone', 'smartphone',
-    'biologi', 'kimia pelajaran', 'fisika pelajaran',
-  ];
-
-  /** Keywords that anchor a message to the property domain */
-  static #PROPERTY_WORDS = [
-    'property', 'properti', 'rumah', 'house', 'home', 'villa', 'vila', 'hotel',
-    'apartment', 'apartemen', 'kos', 'kost', 'boarding', 'ruko', 'shophouse',
-    'office', 'kantor', 'warehouse', 'gudang', 'sewa', 'rent', 'rental',
-    'beli', 'buy', 'purchase', 'jual', 'sale', 'sell', 'kontrak', 'kontrakan',
-    'tanah', 'land', 'investasi',
-    // Extended property types
-    'mansion', 'kondotel', 'condotel', 'toko', 'store', 'retail',
-    'kavling', 'lahan', 'pabrik', 'klinik', 'spbu',
-    // Household composition (Q4 property-related qualifier)
-    'kamar', 'bedroom', 'furnished', 'furnish', 'fasilitas', 'facilities',
-    'tinggal', 'sendiri', 'keluarga', 'family', 'masuk', 'pindah', 'move',
-  ];
+  // Keyword banks moved to utils/languageKeywords.js so this class body isn't
+  // dominated by static data. Static private fields still reference them here so
+  // all `this.#INDONESIAN_WORDS` etc. usage below is unchanged.
+  static #INDONESIAN_WORDS = _languageKeywords.INDONESIAN_WORDS;
+  static #US_ENGLISH_PATTERNS = _languageKeywords.US_ENGLISH_PATTERNS;
+  static #OFF_TOPIC_WORDS = _languageKeywords.OFF_TOPIC_WORDS;
+  static #PROPERTY_WORDS = _languageKeywords.PROPERTY_WORDS;
 
   /**
    * Lowercase + trim a string for keyword matching.
@@ -1609,43 +1361,15 @@ class ConversationQualifier {
     const histCustMsgs = activeHistory.filter(m => m.role === 'user' || m.role === 'customer');
     // Strip commercial use-phrases ("dipakai kantor", "buat usaha") so a house used
     // as an office isn't mis-read as a type change house→office (which would reset).
-    const histCustJoined = stripCommercialUsePhrases(histCustMsgs.map(m => (m.message || '').toLowerCase()).join(' '));
-    let histBuildingType = null;
-    if      (/\bvill?a\b/.test(histCustJoined))                                             histBuildingType = 'villa';
-    else if (/\bapartemen\b|\bapartment\b/.test(histCustJoined))                            histBuildingType = 'apartment';
-    else if (/\bmansion\b|\brumah mewah\b/.test(histCustJoined))                           histBuildingType = 'mansion';
-    else if (/\brumah\b(?!\s+(?:makan|sakit|tangga|ibadah|duka|produksi|tahanan|susun|potong|kos))|\bhouse\b|\bkontrakan\b/.test(histCustJoined))                     histBuildingType = 'house';
-    else if (/\bhotel\b|\bpenginapan\b/.test(histCustJoined))                              histBuildingType = 'hotel';
-    else if (/\bkondotel\b|\bcondo\b/.test(histCustJoined))                                histBuildingType = 'kondotel';
-    else if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(histCustJoined))               histBuildingType = 'boarding_house';
-    else if (/\bruko\b|\brukan\b/.test(histCustJoined))                                    histBuildingType = 'shophouse';
-    else if (/\bkantor\b/.test(histCustJoined))                                            histBuildingType = 'office';
-    else if (/\bgudang\b/.test(histCustJoined))                                            histBuildingType = 'warehouse';
-    else if (/\btoko\b|\bretail\b/.test(histCustJoined))                                  histBuildingType = 'store';
-    else if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(histCustJoined)) histBuildingType = 'others';
-
-    const curMsgLower = stripCommercialUsePhrases((userMessage || '').toLowerCase());
-    let curBuildingType = null;
-    if      (/\bvill?a\b/.test(curMsgLower))                                             curBuildingType = 'villa';
-    else if (/\bapartemen\b|\bapartment\b/.test(curMsgLower))                            curBuildingType = 'apartment';
-    else if (/\bmansion\b|\brumah mewah\b/.test(curMsgLower))                           curBuildingType = 'mansion';
-    else if (/\brumah\b(?!\s+(?:makan|sakit|tangga|ibadah|duka|produksi|tahanan|susun|potong|kos))|\bhouse\b|\bkontrakan\b/.test(curMsgLower))                     curBuildingType = 'house';
-    else if (/\bhotel\b|\bpenginapan\b/.test(curMsgLower))                              curBuildingType = 'hotel';
-    else if (/\bkondotel\b|\bcondo\b/.test(curMsgLower))                                curBuildingType = 'kondotel';
-    else if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(curMsgLower))               curBuildingType = 'boarding_house';
-    else if (/\bruko\b|\brukan\b/.test(curMsgLower))                                    curBuildingType = 'shophouse';
-    else if (/\bkantor\b/.test(curMsgLower))                                            curBuildingType = 'office';
-    else if (/\bgudang\b/.test(curMsgLower))                                            curBuildingType = 'warehouse';
-    else if (/\btoko\b|\bretail\b/.test(curMsgLower))                                  curBuildingType = 'store';
-    else if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(curMsgLower)) curBuildingType = 'others';
-
-    let histTx = null;
-    if      (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|rent|rental|lease)\b/.test(histCustJoined)) histTx = 'rent';
-    else if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase)\b/.test(histCustJoined))                     histTx = 'sale';
-
-    let curTx = null;
-    if      (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|rent|rental|lease)\b/.test(curMsgLower)) curTx = 'rent';
-    else if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase)\b/.test(curMsgLower))                     curTx = 'sale';
+    // NOTE: _typeOfP0/_txOfP0 already lowercase + stripCommercialUsePhrases internally,
+    // so histCustJoined/curMsgLower here are pre-lowercased raw text (double-stripping
+    // is harmless/idempotent, but we keep the join step since _typeOfP0 expects a string).
+    const histCustJoined = histCustMsgs.map(m => (m.message || '').toLowerCase()).join(' ');
+    const histBuildingType = _typeOfP0(histCustJoined);
+    const curMsgLower = (userMessage || '').toLowerCase();
+    const curBuildingType = _typeOfP0(curMsgLower);
+    const histTx = _txOfP0(histCustJoined);
+    const curTx = _txOfP0(curMsgLower);
 
     // A switch detected at Phase 0 (across the now-trimmed segment) forces the
     // full Q2–Q12 reset — covers both type changes and transaction flips.

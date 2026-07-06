@@ -188,13 +188,18 @@ sequelize.sync()
 
     // Load facility master (bilingual) so detectFacilities recognises every
     // facility registered in the DB, not just the hardcoded Indonesian map.
-    const { initFacilityCache, initCityCache } = require('./services/propertyRecommendationService');
+    const { initFacilityCache, initCityCache, initLandmarkCache } = require('./services/propertyRecommendationService');
     await initFacilityCache();
 
     // Load city master (cities table) so detectLocation()/getKnownLocations()
     // in propertyRecommendationService.js recognise every active city in the
     // DB, not just the hardcoded FALLBACK_LOCATION_KEYWORDS list.
     await initCityCache();
+
+    // Load landmark master (locations table) so detectLandmark() recognises
+    // named landmarks (e.g. Pakuwon Mall, Grand City Mall) and catalog search
+    // can filter/prioritize properties tagged to that landmark via property_locations.
+    await initLandmarkCache();
 
     console.log('Database connected and synced');
     console.log('Environment file loaded from:', path.resolve(__dirname, '.env'));

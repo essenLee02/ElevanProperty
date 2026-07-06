@@ -18,6 +18,15 @@ function _waSource() {
   return 'fonnte_whatsapp';
 }
 
+/**
+ * Build the text used to decide which conditional reference skill docs (facilities/
+ * landmark tables) should load this turn — current message + last few history turns.
+ */
+function _skillContext(history = [], userMessage = '') {
+  const recent = (history || []).slice(-6).map((h) => h.message || '').join(' ');
+  return `${recent} ${userMessage || ''}`;
+}
+
 function getClaudeConfig() {
   const apiKey = sanitizeEnvValue(process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY);
   const model = sanitizeEnvValue(process.env.CLAUDE_MODEL);
@@ -121,7 +130,7 @@ async function generateClaudeContactReply(contactPayload) {
 
 async function generateClaudeChatbotReply(session, history, userMessage, propertyContext = '') {
   return callClaudeMessagesAPI(buildChatbotReplyPrompt(session, history, userMessage, propertyContext, 'claude'), {
-    system: getProjectSkillInstruction('claude'),
+    system: getProjectSkillInstruction('claude', _skillContext(history, userMessage)),
     metadata: {
       source: 'floating_chatbot',
       channel: 'website_chatbot',
@@ -133,7 +142,7 @@ async function generateClaudeChatbotReply(session, history, userMessage, propert
 
 async function generateClaudeWhatsappReply(session, history, userMessage, propertyContext = '', extraContext = {}) {
   return callClaudeMessagesAPI(buildWhatsappReplyPrompt(session, history, userMessage, propertyContext, 'claude', extraContext), {
-    system: getProjectSkillInstruction('claude'),
+    system: getProjectSkillInstruction('claude', _skillContext(history, userMessage)),
     metadata: {
       source: _waSource(),
       channel: 'whatsapp',

@@ -3,11 +3,11 @@
 Distilled from the 12 source skill files (House, Apartment, Hotel, Villa, Boarding House,
 Shophouse, Office, Warehouse, Store, Mansion, Kondotel, Other). Each type lists its **frame**,
 the **slot order** for sewa & beli, **skip** rules, a **budget anchor**, and one condensed
-dialog that shows the type's *distinctive* questions. Shared mechanics (budget two-option,
-date normalization, summary brief, C1–C7 conditions) live in `SKILL.md` and doc 13 — not
-repeated here.
+dialog that shows the type's *distinctive* questions. Shared mechanics (Q3 budget category
+question — see docs/09, date normalization, summary brief, C1–C7 conditions) live in
+`SKILL.md` and doc 13 — not repeated here.
 
-**Legend:** `Loc`=location, `Bud`=budget two-option anchor, `Date`=move-in/check-in/target,
+**Legend:** `Loc`=location, `Bud`=budget (3-tier category question, docs/09 § Q3), `Date`=move-in/check-in/target,
 `Occ`=occupants, `Alt`=alternative area, `Dec`=decision-maker, `Dur`=lease duration,
 `Pay`=payment terms (≥1yr), `Furn`=furnishing, `Fin`=financing (KPR/cash).
 
@@ -42,6 +42,32 @@ AI       : Untuk pembayaran 1 tahun, lebih cocok di muka penuh atau cicil per 6 
 Customer : Mau sewa apartemen dekat PTC Surabaya, gym + kolam, 4–7 jt, sendiri, masuk bulan depan, 1 tahun, full furnished
 AI       : Ada preferensi lantai — rendah, tengah, atau tinggi? Dan view tertentu?
 Customer : Lantai tinggi, city view
+```
+
+### Interpretasi jawaban ORIENTASI / HADAP (Q tower-lantai)
+
+Jawaban customer soal arah hadap sering berupa **preferensi menghindari sinar matahari**,
+bukan sekadar arah mata angin. Tangkap DUA komponen: **lantai** + **orientasi**, dan
+terjemahkan maksudnya untuk agent:
+
+| Jawaban customer | Tangkap sebagai | Insight untuk agent |
+|------------------|-----------------|---------------------|
+| "hadap timur" | Hadap timur | dapat sinar matahari **terbit** (pagi cerah) |
+| "hadap barat" | Hadap barat | dapat sinar matahari **terbenam** (sore panas/silau) |
+| "hindari sinar matahari **terbit**" | Hadap non-timur | tak mau silau pagi |
+| "hindari sinar matahari **terbenam**" | Hadap non-barat | tak mau panas/silau sore |
+| "hindari matahari **terbit DAN terbenam**" | Hindari sinar matahari terbit & terbenam | **customer ingin unit SEJUK** — tidak kena sinar langsung pagi & sore; sekaligus red-flag "hindari silau/panas" |
+| "lantai antara 12-15" | Lantai 12-15 | rentang lantai spesifik |
+| "lantai tinggi / rendah / tengah" | Lantai [level] | kualitatif |
+
+**PENTING:** Jangan pernah menganggap jawaban ini "bukan pertanyaan properti". Kata seperti
+"lantai", "hadap", "sinar matahari", "terbit", "terbenam", "sunrise", "sunset" adalah
+**jawaban valid Q tower-lantai** dan harus selalu diproses & masuk summary sebagai
+`✓ Tower/Lantai: *...*`.
+
+```
+Customer : Hadap menghindari sinar matahari terbenam dan terbit.. Lantai antara 12-15 aja
+AI       : (catat) Tower/Lantai: Lantai 12-15, hindari sinar matahari terbit & terbenam (ingin unit sejuk)
 ```
 
 ---

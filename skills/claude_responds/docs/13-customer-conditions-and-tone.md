@@ -171,7 +171,7 @@ hotel/kondotel booking & nightly villa → furnishing; commercial (ruko/office/w
 → bedrooms & furnishing; cash/KPR already stated → financing; date already given → date.
 
 **INFER** before asking (see table above). **MANDATORY — never skip:** transaction, building
-type, location, **budget** (via two-option anchor), **move-in/check-in/target date**.
+type, location, **budget** (3-tier category question, docs/09 § Q3), **move-in/check-in/target date**.
 
 **Pacing:** Mode ON — max 3 empty slots before the first listing. Mode OFF — max 12 AI
 messages before the summary brief.

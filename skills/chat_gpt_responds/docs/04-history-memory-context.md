@@ -207,16 +207,8 @@ Sebelumnya Anda mencari villa di Malang. Apakah masih dengan kriteria yang sama?
 
 ## Language Detection Fallback
 
-If the current message has no clear language cues (numbers, dates, single words),
-check the **last 4 customer messages** in history.
-
-```
-Current: "juni 2026"    → no language keyword
-History: "mau sewa villa di malang"  → Indonesian detected
-→ Reply in Indonesian ✅
-```
-
-Server injects `⚠️ FORCED REPLY LANGUAGE` — that instruction always overrides your own detection.
+Full rules (last-4-message fallback, forced-language override, detection signals)
+→ see `docs/05-multilingual-provider-sync.md`.
 
 ---
 

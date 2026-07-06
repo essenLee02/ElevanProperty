@@ -12,92 +12,27 @@ Reply: Maaf, saya hanya dapat membantu pertanyaan seputar jual, beli, atau sewa 
        kos-kosan, ruko, kantor, atau gudang yang ingin Anda cari. 😊
 ```
 
-**Off-topic topics (full list — 82 categories):**
+**Off-topic topics (full list — 82 categories, grouped by theme; ID/EN keywords merged):**
 
-| # | EN | ID |
-|---|----|----|
-| 1 | Movie, Film | Film, Bioskop, Streaming |
-| 2 | Hiking, Trekking | Mendaki Gunung, Camping |
-| 3 | Sport, Athletics | Olahraga, Sepak Bola, Badminton, Maraton |
-| 4 | Coding, Programming | Pemrograman, JavaScript, Python, GitHub |
-| 5 | Education, School | Pendidikan, Kuliah, Ujian, Beasiswa |
-| 6 | Food, Culinary | Makanan, Kuliner, Resep, Bakso, Nasi Goreng |
-| 7 | Traveling | Wisata, Backpacker, Tiket Pesawat |
-| 8 | Graphic Design | Desain Grafis, Photoshop, Figma |
-| 9 | 3D Modeling, Fashion | Model Fotografi, Catwalk, 3D Modeling |
-| 10 | Stock/Crypto Investment | Saham, Investasi Kripto, Reksa Dana, Trading |
-| 11 | Holiday, Vacation | Liburan, Destinasi Wisata, Paket Wisata |
-| 12 | Romance | Romantis, Percintaan, Patah Hati |
-| 13 | Dating | Kencan, Tinder, Jomblo, Gebetan |
-| 14 | Social Media | Instagram, TikTok, YouTube, Influencer |
-| 15 | Snacks | Camilan, Keripik, Coklat, Permen |
-| 16 | Beverages | Minuman, Boba, Bubble Tea |
-| 17 | Beer, Alcohol | Bir, Wine, Whisky, Cocktail, Alkohol |
-| 18 | Party | Pesta Malam, Club Malam, Dugem |
-| 19 | School, Study | Sekolah, Universitas, Skripsi |
-| 20 | Staff, HR | Rekrutmen, Lowongan Kerja, Gaji Karyawan |
-| 21 | Plumber | Tukang Ledeng, Pipa Bocor |
-| 22 | Carpenter | Tukang Kayu, Carpenter |
-| 23 | Drawing, Art | Menggambar, Lukisan, Ilustrasi |
-| 24 | Smoking | Merokok, Rokok, Vape, Nikotin |
-| 25 | Engineering (non-property) | Insinyur Mesin, Teknik Elektro |
-| 26 | Translation | Menerjemahkan, Penerjemah |
-| 27 | Programming (same as #4) | Coding, Algoritma, Debugging |
-| 28 | Organizing Events | Event Organizer, Manajemen Acara |
-| 29 | Politics | Politik, Pemilu, Partai Politik |
-| 30 | Macroeconomics | Inflasi, GDP, Pertumbuhan Ekonomi |
-| 31 | Biology | Biologi, Fotosintesis, Genetika |
-| 32 | Physics | Fisika, Gravitasi, Quantum |
-| 33 | Medicine | Kedokteran, Obat-obatan, Diagnosa |
-| 34 | Hospital | Rumah Sakit, Hospital |
-| 35 | Computer, Electronics | Komputer, Laptop, Gadget, Smartphone |
-| 36 | Production (non-property) | Produksi Film, Produksi Musik |
-| 37 | Pets | Hewan Peliharaan, Anjing, Kucing |
-| 38 | Wild Animals | Hewan Liar, Singa, Harimau, Gajah |
-| 39 | Restaurant Menu | Menu Makanan, Daftar Menu, Harga Menu |
-| 40 | Electronics (devices) | Elektronik, Handphone, Gadget |
-| 41 | Zoo | Kebun Binatang, Zoo |
-| 42 | Beach, Sea | Pantai, Beach, Surfing, Snorkeling |
-| 43 | Historical Temple | Candi, Borobudur, Prambanan |
-| 44 | Temple, Place of Worship | Kuil, Vihara, Pura |
-| 45 | Science | Sains, Laboratorium, Eksperimen |
-| 46 | War, Military | Perang, Konflik Bersenjata, Senjata |
-| 47 | History | Sejarah, Arkeologi |
-| 48 | Traffic | Lalu Lintas, Traffic, Kemacetan |
-| 49 | Accident | Kecelakaan, Tabrakan |
-| 50 | Crime, Murder | Pembunuhan, Kasus Kriminal |
-| 51 | Health (general) | Kesehatan Umum, Gejala Sakit, Dokter |
-| 52 | Delivery | Pengiriman Barang, Jasa Kurir, Ekspedisi |
-| 53 | Freight, Logistics | Angkutan Barang, Logistik |
-| 54 | Furniture (shopping) | Belanja Furniture, Toko Perabot |
-| 55 | Toys | Mainan, Toy, Action Figure, Lego |
-| 56 | Puppet, Wayang | Boneka, Wayang |
-| 57 | Video Game | Game Online, Gaming, Esports, PlayStation |
-| 58 | Robot | Robot, Robotika, Drone |
-| 59 | Trading | Trading Saham, Day Trading, Forex |
-| 60 | Forex | Foreign Exchange, Mata Uang Asing |
-| 61 | Blockchain, Web3 | Blockchain, NFT, DeFi, Metaverse |
-| 62 | Dishes, Laundry | Cucian Piring, Cuci Piring, Cucian Baju |
-| 63 | Fight | Pertarungan, Baku Hantam, Boxing, MMA |
-| 64 | Magic, Occult | Sihir, Sulap, Santet, Dukun |
-| 65 | Religion, Gods | Dewa-Dewi, Teologi, Ibadah Agama |
-| 66 | Commodity | Komoditas, Commodity, Crude Oil |
-| 67 | Fruits | Buah-Buahan, Mangga, Pisang, Durian |
-| 68 | Vegetables | Sayuran, Wortel, Bayam |
-| 69 | Meat | Daging Sapi, Daging Ayam, Steak |
-| 70 | Coffee (topic) | Kopi |
-| 71 | Tea (topic) | Teh, Minuman Teh |
-| 72 | Honey | Madu, Lebah Madu |
-| 73 | Wildlife, Nature | Hutan Rimba, Satwa Liar, Ekosistem Alam |
-| 74 | Transportation (buying) | Beli Mobil, Mobil Baru, Motor Baru |
-| 75 | Profession, Career | Profesi, Gaji Karyawan, Karir Profesional |
-| 76 | Time (general) | Manajemen Waktu |
-| 77 | Competition, Tournament | Lomba, Turnamen, Kompetisi Olahraga |
-| 78 | Tour, Travel Package | Tur Wisata, Paket Wisata, Tour Guide |
-| 79 | Cooking | Memasak, Resep Masak |
-| 80 | Online Shopping | Belanja Online, Tokopedia, Shopee, Lazada |
-| 81 | Fishing | Memancing, Fishing, Pancing Ikan |
-| 82 | Library | Perpustakaan, Library, Arsip Buku |
+- **Entertainment/media:** Film/Bioskop/Streaming; Video Game/Gaming/Esports/PlayStation; Robot/Drone; Puppet/Wayang; Magic/Occult/Sulap/Santet
+- **Sport/outdoor:** Olahraga/Sepak Bola/Badminton/Maraton; Hiking/Mendaki Gunung/Camping; Beach/Pantai/Surfing/Snorkeling; Fishing/Memancing; Competition/Lomba/Turnamen
+- **Tech/programming:** Pemrograman/JavaScript/Python/GitHub/Coding/Algoritma; Komputer/Laptop/Gadget/Smartphone; Blockchain/NFT/DeFi/Metaverse
+- **Education:** Pendidikan/Kuliah/Ujian/Beasiswa; Sekolah/Universitas/Skripsi
+- **Food/drink:** Makanan/Kuliner/Resep/Bakso/Nasi Goreng; Camilan/Keripik/Coklat; Minuman/Boba; Bir/Wine/Alkohol; Kopi; Teh; Madu; Buah-buahan; Sayuran; Daging; Cooking/Memasak; Menu Makanan/Daftar Menu (restaurant menu itself, not a location preference)
+- **Travel/leisure:** Wisata/Backpacker/Tiket Pesawat; Liburan/Paket Wisata/Tour Guide; Party/Dugem/Club Malam
+- **Relationships:** Romantis/Percintaan/Patah Hati; Kencan/Tinder/Jomblo
+- **Social media:** Instagram/TikTok/YouTube/Influencer
+- **Trades/professions (non-property):** Tukang Ledeng/Pipa Bocor; Tukang Kayu; Rekrutmen/Lowongan Kerja/Gaji Karyawan; Profesi/Karir; Insinyur Mesin/Teknik Elektro; Menerjemahkan/Penerjemah; Event Organizer
+- **Finance (non-real-estate):** Saham/Investasi Kripto/Reksa Dana/Trading; Forex/Foreign Exchange; Komoditas/Crude Oil
+- **Politics/society:** Politik/Pemilu/Partai Politik; Inflasi/GDP/Pertumbuhan Ekonomi; War/Perang/Konflik Bersenjata; History/Sejarah/Arkeologi
+- **Science:** Biologi/Fotosintesis/Genetika; Fisika/Gravitasi; Sains/Laboratorium
+- **Health:** Kedokteran/Obat-obatan/Diagnosa; Rumah Sakit (as a topic, not a Q6 landmark); Kesehatan Umum/Gejala Sakit/Dokter
+- **Animals/nature:** Hewan Peliharaan/Anjing/Kucing; Hewan Liar/Singa/Harimau; Kebun Binatang/Zoo (as a topic, not a Q6 landmark); Hutan Rimba/Satwa Liar
+- **Places of worship/history:** Candi/Borobudur/Prambanan; Kuil/Vihara/Pura (as a topic, not a Q6 landmark); Dewa-Dewi/Teologi
+- **Traffic/incidents:** Lalu Lintas/Kemacetan (as daily-life chatter, not a Q5 red-flag answer); Kecelakaan/Tabrakan; Pembunuhan/Kasus Kriminal
+- **Logistics/shopping:** Pengiriman Barang/Jasa Kurir/Ekspedisi; Angkutan Barang; Belanja Furniture/Toko Perabot; Mainan/Lego; Belanja Online/Tokopedia/Shopee; Beli Mobil/Motor Baru
+- **Design/art:** Desain Grafis/Photoshop/Figma; 3D Modeling/Catwalk; Menggambar/Lukisan/Ilustrasi; Produksi Film/Musik
+- **Other:** Merokok/Rokok/Vape; Fight/Pertarungan/Boxing/MMA; Cucian Piring/Cuci Baju; Manajemen Waktu; Perpustakaan/Library (as a topic, not a Q6 landmark)
 
 **Important exceptions** — these words appear in the list above but ARE valid property
 answers in specific contexts:
@@ -204,6 +139,31 @@ Reply: Maaf, saya hanya bisa membantu terkait pencarian properti. 🏠
 4. Is a technical task list: `review-contract`, `incident-response`, `crm-maintenance`, `customer-pulse-check` — words meaningful only in a software/CRM context with no property anchor.
 
 **Detection note:** The server-side keyword filter already handles `Elevan_Property\skills\` — it uses `\bproperty\b` regex (word boundary) so `_property` does NOT falsely match as a property type keyword. The server also detects 5+ hyphenated tokens as off-topic. If a technical message somehow passes these server-side filters, the AI must still recognize it as non-property and reply with the standard redirect.
+
+### PO / Group-Order Broadcast Messages (WhatsApp)
+
+Messages announcing a food/goods pre-order ("PO" = Pre-Order, common in Indonesian
+WhatsApp group-selling broadcasts) must be treated as off-topic — even though they often
+contain a price (e.g. "Rp16.000"), which must NOT be mistaken for a property budget answer.
+
+```
+User:  Open PO untuk Rabu Sore
+       Degan jelly : Rp16.000. Yang mau order, tolong list nama di bawah ini,
+       terima kasih : 1.
+Reply: Maaf, saya hanya bisa membantu terkait pencarian properti.
+       Ada yang bisa saya bantu untuk kebutuhan properti Anda? 🏠
+```
+
+**Detection rules — treat as off-topic (never as a Q3 budget answer) if the message contains:**
+- "open po", "PO dibuka/ditutup/tutup", "pre-order" / "preorder"
+- "yang mau order", "tolong list nama", "list nama di bawah/yang mau"
+- Food/snack words even outside the main food list: jelly, puding, kue, snack, cemilan
+
+**Why this matters even with prior property history:** If this customer had an earlier,
+already-closed property search in the same conversation thread, do NOT let that stale
+context cause a PO broadcast to be answered as a "continuation" of the property flow.
+A PO broadcast introduces a completely new, unrelated topic — treat it as off-topic
+regardless of what was discussed earlier in the thread.
 
 ### Zero Property Intent — no active qualification
 

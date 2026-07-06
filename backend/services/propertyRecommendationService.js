@@ -259,6 +259,84 @@ function getKnownLocations() {
     .sort((a, b) => String(b).length - String(a).length);
 }
 
+// ─── Landmark Cache & Nearest-Landmark Filtering ─────────────────────────────
+// Model `Location` (tabel `locations`) menyimpan referensi landmark terdaftar
+// (mis. PAKUWON MALL, GRAND CITY MALL, TUNJUNGAN PLAZA, WISATA MANGROVE, BANK BCA)
+// yang di-link ke properti via tabel join `property_locations` (many-to-many).
+// Cache ini memungkinkan detectLandmark() mengenali landmark yang disebut customer,
+// dan getPropertyIdsForLandmark() mengembalikan properti yang benar-benar ter-tag
+// ke landmark tsb — sehingga pencarian "dekat Pakuwon" bisa memfilter/mem-prioritaskan
+// listing yang SECARA NYATA tercatat dekat Pakuwon, bukan cuma cocok di level kota.
+let _landmarkCache = new Map(); // nama landmark (UPPERCASE) → location_id
+
+/**
+ * Muat/refresh daftar landmark dari tabel `locations` (status=1). Dipanggil sekali
+ * saat server startup (mirror pola initCityCache() / initFacilityCache()).
+ */
+async function initLandmarkCache() {
+  try {
+    const { Location } = require('../models');
+    const rows = await Location.findAll({ where: { status: 1 }, attributes: ['location_id', 'name'], raw: true });
+    _landmarkCache = new Map(
+      rows.map((r) => [String(r.name || '').trim().toUpperCase(), r.location_id]).filter(([name]) => name)
+    );
+    console.log(`[LandmarkCache] Loaded ${_landmarkCache.size} landmarks from DB (for detectLandmark()).`);
+  } catch (err) {
+    console.warn('[LandmarkCache] initLandmarkCache() failed:', err.message);
+  }
+}
+
+/** Daftar nama landmark yang dikenal (untuk debug/skill doc generation). */
+function getKnownLandmarks() {
+  return [..._landmarkCache.keys()];
+}
+
+/**
+ * Deteksi landmark yang disebut customer di pesan bebas (mis. "dekat Pakuwon",
+ * "deket Tunjungan Plaza", "sekitar Grand City Mall"). Substring match case-insensitive,
+ * nama TERPANJANG dicek lebih dulu supaya "TUNJUNGAN PLAZA (TP)" tidak ke-shadow oleh
+ * substring generik seperti "MALL PUSAT KOTA".
+ *
+ * @param {string} message
+ * @returns {string} nama landmark kanonik (UPPERCASE, sesuai DB) atau '' bila tidak ada match
+ */
+function detectLandmark(message = '') {
+  if (!message || _landmarkCache.size === 0) return '';
+  const text = normalizeText(message);
+  const names = [..._landmarkCache.keys()].sort((a, b) => b.length - a.length);
+  for (const name of names) {
+    // Nama landmark bisa punya singkatan dalam kurung (mis. "TUNJUNGAN PLAZA (TP)").
+    // Coba nama penuh dulu, lalu bagian SEBELUM kurung saja — supaya customer yang
+    // menyebut "tunjungan plaza" (tanpa "(TP)") tetap match ke nama kanonik penuh.
+    const core = name.replace(/\s*\([^)]*\)\s*$/, '').trim();
+    const candidates = core === name ? [name] : [name, core];
+    const matched = candidates.some((c) => new RegExp(`\\b${escapeRegExp(c.toLowerCase())}\\b`, 'i').test(text));
+    if (matched) return name;
+  }
+  return '';
+}
+
+/**
+ * Resolve property_id yang ter-tag ke sebuah landmark (via tabel join `property_locations`).
+ * Return `null` bila landmark tidak dikenal ATAU query gagal — caller HARUS menganggap
+ * `null` sebagai "tidak ada info landmark" (fallback ke filter kota-saja), BUKAN "nol hasil".
+ *
+ * @param {string} landmarkName - nama landmark (case-insensitive, cocok hasil detectLandmark())
+ * @returns {Promise<Set<string>|null>} Set of property_id, atau null bila tidak resolvable
+ */
+async function getPropertyIdsForLandmark(landmarkName) {
+  const locationId = _landmarkCache.get(String(landmarkName || '').trim().toUpperCase());
+  if (!locationId) return null;
+  try {
+    const { PropertyLocation } = require('../models');
+    const rows = await PropertyLocation.findAll({ where: { location_id: locationId }, attributes: ['property_id'], raw: true });
+    return new Set(rows.map((r) => r.property_id).filter(Boolean));
+  } catch (err) {
+    console.warn('[LandmarkFilter] getPropertyIdsForLandmark() failed:', err.message);
+    return null;
+  }
+}
+
 // ─── JSON Property Loader (FALLBACK ONLY) ────────────────────────────────────
 // Reads indonesia_property_extended_v3.json from backend/asset/json_data/.
 //
@@ -901,7 +979,8 @@ function extractFromHistory(history = []) {
     location:       '',
     budget:         null,
     facilities:     [],
-    fallbackTypes:  []
+    fallbackTypes:  [],
+    landmark:       '',
   };
 
   for (const histMsg of recentUserMsgs) {
@@ -916,6 +995,7 @@ function extractFromHistory(history = []) {
       accumulated.location        = '';  // lokasi lama juga direset — bisa jadi beda kota
       accumulated.budget          = null;
       accumulated.facilities      = [];  // fasilitas pencarian lama tidak diwarisi
+      accumulated.landmark        = '';  // patokan lama juga direset — beda kota, beda landmark
     }
 
     if (h.buildingType)          accumulated.buildingType    = h.buildingType;
@@ -928,6 +1008,7 @@ function extractFromHistory(history = []) {
     // (mis. "Dapur" menghapus "Kolam renang, Gym" → summary tidak lengkap).
     if (h.facilities?.length)    accumulated.facilities      = [...new Set([...accumulated.facilities, ...h.facilities])];
     if (h.fallbackTypes?.length) accumulated.fallbackTypes   = h.fallbackTypes;
+    if (h.landmark)              accumulated.landmark        = h.landmark;
   }
 
   return accumulated;
@@ -985,6 +1066,7 @@ function extractSingleMessageFilters(message = '') {
     budget        : detectBudget(message),
     facilities    : detectFacilities(message),
     fallbackTypes : detectFallbackTypes(message),  // tipe-tipe alternatif eksplisit
+    landmark      : detectLandmark(message),        // patokan/landmark terdekat (mis. "Pakuwon")
   };
 }
 
@@ -1030,7 +1112,8 @@ function extractPropertyFilters(message = '', history = []) {
     location:       current.location        || accumulated.location        || '',
     budget:         _mergeBudget(current.budget, accumulated.budget),
     facilities:     current.facilities?.length ? current.facilities : accumulated.facilities || [],
-    fallbackTypes:  current.fallbackTypes   || accumulated.fallbackTypes   || []
+    fallbackTypes:  current.fallbackTypes   || accumulated.fallbackTypes   || [],
+    landmark:       current.landmark        || accumulated.landmark        || '',
   };
 
   // Auto-alias tipe percakapan baru ke tipe dasar katalog. Tipe percakapan
@@ -1280,15 +1363,34 @@ function budgetMatches(property = {}, budget = null) {
   return true;
 }
 
+/**
+ * @param {object} filters - filters.landmark (opsional) memfilter/mem-prioritaskan
+ *   properti yang ter-tag ke landmark tsb via tabel `property_locations`. Bila
+ *   filter landmark menghasilkan NOL properti (data tagging landmark yang sparse
+ *   untuk kota/tipe tsb), kita FALLBACK ke hasil TANPA landmark constraint —
+ *   customer tetap dapat listing kota-wide, bukan kosong sama sekali.
+ */
 async function searchProperties(filters = {}) {
   const source = await getSourceProperties();
-  return filterProperties(source, filters);
+  let landmarkPropertyIds = null;
+  if (filters.landmark) {
+    landmarkPropertyIds = await getPropertyIdsForLandmark(filters.landmark);
+  }
+  const results = filterProperties(source, { ...filters, landmarkPropertyIds });
+  if (filters.landmark && results.length === 0) {
+    // Tidak ada properti ter-tag ke landmark ini (atau landmark tak dikenal) —
+    // fallback ke filter kota/tipe/tx/budget saja, tetap konsisten dengan
+    // desain "nearest landmark" sebagai BOOST, bukan constraint keras.
+    return filterProperties(source, { ...filters, landmarkPropertyIds: null });
+  }
+  return results;
 }
 
 function filterProperties(properties, filters = {}) {
   const transactionType = normalizeText(filters.transactionType);
   const buildingType = normalizeText(filters.buildingType);
   const location = normalizeText(filters.location || filters.city);
+  const landmarkPropertyIds = filters.landmarkPropertyIds || null;
 
   return properties.filter((property) => {
     const propertyText = [property.province, property.location, property.city, property.district, property.address].map(normalizeText).join(' ');
@@ -1296,7 +1398,8 @@ function filterProperties(properties, filters = {}) {
     const matchesBuilding = buildingType ? normalizeText(property.buildingType) === buildingType : true;
     const matchesLocation = location ? propertyText.includes(location) : true;
     const matchesBudget = budgetMatches(property, filters.budget);
-    return matchesTransaction && matchesBuilding && matchesLocation && matchesBudget;
+    const matchesLandmark = landmarkPropertyIds ? landmarkPropertyIds.has(property.id) : true;
+    return matchesTransaction && matchesBuilding && matchesLocation && matchesBudget && matchesLandmark;
   });
 }
 
@@ -1715,6 +1818,10 @@ module.exports = {
   initFacilityCache,
   initCityCache,
   getKnownLocations,
+  initLandmarkCache,
+  getKnownLandmarks,
+  detectLandmark,
+  getPropertyIdsForLandmark,
   stripCommercialUsePhrases,
   detectCommercialUse,
   detectUseCase,

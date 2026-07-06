@@ -1339,8 +1339,21 @@ Core behavior:
 - After listing property options, ask only one short follow-up question.
 `.trim();
 
-function getProjectSkillInstruction(provider = 'shared') {
-  return `${BASE_PROPERTY_ASSISTANT_PROMPT}\n\nPROJECT SKILL DOCUMENTATION FOR PROVIDER: ${provider}\n${loadProjectSkillPrompt({ provider })}`;
+/**
+ * @param {string} provider
+ * @param {string} [context] - recent conversation text (current message + a few history
+ *   turns) used to decide whether conditional reference skill docs (facilities/landmark
+ *   tables) should be loaded this turn. Omit when no live conversation is available
+ *   (e.g. skill-status checks) — conditional docs default to "always included" then.
+ */
+function getProjectSkillInstruction(provider = 'shared', context = null) {
+  return `${BASE_PROPERTY_ASSISTANT_PROMPT}\n\nPROJECT SKILL DOCUMENTATION FOR PROVIDER: ${provider}\n${loadProjectSkillPrompt({ provider, context })}`;
+}
+
+/** Recent message text used to decide which conditional skill docs to load (see getProjectSkillInstruction). */
+function _skillContext(history = [], userMessage = '') {
+  const recent = (history || []).slice(-6).map((h) => h.message || '').join(' ');
+  return `${recent} ${userMessage || ''}`;
 }
 
 function formatConversationHistory(history = []) {
@@ -1430,7 +1443,7 @@ function buildChatbotReplyPrompt(session, history, userMessage, propertyContext 
     ? `\n⚠️ FORCED REPLY LANGUAGE: Bahasa Indonesia\nCustomer ini berbicara dalam Bahasa Indonesia. SELALU balas dalam Bahasa Indonesia.\n`
     : `\n⚠️ FORCED REPLY LANGUAGE: English\nThe customer is writing in English. Always reply in English.\n`;
 
-  return `${getProjectSkillInstruction(provider)}
+  return `${getProjectSkillInstruction(provider, _skillContext(history, userMessage))}
 ${forcedLangInstruction}
 Customer profile:
 Name: ${session.name}
@@ -1671,7 +1684,7 @@ ${resolvedAppName}
 ✅ Tanda tangan HANYA boleh ada satu kali — di dalam summary brief final (sudah termasuk dalam template di atas), dan TIDAK di tempat lain.
 `;
 
-  return `${getProjectSkillInstruction(provider)}
+  return `${getProjectSkillInstruction(provider, _skillContext(history, userMessage))}
 ${forcedLangInstruction}
 ${summaryModeInstructions}
 ${qualStateBlock ? `\n${qualStateBlock}\n` : ''}
