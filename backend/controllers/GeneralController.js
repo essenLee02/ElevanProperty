@@ -12,6 +12,8 @@
  *     ├── CountryMasterController
  *     ├── ProvinceMasterController
  *     ├── FacilityMasterController
+ *     ├── LocationMasterController
+ *     ├── PropertyMasterController
  *     └── RegisterController
  *
  * Algorithm generateRandomId() mirrors PHP:
@@ -47,7 +49,7 @@ class GeneralController {
    *   generateRandomId('Kolam Renang', 9, 5)   → "KR<rand>010"
    */
   static generateRandomId(name, count, length = 5) {
-    const chars  = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    const chars  = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let   random = '';
     for (let i = 0; i < length; i++) {
       random += chars.charAt(Math.floor(Math.random() * chars.length));
@@ -70,7 +72,7 @@ class GeneralController {
   }
 
   /* ──────────────────────────────────────────────────────────────────────────
-     SHARED HELPERS — dulunya duplikat di setiap controller
+    SHARED HELPERS — dulunya duplikat di setiap controller
   ────────────────────────────────────────────────────────────────────────── */
 
   /** Baca PAGINATION_ROWS dari .env (default 10, minimum 1). */
