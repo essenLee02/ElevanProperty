@@ -80,7 +80,8 @@ that does not match the live `getNextQuestion()` implementation.
 
 ## Property-Specific Q14 Slot Collection
 
-Q14 fires in **summary mode** (RESPOND_CATALOG_RUN=OFF) after Q12, asking type-specific slots.
+Q14 fires **after Q12, in both `RESPOND_CATALOG_RUN` modes** (the interview is identical
+regardless of the mode — see SKILL.md §4), asking type-specific slots.
 **Fire ONLY slots not already answered. One slot per message.**
 
 ---

@@ -49,7 +49,7 @@ Pre-Qualification Gate → Qualification State Injector
 ```
 
 - **Pre-Qualification Gate** — runs server-side before any AI token is consumed
-- **Qualification State Injector** — injects a ✅/❓ checklist into every prompt (Mode OFF only)
+- **Qualification State Injector** — injects a ✅/❓ checklist into every prompt (Q1–Q12 always runs, in BOTH `RESPOND_CATALOG_RUN` modes)
 - All providers receive the same conversation history and property context
 
 ### Provider Selection (`AI_PRIMARY_PROVIDER`)
@@ -66,19 +66,36 @@ Pre-Qualification Gate → Qualification State Injector
 
 ## 4. Operating Modes (`RESPOND_CATALOG_RUN`)
 
-### Mode OFF — Q1–Q12 Qualification *(default)*
+`RESPOND_CATALOG_RUN` controls **only what appears after the summary brief**. The Q1–Q12
+qualification interview itself is **IDENTICAL in both modes** — same questions, same order,
+same one-question-per-message rule, same mandatory Q8 (move-in date). Never treat ON as a
+"skip the interview" shortcut.
+
+### Mode OFF — Summary Only *(default)*
 
 - Ask Q1–Q12 in order — **ONE question per message**
-- ❌ Never show property listings or catalog data
-- ✅ After all mandatory questions answered → show **structured agent brief**
-- Q8 (move-in date) is **MANDATORY** — never skip
-- Budget (Q3) is asked by the AI via contrasting price anchors — the gate never asks budget directly
+- ❌ Never show property listings or catalog data during the interview
+- ✅ After all mandatory questions answered → show **structured agent brief** only, then close
+  with "Saya akan segera menghubungi Anda..." — no listings attached
 
-### Mode ON — Direct Catalog
+### Mode ON — Summary + Catalog
 
-- Pre-Qualification Gate ensures type + tx + location + budget before calling catalog
-- ✅ Show Rumah123 + local catalog listings when 4 minimum fields are present
-- Q8 is appended inside the listing reply if not yet captured
+- Ask Q1–Q12 in order — **exactly the same as Mode OFF**, ONE question per message
+- ❌ Still never show property listings or catalog data during the interview
+- ✅ After all mandatory questions answered → show the **same structured agent brief**, then
+  IMMEDIATELY continue in the same message with catalog recommendations
+- Catalog data is sourced from the backend's own database — `Property` joined with
+  `PropertyFacility` (FK → `Facility`) and `PropertyLocation` (FK → `Location`), plus Rumah123
+  live listings when available. This is the exact same source the Private Agent fallback uses,
+  so the catalog shown is consistent regardless of which provider answers.
+- **Per-agent scoping:** on a WhatsApp terminal each agent recommends **only their own
+  listings** (`Property.user_id` = the agent that owns the connected number). The catalog query
+  is scoped by owner, building type, transaction type, city, and a numeric budget range
+  (`price BETWEEN min AND max`, mapped from Q3), ordered by **price then title**. Requested
+  facilities do **not** exclude a property (soft) — they never shrink the result to empty.
+- Each listing surfaces its nearby landmarks (from `PropertyLocation`) on the location line, so
+  the anchor point the customer gave in Q6 is reflected in the recommendations.
+- Q8 remains mandatory during the interview — it is never deferred to "inside the listing reply"
 
 ---
 

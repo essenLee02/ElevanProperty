@@ -1,6 +1,8 @@
 const path = require('path');
 const fs = require('fs');
 
+const { getStandardFacilitiesByType } = require('../utils/standardFacilities');
+
 // DB models — loaded lazily inside getDbProperties() to avoid circular-import issues
 // at module load time. Require is cached by Node, so repeated calls are free.
 
@@ -1167,12 +1169,26 @@ function sortByPrice(properties = [], direction = 'asc') {
     const pB = parsePropertyPrice(b)?.value ?? null;
 
     // Null values go to end regardless of sort direction
-    if (pA === null && pB === null) return 0;
+    if (pA === null && pB === null) return _titleCompare(a, b);
     if (pA === null) return 1;
     if (pB === null) return -1;
 
-    return direction === 'asc' ? pA - pB : pB - pA;
+    if (pA !== pB) return direction === 'asc' ? pA - pB : pB - pA;
+    return _titleCompare(a, b); // tie-break by title (ORDER BY price, title)
   });
+}
+
+/** Bandingkan judul (case-insensitive) untuk tie-break sort ORDER BY …, title. */
+function _titleCompare(a = {}, b = {}) {
+  return String(a.title || '').localeCompare(String(b.title || ''), 'id', { sensitivity: 'base' });
+}
+
+/**
+ * Urutan katalog DEFAULT: harga termurah dulu, lalu judul (ORDER BY price, title).
+ * Dipakai saat customer TIDAK secara eksplisit minta termurah/termahal.
+ */
+function sortByPriceThenTitle(properties = []) {
+  return sortByPrice(properties, 'asc');
 }
 
 function isRecommendationRequest(message = '') {
@@ -1265,7 +1281,7 @@ async function getDbProperties() {
   }
 
   try {
-    const { Property, PropertyImage, PropertyFacility, Facility, City, Province } = require('../models');
+    const { Property, PropertyImage, PropertyFacility, Facility, PropertyLocation, Location, City, Province } = require('../models');
 
     const rows = await Property.findAll({
       where: { status: 1 },
@@ -1278,27 +1294,47 @@ async function getDbProperties() {
           include: [
             { model: Facility, as: 'facility', attributes: ['name'], required: false, where: { status: 1 } }
           ]
+        },
+        {
+          model: PropertyLocation, as: 'locations', attributes: ['location_id'], required: false,
+          include: [
+            { model: Location, as: 'location', attributes: ['name'], required: false, where: { status: 1 } }
+          ]
         }
       ]
     });
 
     const normalized = rows.map(p => {
       const d = p.toJSON();
+      // Nilai harga MENTAH (numeric) untuk budget BETWEEN yang akurat — hindari
+      // re-parse dari string "450 juta". priceType disimpan mentah (night/monthly/…).
+      const rawPrice = (d.price !== null && d.price !== undefined && d.price !== '')
+        ? Number(d.price) : null;
       return {
         id             : d.property_id,
+        // Pemilik/agent properti (users.user_id). Dipakai untuk scoping katalog
+        // per-agent di terminal WhatsApp: tiap agent hanya merekomendasikan
+        // listing miliknya sendiri (lihat filterProperties → filters.userId).
+        userId         : d.user_id || '',
         title          : d.title || '',
         description    : d.description || '',
         price          : formatDbPrice(d.price, d.price_type),
+        priceValue     : Number.isFinite(rawPrice) ? rawPrice : null,
+        priceType      : (d.price_type || '').toLowerCase(),
         location       : d.city?.name || '',
         province       : d.province?.name || '',
         city           : d.city?.name || '',
         district       : d.district || '',
+        area           : d.area || '',
         address        : d.address || '',
         buildingArea   : d.building_area || '',
         landArea       : d.land_area || '',
         buildingType   : (d.building_type || '').toLowerCase(),
         transactionType: (d.transaction_type || '').toLowerCase(),
         facilities     : (d.facilities || []).map(f => f.facility?.name).filter(Boolean).join(', '),
+        // Lokasi/landmark terdekat (mis. "Pasar Besar, PTC") — dari property_locations
+        // (FK ke locations). Dipakai untuk baris "Lokasi Terdekat" di catalog listing.
+        nearbyLocations: (d.locations || []).map(l => l.location?.name).filter(Boolean).join(', '),
         imageUrl       : (d.images || [])[0]?.url || '',
         status         : 'available',
         bedrooms       : d.bed_rooms   || 0,
@@ -1327,18 +1363,39 @@ async function getSourceProperties() {
   return loadJsonProperties();
 }
 
+// Map raw DB price_type (night/daily/weekly/monthly/yearly/cash/…) → period vocab.
+function _periodFromPriceType(priceType = '') {
+  switch (String(priceType).toLowerCase()) {
+    case 'yearly':  return 'year';
+    case 'monthly': return 'month';
+    case 'weekly':  return 'week';
+    case 'night':
+    case 'daily':   return 'night';
+    default:        return ''; // cash / negotiable / others → harga absolut
+  }
+}
+
 function parsePropertyPrice(property = {}) {
-  const text = normalizeText(property.price);
-  const value = parseNumberToken(text);
-  const period = /tahun|year|annual|\/tahun/.test(text)
-    ? 'year'
-    : /bulan|month|monthly|\/bulan/.test(text)
-      ? 'month'
-      : /minggu|week|weekly|\/minggu/.test(text)
-        ? 'week'
-        : /malam|night|daily|hari|harian|\/malam/.test(text)
-          ? 'night'
-          : '';
+  // Properti dari DB membawa nilai MENTAH (priceValue numeric + priceType) —
+  // pakai itu agar budget BETWEEN akurat, tanpa re-parse string "450 juta".
+  // Properti dari JSON catalog tidak punya priceValue → fallback parse string.
+  let value, period;
+  if (Number.isFinite(property.priceValue) && property.priceValue > 0) {
+    value  = property.priceValue;
+    period = _periodFromPriceType(property.priceType);
+  } else {
+    const text = normalizeText(property.price);
+    value  = parseNumberToken(text);
+    period = /tahun|year|annual|\/tahun/.test(text)
+      ? 'year'
+      : /bulan|month|monthly|\/bulan/.test(text)
+        ? 'month'
+        : /minggu|week|weekly|\/minggu/.test(text)
+          ? 'week'
+          : /malam|night|daily|hari|harian|\/malam/.test(text)
+            ? 'night'
+            : '';
+  }
 
   if (!value) return { value: null, period, annualValue: null };
   const annualValue = period === 'year' ? value : period === 'month' ? value * 12 : null;
@@ -1391,15 +1448,19 @@ function filterProperties(properties, filters = {}) {
   const buildingType = normalizeText(filters.buildingType);
   const location = normalizeText(filters.location || filters.city);
   const landmarkPropertyIds = filters.landmarkPropertyIds || null;
+  // Scoping per-agent (terminal WhatsApp): hanya listing milik agent ini.
+  // Kosong/null → tidak difilter (chatbot web publik = katalog global).
+  const userId = filters.userId ? String(filters.userId).trim() : '';
 
   return properties.filter((property) => {
     const propertyText = [property.province, property.location, property.city, property.district, property.address].map(normalizeText).join(' ');
+    const matchesUser = userId ? String(property.userId || '').trim() === userId : true;
     const matchesTransaction = transactionType ? normalizeText(property.transactionType) === transactionType : true;
     const matchesBuilding = buildingType ? normalizeText(property.buildingType) === buildingType : true;
     const matchesLocation = location ? propertyText.includes(location) : true;
     const matchesBudget = budgetMatches(property, filters.budget);
     const matchesLandmark = landmarkPropertyIds ? landmarkPropertyIds.has(property.id) : true;
-    return matchesTransaction && matchesBuilding && matchesLocation && matchesBudget && matchesLandmark;
+    return matchesUser && matchesTransaction && matchesBuilding && matchesLocation && matchesBudget && matchesLandmark;
   });
 }
 
@@ -1425,19 +1486,29 @@ function getVisibleMatchesFromAlternatives(alternatives = [], filters = {}) {
 
 
 /**
- * Cari properti dengan memperlebar range harga secara bertahap.
+ * Cari properti dengan memperlebar range harga secara bertahap — DIBATASI oleh
+ * "harga wajar" (reasonable price). Tidak lagi tanpa-limit: menampilkan properti
+ * dengan harga jauh di luar anggaran customer (mis. 60 M untuk budget 800 rb)
+ * tidak membantu dan menyesatkan.
  *
  * Jika customer minta gudang di Semarang harga 8-15 jt tapi tidak ada:
- *   Tahap 1: coba 5-18 jt  (±35%)
- *   Tahap 2: coba 2-21 jt  (±70%)
- *   Tahap 3: tanpa limit harga (tipe + lokasi tetap dijaga)
+ *   Tahap 1: coba 5-18 jt   (±35%)
+ *   Tahap 2: coba 2-21 jt   (±70%)
+ *   Tahap 3: coba 1.6-37 jt  (harga wajar: min ×0.20, max ×2.5 — batas akhir)
  *
  * buildingType, transactionType, dan location TIDAK pernah dilonggarkan.
+ * Jika tahap 3 (batas wajar) pun kosong → return kosong; caller lalu memakai
+ * fallback "fasilitas standar per tipe" (bukan memaksakan properti tak wajar).
  *
  * @param {object[]} source  - Semua properti dari catalog
  * @param {object}   filters - Filters asli (harus punya filters.budget)
  * @returns {{ results: object[], expandedBudget: object|null, expansionStep: number }}
  */
+// Batas "harga wajar" untuk ekspansi budget terakhir — jangan tampilkan properti
+// > 2.5× anggaran maksimum (atau < 0.20× minimum) customer.
+const REASONABLE_MIN_FACTOR = 0.20;
+const REASONABLE_MAX_FACTOR = 2.5;
+
 function findWithExpandedBudget(source, filters) {
   const budget = filters.budget;
   if (!budget || (!budget.min && !budget.max)) {
@@ -1452,12 +1523,17 @@ function findWithExpandedBudget(source, filters) {
     { min: min ? Math.round(min * 0.65) : null, max: max ? Math.round(max * 1.35) : null, step: 1 },
     // Step 2: ±70%
     { min: min ? Math.round(min * 0.30) : null, max: max ? Math.round(max * 1.70) : null, step: 2 },
-    // Step 3: tanpa limit budget (tipe + lokasi tetap dijaga)
-    { min: null, max: null, step: 3 },
+    // Step 3: batas WAJAR (bukan tanpa-limit) — min ×0.20, max ×2.5
+    {
+      min: min ? Math.round(min * REASONABLE_MIN_FACTOR) : null,
+      max: max ? Math.round(max * REASONABLE_MAX_FACTOR) : null,
+      step: 3,
+    },
   ];
 
   for (const { min: newMin, max: newMax, step } of expansions) {
     const results = filterProperties(source, {
+      userId         : filters.userId || null,
       buildingType   : filters.buildingType,
       transactionType: filters.transactionType,
       location       : filters.location,
@@ -1511,37 +1587,41 @@ async function getAlternatives(filters = {}) {
   const tt           = filters.transactionType;
   const loc          = filters.location;
   const fallbackTypes = filters.fallbackTypes || [];
+  // Scoping per-agent ikut ke SEMUA relaksasi — alternatif pun harus listing
+  // milik agent yang sama (terminal WhatsApp). Null → tidak difilter (web publik).
+  const uid          = filters.userId || null;
+  const fp           = (extra) => filterProperties(source, { userId: uid, ...extra });
 
   // ── KASUS A: buildingType ditetapkan ────────────────────────────────────
   // Strict: HANYA tipe yang diminta + fallback eksplisit dari customer.
   if (bt) {
     // A1: Type + transaction + location (tanpa budget — relaksasi harga saja)
-    add(filterProperties(source, { buildingType: bt, transactionType: tt, location: loc }));
+    add(fp({ buildingType: bt, transactionType: tt, location: loc }));
 
     // A1b: Type + location (relaksasi transaksi TAPI tetap di kota yang diminta).
     // Prioritas: pertahankan KOTA customer dulu sebelum melebar ke kota lain.
     // Contoh: "sewa hotel di Madiun" tak ada → tawarkan hotel di Madiun (jual/booking),
     // BUKAN langsung hotel di kota lain.
     if (result.length < 4 && loc) {
-      add(filterProperties(source, { buildingType: bt, location: loc }));
+      add(fp({ buildingType: bt, location: loc }));
     }
 
     // A2: Type + transaction (relaksasi lokasi — kota / area lain, LAST RESORT lokasi)
     if (result.length < 4) {
-      add(filterProperties(source, { buildingType: bt, transactionType: tt }));
+      add(fp({ buildingType: bt, transactionType: tt }));
     }
 
     // A3: Type only (relaksasi transaction juga — last resort)
     if (result.length < 4) {
-      add(filterProperties(source, { buildingType: bt }));
+      add(fp({ buildingType: bt }));
     }
 
     // A4: Fallback types eksplisit dari customer ("kalau tidak ada rumah, apartemen juga boleh")
     if (result.length < 4 && fallbackTypes.length > 0) {
       for (const fbt of fallbackTypes) {
-        add(filterProperties(source, { buildingType: fbt, transactionType: tt, location: loc }));
+        add(fp({ buildingType: fbt, transactionType: tt, location: loc }));
         if (result.length >= 8) break;
-        add(filterProperties(source, { buildingType: fbt, transactionType: tt }));
+        add(fp({ buildingType: fbt, transactionType: tt }));
         if (result.length >= 8) break;
       }
     }
@@ -1552,22 +1632,25 @@ async function getAlternatives(filters = {}) {
 
   // ── KASUS B: tidak ada buildingType — lebih fleksibel ───────────────────
   if (tt || loc) {
-    add(filterProperties(source, { transactionType: tt, location: loc }));
-    add(filterProperties(source, { transactionType: tt }));
+    add(fp({ transactionType: tt, location: loc }));
+    add(fp({ transactionType: tt }));
   }
   if (loc) {
-    add(filterProperties(source, { location: loc }));
+    add(fp({ location: loc }));
   }
 
   // Fallback types eksplisit (meski tanpa primary buildingType)
   if (fallbackTypes.length > 0) {
     for (const fbt of fallbackTypes) {
-      add(filterProperties(source, { buildingType: fbt, transactionType: tt, location: loc }));
-      add(filterProperties(source, { buildingType: fbt, transactionType: tt }));
+      add(fp({ buildingType: fbt, transactionType: tt, location: loc }));
+      add(fp({ buildingType: fbt, transactionType: tt }));
     }
   }
 
-  if (!result.length) add(source.slice(0, 8));
+  // Last resort: contoh acak — tetap hormati scoping agent bila ada.
+  if (!result.length) {
+    add((uid ? fp({}) : source).slice(0, 8));
+  }
   return result.slice(0, 8);
 }
 
@@ -1613,6 +1696,7 @@ function formatPropertyItem(item, index) {
     bathrooms: item.bathrooms || '-',
     furnishedStatus: item.furnishedStatus || '-',
     facilities: item.facilities || '-',
+    nearbyLocations: item.nearbyLocations || '',
     description: item.description || '-'
   };
 }
@@ -1622,7 +1706,8 @@ function formatPropertyRecommendation(properties = [], options = {}) {
   const limit = options.limit || 6;
   return properties.slice(0, limit).map((item, index) => {
     const formatted = formatPropertyItem(item, index);
-    return `${formatted.no}. ${formatted.title}\n   Location: ${formatted.location}\n   Price: ${formatted.price}\n   Type: ${humanBuildingType(formatted.buildingType)} - ${humanTransactionType(formatted.transactionType)}\n   Area: building ${formatted.buildingArea}, land ${formatted.landArea}\n   Address: ${formatted.address}\n   Facilities: ${formatted.facilities}`;
+    const nearbyLine = formatted.nearbyLocations ? `\n   Nearby Landmarks: ${formatted.nearbyLocations}` : '';
+    return `${formatted.no}. ${formatted.title}\n   Location: ${formatted.location}\n   Price: ${formatted.price}\n   Type: ${humanBuildingType(formatted.buildingType)} - ${humanTransactionType(formatted.transactionType)}\n   Area: building ${formatted.buildingArea}, land ${formatted.landArea}\n   Address: ${formatted.address}\n   Facilities: ${formatted.facilities}${nearbyLine}`;
   }).join('\n\n');
 }
 
@@ -1641,8 +1726,11 @@ function summarizeFilters(filters = {}) {
   };
 }
 
-async function buildRecommendationContextForLLM(message = '', history = []) {
-  const filters   = extractPropertyFilters(message, history);
+async function buildRecommendationContextForLLM(message = '', history = [], opts = {}) {
+  // opts.userId → scoping katalog per-agent (terminal WhatsApp). Null/absent =
+  // katalog global (chatbot web publik). Diselipkan ke filters agar ikut ke
+  // searchProperties → filterProperties dan semua jalur relaksasi/alternatif.
+  const filters   = { ...extractPropertyFilters(message, history), userId: opts.userId || null };
   const priceSort = detectPriceSort(message);  // 'asc' | 'desc' | ''
 
   let exactMatches    = await searchProperties(filters);
@@ -1655,6 +1743,7 @@ async function buildRecommendationContextForLLM(message = '', history = []) {
 
     // Cek apakah ada properti tipe+lokasi yang sama (tanpa constraint harga)
     const typeLocMatch = filterProperties(source, {
+      userId         : filters.userId || null,
       buildingType   : filters.buildingType,
       transactionType: filters.transactionType,
       location       : filters.location,
@@ -1672,6 +1761,21 @@ async function buildRecommendationContextForLLM(message = '', history = []) {
   }
 
   let alternatives = exactMatches.length ? [] : await getAlternatives(filters);
+
+  // ── Guard "harga wajar" pada alternatif ────────────────────────────────────
+  // getAlternatives() melonggarkan tipe/lokasi TANPA batas harga. Bila customer
+  // menyebut budget, jangan tampilkan alternatif dengan harga di luar batas wajar
+  // (min ×0.20 … max ×2.5) — mis. hotel 60 M untuk anggaran 800 rb/malam.
+  if (alternatives.length && filters.budget && (filters.budget.min || filters.budget.max)) {
+    const reasonableBudget = {
+      ...filters.budget,
+      min: filters.budget.min ? Math.round(filters.budget.min * REASONABLE_MIN_FACTOR) : null,
+      max: filters.budget.max ? Math.round(filters.budget.max * REASONABLE_MAX_FACTOR) : null,
+    };
+    const capped = alternatives.filter(p => budgetMatches(p, reasonableBudget));
+    console.log(`[PropertyRecommendation] Reasonable-price cap on alternatives: ${alternatives.length} → ${capped.length}`);
+    alternatives = capped;
+  }
 
   // Safety correction:
   // Sometimes a previous conversation can make the strict filter too narrow.
@@ -1692,10 +1796,16 @@ async function buildRecommendationContextForLLM(message = '', history = []) {
     }
   }
 
-  // ── Apply price sort when customer requests cheap / expensive ─────────────
+  // ── Ordering ──────────────────────────────────────────────────────────────
+  // Customer minta termurah/termahal → hormati arah itu (lalu tie-break title).
+  // Selain itu → urutan katalog DEFAULT: harga termurah dulu, lalu judul
+  // (ORDER BY price, title) — sesuai spesifikasi query katalog RESPOND_CATALOG_RUN=ON.
   if (priceSort) {
     exactMatches = sortByPrice(exactMatches, priceSort);
     alternatives = sortByPrice(alternatives, priceSort);
+  } else {
+    exactMatches = sortByPriceThenTitle(exactMatches);
+    alternatives = sortByPriceThenTitle(alternatives);
   }
 
   const priceSortNote = priceSort === 'asc'
@@ -1706,6 +1816,44 @@ async function buildRecommendationContextForLLM(message = '', history = []) {
 
   const budgetExpandNote = budgetExpanded
     ? `(NOTE: No properties found at original budget. Budget range was expanded to find the closest matches. Inform customer that exact budget is unavailable but present these as the nearest alternatives.)`
+    : '';
+
+  // ── FALLBACK "fasilitas standar per tipe" ──────────────────────────────────
+  // Bila katalog (agent) TIDAK menemukan data — exact match kosong DAN alternatif
+  // (setelah cap harga wajar) kosong — jangan biarkan respons hampa. Sediakan:
+  //   (a) fasilitas standar sesuai tipe properti (hotel/villa/kos/house/…), dan
+  //   (b) rentang harga WAJAR (budget diperluas dalam batas) sebagai acuan,
+  // supaya AI/Private Agent bisa menawarkan penyesuaian kriteria, bukan sekadar
+  // "tidak ada". Hanya dibangun saat memang nihil hasil.
+  let standardFallback = null;
+  if (!exactMatches.length && !alternatives.length && filters.buildingType) {
+    const stdFacilities = getStandardFacilitiesByType(filters.buildingType, filters.furnishing || '');
+    let reasonableRange = null;
+    if (filters.budget && (filters.budget.min || filters.budget.max)) {
+      reasonableRange = {
+        min: filters.budget.min ? Math.round(filters.budget.min * REASONABLE_MIN_FACTOR) : null,
+        max: filters.budget.max ? Math.round(filters.budget.max * REASONABLE_MAX_FACTOR) : null,
+        period: filters.budget.period || '',
+      };
+    }
+    if (stdFacilities || reasonableRange) {
+      standardFallback = { buildingType: filters.buildingType, standardFacilities: stdFacilities, reasonableRange };
+    }
+  }
+
+  const fmtRp = (n) => (n ? 'Rp ' + Number(n).toLocaleString('id-ID') : '');
+  const stdFallbackNote = standardFallback
+    ? [
+        'NO CATALOG MATCH — STANDARD-FACILITIES FALLBACK (rumusan saat data katalog tidak ditemukan):',
+        `- Tidak ada listing yang cocok untuk permintaan ini di katalog (dalam batas harga wajar).`,
+        standardFallback.standardFacilities
+          ? `- Fasilitas standar untuk tipe "${humanBuildingType(standardFallback.buildingType)}": ${standardFallback.standardFacilities}.`
+          : '',
+        standardFallback.reasonableRange && (standardFallback.reasonableRange.min || standardFallback.reasonableRange.max)
+          ? `- Rentang harga WAJAR sebagai acuan (jangan tawarkan di luar ini): ${fmtRp(standardFallback.reasonableRange.min)} – ${fmtRp(standardFallback.reasonableRange.max)}${standardFallback.reasonableRange.period ? '/' + standardFallback.reasonableRange.period : ''}.`
+          : '',
+        `- Sampaikan dengan jujur bahwa belum ada unit yang pas, sebutkan fasilitas standar tipe ini sebagai gambaran, lalu tawarkan penyesuaian (naikkan budget dalam batas wajar, ganti lokasi/area terdekat, atau longgarkan fasilitas). JANGAN mengarang listing.`,
+      ].filter(Boolean).join('\n')
     : '';
 
   // ── DYNAMIC STRICT RESPONSE RULES ─────────────────────────────────────────
@@ -1720,6 +1868,7 @@ async function buildRecommendationContextForLLM(message = '', history = []) {
     alternatives,
     priceSort,
     budgetExpanded,
+    standardFallback,
     contextText: [
       'PROPERTY SEARCH RESULT FROM BACKEND CATALOG',
       `Detected customer request: ${JSON.stringify(summarizeFilters(filters), null, 2)}`,
@@ -1733,6 +1882,7 @@ async function buildRecommendationContextForLLM(message = '', history = []) {
       '',
       alternatives.length ? `Alternative properties from backend catalog (${alternatives.length}):` : '',
       alternatives.length ? formatPropertyRecommendation(alternatives, { limit: 8 }) : '',
+      stdFallbackNote ? '\n' + stdFallbackNote : '',
       '',
       ...rules,
     ].filter(Boolean).join('\n')

@@ -265,19 +265,34 @@ function buildQualifyReply(filters, message, agentName, contextSource, history =
  * @returns {Promise<{ reply, provider, contextSource }>}
  */
 async function generateWhatsAppAIReply(params) {
-  const { session, message, agentName, options = {} } = params;
+  const { session, message, agentName, agentUserId = null, options = {} } = params;
 
   // Pastikan nama agent (dari database) ikut ke prompt builder lewat session.
   // buildWhatsappReplyPrompt() membaca session.agentName untuk tanda tangan dinamis.
   if (session && agentName && !session.agentName) session.agentName = agentName;
+  // user_id agent → scoping katalog per-agent (tiap nomor WA hanya rekomendasikan
+  // listing miliknya sendiri). Disimpan di session agar ikut ke Private Agent fallback.
+  if (session && agentUserId && !session.agentUserId) session.agentUserId = agentUserId;
 
-  // ── Step 1: Fetch property context ─────────────────────────────────────────
+  // ── Step 1: Get conversation history ───────────────────────────────────────
+  // Diambil DULU (sebelum property context) supaya katalog DB (Property/
+  // PropertyFacility/PropertyLocation) bisa memakai filter yang diekstrak dari
+  // SELURUH percakapan, bukan hanya pesan terakhir — sama seperti
+  // chatbotPrivateController.js memanggil buildRecommendationContextForLLM().
+  let history = [];
+  try {
+    history = await getConversationHistory(session.id, 24);
+  } catch (err) {
+    console.warn('[WhatsAppAI] History fetch failed:', err.message);
+  }
+
+  // ── Step 2: Fetch property context (Rumah123 + katalog DB sendiri) ─────────
   let propertyCtx  = options.context || '';
   let contextSource = 'none';
 
   if (!propertyCtx) {
     try {
-      const ctxResult = await getWhatsappPropertyContext(message);
+      const ctxResult = await getWhatsappPropertyContext(message, history, agentUserId);
       propertyCtx     = ctxResult.contextText || '';
       contextSource   = ctxResult.source       || 'none';
     } catch (err) {
@@ -285,14 +300,6 @@ async function generateWhatsAppAIReply(params) {
     }
   } else {
     contextSource = options.contextSource || 'provided';
-  }
-
-  // ── Step 2: Get conversation history ───────────────────────────────────────
-  let history = [];
-  try {
-    history = await getConversationHistory(session.id, 24);
-  } catch (err) {
-    console.warn('[WhatsAppAI] History fetch failed:', err.message);
   }
 
   // ── Step 3: PRE-QUALIFICATION GATE ★ ───────────────────────────────────────
@@ -404,6 +411,7 @@ async function generateWhatsAppAIReply(params) {
       history,
       userMessage          : message,
       agentName,
+      agentUserId,
       recommendationContext: null,
       externalError        : new Error('ChatGPT and Claude unavailable for WhatsApp reply'),
     });

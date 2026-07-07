@@ -24,8 +24,8 @@ This gate checks 4 minimum fields from the accumulated conversation history:
 
 | `RESPOND_CATALOG_RUN` | Gate behavior |
 |---|---|
-| `OFF` (Q1–Q12 mode) | Gate only intercepts if type+tx are **both** missing. Otherwise → AI handles via Q1–Q12 naturally (especially Q3 budget using contrasting prices). |
-| `ON` (catalog mode) | Gate intercepts whenever any of the 4 fields is missing. |
+| `OFF` (summary mode) | Gate only intercepts when type, transaction, **and** location are ALL missing (a truly cold-start message). If even one of the three is already known → AI handles the rest via Q1–Q12 naturally (especially Q3 budget using contrasting prices). |
+| `ON` (summary + catalog mode) | Same gate, same Q1–Q12 interview — gate intercepts whenever any of the 4 fields is missing. The only difference from OFF is what happens AFTER the interview completes (see SKILL.md §4), not the gate itself. |
 
 **Budget is satisfied by:** `terjangkau`, `murah`, `affordable`, `yang paling murah` — do not keep asking for exact numbers after customer expresses affordability preference.
 

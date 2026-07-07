@@ -65,7 +65,7 @@ national level:
 
 ---
 
-## Budget Expansion
+## Budget Expansion (bounded by "harga wajar" / reasonable price)
 
 When budget is specified but no match exists at that price:
 
@@ -73,12 +73,36 @@ When budget is specified but no match exists at that price:
 |------|-----------|----------------------|
 | 1 | ±35% | 5.2 – 20.3 jt |
 | 2 | ±70% | 2.4 – 25.5 jt |
-| 3 | No limit | All matching type + location |
+| 3 | Reasonable cap (min ×0.20 … max ×2.5) | 1.6 – 37.5 jt |
 
-Always keep **type + location intact** during budget expansion.
+Always keep **type + location intact** during budget expansion. Expansion is **capped at
+a reasonable price** — never show a property far outside the customer's budget (e.g. a
+60-billion listing for an 800k/night request). The backend enforces this cap; do not present
+listings priced beyond ~2.5× the customer's stated maximum.
+
 Explain the adjustment transparently:
 ```
 "⚠️ Belum ada [summary] di budget tersebut. Berikut pilihan terdekat:"
+```
+
+### Standard-Facilities Fallback (when NO reasonable catalog match exists)
+
+If even the reasonable-cap expansion finds nothing (no listing for the type/location within a
+sane price range), the backend injects a `NO CATALOG MATCH — STANDARD-FACILITIES FALLBACK`
+block into the context. When you see it:
+
+1. Honestly state that no matching unit is available yet — **never invent a listing**.
+2. Mention the **standard facilities for that property type** (hotel/villa/kos/house/etc.) as a
+   "here's what this type typically offers" reference, using the list provided.
+3. Quote the **reasonable price range** the backend supplies as guidance.
+4. Offer to adjust: raise the budget within reason, try a nearby area, or relax facilities.
+
+Example:
+```
+"Maaf, belum ada Hotel yang pas di Surabaya sesuai budget tersebut.
+Sebagai gambaran, hotel umumnya punya fasilitas standar: AC, TV, Wi-Fi, resepsionis,
+housekeeping. Kisaran harga yang wajar sekitar [range]. Mau saya sesuaikan budget,
+lokasi, atau fasilitasnya?"
 ```
 
 ---

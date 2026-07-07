@@ -488,7 +488,8 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
     const result = await generateWhatsAppAIReply({
       session,
       message,
-      agentName: agent.name,
+      agentName  : agent.name,
+      agentUserId: agent.user_id,   // scoping katalog per-agent (RESPOND_CATALOG_RUN=ON)
     });
     aiResult  = result;
     ctxSource = result.contextSource || 'none';

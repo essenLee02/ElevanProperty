@@ -39,6 +39,7 @@ const { extractQualificationState }           = require('../services/aiPromptBui
 // own module so this controller file isn't dominated by static data. See file for docs.
 const { getCityLandmarks } = require('../utils/locationLandmarks');
 const _languageKeywords = require('../utils/languageKeywords');
+const { getStandardFacilitiesByType } = require('../utils/standardFacilities');
 
 // Google Places enrichment — supplies live landmark data for cities NOT in the curated
 // LOCATION_LANDMARKS map. Claude/ChatGPT (third-party LLM providers) already have broad,
@@ -254,6 +255,19 @@ class PropertyFormatter {
   }
 
   /**
+   * Format a nearby-locations/landmarks value (from property_locations → locations
+   * FK join) — normalises both array and string inputs. Empty/unset → '' (caller
+   * decides whether to omit the line entirely, unlike facilities which always shows).
+   *
+   * @param {string|string[]} value
+   * @returns {string}
+   */
+  static formatNearbyLocations(value = '') {
+    if (Array.isArray(value)) return value.filter(Boolean).join(', ');
+    return String(value || '');
+  }
+
+  /**
    * Build a wa.me deep-link from a raw phone number string.
    * Strips all non-digit characters before constructing the URL.
    *
@@ -389,13 +403,29 @@ class PropertyFormatter {
       ? `\n   ![${item.title || 'Properti'}](${item.imageUrl})`
       : '';
 
+    // 📍 Lokasi: utamakan landmark terdekat (property_locations → locations FK);
+    // fallback ke kota/kecamatan bila properti tak punya tag lokasi.
+    const landmarks = this.formatNearbyLocations(item.nearbyLocations);
+    const lokasi    = landmarks || this.formatLocation(item);
+
+    // 🏠 Tipe: booking (hotel/kondotel/villa sewa) → "booking"; selain itu label transaksi biasa.
+    const isBooking = this.isBookingType(item.buildingType) && item.transactionType === 'rent';
+    const txLabel   = isBooking
+      ? 'booking'
+      : this.humanTransactionType(item.transactionType, lang).toLowerCase();
+
+    // 📐 Luas: booking → "kamar X"; selain itu "bangunan X, tanah Y".
+    const luas = isBooking
+      ? `${isId ? 'kamar' : 'room'} ${item.buildingArea || '-'}`
+      : `${isId ? 'bangunan' : 'building'} ${item.buildingArea || '-'}, ${isId ? 'tanah' : 'land'} ${item.landArea || '-'}`;
+
     return [
       `${index + 1}. **${item.title || (isId ? 'Properti' : 'Property')}**${imgTag}`,
-      `   📍 ${isId ? 'Lokasi'    : 'Location'}: ${this.formatLocation(item)}`,
+      `   📍 ${isId ? 'Lokasi'    : 'Location'}: ${lokasi}`,
       `   💰 ${isId ? 'Harga'     : 'Price'}: **${item.price || '-'}**`,
-      `   🏠 ${isId ? 'Tipe'      : 'Type'}: ${this.humanBuildingType(item.buildingType, lang)} — ${this.humanTransactionType(item.transactionType, lang)}`,
-      `   📐 ${isId ? 'Luas'      : 'Area'}: ${isId ? 'bangunan' : 'building'} ${item.buildingArea || '-'}, ${isId ? 'tanah' : 'land'} ${item.landArea || '-'}`,
-      `   🏷️ ${isId ? 'Fasilitas' : 'Facilities'}: ${this.formatFacilities(item.facilities)}`,
+      `   🏠 ${isId ? 'Tipe'      : 'Type'}: ${this.humanBuildingType(item.buildingType, lang)} — ${txLabel}`,
+      `   📐 ${isId ? 'Luas'      : 'Area'}: ${luas}`,
+      `   ✨ ${isId ? 'Fasilitas' : 'Facilities'}: ${this.formatFacilities(item.facilities)}`,
     ].join('\n');
   }
 
@@ -587,7 +617,7 @@ class ResponseBuilder {
    * @param {{ alternatives, rumah123Listings, filters }} params
    * @returns {string}
    */
-  alternative({ alternatives = [], rumah123Listings = [], filters = {} }) {
+  alternative({ alternatives = [], rumah123Listings = [], filters = {}, standardFallback = null }) {
     const summary    = this.#summarizeRequest(filters);
     const location   = filters.location || '';
     const hasR123    = rumah123Listings.length > 0;
@@ -604,9 +634,31 @@ class ResponseBuilder {
       const locationNote = location
         ? (isId ? ` di **${location}**` : ` in **${location}**`)
         : '';
+
+      // FALLBACK "fasilitas standar per tipe" — sebutkan fasilitas standar tipe ini
+      // + rentang harga wajar sebagai acuan saat katalog tidak menemukan data.
+      let fallbackNote = '';
+      if (standardFallback) {
+        const parts = [];
+        if (standardFallback.standardFacilities) {
+          parts.push(isId
+            ? ` Sebagai gambaran, **${PropertyFormatter.humanBuildingType(standardFallback.buildingType, 'id')}** umumnya punya fasilitas standar: ${standardFallback.standardFacilities}.`
+            : ` For reference, a **${PropertyFormatter.humanBuildingType(standardFallback.buildingType, 'en')}** typically includes standard facilities: ${standardFallback.standardFacilities}.`);
+        }
+        const rr = standardFallback.reasonableRange;
+        if (rr && (rr.min || rr.max)) {
+          const fmtRp = (n) => (n ? 'Rp ' + Number(n).toLocaleString('id-ID') : '');
+          const rangeStr = `${fmtRp(rr.min)} – ${fmtRp(rr.max)}${rr.period ? '/' + rr.period : ''}`;
+          parts.push(isId
+            ? ` Kisaran harga wajar untuk tipe ini sekitar ${rangeStr}.`
+            : ` A reasonable price range for this type is around ${rangeStr}.`);
+        }
+        fallbackNote = parts.join('');
+      }
+
       return isId
-        ? `Maaf, saat ini belum ada properti yang sesuai dengan **${summary}**${locationNote} di katalog maupun Rumah123. Apakah Anda ingin mencoba lokasi, tipe properti, atau range harga lain?`
-        : `Sorry, there is currently no property matching **${summary}**${locationNote} in my catalog or Rumah123. Would you like to try another location, property type, or price range?`;
+        ? `Maaf, saat ini belum ada properti yang sesuai dengan **${summary}**${locationNote} di katalog maupun Rumah123.${fallbackNote} Apakah Anda ingin menyesuaikan lokasi, tipe properti, atau range harga?`
+        : `Sorry, there is currently no property matching **${summary}**${locationNote} in my catalog or Rumah123.${fallbackNote} Would you like to adjust the location, property type, or price range?`;
     }
 
     const lines = [];
@@ -803,13 +855,30 @@ class ResponseBuilderWhatsApp {
       ? `\n   ![${item.title || 'Properti'}](${item.imageUrl})`
       : '';
 
+    // 📍 Lokasi: utamakan landmark terdekat (property_locations → locations FK),
+    // sesuai patokan lokasi customer; fallback ke kota/kecamatan bila tak ada tag.
+    const landmarks = PropertyFormatter.formatNearbyLocations(item.nearbyLocations);
+    const lokasi    = landmarks || PropertyFormatter.formatLocation(item);
+
+    // 🏠 Tipe: untuk booking (hotel/kondotel/villa sewa) → "booking"; selain itu
+    // pakai label transaksi biasa (sewa/dijual/beli).
+    const isBooking = PropertyFormatter.isBookingType(item.buildingType) && item.transactionType === 'rent';
+    const txLabel   = isBooking
+      ? (isId ? 'booking' : 'booking')
+      : PropertyFormatter.humanTransactionType(item.transactionType, lang).toLowerCase();
+
+    // 📐 Luas: booking (hotel/kondotel/villa) → "kamar X"; selain itu "bangunan X, tanah Y".
+    const luas = isBooking
+      ? `${isId ? 'kamar' : 'room'} ${item.buildingArea || '-'}`
+      : `${isId ? 'bangunan' : 'building'} ${item.buildingArea || '-'}, ${isId ? 'tanah' : 'land'} ${item.landArea || '-'}`;
+
     return [
       `${index + 1}. *${item.title || (isId ? 'Properti' : 'Property')}*${imgTag}`,
-      `   📍 Lokasi: ${PropertyFormatter.formatLocation(item)}`,
+      `   📍 Lokasi: ${lokasi}`,
       `   💰 Harga: *${item.price || '-'}*`,
-      `   🏠 Tipe: ${PropertyFormatter.humanBuildingType(item.buildingType, lang)} — ${PropertyFormatter.humanTransactionType(item.transactionType, lang)}`,
-      `   📐 Luas: bangunan ${item.buildingArea || '-'}, tanah ${item.landArea || '-'}`,
-      `   🏷️ Fasilitas: ${PropertyFormatter.formatFacilities(item.facilities)}`,
+      `   🏠 Tipe: ${PropertyFormatter.humanBuildingType(item.buildingType, lang)} — ${txLabel}`,
+      `   📐 Luas: ${luas}`,
+      `   ✨ Fasilitas: ${PropertyFormatter.formatFacilities(item.facilities)}`,
     ].join('\n');
   }
 
@@ -905,7 +974,7 @@ class ResponseBuilderWhatsApp {
    *   'city'     → properti di kota yang sama (district berbeda)
    *   'national' → properti tipe yang sama dari kota lain
    */
-  alternative({ alternatives = [], rumah123Listings = [], filters = {}, budgetExpanded = null }) {
+  alternative({ alternatives = [], rumah123Listings = [], filters = {}, budgetExpanded = null, standardFallback = null }) {
     const summary  = this.#summarizeRequest(filters);
     const location = filters.location || '';
     const hasR123  = rumah123Listings.length > 0;
@@ -924,9 +993,31 @@ class ResponseBuilderWhatsApp {
         : '';
       const locNote  = location ? (isId ? ` di *${location}*` : ` in *${location}*`) : '';
 
+      // FALLBACK "fasilitas standar per tipe" (rumusan saat katalog tidak menemukan
+      // data): sebutkan fasilitas standar tipe ini + rentang harga wajar sebagai
+      // acuan, lalu tawarkan penyesuaian kriteria — bukan sekadar "tidak ada".
+      let fallbackNote = '';
+      if (standardFallback) {
+        const parts = [];
+        if (standardFallback.standardFacilities) {
+          parts.push(isId
+            ? `\n\nSebagai gambaran, *${PropertyFormatter.humanBuildingType(standardFallback.buildingType, 'id')}* umumnya memiliki fasilitas standar: ${standardFallback.standardFacilities}.`
+            : `\n\nFor reference, a *${PropertyFormatter.humanBuildingType(standardFallback.buildingType, 'en')}* typically includes standard facilities: ${standardFallback.standardFacilities}.`);
+        }
+        const rr = standardFallback.reasonableRange;
+        if (rr && (rr.min || rr.max)) {
+          const fmtRp = (n) => (n ? 'Rp ' + Number(n).toLocaleString('id-ID') : '');
+          const rangeStr = `${fmtRp(rr.min)} – ${fmtRp(rr.max)}${rr.period ? '/' + rr.period : ''}`;
+          parts.push(isId
+            ? `\nKisaran harga yang wajar untuk tipe ini sekitar ${rangeStr}.`
+            : `\nA reasonable price range for this type is around ${rangeStr}.`);
+        }
+        fallbackNote = parts.join('');
+      }
+
       return (isId
-        ? `Maaf, saat ini belum ada${typeNote} yang tersedia${locNote} di katalog maupun Rumah123.\n\nApakah Anda ingin mencoba lokasi atau range harga yang berbeda?`
-        : `Sorry, there is currently no${typeNote} available${locNote} in my catalog or Rumah123.\n\nWould you like to try a different location or price range?`
+        ? `Maaf, saat ini belum ada${typeNote} yang tersedia${locNote} di katalog maupun Rumah123.${fallbackNote}\n\nApakah Anda ingin saya sesuaikan budget, lokasi, atau fasilitasnya?`
+        : `Sorry, there is currently no${typeNote} available${locNote} in my catalog or Rumah123.${fallbackNote}\n\nWould you like me to adjust the budget, location, or facilities?`
       ) + this.#addFooter();
     }
 
@@ -3383,60 +3474,10 @@ class ConversationQualifier {
    * @returns {string|null} daftar fasilitas dipisah koma, atau null bila tak dikenali
    */
   static #getStandardFacilitiesByType(buildingType, furnishing) {
-    const type = (buildingType || '').toLowerCase();
-    const furn = (furnishing || '').toLowerCase();
-    const isFull = /fully|full/.test(furn);
-    const isSemi = /semi/.test(furn);
-
-    if (type === 'house' || type === 'kontrakan') {
-      const base = 'Kamar Tidur, Kamar Mandi, Listrik, Air, Dapur, Ruang Tamu, Carport/Garasi, One gate system';
-      if (isFull) return `AC, Kitchen set, Lemari, Tempat Tidur, TV, Kulkas, CCTV, ${base}`;
-      if (isSemi) return `AC, Kitchen set, Lemari, Kulkas, CCTV, ${base}`;
-      return base;
-    }
-    if (type === 'apartment') {
-      const base = 'Kamar Tidur, Kamar Mandi, AC, Dapur/Pantry, Listrik, Air, Lift, Keamanan 24 jam, Parkir';
-      if (isFull) return `Kitchen set, Lemari, Tempat Tidur, TV, Kulkas, Microwave, ${base}`;
-      if (isSemi) return `Kitchen set, Lemari, ${base}`;
-      return base;
-    }
-    if (type === 'condo') {
-      const base = 'Kamar Tidur, Kamar Mandi, AC, Dapur, WiFi, Parkir, Keamanan, Kolam renang/Gym';
-      if (isFull) return `Kitchen set, Lemari, Tempat Tidur, TV, Kulkas, ${base}`;
-      if (isSemi) return `Kitchen set, Lemari, ${base}`;
-      return base;
-    }
-    if (type === 'boarding_house') {
-      const base = 'Tempat Tidur, Lemari, Meja, Listrik, Air, WiFi, Kamar Mandi';
-      if (isFull) return `AC, ${base}, Akses dapur`;
-      if (isSemi) return `AC, ${base}`;
-      return base;
-    }
-    if (type === 'villa') {
-      const base = 'Kamar Tidur, Kamar Mandi, Peralatan Dapur, AC, WiFi, Ruang Keluarga, Parkir, Taman, CCTV, One gate system, Kolam renang';
-      if (isFull) return `TV, Kulkas, Lemari, Tempat Tidur, ${base}`;
-      if (isSemi) return `Kulkas, ${base}`;
-      return base;
-    }
-    if (type === 'hotel' || type === 'kondotel') {
-      return 'Tempat Tidur, Kamar Mandi, AC, TV, WiFi, Handuk, Perlengkapan mandi, Housekeeping, Resepsionis';
-    }
-    if (type === 'mansion') {
-      return 'Banyak Kamar Tidur, Beberapa Kamar Mandi, Garasi, Taman, Ruang Keluarga Besar, Dapur, AC, Keamanan';
-    }
-    if (type === 'shophouse' || type === 'ruko') {
-      return 'Bangunan Utama, Listrik, Air, Area Parkir, Toilet, Area Usaha';
-    }
-    if (type === 'office' || type === 'kantor') {
-      return 'Ruang Kerja, Listrik, AC, Internet, Toilet, Parkir, Keamanan';
-    }
-    if (type === 'warehouse' || type === 'gudang') {
-      return 'Area Gudang, Listrik, Air, Akses Kendaraan, Area Bongkar Muat, Keamanan';
-    }
-    if (type === 'store' || type === 'toko') {
-      return 'Area Toko, Listrik, Lampu, Air, Toilet, Area Display';
-    }
-    return null;
+    // Delegasi ke util bersama (utils/standardFacilities.js) — satu sumber
+    // kebenaran, juga dipakai propertyRecommendationService untuk fallback
+    // rekomendasi saat katalog agent tidak menemukan data.
+    return getStandardFacilitiesByType(buildingType, furnishing);
   }
 
   static #periodHintFromText(custText) {
@@ -4156,7 +4197,7 @@ class ChatbotPrivateService {
     if (rumah123Listings.length > 0 || catalogMatches.length > 0) {
       reply = builder.exactMatch({ rumah123Listings, catalogMatches, filters: context.filters });
     } else {
-      reply = builder.alternative({ alternatives: context.alternatives, rumah123Listings, filters: context.filters });
+      reply = builder.alternative({ alternatives: context.alternatives, rumah123Listings, filters: context.filters, standardFallback: context.standardFallback || null });
     }
 
     return this.#wrap(reply, {
@@ -4204,12 +4245,15 @@ class ChatbotPrivateService {
    * @param {Error}    params.externalError
    */
   static async generateResponseForTerminalMassege({
-    session, history = [], userMessage = '', agentName = '',
+    session, history = [], userMessage = '', agentName = '', agentUserId = null,
     recommendationContext = null, externalError = null
   }) {
     const skillInfo = this.loadSkillInfo();
     const lang      = LanguageDetector.detect(userMessage, history);
     const builder   = new ResponseBuilderWhatsApp(lang, agentName);
+    // Scoping katalog per-agent (Mode B). Fallback ke session.agentUserId bila
+    // dipanggil tanpa argumen eksplisit (mis. dari whatsappAIService via session).
+    const scopedUserId = agentUserId || session?.agentUserId || null;
 
     console.warn('[WHATSAPP PRIVATE AGENT ACTIVE]', {
       reason   : externalError?.message || 'External AI provider unavailable.',
@@ -4288,7 +4332,9 @@ class ChatbotPrivateService {
     let priceAnchors = null;
     if (filters.location && filters.buildingType) {
       try {
-        const catalogProps = await searchProperties(filters);
+        // Scope ke listing agent ini agar anchor harga Q3 mencerminkan inventori
+        // agent yang bersangkutan (bukan katalog global).
+        const catalogProps = await searchProperties({ ...filters, userId: scopedUserId });
         const withPrice    = catalogProps.filter(p => p.price && p.price !== '-');
         if (withPrice.length >= 2) {
           const sorted = [...withPrice].sort((a, b) =>
@@ -4387,11 +4433,13 @@ class ChatbotPrivateService {
     const brief = ConversationQualifier.buildAgentBrief(profile, filters, history, userMessage);
 
     // ── Fetch listings (Rumah123 + catalog) ──────────────────────────────────
+    // Katalog DB di-scope ke listing milik agent ini (scopedUserId) supaya
+    // rekomendasi RESPOND_CATALOG_RUN=ON konsisten dengan query per-agent.
     const [rumah123Listings, context] = await Promise.all([
       this.fetchRumah123Listings(filters, session?.location),
       recommendationContext
         ? Promise.resolve(recommendationContext)
-        : buildRecommendationContextForLLM(userMessage, history),
+        : buildRecommendationContextForLLM(userMessage, history, { userId: scopedUserId }),
     ]);
 
     const catalogMatches = this.resolveCatalogMatches(context);
@@ -4405,6 +4453,7 @@ class ChatbotPrivateService {
         rumah123Listings,
         filters      : context.filters,
         budgetExpanded: context.budgetExpanded || null,
+        standardFallback: context.standardFallback || null,
       });
     }
 

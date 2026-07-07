@@ -3,9 +3,16 @@
  *
  * Ambil konteks properti untuk AI reply di WhatsApp.
  *
- * Prioritas:
+ * Prioritas (RESPOND_CATALOG_RUN=ON — dipanggil setiap giliran, hanya
+ * DITAMPILKAN ke customer di summary; lihat aiPromptBuilderService.js):
  *   1. Rumah123 live data (jika APIFY_API_TOKEN tersedia dan quota ada)
- *   2. Fallback: backend/asset/json_data/indonesia_property_36_provinces_flat.json
+ *   2. Katalog sendiri dari DB — model Property + PropertyFacility (FK Facility)
+ *      + PropertyLocation (FK Location), via propertyRecommendationService.
+ *      Ini SAMA dengan sumber yang dipakai chatbotPrivateController.js Mode B,
+ *      supaya katalog yang tampil ke customer konsisten baik saat provider
+ *      utama (Claude/ChatGPT/dst) menjawab MAUPUN saat fallback ke Private Agent.
+ *   3. Fallback terakhir: backend/asset/json_data/indonesia_property_36_provinces_flat.json
+ *      (hanya jika Rumah123 DAN katalog DB sama-sama kosong)
  *
  * Digunakan oleh: fonnteChatController, kirimiChatController, timelinesAIChatController
  */
@@ -21,6 +28,8 @@ const {
   mapBuildingTypeToApify,
   mapTransactionTypeToApify,
 } = require('../services/rumah123ContextService');
+
+const { buildRecommendationContextForLLM } = require('../services/propertyRecommendationService');
 
 const {
   extractLocationFromMessage,
@@ -153,19 +162,32 @@ function formatFlatJsonForLLM(properties) {
  * Alur:
  *   1. Ekstrak lokasi, tipe, transaksi dari pesan customer
  *   2. Coba Rumah123 live data (Apify)
- *   3. Jika gagal/kosong → gunakan flat JSON
+ *   3. Coba katalog DB sendiri (Property + PropertyFacility[FK Facility] +
+ *      PropertyLocation[FK Location]) — via propertyRecommendationService.
+ *      Sama dengan sumber yang dipakai chatbotPrivateController.js, supaya
+ *      RESPOND_CATALOG_RUN=ON konsisten baik dijawab oleh provider AI utama
+ *      (Claude/ChatGPT/dst) maupun oleh Private Agent (fallback).
+ *   4. Jika Rumah123 DAN katalog DB sama-sama kosong → fallback ke flat JSON
  *
  * @param {string} customerMessage - Isi pesan customer
- * @returns {Promise<{ contextText: string, source: 'rumah123'|'flat_json'|'none' }>}
+ * @param {Array}  history         - Riwayat percakapan (untuk ekstraksi filter yang akurat
+ *                                    lintas Q1–Q12, mis. budget/tipe yang disebut di pesan sebelumnya)
+ * @param {string} agentUserId     - users.user_id agent pemilik nomor WhatsApp ini. Bila diisi,
+ *                                    katalog DB di-scope hanya ke listing milik agent tsb.
+ * @returns {Promise<{ contextText: string, source: 'rumah123'|'rumah123+db_catalog'|'db_catalog'|'flat_json', location, propertyType, transactionType }>}
  */
-async function getWhatsappPropertyContext(customerMessage) {
+async function getWhatsappPropertyContext(customerMessage, history = [], agentUserId = null) {
   const location        = extractLocationFromMessage(customerMessage);
   const propertyType    = extractPropertyTypeFromMessage(customerMessage);
   const transactionType = extractTransactionTypeFromMessage(customerMessage);
 
   console.log(`[PropertyContext] Params — location: "${location}" | type: "${propertyType}" | tx: "${transactionType}"`);
 
-  // ── Coba Rumah123 live data ──────────────────────────────────────────────
+  const sections = [];
+  let rumah123Used = false;
+  let dbCatalogUsed = false;
+
+  // ── 1. Coba Rumah123 live data ────────────────────────────────────────────
   const apifyToken         = process.env.APIFY_API_TOKEN;
   const apifyReady         = apifyToken && apifyToken !== 'isi_apify_token_anda';
   const rumah123DataEnabled = String(process.env.RUMAH123_DATA || 'ON').toUpperCase() === 'ON';
@@ -179,23 +201,53 @@ async function getWhatsappPropertyContext(customerMessage) {
       });
 
       if (listings && listings.length > 0) {
-        const contextText = formatRumah123ContextForLLM(listings);
+        sections.push(formatRumah123ContextForLLM(listings));
+        rumah123Used = true;
         console.log(`[PropertyContext] ✅ Rumah123: ${listings.length} listings`);
-        return { contextText, source: 'rumah123', location, propertyType, transactionType };
+      } else {
+        console.log(`[PropertyContext] Rumah123 returned 0 listings`);
       }
-      console.log(`[PropertyContext] Rumah123 returned 0 listings → fallback to flat JSON`);
     } catch (err) {
-      console.warn(`[PropertyContext] Rumah123 error: ${err.message} → fallback to flat JSON`);
+      console.warn(`[PropertyContext] Rumah123 error: ${err.message}`);
     }
+  } else if (!rumah123DataEnabled) {
+    console.log(`[PropertyContext] RUMAH123_DATA=OFF → skip Rumah123`);
   } else {
-    if (!rumah123DataEnabled) {
-      console.log(`[PropertyContext] RUMAH123_DATA=OFF → langsung flat JSON`);
-    } else {
-      console.log(`[PropertyContext] Apify token tidak tersedia → flat JSON`);
-    }
+    console.log(`[PropertyContext] Apify token tidak tersedia → skip Rumah123`);
   }
 
-  // ── Fallback: flat JSON ──────────────────────────────────────────────────
+  // ── 2. Coba katalog DB sendiri (Property + PropertyFacility + PropertyLocation) ──
+  // Selalu dicoba, independen dari hasil Rumah123 — agency ingin katalog listing-nya
+  // sendiri tetap tampil (bukan hanya listing eksternal Rumah123).
+  try {
+    const dbContext = await buildRecommendationContextForLLM(customerMessage, history, { userId: agentUserId });
+    if (dbContext.exactMatches.length || dbContext.alternatives.length) {
+      sections.push(dbContext.contextText);
+      dbCatalogUsed = true;
+      console.log(`[PropertyContext] ✅ DB catalog: ${dbContext.exactMatches.length} exact, ${dbContext.alternatives.length} alternatives`);
+    } else {
+      console.log(`[PropertyContext] DB catalog returned 0 properties`);
+    }
+  } catch (err) {
+    console.warn(`[PropertyContext] DB catalog error: ${err.message}`);
+  }
+
+  if (sections.length) {
+    const source = rumah123Used && dbCatalogUsed ? 'rumah123+db_catalog' : rumah123Used ? 'rumah123' : 'db_catalog';
+    return { contextText: sections.join('\n\n---\n\n'), source, location, propertyType, transactionType };
+  }
+
+  // ── 3. Fallback terakhir: flat JSON ───────────────────────────────────────
+  // Flat JSON adalah dataset demo GLOBAL (bukan milik agent). Saat scoping
+  // per-agent aktif, JANGAN pakai flat JSON — akan membocorkan properti yang
+  // bukan milik agent tsb. Agent tanpa listing → konteks kosong (AI akan bilang
+  // katalog masih kosong), bukan menampilkan properti orang lain.
+  if (agentUserId) {
+    console.log(`[PropertyContext] DB catalog kosong untuk agent ${agentUserId} → skip flat JSON (hindari bocor listing non-agent)`);
+    return { contextText: '', source: 'none', location, propertyType, transactionType };
+  }
+
+  console.log(`[PropertyContext] Rumah123 & DB catalog kosong → fallback ke flat JSON`);
   const properties  = searchFlatJson(location, propertyType, transactionType);
   const contextText = formatFlatJsonForLLM(properties);
   console.log(`[PropertyContext] ✅ Flat JSON: ${properties.length} properties (location: "${location}")`);
