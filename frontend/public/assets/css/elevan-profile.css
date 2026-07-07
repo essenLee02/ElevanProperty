@@ -27,7 +27,8 @@
 .profile-section .required { color: #e53e3e; font-size: 14px; }
 .profile-section .badge-locked { font-size: 11px; font-weight: 400; color: #718096; background: #edf2f7; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
 
-.profile-section .profile-form input {
+.profile-section .profile-form input,
+.profile-section .profile-form select {
   width: 100%;
   padding: 12px 14px;
   font-size: 14px;
@@ -36,9 +37,13 @@
   outline: none;
   transition: border-color 0.2s;
   box-sizing: border-box;
+  background-color: #fff;
+  color: #2d3748;
 }
-.profile-section .profile-form input:focus { border-color: #4299e1; box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.15); }
-.profile-section .profile-form input:disabled { background-color: #edf2f7; cursor: not-allowed; color: #718096; }
+.profile-section .profile-form input:focus,
+.profile-section .profile-form select:focus { border-color: #4299e1; box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.15); }
+.profile-section .profile-form input:disabled,
+.profile-section .profile-form select:disabled { background-color: #edf2f7; cursor: not-allowed; color: #718096; }
 .profile-section .form-control-static { background-color: #edf2f7 !important; color: #718096; }
 
 /* ── Password wrapper ────────────────────────────────────── */
