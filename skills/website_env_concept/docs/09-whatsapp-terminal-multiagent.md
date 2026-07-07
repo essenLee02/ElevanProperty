@@ -7,52 +7,83 @@
 > jawaban singkat lanjutan percakapan. Pipeline AI-nya identik (whatsappAIService).
 > (ChakraHQ/WATI/360dialog = legacy, tidak lagi dipakai sebagai terminal platform.)
 
+> **Sinkronisasi penuh (Juli 2026):** ketiga controller sekarang IDENTIK pada:
+> fromMe guard (anti-loop balas pesan sendiri), filter pesan grup, dedup
+> 2-layer (messageId in-memory + DB ChatMessage.metadata survive restart),
+> cookie response timer (debounce pesan beruntun), dan deteksi kegagalan kirim
+> yang lebih robust (cek banyak field respons + regex pesan gagal berbahasa
+> Indonesia). Sebelumnya Kirimi paling lengkap, Fonnte/TimelinesAI tertinggal
+> — sekarang semua fitur di-backport merata. Hanya bagian platform-specific
+> (bentuk payload webhook, format API kirim, auth header) yang legitimately berbeda.
+
 > **Dua env yang berbeda:** `MESSAGE_TERMINAL` (satu nilai) = sumber metadata
 > `source` di log AI (`kirimi_whatsapp` / `timelinesai_whatsapp` / `fonnte_whatsapp`).
 > `MASSEGE_TERMINAL` (boleh multi) = platform mana yang di-render ke terminal + routing `POST /`.
 
 ---
 
-## Alur Proses Lengkap (Updated Juni 2026)
+## Alur Proses Lengkap (Updated Juli 2026)
 
 ```
 Customer kirim WA
         ↓
 Platform (Fonnte / Kirimi / TimelinesAI)
         ↓ webhook
-ngrok → backend POST / atau POST /api/[platform]/webhook
+ngrok (auto-start) → backend POST / atau POST /api/[platform]/webhook
         ↓
-Controller terima payload
+Controller terima payload → log raw → detectEventType()
+        ↓ bukan 'incoming' (status/sent/connection) → return 200, selesai
+        ↓ 'incoming' → return 200 DULU, proses background (setImmediate):
         ↓
-detectEventType() → incoming / status / unknown
+extract sender/name/message/messageId (+device_id utk Kirimi)
         ↓
-findOrCreateSession() → ChatSession di DB
+fromMe guard: pesan dari nomor sendiri? → skip (anti-loop)  [SINKRON 3 controller]
         ↓
-Simpan pesan customer ke DB (SELALU, terlepas dari keyword)
+Filter pesan grup WhatsApp? → skip  [SINKRON 3 controller]
         ↓
-hasPropertyKeyword(message)?
+Identifikasi agent (token/device/phone → users.*)
+        ↓
+Dedup layer 1: messageId in-memory (10 menit TTL)? → skip jika sudah diproses
+        ↓
+Dedup layer 2 (BARU, SINKRON 3 controller): query ChatMessage.metadata di DB
+untuk messageId ini → skip jika sudah ada (survive restart/nodemon)
+        ↓
+COOKIE RESPONSE TIMER (BARU): debounceMessage() — tunggu AI_COOKIE_RESPONSE_TIMER
+ms (default 20000) sejak pesan TERAKHIR dari customer ini. Pesan baru me-reset
+jendela waktu ke penuh. Setelah jendela lewat tanpa pesan baru → gabungkan
+semua pesan tertunda jadi satu teks → lanjut proses SEKALI.
+        ↓
+hasPropertyKeyword(combinedMessage)?
     └── YA ─────────────────────────────────────────────────────→ ⬇ lanjut
-    └── TIDAK → getConversationHistory(session.id, 6)
+    └── TIDAK → getConversationHistory(session.id, 12)
                       ↓
-              isPropertyContextContinuation(message, history)?
-                  ├── TIDAK → log "📥 Disimpan, tidak dibalas" → SELESAI
+              isPropertyContextContinuation(combinedMessage, history)?
+                  ├── TIDAK → log "⏭️ Tidak disimpan ke DB, AI skip" → SELESAI
+                  │          (pesan non-properti TIDAK disimpan sama sekali —
+                  │           gate-before-save, BUKAN "selalu disimpan")
                   └── YA  → ⬇ lanjut
         ↓
-generateWhatsAppAIReply({ session, message, agentName })
+Simpan pesan customer ke ChatMessage (user_id: agent.user_id)
+        ↓
+generateWhatsAppAIReply({ session, message: combinedMessage, agentName, agentUserId })
     ↓
-    [1] getWhatsappPropertyContext(message)
-           → Database (model Property + relasi) sebagai sumber utama
-           → Fallback: backend/asset/json_data/indonesia_property_extended_v3.json
-           → Opsional Rumah123 (APIFY + RUMAH123_DATA=ON)
-    [2] getConversationHistory(session.id, 10)
+    [1] getConversationHistory(session.id, 24)  ← diambil DULU (urutan dibalik dari versi lama)
+    [2] getWhatsappPropertyContext(combinedMessage, history, agentUserId)
+           → Rumah123 (bila RUMAH123_DATA=ON) DIGABUNG DENGAN
+           → Katalog DB sendiri (buildRecommendationContextForLLM, di-scope
+             ke agentUserId) — SAMA dengan sumber Private Agent (parity fix)
+           → Fallback TERAKHIR (hanya bila keduanya kosong & agentUserId
+             kosong): backend/asset/json_data/indonesia_property_extended_v3.json
     [3] Primary AI (deepseek/qwen/claude/chatgpt) via generateWhatsappReplyWithProviderFallback
-    [4] Private Agent → generateResponseForTerminalMassege() [fallback terjamin]
+    [4] Private Agent → generateResponseForTerminalMassege() [fallback terjamin,
+        agentUserId ikut untuk scoping katalog Mode B]
         ↓
-Simpan AI reply ke DB
+Simpan AI reply ke ChatMessage (user_id: agent.user_id)
         ↓
-Kirim balasan via platform API (Fonnte / Kirimi / TimelinesAI)
+Kirim balasan via platform API (Fonnte / Kirimi / TimelinesAI) — deteksi
+kegagalan kirim yang lebih robust (banyak field respons + regex Indonesia)
         ↓
-LOG RINGKASAN TERMINAL (full response, tidak truncated)
+LOG RINGKASAN TERMINAL (full response, tidak truncated, baris "Owner: user_id")
 ```
 
 ---
@@ -236,24 +267,65 @@ extractTransactionTypeFromMessage(message)// → "sale"|"rent"|""
 
 ---
 
-## Property Context
+## Property Context (DIPERBARUI — parity fix + agent scoping)
 
 **File:** `backend/utils/whatsappPropertyContext.js`
 
 ```
-getWhatsappPropertyContext(customerMessage)
+getWhatsappPropertyContext(customerMessage, history, agentUserId)
         ↓
 Extract: location, propertyType, transactionType
         ↓
-Database (model Property + relasi) sebagai sumber utama
-        ↓ (opsional) RUMAH123_DATA=ON → getRumah123Listings() via Apify
-        ↓ fallback bila DB kosong
-JSON: backend/asset/json_data/indonesia_property_extended_v3.json (lazy)
+1. Coba Rumah123 (bila RUMAH123_DATA=ON & APIFY_API_TOKEN valid)
+2. Coba katalog DB sendiri (buildRecommendationContextForLLM, propertyRecommendationService)
+   — di-scope ke agentUserId bila diisi (Property.user_id filter)
+   — SAMA dengan sumber yang dipakai chatbotPrivateController.js Mode B
+3. Keduanya DIGABUNG bila sama-sama ada data (bukan salah satu saja)
+4. Fallback TERAKHIR (hanya bila Rumah123 & katalog DB SAMA-SAMA kosong,
+   DAN agentUserId kosong — mencegah bocor listing bukan-milik-agent):
+   JSON backend/asset/json_data/indonesia_property_extended_v3.json (lazy)
         ↓
-return { contextText, source: 'rumah123'|'flat_json', location, propertyType, transactionType }
+return {
+  contextText,
+  source: 'rumah123'|'rumah123+db_catalog'|'db_catalog'|'flat_json'|'none',
+  location, propertyType, transactionType
+}
 ```
 
 Respects `RUMAH123_DATA` env var (ON/OFF) untuk konsistensi dengan chatbot.
+`agentUserId` dialirkan dari `agent.user_id` di masing-masing controller
+WhatsApp — lihat doc 06 "Agent-Scoped Catalog" untuk alur lengkap.
+
+---
+
+## Cookie Response Timer — Debounce Pesan Beruntun (BARU)
+
+**File:** `backend/utils/responseDebounce.js`
+
+Customer sering mengetik beberapa pesan terpisah dalam waktu singkat (mis.
+"Belum pernah lihat" lalu detik berikutnya "Tapi saya mau cari yang dekat
+stasiun bus"). Tanpa jeda, AI membalas pesan pertama sebelum sempat membaca
+lanjutannya. `debounceMessage()` menahan proses selama
+`AI_COOKIE_RESPONSE_TIMER` ms (default 20000) sejak pesan TERAKHIR dari
+customer tsb — setiap pesan baru me-reset jendela waktu ke penuh. Setelah
+jendela lewat tanpa pesan baru, semua pesan tertunda digabung (dipisah newline,
+urutan kedatangan) dan diproses SEKALI (satu balasan AI).
+
+```javascript
+const { debounceMessage } = require('../utils/responseDebounce');
+
+// key harus unik per (platform + agent + customer), mis. `${source}::${normalizedPhone}`
+debounceMessage(`${source}::${normSender}`, message, (combinedMessage) => {
+  handleDebouncedBatch({ combinedMessage, sender, name, normSender, source, agent, messageId });
+});
+```
+
+Dipasang **identik** di ketiga controller WhatsApp: pengecekan cepat per-pesan
+(fromMe/grup/echo/dedup) tetap jalan tiap pesan masuk (agar retry/echo tidak
+memperpanjang buffer customer), tapi hanya pesan yang lolos itu yang masuk ke
+`debounceMessage()`. Fungsi berat (gate properti, simpan DB, panggil AI, kirim
+balasan) dipindah ke `handleDebouncedBatch()` yang hanya jalan SEKALI setelah
+jendela waktu selesai.
 
 ---
 
@@ -348,6 +420,21 @@ getActiveTerminals()        // → ['FONNTE'] | ['FONNTE','KIRIMI','TIMELINESAI'
 
 // backend/services/sessionService.js
 getConversationHistory(sessionId, limit)  // Used untuk context continuation check
+
+// backend/utils/messageDedup.js — dedup layer 1 (in-memory, 10 menit TTL)
+isAlreadyProcessed(messageId)  // → boolean
+markProcessed(messageId)
+
+// Dedup layer 2 (BARU, SINKRON 3 controller) — query langsung ChatMessage.metadata
+// (survive restart/nodemon), tidak ada helper terpisah — inline di tiap controller:
+//   ChatMessage.findOne({ where: { channel: 'whatsapp',
+//     metadata: { [Op.like]: `%"messageId":"${safeId}"%` } } })
+
+// backend/utils/responseDebounce.js — BARU, cookie response timer (lihat di atas)
+debounceMessage(key, message, onFire)  // key = `${source}::${normalizedPhone}`
+
+// backend/utils/standardFacilities.js — BARU, fallback fasilitas standar (lihat doc 06)
+getStandardFacilitiesByType(buildingType, furnishing)
 ```
 
 ---

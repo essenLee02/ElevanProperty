@@ -36,6 +36,8 @@ frontend/src/
 │       ├── PropertyListView.vue    ← Master properti — list (requires auth)
 │       └── PropertyMasterView.vue  ← Master properti — form tambah/edit (requires auth)
 ├── components/
+│   ├── ConfirmModal.vue      ← BARU: dialog konfirmasi reusable (hapus/nonaktifkan)
+│   ├── Modal.vue             ← Picker CookieFast (search/select record dari DB)
 │   ├── FloatingChatbot.vue   ← Main chatbot widget (XSS-safe, tanpa fetch JSON)
 │   ├── Navbar.vue            ← Navigation bar
 │   ├── PortfolioCard.vue     ← Property card component
@@ -274,7 +276,7 @@ Response: {
 
 `frontend/src/views/ProfileView.vue` — halaman profil agent. Requires auth.
 
-### Form Layout
+### Form Layout (DIPERBARUI — email + Catalog Summary Status)
 
 ```
 ┌─────────────────────────────────────────┐
@@ -283,12 +285,15 @@ Response: {
 │ Nama Lengkap *  [editable]              │
 │ Nomor HP *      [editable]              │
 │ Tanggal Lahir   [editable]              │
+│ Email           [editable, opsional]    │   ← BARU
+│ Catalog Summary Status  [select ON/OFF] │   ← BARU
 │                                         │
 │ ── Keamanan & Integrasi ──              │
 │                                         │
 │ Username 🔒     [disabled, read-only]  │
 │ Password *      [editable, show/hide 👁️]│
 │ Fonnte API      [editable, opsional]    │
+│ Kirimi Device ID [editable, opsional]   │
 └─────────────────────────────────────────┘
 ```
 
@@ -300,7 +305,10 @@ Response: {
 | Nomor HP | ✅ | |
 | Password | ✅ | Min 6 karakter, dikosongkan setelah save |
 | Username | ❌ | Read-only, tidak bisa diubah, **tidak dikirim ke backend** |
+| Email | ❌ | Validasi format regex sederhana, kirim `null` jika kosong (BARU) |
+| Catalog Summary Status | ❌ | Select `ON`/`OFF` — mengontrol tampilan katalog RESPOND_CATALOG_RUN di summary agent ini (BARU) |
 | Fonnte API | ❌ | Token Fonnte pribadi agent, kirim `null` jika kosong |
+| Kirimi Device ID | ❌ | Device ID Kirimi milik agent, kirim `null` jika kosong |
 
 ### Payload ke Backend (`PUT /api/profile/update-agent`)
 
@@ -309,12 +317,63 @@ Response: {
   "name": "NIGEL KUNCORO",
   "phone": "082233556796",
   "birthdate": "1995-01-15",
+  "email": "nigel@example.com",
+  "catalog_summary": "ON",
   "password": "••••••",
-  "fonnte_token": "abc123..." 
+  "fonnte_token": "abc123...",
+  "kirimi_device_id": "D-3OCA6"
 }
 ```
 
 > `username` **TIDAK dikirim** ke backend.
+
+---
+
+## Module: Register (`RegisterView.vue`) — email field (BARU)
+
+Register form menambahkan field **Email** (opsional, validasi regex sederhana,
+`null` jika kosong) — dikirim ke `POST /api/auth/register`. `catalog_summary`
+**TIDAK ADA** input-nya di form Register — backend otomatis set `'OFF'` saat
+`User.create()` (lihat `registerController.js`), hanya bisa diubah lewat
+halaman `/profile` setelah login.
+
+---
+
+## Component: ConfirmModal.vue (BARU)
+
+`frontend/src/components/ConfirmModal.vue` — dialog konfirmasi reusable untuk
+aksi hapus/nonaktifkan, menggantikan blok `modal-overlay` yang tadinya
+diduplikasi persis sama di 12 view (6 modul master × List+Master view).
+
+Dua pola pemakaian:
+
+```vue
+<!-- Master view (statis) — slot untuk pesan kustom -->
+<ConfirmModal
+  :show="deleteModal.show"
+  title="Hapus Fasilitas?"
+  :busy="isDeleting"
+  @confirm="handleDelete"
+  @cancel="closeDeleteModal"
+>
+  Fasilitas <strong>"{{ form.name }}"</strong> akan dihapus.
+  Tindakan ini tidak dapat dibatalkan.
+</ConfirmModal>
+
+<!-- List view (dinamis) — satu modal untuk toggle-status & delete -->
+<ConfirmModal
+  :show="modal.show" :icon="modal.icon" :title="modal.title"
+  :message="modal.desc" :confirm-text="modal.confirmText"
+  :confirm-class="modal.confirmClass" :busy="modal.loading"
+  @confirm="modal.onConfirm" @cancel="closeModal"
+/>
+```
+
+Props: `show`, `icon` (default 🗑️), `title`, `message` (dipakai bila slot
+kosong), `confirmText`, `cancelText`, `confirmClass` (default
+`btn-confirm-danger`), `busy` (disable tombol + spinner). Class CSS
+(`modal-overlay`, `btn-confirm-danger`, dst.) TETAP di `elevan-components.css`
+(global, tidak berubah) — hanya markup Vue yang di-refactor jadi komponen.
 
 ---
 

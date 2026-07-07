@@ -4,7 +4,8 @@ Database: `db_property` (MySQL / MariaDB 10.4)
 ORM: **Sequelize v6** (`backend/models/`) — upgrade dari v3 (fix vuln lodash/validator/dottie)
 Sync strategy: `sequelize.sync()` on server start + `ensureRequiredDatabaseColumns()`
 untuk kolom tambahan yang tidak otomatis ter-`alter` (`logs.level`,
-`chat_sessions.location`, `chat_sessions.normalizedLocation`).
+`chat_sessions.location`, `chat_sessions.normalizedLocation`, `users.email`,
+`users.catalog_summary` — BARU).
 
 **Data properti (salinan `indonesia_property_extended_v3.json`):** properties 8831,
 property_images 8831, property_facilities 56891, property_locations 23022,
@@ -24,6 +25,8 @@ Stores registered agents (login system).
 | phone | VARCHAR(30) | nullable, INDEX |
 | username | VARCHAR | unique |
 | password | VARCHAR | bcrypt hash |
+| email | VARCHAR(200) | nullable — alamat email agent (BARU) |
+| catalog_summary | VARCHAR(5) | `ON`/`OFF`, nullable, default null di model tapi di-set `'OFF'` otomatis saat register (BARU) — kontrol tampilan katalog di summary, terkait `RESPOND_CATALOG_RUN` |
 | refresh_token | TEXT | current JWT refresh token (null = logged out) |
 | status | INTEGER(1) | 1=aktif, 2=blocked, 3=delete, default 1, INDEX |
 | privilege | VARCHAR(50) | nullable, INDEX(privilege,status) composite |
@@ -370,9 +373,45 @@ All models auto-exported from `backend/models/index.js`.
 
 ## Data Read Path — bukan hanya CRUD manual
 
-`propertyRecommendationService.js` (lihat doc 12) membaca tabel-tabel di atas
+`propertyRecommendationService.js` (lihat doc 06/12) membaca tabel-tabel di atas
 via `getDbProperties()` (JOIN Property + City + Province + PropertyImage +
-PropertyFacility→Facility, `where: { status: 1 }`), di-cache 5 menit
-(`DB_PROPS_CACHE_TTL_MS`). Ini adalah **sumber utama** katalog untuk chatbot
-website & WhatsApp — bukan hasil query langsung dari master CRUD di frontend.
-JSON `indonesia_property_extended_v3.json` hanya fallback lazy bila DB kosong.
+PropertyFacility→Facility **+ PropertyLocation→Location** [BARU], `where:
+{ status: 1 }`), di-cache 5 menit (`DB_PROPS_CACHE_TTL_MS`). Ini adalah
+**sumber utama** katalog untuk chatbot website & WhatsApp — bukan hasil query
+langsung dari master CRUD di frontend. JSON `indonesia_property_extended_v3.json`
+hanya fallback lazy bila DB kosong DAN Rumah123 kosong.
+
+**Field ternormalisasi (BARU, ditambahkan ke setiap object property hasil
+`getDbProperties()`):**
+| Field | Sumber | Kegunaan |
+|---|---|---|
+| `userId` | `Property.user_id` | Scoping katalog per-agent — lihat doc 06/17 |
+| `priceValue` | `Property.price` (raw numeric) | Perbandingan budget BETWEEN akurat, tanpa re-parse string harga |
+| `priceType` | `Property.price_type` (lowercase) | Menentukan periode (night/monthly/yearly/dst.) untuk `budgetMatches()` |
+| `area` | `Property.area` | Kawasan/nama area (mis. "Citraland") |
+| `nearbyLocations` | Join `PropertyLocation` → `Location.name` (gabung koma) | Baris "Lokasi Terdekat"/"Nearby Landmarks" di tampilan katalog |
+
+## GeneralController — Shared Helpers (BARU)
+
+`backend/controllers/GeneralController.js` adalah base class SEMUA master
+controller (Country/Province/City/Location/Facility/Property/Register). Dua
+helper baru menggantikan method privat yang tadinya diduplikasi di 4
+controller berbeda:
+
+```javascript
+// Cek duplikat nama (case/spasi-insensitive), dengan scope opsional.
+// Menggantikan #findDuplicate yang tadinya ada terpisah di Country/Location/
+// Province/City controller.
+GeneralController.findDuplicateName(model, name, { idField, scope = {}, excludeId = null })
+// contoh: findDuplicateName(Province, name, { idField: 'province_id', scope: { country_id }, excludeId })
+
+// Resolve nama record dari id-nya (untuk join tampilan list/detail).
+// Menggantikan #countryName/#provinceName yang tadinya diduplikasi.
+GeneralController.lookupName(model, idField, id)
+// contoh: lookupName(Country, 'country_id', province.country_id)
+```
+
+> **Facility TIDAK memakai `findDuplicateName`** — Facility punya logika
+> sinonim sendiri (`#findRedundant` + `FACILITY_SYNONYM_GROUPS`, cek gym/gym
+> club, cctv/kamera pengawas, dll.), sengaja tidak digabung karena beda level
+> abstraksi (bukan sekadar normalisasi nama, tapi grup sinonim semantik).

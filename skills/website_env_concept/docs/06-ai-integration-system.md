@@ -43,6 +43,15 @@ RESPOND_CATALOG_RUN=OFF              # OFF = brief saja ; ON = brief + katalog
 > `OFF` → cukup summary/brief saja; `ON` → brief + katalog rekomendasi.
 > (Dulu flag ini keliru dipakai sebagai toggle seluruh mode.)
 
+> **PENTING — parity fix (Juli 2026):** sebelumnya, saat provider AI UTAMA
+> (ChatGPT/Claude/QWEN/DeepSeek) yang menjawab, katalog `ON` HANYA bersumber
+> dari Rumah123 + JSON statis — TIDAK PERNAH menyentuh database
+> Property/PropertyFacility/PropertyLocation milik agent. Ini membuat katalog
+> tidak konsisten tergantung provider mana yang kebetulan menjawab. Sekarang
+> `whatsappPropertyContext.js` JUGA memanggil `buildRecommendationContextForLLM()`
+> (sumber yang SAMA dipakai Private Agent) dan menggabungkannya dengan Rumah123
+> — JSON statis benar-benar last resort. Lihat "Agent-Scoped Catalog" di bawah.
+
 > **Larangan:** dilarang membuat `const` hardcode untuk nama model AI. Semua nama
 > model dibaca dari `.env` (`OPENAI_MODEL`, `CLAUDE_MODEL`, `QWEN_MODEL`, `DEEPSEEK_MODEL`).
 
@@ -60,29 +69,96 @@ generateWhatsAppAIReply({
   history,        // [{role, message}] — last 12 messages
   message,        // Current customer message
   agentName,      // Agent's name (for signature in brief)
-  contextSource,  // 'rumah123' | 'flat_json' | 'none'
+  agentUserId,    // BARU — users.user_id agent pemilik nomor WA ini; scoping katalog
+  contextSource,  // 'rumah123' | 'rumah123+db_catalog' | 'db_catalog' | 'flat_json' | 'none'
 })
 // Returns: { reply, provider, fallbackUsed, ... }
 ```
 
 ### Flow inside `generateWhatsAppAIReply`:
 
-1. **Extract property filters** from message + history (`extractPropertyFilters`)
-2. **Pre-qualification gate** (`buildQualifyReply`):
+1. **Get conversation history DULU** (`getConversationHistory`) — diambil SEBELUM
+   property context (urutan dibalik dari versi lama) supaya filter Q1-Q12 akurat
+   lintas percakapan saat query katalog, bukan hanya dari pesan terakhir.
+2. **Extract property filters** from message + history (`extractPropertyFilters`)
+3. **Pre-qualification gate** (`buildQualifyReply`):
    - Checks 4 minimum fields: buildingType, transactionType, location, budget
    - If any missing → returns qualification question immediately (no AI called)
-3. **★ Load AI Context Blocks** (`aiContextService.loadAIContextBlocks`): ← NEW
+4. **★ Load AI Context Blocks** (`aiContextService.loadAIContextBlocks`):
    - `buildFacilityContextBlock()` — always injected (facility names from DB)
    - `buildCityContextBlock()` — injected only when message is location-related
    - Cached 5 minutes, parallel fetch. See doc 16 for full details.
-3.5. **Check `RESPOND_CATALOG_RUN`** (hanya memengaruhi isi SETELAH brief):
+5. **Check `RESPOND_CATALOG_RUN`** (hanya memengaruhi isi SETELAH brief):
    - `OFF` → setelah semua Q1–Q12 wajib ✅ → tampilkan brief saja
    - `ON` → setelah brief → lanjutkan dengan katalog rekomendasi dari property context
    - Q1–Q12 tetap dijalankan pada kedua nilai; AI provider dipilih oleh `AI_PRIMARY_PROVIDER`
-4. **Get property context** (`getWhatsappPropertyContext`) — sumber utama **database**
-   (model Property + relasi), fallback JSON `indonesia_property_extended_v3.json`
-5. **Build full prompt** (`buildWhatsappReplyPrompt`) with Q1-Q12 state + facility + city context injected
-6. **Call AI provider chain** → return reply
+6. **Get property context** (`getWhatsappPropertyContext(message, history, agentUserId)`):
+   - Coba Rumah123 live data (jika `RUMAH123_DATA=ON`)
+   - **BARU:** JUGA coba katalog DB sendiri via `buildRecommendationContextForLLM()`,
+     di-scope ke `agentUserId` bila diisi — SAMA dengan sumber Private Agent
+   - Keduanya DIGABUNG (bukan salah satu) bila sama-sama ada data
+   - Fallback terakhir (hanya bila Rumah123 DAN katalog DB sama-sama kosong):
+     JSON `indonesia_property_extended_v3.json` — dan HANYA dipakai bila
+     `agentUserId` kosong (mencegah bocor listing bukan-milik-agent saat scoping aktif)
+7. **Build full prompt** (`buildWhatsappReplyPrompt`) with Q1-Q12 state + facility + city context injected
+8. **Call AI provider chain** → return reply
+
+### Agent-Scoped Catalog (BARU)
+
+Setiap agent WhatsApp hanya merekomendasikan **listing miliknya sendiri**
+(`Property.user_id` = agent yang menjawab), bukan katalog gabungan semua agent.
+`agentUserId` dialirkan dari controller WhatsApp (`agent.user_id`) melalui:
+
+```
+fonnteChatController / kirimiChatController / timelinesAIChatController
+  → generateWhatsAppAIReply({ ..., agentUserId })
+  → session.agentUserId = agentUserId   (disimpan agar ikut ke Private Agent fallback)
+  → getWhatsappPropertyContext(message, history, agentUserId)
+  → buildRecommendationContextForLLM(message, history, { userId: agentUserId })
+  → searchProperties / getAlternatives / findWithExpandedBudget
+      → filterProperties({ ..., userId })  ← scope by Property.userId bila diisi
+```
+
+`userId` kosong/null = katalog global (dipakai chatbot web publik, TIDAK di-scope).
+
+### Budget Expansion — Batas "Harga Wajar" (BARU, bukan lagi tanpa-limit)
+
+`findWithExpandedBudget()` melebarkan budget bertahap saat exact match kosong:
+
+| Step | Ekspansi | Catatan |
+|---|---|---|
+| 1 | ±35% dari budget asli | |
+| 2 | ±70% dari budget asli | |
+| 3 | **Batas harga wajar**: min × 0.20 … max × 2.5 | BUKAN tanpa-limit lagi |
+
+Guard yang sama (`min×0.20…max×2.5`) juga diterapkan ke `getAlternatives()` —
+yang sebelumnya melonggarkan tipe/lokasi tanpa mempedulikan harga sama sekali,
+sehingga bisa menampilkan properti jauh di luar anggaran customer (mis. listing
+60 miliar untuk budget 800rb/malam).
+
+### Fallback "Fasilitas Standar + Harga Wajar" (BARU)
+
+Bila katalog agent benar-benar kosong (exact match DAN alternatif kosong,
+bahkan setelah ekspansi batas wajar), `buildRecommendationContextForLLM()`
+membangun objek `standardFallback` dari `utils/standardFacilities.js`
+(`getStandardFacilitiesByType(buildingType, furnishing)` — satu sumber, juga
+dipakai `chatbotPrivateController.js` untuk mengisi summary saat customer
+jawab "standar"):
+
+```javascript
+standardFallback = {
+  buildingType,
+  standardFacilities: 'Tempat Tidur, Kamar Mandi, AC, TV, WiFi, ...', // per tipe
+  reasonableRange: { min, max, period }  // dari budget customer × 0.20/2.5
+}
+```
+
+Ini di-inject ke `contextText` LLM (`NO CATALOG MATCH — STANDARD-FACILITIES
+FALLBACK` block) DAN dirender langsung oleh Private Agent
+(`ResponseBuilder`/`ResponseBuilderWhatsApp.alternative()`) — instruksinya:
+sampaikan jujur tidak ada listing pas, sebutkan fasilitas standar tipe ini
+sebagai gambaran, kutip rentang harga wajar, lalu tawarkan penyesuaian
+kriteria. **Dilarang mengarang listing.**
 
 ### `buildQualifyReply` — Pre-Qualification Gate
 

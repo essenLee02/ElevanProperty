@@ -76,8 +76,9 @@ AI_PRIMARY_PROVIDER=deepseek     # qwen | claude | chatgpt | deepseek | private
 ENABLE_CLAUDE_FALLBACK=true       # efektif = toggle global Claude
 ENABLE_CHATBOT_PRIVATE_CONTROLLER=true
 ENABLE_AI_WHATSAPP=true
-RESPOND_CATALOG_RUN=OFF           # OFF = brief saja ; ON = brief + katalog (Q1–Q12 tetap jalan)
+RESPOND_CATALOG_RUN=OFF           # OFF = brief saja ; ON = brief + katalog per-agent (Q1–Q12 IDENTIK di kedua mode)
 AI_PRIMARY_TAG=propmatches.netlify.app   # footer "> Sent via <tag>" pesan WA keluar
+AI_COOKIE_RESPONSE_TIMER=20000    # ms — debounce pesan beruntun WhatsApp (BARU, lihat doc 09/17)
 ```
 
 ### WhatsApp Terminals
@@ -125,8 +126,13 @@ CHATBOT_COOKIE_TTL_MINUTES=90
 ### Skill Prompt Character Limits
 ```env
 SKILL_MAX_WEBSITE_CHARACTERS=12000
-SKILL_MAX_RESPONSE_CHARACTERS=22000
-SKILL_MAX_PROJECT_CHARACTERS=36000
+SKILL_MAX_RESPONSE_CHARACTERS=260000
+SKILL_MAX_PROJECT_CHARACTERS=280000
+```
+
+### Pagination (semua master data list)
+```env
+PAGINATION_ROWS=8                # default page size — GeneralController.pageSize()
 ```
 
 ### Frontend (frontend/.env)
