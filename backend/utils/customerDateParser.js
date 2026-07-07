@@ -97,6 +97,32 @@ function parseCustomerDate(text, now = new Date()) {
     return { status: 'ok', date: d, formatted: fmt(d) };
   }
 
+  // ── "N hari/minggu/bulan/tahun lagi" / "dalam N ..." — relative offset ──
+  // Sangat umum dipakai customer ("2 minggu lagi", "sebulan lagi", "dalam
+  // 3 hari") tapi sebelumnya tidak ter-resolve sama sekali (moveInDate tetap
+  // null walau AI sudah tidak menanyakan Q8 lagi karena aiAskedMoveIn=true).
+  {
+    let n, unit;
+    let m = t.match(/\b(\d{1,3})\s*(hari|minggu|bulan|tahun)\s+lagi\b/);
+    if (m) { n = parseInt(m[1], 10); unit = m[2]; }
+    if (!m) {
+      m = t.match(/\bse(hari|minggu|bulan|tahun)\s+lagi\b/);
+      if (m) { n = 1; unit = m[1]; }
+    }
+    if (!m) {
+      m = t.match(/\bdalam\s+(\d{1,3})\s*(hari|minggu|bulan|tahun)\b/);
+      if (m) { n = parseInt(m[1], 10); unit = m[2]; }
+    }
+    if (m) {
+      let d;
+      if (unit === 'hari')        d = new Date(curY, curM - 1, curD + n);
+      else if (unit === 'minggu') d = new Date(curY, curM - 1, curD + n * 7);
+      else if (unit === 'bulan')  d = new Date(curY, curM - 1 + n, curD);
+      else /* tahun */            d = new Date(curY + n, curM - 1, curD);
+      return { status: 'ok', date: d, formatted: fmt(d) };
+    }
+  }
+
   // ── Numeric dates: DD/MM/YYYY vs MM/DD/YYYY (rules 15–22) ───────────────
   // Disambiguation: a>12 → DD/MM ; b>12 → MM/DD ; both ≤12 → DD/MM (Indonesian default)
   {

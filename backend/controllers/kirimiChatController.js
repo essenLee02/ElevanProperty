@@ -63,6 +63,16 @@ const { isAlreadyProcessed: _isAlreadyProcessed,
         markContentProcessed:      _markContentDup } = require('../utils/messageDedup');
 
 /* ══════════════════════════════════════════════════════════════════════════════
+   BAGIAN 0b — COOKIE RESPONSE TIMER (debounce pesan beruntun)
+   Shared dengan Fonnte/TimelinesAI via utils/responseDebounce.js.
+   AI menunggu AI_COOKIE_RESPONSE_TIMER ms (.env, default 20000) sejak pesan
+   TERAKHIR customer sebelum diproses — menampung pesan susulan yang dikirim
+   terpisah agar tidak dibalas terburu-buru.
+══════════════════════════════════════════════════════════════════════════════ */
+
+const { debounceMessage } = require('../utils/responseDebounce');
+
+/* ══════════════════════════════════════════════════════════════════════════════
    BAGIAN 1 — UTILITY FUNCTIONS
 ══════════════════════════════════════════════════════════════════════════════ */
 
@@ -346,7 +356,6 @@ async function sendViaKirimi(targetPhone, message, deviceId) {
 
 async function processIncomingMessage(body, agent) {
   const { sender, name, message, messageId, fromMe, isGroup } = extractMessage(body);
-  const ts = new Date().toISOString();
 
   // ── Skip pesan kosong, grup & pesan kita sendiri ────────────────────
   if (!message) return;
@@ -401,6 +410,20 @@ async function processIncomingMessage(body, agent) {
   _markContentDup(normSender, message);
 
   const source = `kirimi_${agent.name.toLowerCase().replace(/\s+/g, '_')}`;
+
+  // ── Cookie response timer: tunggu jeda sebelum proses & balas ─────────
+  // Customer sering kirim beberapa pesan terpisah dalam waktu singkat. Tunggu
+  // AI_COOKIE_RESPONSE_TIMER ms (.env) sejak pesan TERAKHIR sebelum diproses,
+  // supaya pesan susulan tergabung dalam satu balasan (bukan balas terburu-buru
+  // ke pesan pertama). Tiap pesan baru me-reset jendela waktu ke penuh.
+  debounceMessage(`${source}::${normSender}`, message, (combinedMessage) =>
+    handleDebouncedBatch({ combinedMessage, sender, name, normSender, source, agent, messageId })
+  );
+}
+
+async function handleDebouncedBatch({ combinedMessage, sender, name, normSender, source, agent, messageId }) {
+  const message = combinedMessage;
+  const ts      = new Date().toISOString();
 
   let session = await ChatSession.findOne({ where: { normalizedPhone: normSender, source } });
   if (!session) {

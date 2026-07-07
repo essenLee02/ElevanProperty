@@ -4253,6 +4253,19 @@ class ChatbotPrivateService {
       profile.moveInDateValue = _qs.moveInDate   || null;   // normalized date | 'Waiting the update' | null
       // A resolved value (real date or "Waiting the update") satisfies Q8.
       if (profile.moveInDateValue) profile.hasMoveInDate = true;
+
+      // Q8 (move-in/pindah) and Q14's check-in date are the SAME real-world date —
+      // just asked with different wording (hotel/kondotel/villa booking phrases it
+      // "check-in", generic sewa phrases it "masuk/pindah"). Q8 fires unconditionally
+      // ("MANDATORY — never skipped"), so once the customer gives a concrete date
+      // there ("2 minggu lagi" → resolved), Q14 must not ask check-in again for the
+      // same info. Skip when the value is just the "Waiting the update" placeholder
+      // (customer didn't actually give a date yet).
+      if (profile.moveInDateValue && profile.moveInDateValue !== 'Waiting the update'
+          && !profile.hasCheckInDate) {
+        profile.hasCheckInDate   = true;
+        profile.checkInDateValue = profile.moveInDateValue;
+      }
     } catch (_e) { /* non-fatal — fall back to regex hasMoveInDate */ }
 
     console.log('[PrivateAgent/Qualifier]', {
