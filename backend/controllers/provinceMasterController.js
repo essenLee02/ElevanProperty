@@ -23,14 +23,8 @@ class ProvinceMasterController extends GeneralController {
   ────────────────────────────────────────────────────────────────────────── */
 
   /** Ambil nama negara dari country_id (untuk join tampilan list/detail). */
-  static async #countryName(idCountry) {
-    if (!idCountry) return null;
-    try {
-      const c = await Country.findOne({ where: { country_id: idCountry }, attributes: ['name'] });
-      return c ? c.name : null;
-    } catch (_) {
-      return null;
-    }
+  static #countryName(idCountry) {
+    return GeneralController.lookupName(Country, 'country_id', idCountry);
   }
 
   /** Validasi negara induk ada & aktif (status ≠ 3). */
@@ -40,18 +34,15 @@ class ProvinceMasterController extends GeneralController {
   }
 
   /**
-   * Cari provinsi aktif dengan nama sama DALAM negara yang sama (case/spasi-insensitive).
-   * Nama provinsi unik per-negara, bukan global.
+   * Cari provinsi duplikat DALAM negara yang sama (nama provinsi unik per-negara).
+   * Delegasi ke GeneralController dengan scope country_id.
    */
-  static async #findDuplicate(name, idCountry, excludeId = null) {
-    const target = GeneralController.normalizeName(name);
-    if (!target) return null;
-
-    const where = { country_id: idCountry, status: { [Op.ne]: 3 } };
-    if (excludeId) where.province_id = { [Op.ne]: excludeId };
-
-    const existing = await Province.findAll({ where, attributes: ['province_id', 'name'] });
-    return existing.find(p => GeneralController.normalizeName(p.name) === target) || null;
+  static #findDuplicate(name, idCountry, excludeId = null) {
+    return GeneralController.findDuplicateName(Province, name, {
+      idField: 'province_id',
+      scope:   { country_id: idCountry },
+      excludeId
+    });
   }
 
   /* ──────────────────────────────────────────────────────────────────────────

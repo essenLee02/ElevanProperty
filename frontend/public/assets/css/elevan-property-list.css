@@ -1,0 +1,223 @@
+/* =========================================================
+   ELEVAN PROPERTY — Property list building-type filter
+   Extracted from PropertyListView.vue's <style scoped>.
+   Pairs with elevan-list.css (shared list shell).
+
+   Selectors are nested under .filter-building-dropdown /
+   .filter-building-actions (unique to this feature) instead of
+   using bare .checkbox-group / .checkbox-item / .btn-reset /
+   .btn-apply — those generic names are reused by other pages
+   (e.g. .btn-reset already exists in elevan-rumah123.css with
+   different sizing) and would collide once out of Vue's
+   automatic style scoping.
+   ========================================================= */
+
+.filter-building-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: auto;
+}
+
+.filter-building-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #333;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  min-width: 130px;
+}
+
+.filter-building-toggle:hover {
+  background: #eeeeee;
+  border-color: #bbb;
+}
+
+.filter-building-toggle.active {
+  background: #e8f4f8;
+  border-color: #1e90ff;
+  color: #1e90ff;
+  font-weight: 500;
+}
+
+.filter-building-toggle i {
+  font-size: 12px;
+  transition: transform 0.2s ease;
+}
+
+.filter-building-dropdown {
+  position: fixed;
+  top: auto;
+  left: 50%;
+  right: auto;
+  margin-top: 0;
+  margin-left: 0;
+  transform: translateX(-50%);
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  min-width: 240px;
+  max-width: 90vw;
+  width: fit-content;
+  max-height: 400px;
+}
+
+.filter-building-dropdown .checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 8px 0;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.filter-building-dropdown .checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s ease;
+  border-bottom: 1px solid #f5f5f5;
+}
+
+.filter-building-dropdown .checkbox-item:hover {
+  background: #f9f9f9;
+}
+
+.filter-building-dropdown .checkbox-item:last-child {
+  border-bottom: none;
+}
+
+.filter-building-dropdown .checkbox-item input[type="checkbox"] {
+  cursor: pointer;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: #1e90ff;
+}
+
+.filter-building-dropdown .checkbox-item span {
+  font-size: 14px;
+  color: #333;
+}
+
+.filter-building-actions {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid #f5f5f5;
+  background: #fafafa;
+  border-radius: 0 0 6px 6px;
+}
+
+.filter-building-actions .btn-reset {
+  flex: 1;
+  padding: 8px 12px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #666;
+  transition: all 0.2s ease;
+}
+
+.filter-building-actions .btn-reset:hover {
+  background: #f5f5f5;
+  border-color: #bbb;
+}
+
+.filter-building-actions .btn-apply {
+  flex: 1;
+  padding: 8px 12px;
+  background: #1e90ff;
+  border: 1px solid #1e90ff;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  color: white;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.filter-building-actions .btn-apply:hover {
+  background: #1873cc;
+  border-color: #1873cc;
+}
+
+.filter-building-actions .btn-apply:active {
+  transform: scale(0.98);
+}
+
+@media (max-width: 1024px) {
+  .filter-building-dropdown {
+    max-width: calc(100vw - 32px);
+  }
+}
+
+@media (max-width: 768px) {
+  .filter-building-wrapper {
+    position: relative;
+  }
+
+  .filter-building-toggle {
+    font-size: 13px;
+    padding: 8px 12px;
+    min-width: auto;
+  }
+
+  .filter-building-dropdown {
+    max-width: calc(100vw - 24px);
+    width: calc(100vw - 24px);
+  }
+
+  .filter-building-dropdown .checkbox-group {
+    max-height: 300px;
+  }
+}
+
+@media (max-width: 480px) {
+  .filter-building-toggle {
+    font-size: 12px;
+    padding: 8px 10px;
+    gap: 6px;
+  }
+
+  .filter-building-dropdown {
+    max-width: calc(100vw - 20px);
+    width: calc(100vw - 20px);
+    min-width: calc(100vw - 20px);
+  }
+
+  .filter-building-dropdown .checkbox-item {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  .filter-building-dropdown .checkbox-group {
+    max-height: 250px;
+  }
+
+  .filter-building-actions {
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 12px;
+  }
+
+  .filter-building-actions .btn-reset,
+  .filter-building-actions .btn-apply {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+}

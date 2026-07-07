@@ -152,23 +152,16 @@
     <Modal ref="modalRef" />
 
     <!-- Confirm Delete Modal -->
-    <div v-if="deleteModal.show" class="modal-overlay" @click.self="closeDeleteModal">
-      <div class="modal-box">
-        <div class="modal-icon">🗑️</div>
-        <h3 class="modal-title">Hapus Provinsi?</h3>
-        <p class="modal-desc">
-          Provinsi <strong>"{{ form.name }}"</strong> akan dihapus.
-          Tindakan ini tidak dapat dibatalkan.
-        </p>
-        <div class="modal-actions">
-          <button class="btn-modal-cancel" @click="closeDeleteModal" :disabled="isDeleting">Batal</button>
-          <button class="btn-modal-confirm btn-confirm-danger" @click="handleDelete" :disabled="isDeleting">
-            <span v-if="isDeleting" class="spinner-sm"></span>
-            <span v-else>Ya, Hapus</span>
-          </button>
-        </div>
-      </div>
-    </div>
+    <ConfirmModal
+      :show="deleteModal.show"
+      title="Hapus Provinsi?"
+      :busy="isDeleting"
+      @confirm="handleDelete"
+      @cancel="closeDeleteModal"
+    >
+      Provinsi <strong>"{{ form.name }}"</strong> akan dihapus.
+      Tindakan ini tidak dapat dibatalkan.
+    </ConfirmModal>
   </section>
 </template>
 
@@ -185,6 +178,7 @@ import {
 } from '../../services/provinceApi';
 import { getCountryList } from '../../services/countryApi';
 import Modal from '../../components/Modal.vue';
+import ConfirmModal from '../../components/ConfirmModal.vue';
 
 const route  = useRoute();
 const router = useRouter();

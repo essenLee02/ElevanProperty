@@ -66,24 +66,17 @@
     </div>
 
     <!-- Confirm Modal -->
-    <div v-if="modal.show" class="modal-overlay" @click.self="closeModal">
-      <div class="modal-box">
-        <div class="modal-icon">{{ modal.icon }}</div>
-        <h3 class="modal-title">{{ modal.title }}</h3>
-        <p class="modal-desc">{{ modal.desc }}</p>
-        <div class="modal-actions">
-          <button class="btn-modal-cancel" @click="closeModal" :disabled="modal.loading">Batal</button>
-          <button
-            :class="['btn-modal-confirm', modal.confirmClass]"
-            @click="modal.onConfirm"
-            :disabled="modal.loading"
-          >
-            <span v-if="modal.loading" class="spinner-sm"></span>
-            <span v-else>{{ modal.confirmText }}</span>
-          </button>
-        </div>
-      </div>
-    </div>
+    <ConfirmModal
+      :show="modal.show"
+      :icon="modal.icon"
+      :title="modal.title"
+      :message="modal.desc"
+      :confirm-text="modal.confirmText"
+      :confirm-class="modal.confirmClass"
+      :busy="modal.loading"
+      @confirm="modal.onConfirm"
+      @cancel="closeModal"
+    />
   </section>
 </template>
 
@@ -91,6 +84,7 @@
   import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
   import { useRouter } from 'vue-router';
   import { toast } from 'vue3-toastify';
+  import ConfirmModal from '../../components/ConfirmModal.vue';
   import {
     getProvinceList,
     toggleProvinceStatus,

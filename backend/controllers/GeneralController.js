@@ -21,6 +21,7 @@
  *   – counter : count+1 padded ke 3 digit
  */
 
+const { Op } = require('sequelize');
 const { User } = require('../models');
 
 class GeneralController {
@@ -109,6 +110,52 @@ class GeneralController {
     } catch (_) {
       return userId;
     }
+  }
+
+  /**
+   * Ambil `name` sebuah record berdasarkan kolom id string-nya (untuk join
+   * tampilan). Menggantikan helper #countryName/#provinceName yang duplikat
+   * di setiap controller.
+   *
+   * @param {import('sequelize').ModelStatic} model  Model Sequelize (Country/Province/…)
+   * @param {string} idField  Nama kolom id (mis. 'country_id', 'province_id')
+   * @param {string} id       Nilai id yang dicari
+   * @returns {Promise<string|null>} nama record, atau null bila tidak ada/error
+   */
+  static async lookupName(model, idField, id) {
+    if (!id) return null;
+    try {
+      const row = await model.findOne({ where: { [idField]: id }, attributes: ['name'] });
+      return row ? row.name : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /**
+   * Cari record aktif (status ≠ 3) dengan nama sama (case/spasi-insensitive),
+   * dalam scope opsional. Satu implementasi kanonik yang menggantikan
+   * #findDuplicate yang sebelumnya diduplikat di controller Country, Location,
+   * Province, dan City — bedanya hanya model, kolom id, dan scope-nya.
+   *
+   * @param {import('sequelize').ModelStatic} model  Model yang dicek (Country/Location/Province/City)
+   * @param {string} name  Nama yang akan divalidasi keunikannya
+   * @param {object} opts
+   * @param {string} opts.idField    Nama kolom id string (mis. 'country_id', 'city_id')
+   * @param {object} [opts.scope]    Filter tambahan penentu cakupan unik
+   *                                 (mis. { country_id } untuk provinsi, { province_id } untuk kota)
+   * @param {string|null} [opts.excludeId]  Nilai idField yang dikecualikan (untuk update)
+   * @returns {Promise<object|null>} Record existing yang bentrok, atau null
+   */
+  static async findDuplicateName(model, name, { idField, scope = {}, excludeId = null } = {}) {
+    const target = GeneralController.normalizeName(name);
+    if (!target) return null;
+
+    const where = { ...scope, status: { [Op.ne]: 3 } };
+    if (excludeId) where[idField] = { [Op.ne]: excludeId };
+
+    const rows = await model.findAll({ where, attributes: [idField, 'name'] });
+    return rows.find(r => GeneralController.normalizeName(r.name) === target) || null;
   }
 }
 

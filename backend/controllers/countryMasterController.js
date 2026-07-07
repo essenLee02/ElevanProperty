@@ -18,23 +18,10 @@ const GeneralController = require('./GeneralController');
 class CountryMasterController extends GeneralController {
 
   /* ──────────────────────────────────────────────────────────────────────────
-     PRIVATE HELPERS — hanya yang unik untuk country
+     Cek duplikat nama negara (global) — delegasi ke GeneralController.
   ────────────────────────────────────────────────────────────────────────── */
-
-  /**
-   * Cari negara aktif (status ≠ 3) dengan nama yang sama (case/spasi-insensitive).
-   * @param {string} name
-   * @param {string|null} excludeId  country_id yang dikecualikan (untuk update)
-   */
-  static async #findDuplicate(name, excludeId = null) {
-    const target = GeneralController.normalizeName(name);
-    if (!target) return null;
-
-    const where = { status: { [Op.ne]: 3 } };
-    if (excludeId) where.country_id = { [Op.ne]: excludeId };
-
-    const existing = await Country.findAll({ where, attributes: ['country_id', 'name'] });
-    return existing.find(c => GeneralController.normalizeName(c.name) === target) || null;
+  static #findDuplicate(name, excludeId = null) {
+    return GeneralController.findDuplicateName(Country, name, { idField: 'country_id', excludeId });
   }
 
   /* ──────────────────────────────────────────────────────────────────────────

@@ -95,24 +95,17 @@
     </div>
 
     <!-- Confirm Modal -->
-    <div v-if="modal.show" class="modal-overlay" @click.self="closeModal">
-      <div class="modal-box">
-        <div class="modal-icon">{{ modal.icon }}</div>
-        <h3 class="modal-title">{{ modal.title }}</h3>
-        <p class="modal-desc">{{ modal.desc }}</p>
-        <div class="modal-actions">
-          <button class="btn-modal-cancel" @click="closeModal" :disabled="modal.loading">Batal</button>
-          <button
-            :class="['btn-modal-confirm', modal.confirmClass]"
-            @click="modal.onConfirm"
-            :disabled="modal.loading"
-          >
-            <span v-if="modal.loading" class="spinner-sm"></span>
-            <span v-else>{{ modal.confirmText }}</span>
-          </button>
-        </div>
-      </div>
-    </div>
+    <ConfirmModal
+      :show="modal.show"
+      :icon="modal.icon"
+      :title="modal.title"
+      :message="modal.desc"
+      :confirm-text="modal.confirmText"
+      :confirm-class="modal.confirmClass"
+      :busy="modal.loading"
+      @confirm="modal.onConfirm"
+      @cancel="closeModal"
+    />
   </section>
 </template>
 
@@ -120,6 +113,7 @@
   import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
   import { useRouter } from 'vue-router';
   import { toast } from 'vue3-toastify';
+  import ConfirmModal from '../../components/ConfirmModal.vue';
   import {
     getPropertyList,
     togglePropertyStatus,
@@ -387,215 +381,3 @@
     if (pagerHost.value) $(pagerHost.value).off('.cfProperty');
   });
 </script>
-
-<style scoped>
-.filter-building-wrapper {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  width: auto;
-}
-
-.filter-building-toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  background: #f5f5f5;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-  color: #333;
-  transition: all 0.2s ease;
-  white-space: nowrap;
-  min-width: 130px;
-}
-
-.filter-building-toggle:hover {
-  background: #eeeeee;
-  border-color: #bbb;
-}
-
-.filter-building-toggle.active {
-  background: #e8f4f8;
-  border-color: #1e90ff;
-  color: #1e90ff;
-  font-weight: 500;
-}
-
-.filter-building-toggle i {
-  font-size: 12px;
-  transition: transform 0.2s ease;
-}
-
-.filter-building-dropdown {
-  position: fixed;
-  top: auto;
-  left: 50%;
-  right: auto;
-  margin-top: 0;
-  margin-left: 0;
-  transform: translateX(-50%);
-  background: white;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  z-index: 1000;
-  min-width: 240px;
-  max-width: 90vw;
-  width: fit-content;
-  max-height: 400px;
-}
-
-.checkbox-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  padding: 8px 0;
-  max-height: 400px;
-  overflow-y: auto;
-}
-
-.checkbox-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
-  cursor: pointer;
-  user-select: none;
-  transition: background 0.2s ease;
-  border-bottom: 1px solid #f5f5f5;
-}
-
-.checkbox-item:hover {
-  background: #f9f9f9;
-}
-
-.checkbox-item:last-child {
-  border-bottom: none;
-}
-
-.checkbox-item input[type="checkbox"] {
-  cursor: pointer;
-  width: 18px;
-  height: 18px;
-  margin: 0;
-  accent-color: #1e90ff;
-}
-
-.checkbox-item span {
-  font-size: 14px;
-  color: #333;
-}
-
-.filter-building-actions {
-  display: flex;
-  gap: 8px;
-  padding: 12px 16px;
-  border-top: 1px solid #f5f5f5;
-  background: #fafafa;
-  border-radius: 0 0 6px 6px;
-}
-
-.btn-reset {
-  flex: 1;
-  padding: 8px 12px;
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 13px;
-  color: #666;
-  transition: all 0.2s ease;
-}
-
-.btn-reset:hover {
-  background: #f5f5f5;
-  border-color: #bbb;
-}
-
-.btn-apply {
-  flex: 1;
-  padding: 8px 12px;
-  background: #1e90ff;
-  border: 1px solid #1e90ff;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 13px;
-  color: white;
-  font-weight: 500;
-  transition: all 0.2s ease;
-}
-
-.btn-apply:hover {
-  background: #1873cc;
-  border-color: #1873cc;
-}
-
-.btn-apply:active {
-  transform: scale(0.98);
-}
-
-@media (max-width: 1024px) {
-  .filter-building-dropdown {
-    max-width: calc(100vw - 32px);
-  }
-}
-
-@media (max-width: 768px) {
-  .filter-building-wrapper {
-    position: relative;
-  }
-
-  .filter-building-toggle {
-    font-size: 13px;
-    padding: 8px 12px;
-    min-width: auto;
-  }
-
-  .filter-building-dropdown {
-    max-width: calc(100vw - 24px);
-    width: calc(100vw - 24px);
-  }
-
-  .checkbox-group {
-    max-height: 300px;
-  }
-}
-
-@media (max-width: 480px) {
-  .filter-building-toggle {
-    font-size: 12px;
-    padding: 8px 10px;
-    gap: 6px;
-  }
-
-  .filter-building-dropdown {
-    max-width: calc(100vw - 20px);
-    width: calc(100vw - 20px);
-    min-width: calc(100vw - 20px);
-  }
-
-  .checkbox-item {
-    padding: 8px 12px;
-    font-size: 13px;
-  }
-
-  .checkbox-group {
-    max-height: 250px;
-  }
-
-  .filter-building-actions {
-    flex-direction: column;
-    gap: 6px;
-    padding: 8px 12px;
-  }
-
-  .btn-reset,
-  .btn-apply {
-    padding: 6px 10px;
-    font-size: 12px;
-  }
-}
-</style>

@@ -23,24 +23,12 @@ class CityMasterController extends GeneralController {
      PRIVATE HELPERS — hanya yang unik untuk city
   ────────────────────────────────────────────────────────────────────────── */
 
-  static async #countryName(idCountry) {
-    if (!idCountry) return null;
-    try {
-      const c = await Country.findOne({ where: { country_id: idCountry }, attributes: ['name'] });
-      return c ? c.name : null;
-    } catch (_) {
-      return null;
-    }
+  static #countryName(idCountry) {
+    return GeneralController.lookupName(Country, 'country_id', idCountry);
   }
 
-  static async #provinceName(idProvince) {
-    if (!idProvince) return null;
-    try {
-      const p = await Province.findOne({ where: { province_id: idProvince }, attributes: ['name'] });
-      return p ? p.name : null;
-    } catch (_) {
-      return null;
-    }
+  static #provinceName(idProvince) {
+    return GeneralController.lookupName(Province, 'province_id', idProvince);
   }
 
   /**
@@ -55,17 +43,15 @@ class CityMasterController extends GeneralController {
   }
 
   /**
-   * Cari kota aktif dengan nama sama DALAM provinsi yang sama (case/spasi-insensitive).
+   * Cari kota duplikat DALAM provinsi yang sama (nama kota unik per-provinsi).
+   * Delegasi ke GeneralController dengan scope province_id.
    */
-  static async #findDuplicate(name, idProvince, excludeId = null) {
-    const target = GeneralController.normalizeName(name);
-    if (!target) return null;
-
-    const where = { province_id: idProvince, status: { [Op.ne]: 3 } };
-    if (excludeId) where.city_id = { [Op.ne]: excludeId };
-
-    const existing = await City.findAll({ where, attributes: ['city_id', 'name'] });
-    return existing.find(c => GeneralController.normalizeName(c.name) === target) || null;
+  static #findDuplicate(name, idProvince, excludeId = null) {
+    return GeneralController.findDuplicateName(City, name, {
+      idField: 'city_id',
+      scope:   { province_id: idProvince },
+      excludeId
+    });
   }
 
   /* ──────────────────────────────────────────────────────────────────────────

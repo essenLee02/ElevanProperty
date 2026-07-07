@@ -20,22 +20,10 @@ const GeneralController = require('./GeneralController');
 class LocationMasterController extends GeneralController {
 
   /* ──────────────────────────────────────────────────────────────────────────
-     PRIVATE HELPERS
+     Cek duplikat nama lokasi (global) — delegasi ke GeneralController.
   ────────────────────────────────────────────────────────────────────────── */
-
-  /**
-   * Cari lokasi aktif dengan nama sama (case/spasi-insensitive).
-   * excludeId dipakai saat update agar tidak mendeteksi dirinya sendiri sebagai duplikat.
-   */
-  static async #findDuplicate(name, excludeId = null) {
-    const target = GeneralController.normalizeName(name);
-    if (!target) return null;
-
-    const where = { status: { [Op.ne]: 3 } };
-    if (excludeId) where.location_id = { [Op.ne]: excludeId };
-
-    const existing = await Location.findAll({ where, attributes: ['location_id', 'name'] });
-    return existing.find(l => GeneralController.normalizeName(l.name) === target) || null;
+  static #findDuplicate(name, excludeId = null) {
+    return GeneralController.findDuplicateName(Location, name, { idField: 'location_id', excludeId });
   }
 
   /* ──────────────────────────────────────────────────────────────────────────
