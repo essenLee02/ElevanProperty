@@ -305,13 +305,20 @@ sequelize.sync()
       }
 
       // ─── Warmup Rumah123 cache ─────────────────────────────────────────
-      if (process.env.APIFY_API_TOKEN && process.env.APIFY_API_TOKEN !== 'isi_apify_token_anda') {
+      // Hormati RUMAH123_DATA=OFF juga di sini — sebelumnya hanya cek token
+      // Apify tersedia, jadi warmup tetap jalan (membakar kuota Apify) meski
+      // fitur live-fetch sudah dimatikan lewat toggle. Konsisten dengan gate
+      // yang sama di whatsappPropertyContext.js.
+      const rumah123Enabled = String(process.env.RUMAH123_DATA || 'ON').toUpperCase() === 'ON';
+      if (rumah123Enabled && process.env.APIFY_API_TOKEN && process.env.APIFY_API_TOKEN !== 'isi_apify_token_anda') {
         const { warmupCache } = require('./services/rumah123ContextService');
         const warmupLocations = (process.env.RUMAH123_WARMUP_LOCATIONS || 'Jakarta Selatan,Surabaya,Bandung,Bali').split(',').map(s => s.trim());
         setTimeout(() => {
           console.log('[Rumah123] Starting background cache warmup...');
           warmupCache(warmupLocations);
         }, 5000); // delay 5s after server start
+      } else if (!rumah123Enabled) {
+        console.log('[Rumah123] RUMAH123_DATA=OFF → skip cache warmup (hemat kuota Apify)');
       }
     });
   })
