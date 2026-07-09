@@ -46,7 +46,6 @@ const chatbotPrivateController   = require('../controllers/chatbotPrivateControl
 const fonnteWebhookController    = require('../controllers/fonnteWebhookController');
 const logController              = require('../controllers/logController');
 const rumah123Controller         = require('../controllers/rumah123Controller');
-const whatsappInboundController  = require('../controllers/whatsappInboundController');
 const timelinesAIChatController  = require('../controllers/timelinesAIChatController');
 const fonnteChatController       = require('../controllers/fonnteChatController');
 const kirimiChatController       = require('../controllers/kirimiChatController');
@@ -121,9 +120,6 @@ router.put('/profile/update-agent',  verifyToken, profileController.updateDataAg
 
 // Fonnte legacy webhook
 router.post('/fonnte/webhook',       webhookLimiter, fonnteWebhookController.handleWebhook);
-router.post('/whatsapp/webhook',     webhookLimiter, whatsappInboundController.handleInboundMessage);
-router.get('/whatsapp/messages',                     whatsappInboundController.getInboundMessages);
-router.get('/whatsapp/messages/:id',                 whatsappInboundController.getMessageDetail);
 
 // Fonnte multi-agent webhook (public)
 router.post('/fonnte-chat/webhook',      webhookLimiter, fonnteChatController.handleInboundMessage);

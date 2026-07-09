@@ -6,7 +6,6 @@ const Property = require('./Property');
 const PropertyImage = require('./PropertyImage');
 const PropertyFacility = require('./PropertyFacility');
 const PropertyLocation = require('./PropertyLocation');
-const WhatsAppInbound = require('./WhatsAppInbound');
 const User = require('./User');
 const Facility = require('./Facility');
 const Country = require('./Country');
@@ -57,7 +56,6 @@ module.exports = {
   PropertyImage,
   PropertyFacility,
   PropertyLocation,
-  WhatsAppInbound,
   User,
   Facility,
   Country,
