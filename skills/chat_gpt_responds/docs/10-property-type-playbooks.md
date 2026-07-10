@@ -19,6 +19,8 @@ question — see docs/09, date normalization, summary brief, C1–C7 conditions)
 - **Beli:** Loc → (spec) → Bud → Occ/use → Alt → Target → Dec → Fin → ready/second → hook/sudut
 - **Anchor:** sewa 2–15 jt/bln · beli 300 jt–5 M
 - **Distinctive:** hook/corner preference (beli); payment terms on long lease.
+- **Sub-cases:** second-home renovation (beli "rumah second, budget renov terpisah");
+  multi-generation/accessible living (ramp, kamar utama di lantai bawah untuk lansia).
 
 ```
 Customer : Saya mau cari rumah untuk disewa
@@ -80,6 +82,11 @@ AI       : (catat) Tower/Lantai: Lantai 12-15, hindari sinar matahari terbit & t
   komersial) → mgmt model (self/franchise/contract) → ROI → star/concept
 - **Skip (booking):** furnishing, occupants-as-bedrooms, lease duration.
 - **Anchor:** booking 350 rb–4 jt/mlm · beli 3–80 M
+- **Sub-cases:** family/kid-friendly (kolam anak, connecting room); rombongan/event
+  (block booking, meeting room); dekat bandara (transit, late check-in); rating tinggi
+  as a hard filter; long-stay bulanan (monthly rate ≠ nightly × 30, ask explicitly).
+- **Overbooking recovery (C5):** treat as urgent — same-tier replacement NOW, don't
+  make the customer re-explain from scratch; ask only city+date if not yet known.
 
 ```
 Customer : Booking hotel di Surabaya untuk acara keluarga, dekat PTC
@@ -98,6 +105,10 @@ AI       : Tipe kamarnya family room atau connecting untuk 4 orang? Dan breakfas
 - **Skip:** furnishing for nightly (always furnished).
 - **Anchor:** sewa 1.5–8 jt/mlm or 15–25 jt/bln · beli 3–40 M
 - **Distinctive:** private pool & period (malam/minggu/bulan); freehold vs leasehold (beli).
+- **Sub-cases:** honeymoon/couple (privacy + romantic setup, ask discreetly not
+  interrogatively); wedding/event (venue capacity, vendor access); pet-friendly (ask
+  explicitly if traveling with pets); rombongan besar (10+ orang → multi-bedroom villa
+  compound, not single unit); long-stay bulanan (distinct monthly rate from nightly).
 
 ```
 Customer : Sewa villa di Ubud, tenang + sawah view, private pool, 3 kamar
@@ -116,6 +127,10 @@ AI       : Perlu sarapan diinclude untuk 6 orang?
   kos type
 - **Anchor:** sewa 0.8–3 jt/bln · beli 500 jt–3 M
 - **Distinctive:** kos type & KM dalam/luar & meals; near-campus anchor; occupancy/ROI (beli).
+- **Sub-cases:** kos harian (short-stay pricing, not monthly); include-makan (2–3×/hari,
+  affects price tier); eksklusif/premium (AC + KM dalam + WiFi as baseline, not upsell);
+  untuk pasangan suami-istri (campur/couple-friendly kos, not putra/putri-only); dekat
+  RS untuk nakes (shift-friendly access, 24-jam akses masuk).
 
 ```
 Customer : Cari kos dekat ITS Sukolilo, mahasiswi baru
@@ -134,6 +149,10 @@ AI       : Mau yang sudah include listrik atau ada meteran sendiri?
 - **Skip:** occupants/bedrooms, furnishing.
 - **Anchor:** sewa 6–35 jt/bln · beli 1.5–8 M
 - **Distinctive:** business type drives location; frontage & hook & floors & parking.
+- **Sub-cases:** frontage lebar for showroom business (ask minimum meter explicitly);
+  multi-unit for branch office (ask unit count + spacing between branches); ruko di
+  proyek baru/inden (beli) — same inden caution as apartment: confirm developer track
+  record before pushing toward pre-sale units.
 
 ```
 Customer : Sewa ruko untuk cafe & resto kecil, Raya Darmo/Citraland
@@ -154,6 +173,9 @@ AI       : Perlu posisi hook/sudut, atau menghadap satu jalan saja cukup?
 - **Skip:** bedrooms, furnishing.
 - **Anchor:** sewa 10–80 jt/bln · beli 2–10 M
 - **Distinctive:** headcount→area, grade, fit-out vs shell, **service charge** transparency, server room.
+- **Sub-cases:** virtual office/co-working (no dedicated headcount needed — ask desk
+  count instead); kantor luas for large enterprise (100+ orang → ask floor plate/multi-
+  floor need); dekat bandara for logistics/distribution back-office.
 
 ```
 Customer : Sewa kantor di Surabaya Pusat, tim 30 orang
@@ -173,6 +195,9 @@ AI       : Berapa slot parkir yang dibutuhkan?
 - **Skip:** bedrooms, furnishing.
 - **Anchor:** sewa 10–80 jt/bln · beli 5–25 M
 - **Distinctive:** ceiling height, loading dock, KVA, industrial zoning, cold-storage variant.
+- **Sub-cases:** cold storage (ask temperature range + power redundancy — not standard
+  KVA question); gudang kecil for UMKM (100–300 m², relaxed on loading dock/ceiling);
+  dekat pelabuhan for ekspor-impor (customs/bonded-zone proximity matters more than tol).
 
 ```
 Customer : Sewa gudang distribusi FMCG, dekat tol, 1.000–1.500 m²
@@ -192,6 +217,9 @@ AI       : Mulai operasionalnya rencananya bulan apa?
 - **Anchor:** sewa 5–30 jt/bln · beli 1.5–3 M
 - **Distinctive:** toko = retail unit (mall/strip) ≠ ruko (standalone multi-floor); mall vs
   standalone; deposit (mall 3–6 bln); PPJB/AJB on unit purchase.
+- **Sub-cases:** trade center/grosir (bulk-buyer traffic, ask target segment: retail vs
+  wholesale); popup store (short-term lease, weeks not years — confirm exact duration
+  before quoting monthly rate); toko + storage (ask storage m² separately from selling floor).
 
 ```
 Customer : Sewa toko baju anak di Surabaya Barat, target ibu-ibu
@@ -210,6 +238,10 @@ AI       : Parkir mal sudah cukup atau perlu area parkir khusus?
 - **Anchor:** sewa 30–100 jt/bln · beli 8–50 M
 - **Distinctive:** staff quarters, smart home, garage capacity, off-market discretion; expat
   needs (international school, full-service) on sewa.
+- **Sub-cases:** corporate guest house (company-paid, ask billing/PIC company name, not
+  just occupants); syuting/event venue (short-term rental, ask crew size + equipment
+  access, not standard household questions); smart home as a hard requirement (ask which
+  systems specifically — lighting/security/climate — don't assume "smart home" = one thing).
 
 ```
 Customer : Sewa rumah mewah di Citraland/Pakuwon, private pool, 5 kamar, smart home
@@ -230,6 +262,10 @@ AI       : Perlu kamar khusus untuk ART (staff quarter), berapa kamar?
 - **Anchor:** booking 0.8–4 jt/mlm · beli 500 jt–2 M
 - **Distinctive:** kondotel = apartment unit under hotel management; operator, ROI, revenue
   share/management fee, strata title (beli). Educate vs plain apartment/hotel when confused.
+- **Sub-cases:** remote-work/long-stay bulanan (monthly rate, ask WiFi speed/workspace);
+  operator ternama as a hard filter (brand reputation drives decision more than unit specs
+  — don't push unit details before confirming operator preference); SHMSRS legality
+  first-timer (see C7 teaching moment — explain strata title before asking financing).
 
 ```
 Customer : Beli unit kondotel di Bali untuk investasi, ROI bagus
@@ -257,6 +293,25 @@ AI       : Kavling matang siap bangun, atau tidak masalah yang masih perlu pemat
 Customer : Kavling matang siap bangun. 1–2,5 M, cash, target 3 bln
 AI       : Saya carikan kavling matang 200–400 m² siap bangun, 1–2,5 M, cash, target 3 bulan!
 ```
+
+### Sub-Purpose Branches (ask FIRST, before generic Loc/area/budget flow)
+
+"Other" is a catch-all — the purpose word customer uses determines which distinctive
+question to ask immediately after location, instead of jumping straight to a generic
+m²/budget question:
+
+| Sub-purpose (customer says) | Ask immediately after Loc | Anchor / notes |
+|---|---|---|
+| Parkir (sewa lahan parkir) | Kapasitas kendaraan & jam operasional (24 jam / jam kerja saja) | Priced per m²/bln, near keramaian |
+| Lapangan futsal | Jumlah lapangan & indoor/outdoor | Sewa lahan atau bangunan sudah jadi? |
+| Glamping | Kontur lahan (asri/sejuk/view) & kapasitas tenda/unit | Pertanyaan lingkungan (asri/sejuk) jadi prioritas, bukan legalitas dulu |
+| Lahan pertanian/perkebunan | Jenis tanaman & sumber air/irigasi | Harga sering per-tahun, bukan per-bulan |
+| SPBU (existing) | Beli/sewa operasional (sudah jalan) atau lahan kosong untuk bangun baru | Proses Pertamina kompleks — lihat C5 "berbelit" di doc 13, tawarkan jalur lebih jelas |
+| Pabrik / zona industri | Jenis produksi & kebutuhan daya listrik (KVA) | Zonasi industri wajib diverifikasi di awal |
+| Event/festival (lahan/venue) | Kapasitas pengunjung & durasi sewa (harian/mingguan) | Short-term — jangan asumsikan sewa tahunan |
+| Klinik (existing, izin lengkap) | Izin operasional sudah lengkap atau perlu diurus? | Legalitas kesehatan (izin praktik, IMB klinik) beda dari komersial biasa |
+| Lahan pengembangan (developer) | Luas total & rencana jumlah unit yang mau dibangun | Skala besar, target investor/developer bukan end-user |
+| Lahan wisata (dekat Bromo/Batu/dll.) | Akses jalan & potensi wisata di sekitar | View & aksesibilitas jadi driver harga utama |
 
 ---
 

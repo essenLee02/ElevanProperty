@@ -100,7 +100,8 @@ Elevan_Property/
 │  │   ├─ whatsappUtils.js (sanitizeLog, maskPhone, maskName)
 │  │   ├─ httpStatus.js / responseFormat.js / safeLog.js / normalizePhone.js
 │  ├─ models/  User, ChatSession, ChatMessage, Contact, Facility, Property,
-│  │           Log, WhatsAppInbound (legacy)
+│  │           PropertyImage, PropertyFacility, PropertyLocation, Country,
+│  │           Province, City, Location, Log
 │  ├─ asset/json_data/indonesia_property_36_provinces_flat.json
 │  └─ tests/  (node-native, 1 file = 1 suite): customerDateParser, customerMoney-
 │             Parser, aiPromptBuilder, housePilot, extractFilters

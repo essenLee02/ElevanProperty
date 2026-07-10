@@ -246,6 +246,11 @@ Mansion = rumah mewah ultra-premium (sewa >5 juta/bln, beli >3 miliar).
 | `land_area_sqm` | "Luas lahan yang dibutuhkan? (dalam m² atau hektar)" |
 | `zoning` | "Ada kebutuhan zonasi tertentu? (misalnya zona industri, komersial, atau pertanian)" |
 
+Once `property_purpose` is known, **branch to the sub-purpose distinctive question**
+(parkir/futsal/glamping/pertanian/SPBU/pabrik/event/klinik/lahan-pengembangan/lahan-wisata)
+instead of jumping straight to `land_area_sqm` — see `docs/10-property-type-playbooks.md`
+§12 "Sub-Purpose Branches" for the full table and per-purpose anchor notes.
+
 ---
 
 ## Bedroom Inference from Q4 (NEVER ask directly)

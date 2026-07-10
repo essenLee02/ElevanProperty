@@ -45,10 +45,6 @@
 | Method | Path | Controller |
 |---|---|---|
 | POST | /api/fonnte/webhook | fonnteWebhookController.handleWebhook (legacy) |
-| POST | /api/whatsapp/webhook | whatsappInboundController.handleInboundMessage (legacy log-only) |
-| GET | /api/whatsapp/messages | whatsappInboundController.getInboundMessages |
-| GET | /api/whatsapp/messages/:id | whatsappInboundController.getMessageDetail |
-| GET | /api/whatsapp/agents/status | whatsappInboundController.getAgentsStatus |
 | **POST** | **/api/fonnte-chat/webhook** | **fonnteChatController.handleInboundMessage (MAIN)** |
 | POST | /api/fonnte-chat/chaining | fonnteChatController.handleChainingWebhook |
 | POST | /api/fonnte-chat/webhook-raw | fonnteChatController.webhookRawCatcher |

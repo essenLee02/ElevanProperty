@@ -110,8 +110,12 @@ Contact form submissions.
 
 ---
 
-### whatsapp_inbound_messages
+### whatsapp_inbound_messages — ORPHAN TABLE (model+controller dihapus Juli 2026)
 Legacy table — messages captured from agent WA numbers via Fonnte webhook (old approach).
+Model (`WhatsAppInbound.js`) dan controller (`whatsappInboundController.js`) sudah
+dihapus dari codebase (tidak ada frontend/kode internal yang memakainya). Tabel
+fisik ini SENGAJA dibiarkan di database (bukan destructive drop) — bila memang
+tidak ada kebutuhan histori, boleh di-drop manual.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -360,7 +364,6 @@ yang FK-nya benar-benar ditegakkan Sequelize.
 | `ChatMessage.js` | chat_messages |
 | `Contact.js` | contacts |
 | `Facility.js` | facilities |
-| `WhatsAppInbound.js` | whatsapp_inbound_messages |
 | `Property.js` | properties |
 | `PropertyImage.js` | property_images |
 | `PropertyFacility.js` | property_facilities |

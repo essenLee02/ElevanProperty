@@ -34,8 +34,9 @@ Elevan_Property/
 │   │   ├── fonnteWebhookController.js    ← Legacy Fonnte webhook
 │   │   ├── homeController.js / logController.js / rumah123Controller.js
 │   │   ├── loginController.js / registerController.js / refreshTokenController.js / profileController.js
-│   │   ├── timelinesAIChatController.js  ← TimelinesAI multi-agent webhook
-│   │   └── whatsappInboundController.js  ← Legacy WA inbound (log-only)
+│   │   └── timelinesAIChatController.js  ← TimelinesAI multi-agent webhook
+│   │   (whatsappInboundController.js DIHAPUS Juli 2026 — legacy Fonnte single-agent,
+│   │    digantikan fonnteChatController.js; tidak dipakai frontend/kode internal manapun)
 │   ├── services/
 │   │   ├── aiPromptBuilderService.js     ← Q1-Q12 extraction + WhatsApp prompt builder
 │   │   ├── aiProviderService.js          ← routing 1 primary → Private Agent (no cross-AI)
@@ -53,7 +54,8 @@ Elevan_Property/
 │   │   ├── Property.js / PropertyImage.js / PropertyFacility.js / PropertyLocation.js  ← catalog (extended_v3)
 │   │   ├── Country.js / Province.js / City.js / Location.js  ← region + landmark
 │   │   ├── User.js                       ← fonnte_token + kirimi_device_id columns
-│   │   ├── WhatsAppInbound.js            ← Legacy inbound log table
+│   │   │   (WhatsAppInbound.js DIHAPUS Juli 2026 bersama controller-nya; tabel
+│   │   │    whatsapp_inbound_messages masih ada di DB tapi orphan, tidak di-drop)
 │   │   └── index.js
 │   ├── middleware/
 │   │   └── verifyToken.js                ← JWT auth + requirePrivilege
