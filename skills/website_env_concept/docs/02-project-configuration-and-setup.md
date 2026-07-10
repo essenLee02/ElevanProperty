@@ -126,8 +126,16 @@ CHATBOT_COOKIE_TTL_MINUTES=90
 ### Skill Prompt Character Limits
 ```env
 SKILL_MAX_WEBSITE_CHARACTERS=12000
-SKILL_MAX_RESPONSE_CHARACTERS=260000
-SKILL_MAX_PROJECT_CHARACTERS=280000
+SKILL_MAX_RESPONSE_CHARACTERS=330000
+SKILL_MAX_PROJECT_CHARACTERS=345000
+```
+Dinaikkan Juli 2026 (260000/280000 → 330000/345000): baseline wajib
+claude_responds/chat_gpt_responds (SKILL.md + docs 01-15, tanpa file
+kondisional 16-19) sudah ~250K sendiri. Headroom lama (10K) tidak cukup
+begitu 2+ file kondisional (fasilitas+lokasi) terpicu bersamaan dalam
+satu pesan customer → bagian akhir skill docs terpotong diam-diam
+(`trimForPrompt()` adalah hard slice, bukan smart-summarize).
+```env
 ```
 
 ### Pagination (semua master data list)
