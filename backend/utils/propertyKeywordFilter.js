@@ -471,6 +471,13 @@ const PROPERTY_QUESTION_PATTERNS = [
   // ── Q12 apartment tower / floor ─────────────────────────────────────────────
   /tower\s+atau\s+lantai/, /preferensi\s+tower/, /lantai\s+(rendah|tinggi|tertentu|berapa)/,
   /tower\s+or\s+floor/, /floor\s+(prefer|choice)/,
+  // ── Q kondisi ruang kantor (office fit-out) & kondisi properti ──────────────
+  // "Kondisi ruang yang diinginkan: fitted out (siap pakai) atau bare shell?"
+  // "prefer yang baru/ready, second kondisi baik, atau inden?"
+  /fitted\s*[\s-]?out/, /bare\s*[\s-]?shell/, /kondisi\s+ruang/, /siap\s+pakai/,
+  /kondisi\s+(baik|baru)/, /baru\/ready/, /second\s+kondisi/, /atau\s+inden/,
+  // ── Q jam viewing ────────────────────────────────────────────────────────────
+  /viewing\s+jam\s+berapa/, /jam\s+berapa.*viewing/, /mau\s+viewing\s+jam/,
   // Q2b — "Sudah lihat berapa properti/villa/rumah di X? Apa yang membuat belum cocok?"
   // Q4 house pilot — "Sebelumnya sudah sempat lihat beberapa rumah, Kak?"
   /sudah\s+lihat\s+berapa/, /sudah\s+sempat\s+lihat/, /sebelumnya\s+sudah\s+sempat/,
@@ -821,6 +828,11 @@ function isPropertyContextContinuation(message, history = []) {
 
   // 5) Jawaban spesifikasi properti (luas, kamar, furnishing, dll)
   if (/\b(furnished|unfurnished|kosong|semi|ac|wifi|parkir|garasi|kolam|renang)\b/.test(lower))
+    return true;
+  // 5a) Jawaban KONDISI ruang/properti — "Kondisi yang fitted out, Kak", "bare shell
+  //     saja", "yang siap pakai", "second aja", "inden tidak masalah", "ready stock".
+  //     Jawaban Q kondisi kantor (fitted out/bare shell) & Q kondisi rumah (baru/second/inden).
+  if (/\b(fitted\s*[\s-]?out|bare\s*[\s-]?shell|siap\s+pakai|bangun\s+interior|inden|indent|ready\s*(stock)?|second|bekas|renovasi|kondisi\s+(baru|baik|apa\s*adanya))\b/i.test(lower))
     return true;
   if (/\b(\d+\s*(kamar|km|lt|lb|m2|meter|lantai))\b/.test(lower))
     return true;

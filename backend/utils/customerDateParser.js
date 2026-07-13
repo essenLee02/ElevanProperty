@@ -75,13 +75,30 @@ function parseCustomerDate(text, now = new Date()) {
   }
 
   // ── Relative expressions (rules 1, 2, 3, 6, 32, 34) ─────────────────────
+  // "N hari besok/kedepan/lagi" HARUS dicek SEBELUM "besok" polos — "viewing
+  // 2 hari besok ini" berarti today+2 (15 Juli), bukan besok (14 Juli). Pola
+  // "besok" yang rakus dulunya menang duluan dan salah menghitung.
+  {
+    const m = t.match(/\b(\d{1,3})\s*(hari|minggu|bulan|tahun)\s+(?:besok(?:\s+ini)?|kedepan|ke\s+depan|mendatang|dari\s+sekarang)\b/);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      const unit = m[2];
+      let d;
+      if (unit === 'hari')        d = new Date(curY, curM - 1, curD + n);
+      else if (unit === 'minggu') d = new Date(curY, curM - 1, curD + n * 7);
+      else if (unit === 'bulan')  d = new Date(curY, curM - 1 + n, curD);
+      else /* tahun */            d = new Date(curY + n, curM - 1, curD);
+      return { status: 'ok', date: d, formatted: fmt(d) };
+    }
+  }
   if (/\b(hari ini|sekarang|today)\b/.test(t)) return ok(curY, curM, curD);
-  if (/\b(besok|tomorrow)\b/.test(t)) {
-    const d = new Date(curY, curM - 1, curD + 1);
+  // "besok lusa" = lusa (+2) — cek sebelum "besok" polos.
+  if (/\bbesok\s+lusa\b|\blusa\b/.test(t)) {
+    const d = new Date(curY, curM - 1, curD + 2);
     return { status: 'ok', date: d, formatted: fmt(d) };
   }
-  if (/\blusa\b/.test(t)) {
-    const d = new Date(curY, curM - 1, curD + 2);
+  if (/\b(besok|tomorrow)\b/.test(t)) {
+    const d = new Date(curY, curM - 1, curD + 1);
     return { status: 'ok', date: d, formatted: fmt(d) };
   }
   if (/\b(minggu depan|next week)\b/.test(t)) {

@@ -713,6 +713,15 @@ Never ask "siapa yang memutuskan" directly.
 | Customer usul `"boleh siang"` (hanya time-of-day) → AI tanya jam → customer jawab jam | `✓ Viewing: *Besok siang jam 1*` (default hari = besok bila tidak disebutkan) |
 | Customer sebut hari-dalam-minggu + "minggu depan" → AI tanya jam → customer jawab jam | `✓ Viewing: *Jam 7 pagi, 9 Juli 2026*` (hari X minggu depan = tanggal konkret +7 hari dari hari ini) |
 
+**⚠️ Hitungan tanggal RELATIF — jangan salah offset** (hari ini = H):
+| Customer says | Tanggal viewing |
+|---|---|
+| `"besok"` | H+1 |
+| `"lusa"` / `"besok lusa"` | H+2 |
+| `"2 hari besok ini"` / `"2 hari kedepan"` / `"2 hari lagi"` | **H+2** (BUKAN H+1 — kata "besok" di sini bagian dari frasa "N hari", bukan besok polos) |
+| `"4 hari kedepan"` | H+4 |
+Contoh: hari ini 13 Juli → "viewing 2 hari besok ini" = **15 Juli**, bukan 14 Juli.
+
 **⚠️ Viewing wajib ada di summary** jika ada jadwal survey yang sudah dikonfirmasi (hari/jam). Jangan hilangkan baris Viewing dari brief hanya karena tidak ada tanggal kalender eksplisit — "besok siang jam 1" sudah cukup sebagai jadwal.
 
 **⛔ JANGAN mengarang label.** Salin nilai persis dari state block. Jangan tulis "Mandiri", "Koordinasi dengan pasangan" — ikuti tabel di atas.
@@ -813,7 +822,10 @@ EN: Any specific facilities you'd like?
 
 - Detected amenities accumulate across the session and appear as `✓ Fasilitas: Kids zone, Gym`
   in the summary. Common labels: AC, WiFi, Kolam renang, Gym, Kids zone, Keamanan 24 jam, Lift,
-  Parkir, Carport, Garasi, Taman, Dapur, Water heater, Balkon, Rooftop.
+  Parkir, Carport, Garasi, Taman, Dapur, Water heater, Balkon, Rooftop. Office/meeting &
+  meal-plan labels (booking kantor/hotel): LCD, Proyektor (typo-tolerant: "projectktor",
+  "projektor"), Breakfast, Lunch, Dinner, Ruang Meeting — capture ALL of them, none may be
+  dropped from the summary even when volunteered across several separate messages.
 - Jika customer jawab **"standar", "biasa", "terserah", "apa saja", "gak ada", "tidak apa-apa
   dengan semua fasilitas"** (semua jawaban fleksibel/tanpa-preferensi) → catat sebagai
   fasilitas standar, lalu tampilkan daftar standar berdasarkan tipe properti + furnishing.

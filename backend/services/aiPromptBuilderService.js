@@ -62,6 +62,35 @@ function isConditionalFallbackMessage(text = '') {
 }
 
 /**
+ * Extract individual anchor-landmark tokens from a text: every "dekat/deket/near X"
+ * phrase, split into per-landmark tokens (commas / "dan" / "&"), with filler words
+ * stripped and city names excluded (a city is the Q2 location, not a Q6 anchor).
+ * Newline is deliberately NOT part of the capture class — debounce-joined WhatsApp
+ * messages must produce separate matches, not one phrase with an embedded newline.
+ */
+function extractAnchorTokens(text = '') {
+  const tokens = [];
+  for (const am of String(text || '').matchAll(/\b(?:dekat|deket|near)\s+(?:dengan\s+)?([a-z][\w ,.\/&-]{2,60})/gi)) {
+    const after = am[1].trim();
+    const cleaned = after.replace(/\s+(ya|dong|kak|aja|saja|nih|lainnya)\b.*$/i, '').trim();
+    if (!cleaned || detectLocation(after)) continue;
+    for (const token of cleaned.split(/\s*,\s*|\s+dan\s+|\s+&\s+/i)) {
+      const t = token.trim();
+      if (t && !tokens.some((p) => p.toLowerCase() === t.toLowerCase())) tokens.push(t);
+    }
+  }
+  return tokens;
+}
+
+/** Join anchor tokens into ONE clean phrase: "dekat A, B dan C". */
+function joinAnchorTokens(parts = []) {
+  if (!parts.length) return null;
+  return parts.length === 1
+    ? `dekat ${parts[0]}`
+    : `dekat ${parts.slice(0, -1).join(', ')} dan ${parts[parts.length - 1]}`;
+}
+
+/**
  * Extract which Q1–Q12 fields have been answered from conversation history.
  * Runs server-side so the AI gets an authoritative checklist — it does NOT
  * have to guess from raw history text (which fails when history is truncated).
@@ -162,8 +191,8 @@ function extractQualificationState(history = [], currentMessage = '') {
       if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(w))              return 'boarding_house';
       if (/\bruko\b|\brukan\b/.test(w))                                   return 'shophouse';
       if (/\btoko\b|\bkios\b|\bwarung\b|\bretail\b/.test(w))             return 'store';
-      if (/\bkantor\b/.test(w))                                           return 'office';
-      if (/\bgudang\b/.test(w))                                           return 'warehouse';
+      if (/\bkantor\b|\boffice\b/.test(w))                                           return 'office';
+      if (/\bgudang\b|\bwarehouse\b/.test(w))                                           return 'warehouse';
       if (/\brumah\b(?!\s+(?:makan|sakit|tangga|ibadah|duka|produksi|tahanan|susun|potong|kos))|\bhouse\b|\bkontrakan\b/.test(w))                   return 'house';
       if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(w)) return 'others';
       return null;
@@ -282,8 +311,8 @@ function extractQualificationState(history = [], currentMessage = '') {
       else if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(tt))      state.buildingType = 'boarding_house';
       else if (/\bruko\b|\brukan\b/.test(tt))                           state.buildingType = 'shophouse';
       else if (/\btoko\b|\bkios\b|\bwarung\b|\bretail\b/.test(tt))     state.buildingType = 'store';
-      else if (/\bkantor\b/.test(tt))                                   state.buildingType = 'office';
-      else if (/\bgudang\b/.test(tt))                                   state.buildingType = 'warehouse';
+      else if (/\bkantor\b|\boffice\b/.test(tt))                                   state.buildingType = 'office';
+      else if (/\bgudang\b|\bwarehouse\b/.test(tt))                                   state.buildingType = 'warehouse';
       else if (/\brumah\b(?!\s+(?:makan|sakit|tangga|ibadah|duka|produksi|tahanan|susun|potong|kos))|\bhouse\b|\bkontrakan\b/.test(tt))           state.buildingType = 'house';
       else if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(tt)) state.buildingType = 'others';
     }
@@ -420,18 +449,9 @@ function extractQualificationState(history = [], currentMessage = '') {
     // Dekat stasiun bus"), so a \s-based class swallowed the newline into ONE
     // anchor phrase and only the first "dekat" was ever matched.
     {
-      for (const am of raw.matchAll(/\b(?:dekat|deket|near)\s+(?:dengan\s+)?([a-z][\w ,.\/&-]{2,60})/gi)) {
-        const after = am[1].trim();
-        const cleaned = after.replace(/\s+(ya|dong|kak|aja|saja|nih|lainnya)\b.*$/i, '').trim();
-        if (!cleaned || detectLocation(after)) continue;
-        // Split into individual landmarks ("Manguharjo dan Suncity mall" →
-        // 2 tokens) so token-level duplicates from later messages ("dekat dengan
-        // Suncity mall") are recognized and dropped.
-        for (const token of cleaned.split(/\s*,\s*|\s+dan\s+|\s+&\s+/i)) {
-          const t = token.trim();
-          if (t && !_anchorParts.some((p) => p.toLowerCase() === t.toLowerCase())) {
-            _anchorParts.push(t);
-          }
+      for (const t of extractAnchorTokens(raw)) {
+        if (!_anchorParts.some((p) => p.toLowerCase() === t.toLowerCase())) {
+          _anchorParts.push(t);
         }
       }
     }
@@ -554,12 +574,9 @@ function extractQualificationState(history = [], currentMessage = '') {
   // ["Manguharjo", "Suncity mall", "stasiun bus"] → "dekat Manguharjo, Suncity mall
   // dan stasiun bus". Tokens are already deduped at capture time, so a repeated
   // mention ("dekat dengan Suncity mall" after "dekat Manguharjo dan Suncity mall")
-  // never appears twice. Phase 2 below may still overwrite this with a more
-  // authoritative, explicitly-asked Q6 answer if one exists.
+  // never appears twice.
   if (_anchorParts.length) {
-    state.anchorPoint = _anchorParts.length === 1
-      ? `dekat ${_anchorParts[0]}`
-      : `dekat ${_anchorParts.slice(0, -1).join(', ')} dan ${_anchorParts[_anchorParts.length - 1]}`;
+    state.anchorPoint = joinAnchorTokens(_anchorParts);
   }
 
   // ── Phase 2: Detect context-dependent Q6/Q7/Q9/Q10 from AI→Customer pairs ─
@@ -591,12 +608,24 @@ function extractQualificationState(history = [], currentMessage = '') {
       }
     }
 
-    // Q6 — anchor point. This is the AUTHORITATIVE source (AI explicitly asked the
-    // dedicated Q6 question) — overrides any Phase 1 accumulated "dekat X" guess,
-    // it does NOT merge with it, since the full Q6 answer already supersedes the
-    // scattered mentions Phase 1 picked up from earlier unrelated answers.
+    // Q6 — anchor point (AI explicitly asked the dedicated Q6 question).
+    // Tokenize the answer and MERGE with Phase 1's accumulated landmarks — a raw
+    // copy used to (a) keep filler like "Ya yang strategis saja" and the debounce
+    // newline inside the summary line, and (b) clobber landmarks the customer
+    // volunteered in OTHER answers (e.g. "deket Pakuwon, GWalk, pasar" given as a
+    // red-flags reply AFTER Q6). Only when no landmark is extractable (negative /
+    // flexible answers like "bebas", "terserah") keep the raw reply so downstream
+    // normalization can render "Bebas".
     if (/patokan|dekat sekolah|dekat kantor|mall tertentu|anchor|wisata|kawasan tertentu|tempat tertentu.*patokan/.test(aiText)) {
-      state.anchorPoint = custResp;
+      const q6Tokens = extractAnchorTokens(custResp);
+      if (q6Tokens.length) {
+        for (const t of q6Tokens) {
+          if (!_anchorParts.some((p) => p.toLowerCase() === t.toLowerCase())) _anchorParts.push(t);
+        }
+        state.anchorPoint = joinAnchorTokens(_anchorParts);
+      } else {
+        state.anchorPoint = custResp;
+      }
     }
     // Q7 — alternative areas
     // Q7 detection: matches both old ("area sekitar yang masih oke") and
@@ -801,8 +830,8 @@ function extractQualificationState(history = [], currentMessage = '') {
       else if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(cur))           state.buildingType = 'boarding_house';
       else if (/\bruko\b|\brukan\b/.test(cur))                                state.buildingType = 'shophouse';
       else if (/\btoko\b|\bkios\b|\bwarung\b|\bretail\b/.test(cur))          state.buildingType = 'store';
-      else if (/\bkantor\b/.test(cur))                                        state.buildingType = 'office';
-      else if (/\bgudang\b/.test(cur))                                        state.buildingType = 'warehouse';
+      else if (/\bkantor\b|\boffice\b/.test(cur))                                        state.buildingType = 'office';
+      else if (/\bgudang\b|\bwarehouse\b/.test(cur))                                        state.buildingType = 'warehouse';
       else if (/\brumah\b(?!\s+(?:makan|sakit|tangga|ibadah|duka|produksi|tahanan|susun|potong|kos))|\bhouse\b|\bkontrakan\b/.test(cur))                state.buildingType = 'house';
       else if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(cur)) state.buildingType = 'others';
 
@@ -838,8 +867,8 @@ function extractQualificationState(history = [], currentMessage = '') {
       if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(w))              return 'boarding_house';
       if (/\bruko\b|\brukan\b/.test(w))                                   return 'shophouse';
       if (/\btoko\b|\bkios\b|\bwarung\b|\bretail\b/.test(w))             return 'store';
-      if (/\bkantor\b/.test(w))                                           return 'office';
-      if (/\bgudang\b/.test(w))                                           return 'warehouse';
+      if (/\bkantor\b|\boffice\b/.test(w))                                           return 'office';
+      if (/\bgudang\b|\bwarehouse\b/.test(w))                                           return 'warehouse';
       if (/\brumah\b(?!\s+(?:makan|sakit|tangga|ibadah|duka|produksi|tahanan|susun|potong|kos))|\bhouse\b|\bkontrakan\b/.test(w))                   return 'house';
       if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(w)) return 'others';
       return null;
@@ -874,8 +903,8 @@ function extractQualificationState(history = [], currentMessage = '') {
     else if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(cur))           curType = 'boarding_house';
     else if (/\bruko\b|\brukan\b/.test(cur))                                curType = 'shophouse';
     else if (/\btoko\b|\bkios\b|\bwarung\b|\bretail\b/.test(cur))          curType = 'store';
-    else if (/\bkantor\b/.test(cur))                                        curType = 'office';
-    else if (/\bgudang\b/.test(cur))                                        curType = 'warehouse';
+    else if (/\bkantor\b|\boffice\b/.test(cur))                                        curType = 'office';
+    else if (/\bgudang\b|\bwarehouse\b/.test(cur))                                        curType = 'warehouse';
     else if (/\brumah\b(?!\s+(?:makan|sakit|tangga|ibadah|duka|produksi|tahanan|susun|potong|kos))|\bhouse\b|\bkontrakan\b/.test(cur))                curType = 'house';
     else if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(cur)) curType = 'others';
 
@@ -937,8 +966,8 @@ function _typeKeyFromWord(word = '') {
   if (/kos|kost|kosan|indekos/.test(w))          return 'boarding_house';
   if (/ruko|rukan|shophouse/.test(w))            return 'shophouse';
   if (/toko|kios|warung|retail/.test(w))         return 'store';
-  if (/kantor|office/.test(w))                   return 'office';
-  if (/gudang|warehouse/.test(w))                return 'warehouse';
+  if (/kantor/.test(w))                   return 'office';
+  if (/gudang/.test(w))                return 'warehouse';
   if (/rumah|house|kontrakan/.test(w))           return 'house';
   if (/tanah|kavling|lahan|spbu|pabrik/.test(w)) return 'others';
   return null;

@@ -635,6 +635,14 @@ const _FACILITY_MAP = [
   ['Area Usaha',     ['area usaha', 'business area']],
   ['Area Toko',      ['area toko', 'retail area']],
   ['Lampu',          ['lampu', 'lighting', 'penerangan']],
+  // ── Fasilitas kantor / meeting & meal plan (booking office/hotel) ──────────
+  // Typo-tolerant: "projectktor"/"projektor" adalah salah ketik umum "proyektor".
+  ['LCD',            ['lcd']],
+  ['Proyektor',      ['proyektor', 'projector', 'projektor', 'projectktor', 'projecktor']],
+  ['Breakfast',      ['breakfast', 'sarapan', 'makan pagi']],
+  ['Lunch',          ['lunch', 'makan siang']],
+  ['Dinner',         ['dinner', 'makan malam']],
+  ['Ruang Meeting',  ['ruang meeting', 'meeting room', 'ruang rapat']],
 ];
 
 // ─── DB-backed facility vocabulary (bilingual augmentation) ──────────────────

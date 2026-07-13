@@ -1370,8 +1370,8 @@ class ConversationQualifier {
       if (/\bkondotel\b|\bcondo\b/.test(w))                                 return 'kondotel';
       if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(w))                return 'boarding_house';
       if (/\bruko\b|\brukan\b/.test(w))                                     return 'shophouse';
-      if (/\bkantor\b/.test(w))                                             return 'office';
-      if (/\bgudang\b/.test(w))                                             return 'warehouse';
+      if (/\bkantor\b|\boffice\b/.test(w))                                             return 'office';
+      if (/\bgudang\b|\bwarehouse\b/.test(w))                                             return 'warehouse';
       if (/\btoko\b|\bretail\b/.test(w))                                  return 'store';
       if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(w))  return 'others';
       return null;
@@ -1529,7 +1529,7 @@ class ConversationQualifier {
       else if (/\bkondotel\b|\bcondo\b/i.test(custText))                            recoveredType = 'kondotel';
       else if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/i.test(custText))           recoveredType = 'boarding_house';
       else if (/\bruko\b|\brukan\b/i.test(custText))                                recoveredType = 'shophouse';
-      else if (/\bkantor\b/i.test(custText))                                         recoveredType = 'office';
+      else if (/\bkantor\b|\boffice\b/i.test(custText))                                         recoveredType = 'office';
       else if (/\bgudang\b/i.test(custText))                                         recoveredType = 'warehouse';
       else if (/\btoko\b|\bretail\b/i.test(custText))                               recoveredType = 'store';
     }
