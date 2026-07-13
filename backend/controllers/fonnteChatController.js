@@ -430,17 +430,24 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
   });
 
   // ── Kirim via Fonnte (pakai token agent sendiri) ─────────────────────
+  // replyParts: summary/lead-in as one message, then one message per catalog
+  // property card (RESPOND_CATALOG_RUN=ON). Falls back to a single message
+  // when no cards are present (e.g. the "no catalog match" apology).
   let fonnteSent  = false;
   let fonnteError = null;
+  const replyParts = aiResult.replyParts && aiResult.replyParts.length ? aiResult.replyParts : [aiResult.reply];
 
   try {
-    await sendViaFonnte(sender, aiResult.reply, agent.fonnte_token);
+    for (const part of replyParts) {
+      await sendViaFonnte(sender, part, agent.fonnte_token);
+    }
     fonnteSent = true;
     safeLog('FONNTE_REPLY_SENT', {
       sessionId  : session.id,
       agent      : agent.name,
       recipient  : sender,
       aiProvider : aiResult.provider,
+      parts      : replyParts.length,
       ctxSource
     });
   } catch (err) {

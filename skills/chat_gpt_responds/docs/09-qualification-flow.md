@@ -527,29 +527,23 @@ cool place. Instead, split into **two paired sections**: `Hindari` (the inverted
 each positive wish, plus any genuine negatives as-is) and `Prefer` (the positive wishes as
 stated). Each positive wish gets ONE entry in each list:
 
-| Customer's positive wish | `Hindari` entry (opposite) | `Prefer` entry (as-is) |
+**The `Hindari` LABEL is the avoided thing itself** — never an echo of the Prefer label.
+`1. *Suasana tenang* : Hindari tempat bising/ramai` is WRONG (label says the customer avoids
+a quiet atmosphere). The label states what to avoid; the optional `: reason` restates it as
+"Tidak [want]":
+
+| Customer's positive wish | `Hindari` entry (label : reason) | `Prefer` entry (as-is) |
 |---|---|---|
-| sejuk / adem / rindang / teduh / asri | Hindari tempat yang panas | Tempat yang sejuk |
-| akses jalan lancar / mudah | Hindari tempat macet | Akses jalan lancar |
-| tenang / sepi | Hindari tempat bising/ramai | Suasana tenang |
-| **ramai / hidup / rame / crowded / lively** | **Tidak mau sepi** | **Tempat yang ramai & hidup** |
-| aman | Hindari lingkungan rawan | Lingkungan aman |
-| jalan lebar | Hindari gang sempit | Jalan lebar |
+| sejuk / adem / rindang / teduh / asri | *Tempat panas* : Tidak sejuk | Tempat yang sejuk |
+| akses jalan lancar / mudah | *Akses jalan lancar* | Akses jalan lancar |
+| tenang / sepi | *Suasana ramai* : Tidak sepi | Suasana tenang |
+| aman | *Lingkungan rawan* : Tidak aman | Lingkungan aman |
+| jalan lebar | *Gang sempit* : Jalan tidak lebar | Jalan lebar |
+| strategis | *(no Hindari entry)* | Lokasi strategis |
 
 Statements that are ALREADY avoidance-framed (banjir, hadap barat, gang sempit, bising, rumah
 tua, dekat rel kereta) go straight into `Hindari` as-is — they have no natural "Prefer"
 counterpart, so no matching Prefer entry is added for them.
-
-**⚠️ "mau ramai" is a POSITIVE wish, not a red flag.** When the customer says they *want* a lively/
-crowded area ("mau yang ramai", "suka rame", "tempat ramai"), it means they want to **avoid a quiet/
-dead area** → `Hindari: Tidak mau sepi` + `Prefer: Tempat yang ramai & hidup`. Do **NOT** flag "ramai"
-as `Tidak mau bising/ramai` in this case. Only treat "ramai" as avoidance when it is explicitly
-negated or qualified ("jangan ramai", "jalan terlalu ramai", "bising"). This mirrors the
-server-side `#buildAvoidPreferPairs` inference.
-
-**⚠️ Negation variants must all be caught** — `enggak / gak / ga / nggak / ngga` are equivalent to
-`tidak`. "Enggak macet" = `Tidak mau macet`, "enggak panas" = `Tidak mau panas`, etc. Never drop a
-red flag just because the customer used an informal negation.
 
 **Q12 sun-orientation also feeds this pair** (see Q12 section above): if the customer wants to
 avoid BOTH sunrise and sunset facing, add ONE more pair: `Hindari` = "Lokasi kamar yang hadap
@@ -557,18 +551,17 @@ sinar matahari terbenam dan terbit", `Prefer` = "Tempat yang nyaman dari sinar m
 membuat mata terasa silau".
 
 **Summary display format** — numbered list, each `Hindari` item may carry a `: reason`
-annotation (omitted when the statement is already avoidance-framed):
+annotation (omitted when the statement is already avoidance-framed). Example for
+"akses lancar, tidak banjir, tempat yang sepi":
 ```
 ✓ Hindari:
-1. *Tempat yang sejuk* : Hindari tempat yang panas
-2. *Akses jalan lancar* : Hindari tempat macet
+1. *Akses jalan lancar*
+2. *Suasana ramai* : Tidak sepi
 3. *Tidak mau banjir*
-4. *Lokasi kamar yang hadap sinar matahari terbenam dan terbit*
 
 ✓ Prefer:
-1. *Tempat yang sejuk*
-2. *Akses jalan lancar*
-3. *Tempat yang nyaman dari sinar matahari yang membuat mata terasa silau*
+1. *Akses jalan lancar*
+2. *Suasana tenang*
 ```
 Omit either header entirely (no empty `✓ Hindari:` with zero items) if that list is empty.
 
@@ -618,6 +611,18 @@ Copy the **full anchor phrase** from the Q6 state block — do NOT truncate at c
 | `"dekat kampus ubaya"` | `✓ Patokan lokasi: *Dekat kampus ubaya*` |
 
 **FORBIDDEN:** `✓ Patokan lokasi: *deket indomaret,*` — the comma-truncated partial text.
+
+**Merge & dedupe multiple anchor mentions into ONE clean line:**
+Customers often volunteer landmarks across SEVERAL messages ("Saya mau dekat Manguharjo
+dan Suncity mall" … later … "Dekat dengan Suncity mall" … "Dekat stasiun bus"). The summary
+must merge these into a single deduplicated phrase — never concatenate the raw fragments.
+
+| Customer mentions (across messages) | ❌ Wrong (raw concat, duplicate, multi-line) | ✅ Correct (merged, deduped, one line) |
+|---|---|---|
+| "dekat Manguharjo dan Suncity mall" + "Dekat dengan Suncity mall" + "Dekat stasiun bus" | `Dekat Manguharjo dan Suncity mall, dekat dengan Suncity mall`<br>`Dekat stasiun bus` | `Dekat Manguharjo, Suncity Mall dan stasiun bus` |
+
+Rules: list each landmark ONCE (case-insensitive dedupe), join with commas + final "dan",
+keep everything on one line, single leading "Dekat".
 
 **Strip instruction phrases directed AT the bot — they are not part of the anchor itself:**
 Customers sometimes phrase Q6 answers as a request to the bot rather than a pure landmark
@@ -751,19 +756,6 @@ EN: For furnishing, do you prefer *fully furnished*,
     *semi-furnished*, or *unfurnished*? 🛋️
 ```
 
-**Furnishing value normalization (summary must show the resolved label, NEVER "Disebutkan"):**
-
-| Customer says | `✓ Furnitur:` value |
-|---|---|
-| "furnished", "yang furnished", "berperabot", "sudah ada perabot/furnitur" | **Full furnished** |
-| "full furnished", "fully furnished", "full" | Full furnished |
-| "semi", "semi furnished", "semi-furnish" | Semi furnished |
-| "kosongan", "unfurnished", "kosong", "tanpa perabot" | Kosongan |
-
-Plain "furnished" (without "semi"/"full") = **Full furnished** by convention (customer means
-turnkey / tinggal bawa koper). ⛔ Never render `✓ Furnitur: *Disebutkan*` — if furnishing was
-answered, resolve it to one of the four labels above; if truly not answered, omit the line.
-
 **CRITICAL — "Kosongan" is a furnishing answer, NOT a building type change:**
 
 When a customer answers Q11 with `"kosongan saja"`, `"tidak pakai furnish"`, or any unfurnished preference:
@@ -822,8 +814,15 @@ EN: Any specific facilities you'd like?
 - Detected amenities accumulate across the session and appear as `✓ Fasilitas: Kids zone, Gym`
   in the summary. Common labels: AC, WiFi, Kolam renang, Gym, Kids zone, Keamanan 24 jam, Lift,
   Parkir, Carport, Garasi, Taman, Dapur, Water heater, Balkon, Rooftop.
-- Jika customer jawab **"standar", "biasa", "terserah", "apa saja", "gak ada"** → catat sebagai
-  fasilitas standar, lalu tampilkan daftar standar berdasarkan tipe properti + furnishing:
+- Jika customer jawab **"standar", "biasa", "terserah", "apa saja", "gak ada", "tidak apa-apa
+  dengan semua fasilitas"** (semua jawaban fleksibel/tanpa-preferensi) → catat sebagai
+  fasilitas standar, lalu tampilkan daftar standar berdasarkan tipe properti + furnishing.
+  **Jika customer BELAKANGAN menambahkan item spesifik** (mis. "saya one gate system dan smart
+  door" beberapa giliran setelah jawaban fleksibel) → summary menampilkan GABUNGAN: item
+  spesifik dulu, lalu daftar standar yang belum tercakup — contoh:
+  `✓ Fasilitas: One Gate System, Smart Door + standar rumah: AC, Kitchen set, CCTV camera, Lemari, Kamar Mandi, Kulkas`
+  Jangan tampilkan item spesifik saja — permintaan "semua fasilitas tidak apa-apa" berarti
+  fasilitas standar tetap relevan sebagai baseline:
   - Rumah **semi-furnished**: `AC, Kitchen set, CCTV camera, Lemari, Kamar Mandi, Kulkas, One gate system`
   - Rumah **fully furnished**: tambah `Tempat Tidur, TV`
   - Rumah **unfurnished**: `Kamar Mandi, One gate system`
@@ -833,17 +832,6 @@ EN: Any specific facilities you'd like?
   - Kos **semi-furnished**: `AC, Kamar Mandi dalam`
   - Villa: `AC, Kitchen set, Kolam renang, Kamar Mandi`
   → Tampil di summary sebagai: `✗ Fasilitas: *[daftar standar] (Fasilitas standar)*`
-- **Fasilitas standar SELALU dilampirkan setelah fasilitas spesifik customer.** Meskipun customer
-  menyebut fasilitas tertentu (mis. "gym, AC, smart door, dinner"), summary tetap **menambahkan**
-  fasilitas standar tipe tsb (mis. apartemen: `Kamar Tidur, Kamar Mandi, Dapur/Pantry, Listrik, Air,
-  Lift, Keamanan 24 jam, Parkir`) yang belum tercakup — supaya agent & katalog punya gambaran lengkap.
-  Contoh: customer minta `Gym, AC, Smart Door, Dinner` → `✓ Fasilitas: Gym, AC, Smart Door, Dinner,
-  Kamar Tidur, Kamar Mandi, Dapur/Pantry, Lift, Keamanan 24 jam, Parkir`. (Item spesifik customer di
-  DEPAN, standar menyusul; dedupe yang sama.)
-- **Catalog facility ranking (server-side):** the requested facilities feed a `LIKE '%X%' OR …`
-  overlap score (`facilityMatchScore`) that **prioritizes** listings having the most requested
-  amenities. It is a ranking boost, never a hard filter — listings without those facilities still
-  appear, just lower — so the customer always gets the closest available alternatives.
 - **Do NOT show the summary for a sewa transaction until facilities has been asked.** If still
   un-asked at summary time → it appears as `✗ Fasilitas: (Belum ditanyakan)` (a gap for the agent).
 
@@ -935,13 +923,6 @@ A question is skipped if **any** of these is true:
 - AI already asked it in a prior turn
 - Customer explicitly requested a listing (`kasih daftarnya`, `tampilkan`, `show me`, etc.)
 - Readiness score ≥ 3 and mode=ON → switch to listing
-
-> **Completeness ≠ skipping.** Skip only when a slot is genuinely ✅ or not applicable to the
-> active type/transaction. A slot that is empty, vague, or only *partially* answered is NOT skippable —
-> it must be re-asked (one per message) per **`docs/20-answer-completeness-and-reask.md`**. That doc
-> defines what "answered" means per slot, how to capture partial answers, how to convert a
-> non-answer ("gak tau"/"terserah") into an anchored choice, and the two-try anti-loop limit before
-> defaulting-and-proceeding.
 
 ---
 

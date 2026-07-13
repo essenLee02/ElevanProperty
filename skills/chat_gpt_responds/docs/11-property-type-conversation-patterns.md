@@ -294,9 +294,9 @@ Baik, permintaan utama Anda sudah saya catat 📝 🔥
 ✓ Penghuni: *[Jumlah & Komposisi]*
 ✓ Durasi sewa: *[Durasi]* — hanya jika ✅
 ✓ Furnitur: *[Pilihan]* — hanya jika ✅
-✓ Patokan lokasi: *[Patokan]* — hanya jika ✅
+✓ Patokan lokasi: *[Patokan — gabungan semua landmark, dedupe, satu baris]* — hanya jika ✅
 ✓ Area alternatif: *[Area]* — hanya jika ✅
-✓ Hindari: *[Red flags]* — hanya jika ✅
+✓ Hindari: [numbered list — format & label rules di docs/09 §Q5] — hanya jika ✅
 
 Saya akan segera menghubungi Anda dengan rekomendasi terbaik! 🏠
 Terima kasih sudah menghubungi saya. 🙏

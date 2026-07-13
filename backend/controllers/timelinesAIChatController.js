@@ -489,18 +489,25 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
     metadata      : JSON.stringify({ aiProvider: aiResult.provider, contextSource: ctxSource })
   });
 
-  // ── Kirim via TimelinesAI (shared key) ───────────────────────────────
+  // ── Kirim via TimelinesAI (shared key) ────────────────────────────────
+  // replyParts: summary/lead-in as one message, then one message per catalog
+  // property card (RESPOND_CATALOG_RUN=ON). Falls back to a single message
+  // when no cards are present (e.g. the "no catalog match" apology).
   let sent      = false;
   let sendError = null;
+  const replyParts = aiResult.replyParts && aiResult.replyParts.length ? aiResult.replyParts : [aiResult.reply];
 
   try {
-    await sendViaTimelinesAI(sender, aiResult.reply);
+    for (const part of replyParts) {
+      await sendViaTimelinesAI(sender, part);
+    }
     sent = true;
     safeLog('TIMELINESAI_REPLY_SENT', {
       sessionId  : session.id,
       agent      : agent.name,
       recipient  : sender,
       aiProvider : aiResult.provider,
+      parts      : replyParts.length,
       ctxSource
     });
   } catch (err) {

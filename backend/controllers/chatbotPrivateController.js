@@ -33,13 +33,14 @@ const { loadResponseSkillPrompt,
         getSkillRegistryStatus }              = require('../services/skillPromptService');
 const { hasPropertyKeyword,
         isPropertyContextContinuation }       = require('../utils/propertyKeywordFilter');
-const { extractQualificationState }           = require('../services/aiPromptBuilderService');
+const { extractQualificationState, isConditionalFallbackMessage } = require('../services/aiPromptBuilderService');
 
 // Per-city landmark reference (Q2c sub-area & Q6 anchor point examples) — moved to its
 // own module so this controller file isn't dominated by static data. See file for docs.
 const { getCityLandmarks } = require('../utils/locationLandmarks');
 const _languageKeywords = require('../utils/languageKeywords');
 const { getStandardFacilitiesByType } = require('../utils/standardFacilities');
+const { splitCatalogReply } = require('../utils/replySplitter');
 
 // Google Places enrichment — supplies live landmark data for cities NOT in the curated
 // LOCATION_LANDMARKS map. Claude/ChatGPT (third-party LLM providers) already have broad,
@@ -1055,9 +1056,13 @@ class ResponseBuilderWhatsApp {
         } else if (locationScope === 'national' && location) {
           // Customer specifically asked for a city, but we have no properties there.
           // Be explicit about why we're showing alternatives from other cities.
+          // filters.budget adalah OBJEK {text,min,max,period} — interpolasi langsung
+          // menghasilkan "budget [object Object]". Pakai .text (string terformat).
+          const budgetText = filters.budget?.text
+            || (typeof filters.budget === 'string' ? filters.budget : '');
           contextMsg = isId
-            ? `⚠️ Maaf, saat ini belum ada *${PropertyFormatter.humanBuildingType(filters.buildingType, 'id')}* tersedia di *${location}* dengan kriteria yang Anda minta (${filters.transactionType === 'rent' ? 'sewa' : 'jual'}, budget ${filters.budget || 'fleksibel'}).\n\n📍 Berikut pilihan *${PropertyFormatter.humanBuildingType(filters.buildingType, 'id')}* terdekat dari kota lain yang mungkin sesuai:\n`
-            : `⚠️ Unfortunately, there are currently no *${PropertyFormatter.humanBuildingType(filters.buildingType, 'en')}* available in *${location}* matching your criteria (${filters.transactionType === 'rent' ? 'for rent' : 'for sale'}, budget ${filters.budget || 'flexible'}).\n\n📍 Here are the closest *${PropertyFormatter.humanBuildingType(filters.buildingType, 'en')}* options from nearby cities:\n`;
+            ? `⚠️ Maaf, saat ini belum ada *${PropertyFormatter.humanBuildingType(filters.buildingType, 'id')}* tersedia di *${location}* dengan kriteria yang Anda minta (${filters.transactionType === 'rent' ? 'sewa' : 'jual'}, budget ${budgetText || 'fleksibel'}).\n\n📍 Berikut pilihan *${PropertyFormatter.humanBuildingType(filters.buildingType, 'id')}* terdekat dari kota lain yang mungkin sesuai:\n`
+            : `⚠️ Unfortunately, there are currently no *${PropertyFormatter.humanBuildingType(filters.buildingType, 'en')}* available in *${location}* matching your criteria (${filters.transactionType === 'rent' ? 'for rent' : 'for sale'}, budget ${budgetText || 'flexible'}).\n\n📍 Here are the closest *${PropertyFormatter.humanBuildingType(filters.buildingType, 'en')}* options from nearby cities:\n`;
 
         } else {
           contextMsg = isId
@@ -1410,7 +1415,9 @@ class ConversationQualifier {
       let runTx   = null;
       for (const m of seq) {
         if (!(m.role === 'user' || m.role === 'customer')) continue;
-        const t  = _typeOfP0(m.message);
+        // A hedge message ("kalau gak ada apartemen, villa juga boleh") names a
+        // fallback type without confirming a switch — don't let it flip runType.
+        const t  = isConditionalFallbackMessage(m.message) ? null : _typeOfP0(m.message);
         const tx = _txOfP0(m.message);
         if ((t && runType && t !== runType) || (tx && runTx && tx !== runTx)) {
           switchStart = m.i;
@@ -1488,7 +1495,9 @@ class ConversationQualifier {
     const histCustJoined = histCustMsgs.map(m => (m.message || '').toLowerCase()).join(' ');
     const histBuildingType = _typeOfP0(histCustJoined);
     const curMsgLower = (userMessage || '').toLowerCase();
-    const curBuildingType = _typeOfP0(curMsgLower);
+    // A hedge message ("kalau gak ada apartemen, villa juga boleh") names a fallback
+    // type without confirming a switch — don't let it force a Q2-Q12 reset.
+    const curBuildingType = isConditionalFallbackMessage(userMessage) ? null : _typeOfP0(curMsgLower);
     const histTx = _txOfP0(histCustJoined);
     const curTx = _txOfP0(curMsgLower);
 
@@ -3370,13 +3379,8 @@ class ConversationQualifier {
         const wantsStandard = Array.isArray(qualState.facilities)
           && qualState.facilities.some(f => String(f).toLowerCase() === 'standar');
 
-        // Fasilitas STANDAR per tipe SELALU dilampirkan (melengkapi yang spesifik),
-        // sesuai skill: customer sebut "gym, AC, smart door" → tetap tampilkan juga
-        // fasilitas standar apartemen (Kamar Tidur, Kamar Mandi, Dapur, Lift, dll.)
-        // supaya agent & katalog punya gambaran lengkap. Sebelumnya standar hanya
-        // muncul saat customer bilang "standar" — kini selalu digabung.
         let stdItems = [];
-        {
+        if (wantsStandard) {
           // Furnishing hint: qualState (Phase 1) sering null saat customer bilang
           // "semi aja" tanpa kata "furnish". Fallback ke #extractFurnishing(custText)
           // yang mengenali "semi"/"full"/"kosongan" agar tier standar sesuai.
@@ -3548,14 +3552,9 @@ class ConversationQualifier {
   static #extractFurnishing(custText) {
     // Semua varian jawaban customer untuk "semi" dianggap sama:
     //   "semi", "Semi", "semi-furnished", "semi-furnish", "semi furnish" → "Semi furnished".
-    // Urutan penting: cek "unfurnished/kosongan" & "semi" DULU sebelum plain "furnished",
-    // karena keduanya mengandung substring "furnish".
     if (/full\s*furnish|fully\s*furnished|\bfull\b/.test(custText))            return 'Full furnished';
     if (/semi[\s-]*furnish(?:ed)?|\bsemi\b/.test(custText))                    return 'Semi furnished';
     if (/kosongan|unfurnished|tanpa\s+perabot|\bkosong\b/.test(custText))      return 'Kosongan';
-    // Plain "furnished"/"furnish"/"berperabot" tanpa "semi"/"full" = fully furnished
-    // (konvensi: "mau yang furnished" berarti lengkap). Sebelumnya jatuh ke "Disebutkan".
-    if (/\bfurnish(?:ed)?\b|berperabot|sudah\s+ada\s+(?:perabot|furnitur)/.test(custText)) return 'Full furnished';
     return 'Disebutkan';
   }
 
@@ -3797,52 +3796,41 @@ class ConversationQualifier {
     const lower = String(redFlagsRawText || '').toLowerCase();
 
     // ── Preferensi POSITIF dengan lawan (avoid) alami ─────────────────────────
+    // Baris Hindari memakai lawan NEGATIF sebagai label ("Suasana ramai"), BUKAN
+    // menggandakan label Prefer ("Suasana tenang : Hindari tempat bising/ramai" —
+    // format lama yang membingungkan karena label Hindari = hal yang justru
+    // diinginkan). Anotasi reason opsional memakai frasa "Tidak [keinginan]".
     const PAIRS = [
-      { test: /\b(sejuk|adem|dingin|rindang|teduh|asri)\b/,               label: 'Tempat yang sejuk',   avoidReason: 'Hindari tempat yang panas' },
-      { test: /\bakses\s+(jalan\s+)?(lancar|mudah|gampang)\b/,            label: 'Akses jalan lancar',  avoidReason: 'Hindari tempat macet' },
-      { test: /\b(tenang|sepi)\b/,                                       label: 'Suasana tenang',      avoidReason: 'Hindari tempat bising/ramai' },
-      { test: /\baman\b/,                                                label: 'Lingkungan aman',     avoidReason: 'Hindari lingkungan rawan' },
-      { test: /\bjalan\s+(raya\s+)?(lebar|besar|luas)\b/,                 label: 'Jalan lebar',         avoidReason: 'Hindari gang sempit' },
-      { test: /\bstrategis\b/,                                           label: 'Lokasi strategis',    avoidReason: null },
+      { test: /\b(sejuk|adem|dingin|rindang|teduh|asri)\b/,               preferLabel: 'Tempat yang sejuk',   avoidLabel: 'Tempat panas',        avoidReason: 'Tidak sejuk' },
+      { test: /\bakses\s+(jalan\s+)?(lancar|mudah|gampang)\b/,            preferLabel: 'Akses jalan lancar',  avoidLabel: 'Akses jalan lancar',  avoidReason: null },
+      { test: /\b(tenang|sepi)\b/,                                       preferLabel: 'Suasana tenang',      avoidLabel: 'Suasana ramai',       avoidReason: 'Tidak sepi' },
+      { test: /\baman\b/,                                                preferLabel: 'Lingkungan aman',     avoidLabel: 'Lingkungan rawan',    avoidReason: 'Tidak aman' },
+      { test: /\bjalan\s+(raya\s+)?(lebar|besar|luas)\b/,                 preferLabel: 'Jalan lebar',         avoidLabel: 'Gang sempit',         avoidReason: 'Jalan tidak lebar' },
+      { test: /\bstrategis\b/,                                           preferLabel: 'Lokasi strategis',    avoidLabel: null,                   avoidReason: null },
     ];
     PAIRS.forEach(p => {
       if (p.test.test(lower)) {
-        prefer.push({ label: p.label });
-        avoid.push({ label: p.label, reason: p.avoidReason });
+        prefer.push({ label: p.preferLabel });
+        if (p.avoidLabel) avoid.push({ label: p.avoidLabel, reason: p.avoidReason });
       }
     });
-
-    // ── "Mau ramai" = preferensi POSITIF (suka keramaian) → Hindari sepi ────────
-    // Customer yang bilang "mau tempat ramai / suka ramai" TIDAK sedang menghindari
-    // keramaian — sebaliknya, mereka menghindari tempat SEPI. Bedakan dari konteks
-    // avoid ("jangan ramai", "jalan ramai", "terlalu ramai", "bising") supaya
-    // "ramai" tidak salah tafsir jadi red flag (bug: "mau ramai" → "Tidak mau bising/ramai").
-    const avoidRamai = /(?:tidak|gak|ga|nggak|ngga|enggak|engga|jangan|bukan|anti|hindari)\s+(?:mau\s+)?(?:yang\s+|terlalu\s+)?ramai|jalan\s+(?:raya\s+)?(?:yang\s+)?ramai|terlalu\s+ramai|\bbising\b|noisy/.test(lower);
-    const wantsRamai = !avoidRamai && /\bramai\b|\bhidup\b|\bcrowded\b|\blively\b/.test(lower);
-    if (wantsRamai) {
-      prefer.push({ label: 'Tempat yang ramai & hidup' });
-      avoid.push({ label: 'Tidak mau sepi', reason: 'Customer ingin area yang ramai/hidup' });
-    }
 
     // ── Statement yang SUDAH avoid-framed, tanpa lawan Prefer alami ──────────
     const AVOID_ONLY = [
       { test: /\bbanjir\b|flood/,                                        label: 'Tidak mau banjir' },
       { test: /hadap\s+barat|west\s+facing/,                             label: 'Tidak mau hadap barat' },
       { test: /gang\s+sempit|narrow/,                                    label: 'Tidak mau gang sempit' },
+      { test: /\bbising\b|noisy|\bramai\b/,                              label: 'Tidak mau bising/ramai' },
       { test: /\btua\b|old\s+building/,                                  label: 'Tidak mau bangunan tua' },
       { test: /dekat\s+rel\b|rel\s+kereta|train\s+track/,                label: 'Tidak mau dekat rel kereta' },
       { test: /(?:tidak|gak|ga|ngga|enggak|jangan|anti|hindari|bukan)\s+(?:yang\s+)?panas|\bgerah\b|\bpengap\b|too hot|not hot/, label: 'Tidak mau panas' },
-      { test: /(?:tidak|gak|ga|nggak|ngga|enggak|engga|bukan|anti|bebas|hindari)\s+macet|sering\s+macet|macet\s+(?:banget|parah)|kemacetan/, label: 'Tidak mau macet' },
+      { test: /(?:tidak\s+macet|bebas\s+macet|anti\s+macet|hindari\s+macet|sering\s+macet|macet\s+(?:banget|parah)|kemacetan)/, label: 'Tidak mau macet' },
     ];
     AVOID_ONLY.forEach(p => {
       if (p.test.test(lower) && !avoid.some(a => a.label === p.label)) {
         avoid.push({ label: p.label, reason: null });
       }
     });
-    // Bising/ramai sebagai red flag HANYA bila konteksnya avoid (bukan "mau ramai").
-    if (avoidRamai && !avoid.some(a => a.label === 'Tidak mau bising/ramai')) {
-      avoid.push({ label: 'Tidak mau bising/ramai', reason: null });
-    }
 
     // ── Orientasi matahari — avoid + prefer reframe ──────────────────────────
     // Checked across BOTH sources: the customer may state this as a Q5 red-flag
@@ -4532,6 +4520,11 @@ class ChatbotPrivateService {
   static #wrap(reply, meta = {}) {
     return {
       reply,
+      // One WhatsApp message per numbered catalog card (summary/lead-in as the
+      // first part). Falls back to [reply] unsplit when no card is present —
+      // e.g. the "no catalog match" apology, which stays combined with the
+      // summary as a single message.
+      replyParts:   meta.replyParts || splitCatalogReply(reply),
       source:       'private_agent',
       controller:   'chatbotPrivateController',
       fallbackUsed: true,

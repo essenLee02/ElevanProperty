@@ -514,17 +514,24 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
   });
 
   // ── Kirim via Kirimi (device milik agent) ────────────────────────────
+  // replyParts: summary/lead-in as one message, then one message per catalog
+  // property card (RESPOND_CATALOG_RUN=ON). Falls back to a single message
+  // when no cards are present (e.g. the "no catalog match" apology).
   let sent      = false;
   let sendError = null;
+  const replyParts = aiResult.replyParts && aiResult.replyParts.length ? aiResult.replyParts : [aiResult.reply];
 
   try {
-    await sendViaKirimi(sender, aiResult.reply, agent.kirimi_device_id);
+    for (const part of replyParts) {
+      await sendViaKirimi(sender, part, agent.kirimi_device_id);
+    }
     sent = true;
     safeLog('KIRIMI_REPLY_SENT', {
       sessionId  : session.id,
       agent      : agent.name,
       recipient  : sender,
       aiProvider : aiResult.provider,
+      parts      : replyParts.length,
       ctxSource
     });
   } catch (err) {

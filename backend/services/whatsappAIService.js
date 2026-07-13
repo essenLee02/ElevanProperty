@@ -29,6 +29,7 @@ const { buildRecommendationContextForLLM,
         extractPropertyFilters }                    = require('./propertyRecommendationService');
 const { getConversationHistory }                    = require('./sessionService');
 const { loadAIContextBlocks }                       = require('./aiContextService');
+const { splitCatalogReply }                         = require('../utils/replySplitter');
 
 /* ══════════════════════════════════════════════════════════════════════════════
    QUALIFICATION GATE — 4 Minimum Info Required
@@ -390,6 +391,7 @@ async function generateWhatsAppAIReply(params) {
       );
       return {
         reply         : result.reply,
+        replyParts    : splitCatalogReply(result.reply),
         provider      : result.provider,
         contextSource,
       };
@@ -421,6 +423,7 @@ async function generateWhatsAppAIReply(params) {
 
     return {
       reply         : result.reply,
+      replyParts    : result.replyParts || splitCatalogReply(result.reply),
       provider      : 'private_agent',
       contextSource,
     };
@@ -434,7 +437,12 @@ async function generateWhatsAppAIReply(params) {
         const aiResult = await generateWhatsappExternalAIFallback(
           session, history, message, enrichedPropertyCtx, { facilityContext, cityContext }
         );
-        return { reply: aiResult.reply, provider: aiResult.provider, contextSource };
+        return {
+          reply      : aiResult.reply,
+          replyParts : splitCatalogReply(aiResult.reply),
+          provider   : aiResult.provider,
+          contextSource,
+        };
       } catch (extErr) {
         console.error('[WhatsAppAI] External AI fallback also failed:', extErr.message);
       }
@@ -442,8 +450,10 @@ async function generateWhatsAppAIReply(params) {
 
     // ── Last resort ────────────────────────────────────────────────────────────
     const name = session?.name || 'Pelanggan';
+    const lastResortReply = `Halo *${name}*! 👋\n\nTerima kasih telah menghubungi saya. Saya akan segera membalas pesan Anda dengan informasi properti yang sesuai.\n\nMohon tunggu sebentar 🙏`;
     return {
-      reply         : `Halo *${name}*! 👋\n\nTerima kasih telah menghubungi saya. Saya akan segera membalas pesan Anda dengan informasi properti yang sesuai.\n\nMohon tunggu sebentar 🙏`,
+      reply         : lastResortReply,
+      replyParts    : [lastResortReply],
       provider      : 'fallback_generic',
       contextSource : 'none',
     };

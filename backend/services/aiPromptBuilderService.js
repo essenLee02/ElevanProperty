@@ -47,6 +47,21 @@ function normalizeDuration(text = '') {
 }
 
 /**
+ * A conditional/hedge message ("kalau gak ada apartemen, villa juga boleh") names
+ * a fallback type but does NOT confirm the customer switched to it — the primary
+ * search is still the earlier type. Boundary B must not treat the fallback word as
+ * a hard type switch (which would wipe budget/facilities before the primary type is
+ * even confirmed unavailable). Phase 1's existing fallbackTypes logic captures the
+ * hedge word properly; this only suppresses the switch-detection side.
+ */
+function isConditionalFallbackMessage(text = '') {
+  const t = (text || '').toLowerCase();
+  const hasCondition = /\b(kalau|jika|kalo|bila|seandainya)\b[\s\S]{0,60}?\b(tidak|gak|ga|ngga|enggak|kagak|ndak)\b[\s\S]{0,10}?\bada\b/.test(t);
+  const hasHedgeOffer = /\b(juga|masih)\b[\s\S]{0,25}?\b(boleh|bisa|oke|ok|mau)\b|\b(saja|aja)\b/.test(t);
+  return hasCondition && hasHedgeOffer;
+}
+
+/**
  * Extract which Q1–Q12 fields have been answered from conversation history.
  * Runs server-side so the AI gets an authoritative checklist — it does NOT
  * have to guess from raw history text (which fails when history is truncated).
@@ -195,7 +210,11 @@ function extractQualificationState(history = [], currentMessage = '') {
       let runLoc  = null;
       for (let i = 0; i < ALL.length; i++) {
         if (!QS_CUST_ROLES.has(ALL[i].role)) continue;
-        const t   = typeOfP0(ALL[i].message);
+        const isHedge = isConditionalFallbackMessage(ALL[i].message);
+        // A hedge message ("kalau gak ada apartemen, villa juga boleh") names a
+        // fallback type without confirming a switch — don't let its type keyword
+        // flip runType or trigger a Q1 reset. txFlipped/locFlipped can still apply.
+        const t   = isHedge ? null : typeOfP0(ALL[i].message);
         const tx  = txOfP0(ALL[i].message);
         const loc = locOfP0(ALL[i].message);
         const typeFlipped = t   && runType && t   !== runType;
@@ -292,6 +311,17 @@ function extractQualificationState(history = [], currentMessage = '') {
         state.fallbackTypes.push(fb);
       }
     }
+    // Pattern C: hedge offer — "... juga boleh/bisa/mau [type]" (no "saja/aja"), e.g.
+    // "kalau gak ada apartemen, saya juga boleh dibantu booking Villa"
+    if (isConditionalFallbackMessage(raw)) {
+      const hedgeMatch = text.match(/\b(?:juga|masih)\b\s+(?:boleh|bisa|oke|ok|mau)\b([^.!?]{0,40})/);
+      if (hedgeMatch) {
+        const fb = _typeKeyFromWord(hedgeMatch[1]);
+        if (fb && fb !== state.buildingType && !state.fallbackTypes.includes(fb)) {
+          state.fallbackTypes.push(fb);
+        }
+      }
+    }
 
     // Q2 — Location (city). detectLocation() already strips "kisaran [price]" internally
     // ("kisaran" = range/approximately in Indonesian, must never be read as the city
@@ -384,15 +414,23 @@ function extractQualificationState(history = [], currentMessage = '') {
     // when the customer states it inside another answer (e.g. with facilities) and
     // not paired with the Q6 question. Exclude "dekat <kota>" (that's the location).
     // Accumulated across ALL messages (see _anchorParts note above the loop).
+    //
+    // matchAll + newline excluded from the capture: the cookie response timer
+    // debounce-joins consecutive WhatsApp messages with '\n' ("Dekat Suncity mall\n
+    // Dekat stasiun bus"), so a \s-based class swallowed the newline into ONE
+    // anchor phrase and only the first "dekat" was ever matched.
     {
-      const am = raw.match(/\b(?:dekat|deket|near)\s+([a-z][\w\s,.\/&-]{2,60})/i);
-      if (am) {
+      for (const am of raw.matchAll(/\b(?:dekat|deket|near)\s+(?:dengan\s+)?([a-z][\w ,.\/&-]{2,60})/gi)) {
         const after = am[1].trim();
         const cleaned = after.replace(/\s+(ya|dong|kak|aja|saja|nih|lainnya)\b.*$/i, '').trim();
-        if (cleaned && !detectLocation(after)) {
-          const phrase = `dekat ${cleaned}`;
-          if (!_anchorParts.some((p) => p.toLowerCase() === phrase.toLowerCase())) {
-            _anchorParts.push(phrase);
+        if (!cleaned || detectLocation(after)) continue;
+        // Split into individual landmarks ("Manguharjo dan Suncity mall" →
+        // 2 tokens) so token-level duplicates from later messages ("dekat dengan
+        // Suncity mall") are recognized and dropped.
+        for (const token of cleaned.split(/\s*,\s*|\s+dan\s+|\s+&\s+/i)) {
+          const t = token.trim();
+          if (t && !_anchorParts.some((p) => p.toLowerCase() === t.toLowerCase())) {
+            _anchorParts.push(t);
           }
         }
       }
@@ -512,10 +550,17 @@ function extractQualificationState(history = [], currentMessage = '') {
     );
   }
 
-  // Merge accumulated Phase 1 anchor mentions ("dekat stasiun bus" + "deket dengan
-  // cafe" → "dekat stasiun bus, deket dengan cafe"). Phase 2 below may still overwrite
-  // this with a more authoritative, explicitly-asked Q6 answer if one exists.
-  if (_anchorParts.length) state.anchorPoint = _anchorParts.join(', ');
+  // Merge accumulated Phase 1 anchor landmarks into ONE clean phrase:
+  // ["Manguharjo", "Suncity mall", "stasiun bus"] → "dekat Manguharjo, Suncity mall
+  // dan stasiun bus". Tokens are already deduped at capture time, so a repeated
+  // mention ("dekat dengan Suncity mall" after "dekat Manguharjo dan Suncity mall")
+  // never appears twice. Phase 2 below may still overwrite this with a more
+  // authoritative, explicitly-asked Q6 answer if one exists.
+  if (_anchorParts.length) {
+    state.anchorPoint = _anchorParts.length === 1
+      ? `dekat ${_anchorParts[0]}`
+      : `dekat ${_anchorParts.slice(0, -1).join(', ')} dan ${_anchorParts[_anchorParts.length - 1]}`;
+  }
 
   // ── Phase 2: Detect context-dependent Q6/Q7/Q9/Q10 from AI→Customer pairs ─
   // Only meaningful when the AI actually asked the question first.
@@ -647,16 +692,18 @@ function extractQualificationState(history = [], currentMessage = '') {
         /fasilitas|amenity|amenities|facility|kolam|gym|parking|parkir|furnish|perabot|kelengkapan/i.test(aiText + ' ' + custResp)) {
       const custLo = custResp.toLowerCase();
       const wantsStandardExplicit = /\b(standar|standard)\b|fasilitas\s+(?:yang\s+)?(?:standar|biasa|umum)|(?:yang\s+)?biasa\s+(?:aja|saja)/i.test(custLo);
-      const noPreference = /\b(gak ada|tidak ada|apa saja|terserah|bebas|gapapa|ga pa pa|ngga ada|engga ada|standar apa? aja)\b/i.test(custLo);
+      // Flexible/no-preference answers — incl. "tidak apa-apa dengan semua fasilitas".
+      // Treated same as explicit: marker keeps LATER specifics too (customer often
+      // defers first, then adds "one gate system dan smart door" a few turns later —
+      // the summary must show standar + specifics merged, not specifics only).
+      const noPreference = /\b(gak ada|tidak ada|apa saja|terserah|bebas|gapapa|ga pa pa|ngga ada|engga ada|standar apa? aja)\b|(?:tidak|gak|ga|ngga|enggak)\s+apa[\s-]?apa|semua\s+fasilitas\s+(?:boleh|oke|ok|tidak\s+apa|gak\s+apa)?/i.test(custLo);
       const prev = Array.isArray(state.facilities) ? state.facilities : [];
       const hasStdMarker = prev.some(f => String(f).toLowerCase() === 'standar');
 
-      if (wantsStandardExplicit && !hasStdMarker) {
+      if ((wantsStandardExplicit || noPreference) && !hasStdMarker) {
         // Sisipkan marker 'standar' di DEPAN agar summary tetap tahu ada permintaan
         // fasilitas standar, sambil mempertahankan item spesifik yang sudah tertangkap.
         state.facilities = ['standar', ...prev];
-      } else if (noPreference && prev.length === 0) {
-        state.facilities = ['standar'];
       }
       // Item spesifik lain sudah ditangkap Phase 1 detectFacilities di atas.
     }
@@ -739,8 +786,14 @@ function extractQualificationState(history = [], currentMessage = '') {
 
       // Re-populate ONLY what the current message explicitly states — all 12 types.
       // Strip commercial use-phrases ("dipakai kantor") so they don't set a wrong type.
+      // Skip entirely if the opener is a hedge ("kalau gak ada X, Y juga boleh") — an
+      // ambiguous first message shouldn't commit to whichever type the priority chain
+      // happens to match first.
       const cur = stripCommercialUsePhrases((currentMessage || '').toLowerCase().trim());
-      if      (/\bkondotel\b|\bcondotel\b/.test(cur))                          state.buildingType = 'kondotel';
+      if (isConditionalFallbackMessage(currentMessage)) {
+        // leave buildingType/transactionType null — nothing confirmed yet
+      }
+      else if (/\bkondotel\b|\bcondotel\b/.test(cur))                          state.buildingType = 'kondotel';
       else if (/\bmansion\b|\brumah\s+mewah\b/.test(cur))                    state.buildingType = 'mansion';
       else if (/\bvill?a\b/.test(cur))                                         state.buildingType = 'villa';
       else if (/\bapartemen\b|\bapartment\b/.test(cur))                        state.buildingType = 'apartment';
@@ -803,8 +856,17 @@ function extractQualificationState(history = [], currentMessage = '') {
     // Strip commercial use-phrases so "dipakai kantor"/"buat usaha" doesn't read as
     // a type switch (house→office) and reset the search.
     const cur = stripCommercialUsePhrases((currentMessage || '').toLowerCase().trim());
+    // A hedge message ("kalau gak ada apartemen, villa juga boleh") names a fallback
+    // type without confirming a switch — must not compute a curType from it, or this
+    // block force-flips buildingType/wipes budget before the primary type is even
+    // confirmed unavailable. Phase 1's Pattern C already records the hedge type into
+    // fallbackTypes instead.
+    const curIsHedge = isConditionalFallbackMessage(currentMessage);
     let curType = null;
-    if      (/\bkondotel\b|\bcondotel\b/.test(cur))                          curType = 'kondotel';
+    if (curIsHedge) {
+      // leave curType null — no forced switch from a hedge message
+    }
+    else if (/\bkondotel\b|\bcondotel\b/.test(cur))                          curType = 'kondotel';
     else if (/\bmansion\b|\brumah\s+mewah\b/.test(cur))                    curType = 'mansion';
     else if (/\bvill?a\b/.test(cur))                                         curType = 'villa';
     else if (/\bapartemen\b|\bapartment\b/.test(cur))                        curType = 'apartment';
@@ -1781,4 +1843,5 @@ module.exports = {
   extractQualificationState,
   buildQualificationStateBlock,
   findNextQuestion,
+  isConditionalFallbackMessage,
 };
