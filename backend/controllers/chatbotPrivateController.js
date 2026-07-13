@@ -3370,8 +3370,13 @@ class ConversationQualifier {
         const wantsStandard = Array.isArray(qualState.facilities)
           && qualState.facilities.some(f => String(f).toLowerCase() === 'standar');
 
+        // Fasilitas STANDAR per tipe SELALU dilampirkan (melengkapi yang spesifik),
+        // sesuai skill: customer sebut "gym, AC, smart door" → tetap tampilkan juga
+        // fasilitas standar apartemen (Kamar Tidur, Kamar Mandi, Dapur, Lift, dll.)
+        // supaya agent & katalog punya gambaran lengkap. Sebelumnya standar hanya
+        // muncul saat customer bilang "standar" — kini selalu digabung.
         let stdItems = [];
-        if (wantsStandard) {
+        {
           // Furnishing hint: qualState (Phase 1) sering null saat customer bilang
           // "semi aja" tanpa kata "furnish". Fallback ke #extractFurnishing(custText)
           // yang mengenali "semi"/"full"/"kosongan" agar tier standar sesuai.
@@ -3543,9 +3548,14 @@ class ConversationQualifier {
   static #extractFurnishing(custText) {
     // Semua varian jawaban customer untuk "semi" dianggap sama:
     //   "semi", "Semi", "semi-furnished", "semi-furnish", "semi furnish" → "Semi furnished".
+    // Urutan penting: cek "unfurnished/kosongan" & "semi" DULU sebelum plain "furnished",
+    // karena keduanya mengandung substring "furnish".
     if (/full\s*furnish|fully\s*furnished|\bfull\b/.test(custText))            return 'Full furnished';
     if (/semi[\s-]*furnish(?:ed)?|\bsemi\b/.test(custText))                    return 'Semi furnished';
     if (/kosongan|unfurnished|tanpa\s+perabot|\bkosong\b/.test(custText))      return 'Kosongan';
+    // Plain "furnished"/"furnish"/"berperabot" tanpa "semi"/"full" = fully furnished
+    // (konvensi: "mau yang furnished" berarti lengkap). Sebelumnya jatuh ke "Disebutkan".
+    if (/\bfurnish(?:ed)?\b|berperabot|sudah\s+ada\s+(?:perabot|furnitur)/.test(custText)) return 'Full furnished';
     return 'Disebutkan';
   }
 
@@ -3802,22 +3812,37 @@ class ConversationQualifier {
       }
     });
 
+    // ── "Mau ramai" = preferensi POSITIF (suka keramaian) → Hindari sepi ────────
+    // Customer yang bilang "mau tempat ramai / suka ramai" TIDAK sedang menghindari
+    // keramaian — sebaliknya, mereka menghindari tempat SEPI. Bedakan dari konteks
+    // avoid ("jangan ramai", "jalan ramai", "terlalu ramai", "bising") supaya
+    // "ramai" tidak salah tafsir jadi red flag (bug: "mau ramai" → "Tidak mau bising/ramai").
+    const avoidRamai = /(?:tidak|gak|ga|nggak|ngga|enggak|engga|jangan|bukan|anti|hindari)\s+(?:mau\s+)?(?:yang\s+|terlalu\s+)?ramai|jalan\s+(?:raya\s+)?(?:yang\s+)?ramai|terlalu\s+ramai|\bbising\b|noisy/.test(lower);
+    const wantsRamai = !avoidRamai && /\bramai\b|\bhidup\b|\bcrowded\b|\blively\b/.test(lower);
+    if (wantsRamai) {
+      prefer.push({ label: 'Tempat yang ramai & hidup' });
+      avoid.push({ label: 'Tidak mau sepi', reason: 'Customer ingin area yang ramai/hidup' });
+    }
+
     // ── Statement yang SUDAH avoid-framed, tanpa lawan Prefer alami ──────────
     const AVOID_ONLY = [
       { test: /\bbanjir\b|flood/,                                        label: 'Tidak mau banjir' },
       { test: /hadap\s+barat|west\s+facing/,                             label: 'Tidak mau hadap barat' },
       { test: /gang\s+sempit|narrow/,                                    label: 'Tidak mau gang sempit' },
-      { test: /\bbising\b|noisy|\bramai\b/,                              label: 'Tidak mau bising/ramai' },
       { test: /\btua\b|old\s+building/,                                  label: 'Tidak mau bangunan tua' },
       { test: /dekat\s+rel\b|rel\s+kereta|train\s+track/,                label: 'Tidak mau dekat rel kereta' },
       { test: /(?:tidak|gak|ga|ngga|enggak|jangan|anti|hindari|bukan)\s+(?:yang\s+)?panas|\bgerah\b|\bpengap\b|too hot|not hot/, label: 'Tidak mau panas' },
-      { test: /(?:tidak\s+macet|bebas\s+macet|anti\s+macet|hindari\s+macet|sering\s+macet|macet\s+(?:banget|parah)|kemacetan)/, label: 'Tidak mau macet' },
+      { test: /(?:tidak|gak|ga|nggak|ngga|enggak|engga|bukan|anti|bebas|hindari)\s+macet|sering\s+macet|macet\s+(?:banget|parah)|kemacetan/, label: 'Tidak mau macet' },
     ];
     AVOID_ONLY.forEach(p => {
       if (p.test.test(lower) && !avoid.some(a => a.label === p.label)) {
         avoid.push({ label: p.label, reason: null });
       }
     });
+    // Bising/ramai sebagai red flag HANYA bila konteksnya avoid (bukan "mau ramai").
+    if (avoidRamai && !avoid.some(a => a.label === 'Tidak mau bising/ramai')) {
+      avoid.push({ label: 'Tidak mau bising/ramai', reason: null });
+    }
 
     // ── Orientasi matahari — avoid + prefer reframe ──────────────────────────
     // Checked across BOTH sources: the customer may state this as a Q5 red-flag

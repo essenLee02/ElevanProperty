@@ -1421,11 +1421,37 @@ function budgetMatches(property = {}, budget = null) {
 }
 
 /**
+ * Skor kecocokan fasilitas — setara SQL `fasilitas LIKE '%A%' OR fasilitas LIKE '%B%' …`.
+ * Menghitung berapa banyak fasilitas yang diminta customer muncul (substring, case-
+ * insensitive) di string fasilitas properti. Dipakai untuk MEM-PRIORITASKAN properti
+ * yang paling cocok — BUKAN filter keras (properti tanpa fasilitas terdaftar tetap
+ * muncul, hanya turun peringkat), supaya customer selalu dapat alternatif terbaik.
+ *
+ * @param {object} property
+ * @param {string[]} requestedFacilities - mis. ['Gym', 'AC', 'Smart door', 'dinner']
+ * @returns {number} jumlah fasilitas diminta yang cocok (0..N)
+ */
+function facilityMatchScore(property = {}, requestedFacilities = []) {
+  if (!Array.isArray(requestedFacilities) || requestedFacilities.length === 0) return 0;
+  const haystack = String(property.facilities || '').toLowerCase();
+  if (!haystack) return 0;
+  let score = 0;
+  for (const f of requestedFacilities) {
+    const needle = String(f || '').trim().toLowerCase();
+    if (needle && haystack.includes(needle)) score += 1; // LIKE '%needle%'
+  }
+  return score;
+}
+
+/**
  * @param {object} filters - filters.landmark (opsional) memfilter/mem-prioritaskan
  *   properti yang ter-tag ke landmark tsb via tabel `property_locations`. Bila
  *   filter landmark menghasilkan NOL properti (data tagging landmark yang sparse
  *   untuk kota/tipe tsb), kita FALLBACK ke hasil TANPA landmark constraint —
  *   customer tetap dapat listing kota-wide, bukan kosong sama sekali.
+ *   filters.facilities (opsional) mem-PRIORITASKAN (bukan memfilter) properti yang
+ *   punya fasilitas diminta customer — properti dengan lebih banyak fasilitas cocok
+ *   naik ke atas (lihat facilityMatchScore).
  */
 async function searchProperties(filters = {}) {
   const source = await getSourceProperties();
@@ -1433,14 +1459,27 @@ async function searchProperties(filters = {}) {
   if (filters.landmark) {
     landmarkPropertyIds = await getPropertyIdsForLandmark(filters.landmark);
   }
-  const results = filterProperties(source, { ...filters, landmarkPropertyIds });
+  let results = filterProperties(source, { ...filters, landmarkPropertyIds });
   if (filters.landmark && results.length === 0) {
     // Tidak ada properti ter-tag ke landmark ini (atau landmark tak dikenal) —
     // fallback ke filter kota/tipe/tx/budget saja, tetap konsisten dengan
     // desain "nearest landmark" sebagai BOOST, bukan constraint keras.
-    return filterProperties(source, { ...filters, landmarkPropertyIds: null });
+    results = filterProperties(source, { ...filters, landmarkPropertyIds: null });
   }
-  return results;
+  return rankByFacilityMatch(results, filters.facilities);
+}
+
+/**
+ * Stable-sort daftar properti agar yang paling cocok fasilitasnya di atas.
+ * Properti dengan skor fasilitas sama mempertahankan urutan awal (harga termurah dulu).
+ */
+function rankByFacilityMatch(properties = [], requestedFacilities = []) {
+  if (!Array.isArray(properties) || properties.length === 0) return properties;
+  if (!Array.isArray(requestedFacilities) || requestedFacilities.length === 0) return properties;
+  return properties
+    .map((p, idx) => ({ p, idx, score: facilityMatchScore(p, requestedFacilities) }))
+    .sort((a, b) => (b.score - a.score) || (a.idx - b.idx)) // skor desc, lalu urutan asal (stable)
+    .map(x => x.p);
 }
 
 function filterProperties(properties, filters = {}) {
