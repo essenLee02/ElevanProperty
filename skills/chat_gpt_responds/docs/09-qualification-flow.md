@@ -539,7 +539,14 @@ a quiet atmosphere). The label states what to avoid; the optional `: reason` res
 | tenang / sepi | *Suasana ramai* : Tidak sepi | Suasana tenang |
 | aman | *Lingkungan rawan* : Tidak aman | Lingkungan aman |
 | jalan lebar | *Gang sempit* : Jalan tidak lebar | Jalan lebar |
+| perairan / air lancar / bersih | *Perairan bermasalah* : Air tidak lancar | Perairan lancar |
 | strategis | *(no Hindari entry)* | Lokasi strategis |
+
+**Preferences volunteered OUTSIDE the Q5 question still count.** Customers often state
+wishes early, e.g. inside a Q2b answer: "Saya cari yang sepi / perairan lancar / akses
+jalan lancar / tempat yang rindang". ALL of them must appear in the Hindari/Prefer
+pairs above — do not drop them just because the dedicated red-flags question was
+answered with something else (e.g. landmarks) later.
 
 Statements that are ALREADY avoidance-framed (banjir, hadap barat, gang sempit, bising, rumah
 tua, dekat rel kereta) go straight into `Hindari` as-is — they have no natural "Prefer"
@@ -689,7 +696,12 @@ Never ask "siapa yang memutuskan" directly.
 
 **Q9 Summary labels — Keputusan bersama:**
 
-| Customer answer | Summary shows |
+⚠️ These labels apply ONLY to answers given TO the Q9 question. Kin phrases inside a
+**Q4 household answer** ("Saya **bersama keluarga** saja" ← answer to "tinggal bersama
+siapa?") are NOT decision-maker signals — they go to `✓ Penghuni:`, and `Keputusan
+bersama` stays unanswered/omitted. Never fabricate a Keputusan line from Q4 wording.
+
+| Customer answer (to Q9) | Summary shows |
 |---|---|
 | `"sendiri"`, `"solo"`, `"seorang diri"` | `✓ Keputusan bersama: *Sendirian*` |
 | `"langsung bisa"`, `"bisa langsung"` | `✓ Keputusan bersama: *Solo (bisa langsung jadwalkan)*` |
@@ -741,6 +753,12 @@ EN: How long are you planning to rent? ⏱️ (a duration, not a date — e.g. 6
 Only include `✓ Durasi:` in the summary brief if the customer explicitly stated a specific duration. Valid for **ALL units** — `10 hari`, `2 minggu`, `6 bulan`, `1 tahun`, `2 tahun` — not just years. A short-stay weekly/daily rental ("butuh sewa 2 minggu") must show `✓ Durasi: *2 minggu*`.
 
 **FORBIDDEN:** Writing `✓ Durasi sewa: *Disebutkan*` or any vague placeholder when no specific duration was given. If Q10 was not answered with a specific value, omit the line entirely.
+
+**⚠️ "N minggu/hari/bulan LAGI" is a DATE OFFSET, never a duration.** "Kita rencana
+checkin **3 minggu lagi**" answers Q8 (check-in = today+3 weeks), NOT Q10 — the stay
+duration is still unknown and must be asked separately. Same for "N hari kedepan/besok/
+mendatang". Only a bare "N unit" without those suffixes ("menginap 3 minggu", "sewa 2
+hari saja") is a duration.
 
 **Short duration answers are always property continuation:**
 A message like `"1 tahun"` or `"6 bulan"` as the entire customer message is **always** treated as a property continuation (answer to Q10), even if it appears shortly after the Q10 question was asked. The server-side keyword filter has an early fast-path rule that passes these through before checking conversation history — this prevents race conditions where the AI's question isn't yet persisted to the database.

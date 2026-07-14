@@ -1410,17 +1410,32 @@ function parsePropertyPrice(property = {}) {
   return { value, period, annualValue };
 }
 
+// Konversi periode sewa → hari, untuk menyamakan satuan sebelum membandingkan
+// harga. year=360 & month=30 dipilih supaya rasio year/month tepat 12 (konsisten
+// dengan konversi tahunan↔bulanan yang lama).
+const _PERIOD_DAYS = { night: 1, week: 7, month: 30, year: 360 };
+
 function budgetMatches(property = {}, budget = null) {
   if (!budget || (!budget.min && !budget.max)) return true;
   const parsed = parsePropertyPrice(property);
   if (!parsed.value) return true;
 
+  // Normalisasi LINTAS PERIODE: budget "5-7 juta/minggu" vs listing "8.3 juta/malam"
+  // dulu dibandingkan angka mentah (8.3 vs 7 → beda tipis) padahal per-minggu
+  // listing itu ≈58 juta. Konversi harga listing ke periode budget dulu, baru
+  // bandingkan. Bila salah satu tanpa periode (harga jual absolut) → bandingkan
+  // mentah seperti semula.
   let comparable = parsed.value;
-  if (budget.period === 'year') comparable = parsed.annualValue;
-  if (budget.period === 'month' && parsed.period === 'year') comparable = Math.round(parsed.value / 12);
-  if (budget.period === 'month' && parsed.period === 'month') comparable = parsed.value;
-  if (budget.period === 'week'  && parsed.period === 'week')  comparable = parsed.value;
-  if (budget.period === 'night' && parsed.period === 'night') comparable = parsed.value;
+  const bDays = _PERIOD_DAYS[budget.period] || null;
+  const pDays = _PERIOD_DAYS[parsed.period] || null;
+  if (bDays && pDays && bDays !== pDays) {
+    comparable = parsed.value * (bDays / pDays);
+  } else if (bDays && !pDays) {
+    // Budget per-periode tapi harga listing absolut/tanpa periode — tidak sebanding.
+    // Perilaku lama untuk budget tahunan adalah menolak (annualValue null); kini
+    // konsisten untuk semua periode: tolak agar listing salah-satuan tidak lolos.
+    return false;
+  }
 
   if (!comparable) return false;
   if (budget.min && comparable < budget.min) return false;

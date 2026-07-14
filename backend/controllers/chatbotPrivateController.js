@@ -1136,6 +1136,11 @@ class ResponseBuilderWhatsApp {
                                     : (isId ? 'Durasi sewa'    : 'Lease duration');
     const durL = fmt(durLabel, brief.leaseDuration);
     if (durL) lines.push(durL);
+    // Penghuni (Q4) — sebelumnya TIDAK ada di template ini sama sekali, sehingga
+    // jawaban "bersama keluarga" hanya bisa bocor lewat jalur salah (Q9 decision
+    // maker). Baris ini yang benar untuk komposisi penghuni.
+    const hhL = fmt(isId ? 'Penghuni' : 'Occupants', brief.household);
+    if (hhL) lines.push(hhL);
     const dmL  = fmt(isId ? 'Keputusan bersama' : 'Decision maker', brief.decisionMaker);
     if (dmL) lines.push(dmL);
     const furL = fmt(isId ? 'Furnitur' : 'Furnishing', brief.furnishing);
@@ -1792,13 +1797,18 @@ class ConversationQualifier {
       ]),
 
       /* ── Q9: Decision maker / viewing logistics ── */
+      // Frasa kekerabatan POLOS ('sama keluarga', 'sama istri', dst.) sengaja
+      // TIDAK ada di daftar: itu kosakata jawaban Q4 penghuni ("Saya bersama
+      // keluarga saja" match substring 'sama keluarga') dan dulu memicu false
+      // hasDecisionMaker → Q9 di-skip + summary menampilkan "Keputusan bersama"
+      // fiktif. Kin words hanya dihitung lewat frasa berkata-kerja keputusan.
       hasDecisionMaker: this.#has(custText, [
         'langsung bisa', 'bisa langsung', 'perlu koordinasi', 'perlu diskusi',
-        'sama suami', 'sama istri', 'sama pasangan', 'sama keluarga', 'sendiri saja',
-        'sama teman', 'bersama teman', 'teman-teman', 'koordinasikan', 'koordinasiin',
+        'koordinasikan', 'koordinasiin', 'koordinasi sama', 'koordinasi dengan',
         'solo decision', 'joint decision', 'discuss with', 'check with',
         'suami dulu', 'istri dulu', 'koordinasi dulu', 'minta persetujuan',
-        'izin dulu', 'keputusan bersama', 'decide together',
+        'izin dulu', 'keputusan bersama', 'decide together', 'putuskan sendiri',
+        'keputusan sendiri',
       ]),
       aiAskedDecisionMaker: this.#has(aiText, [
         'jadwalkan viewing', 'bisa jadwalkan', 'koordinasi dulu', 'keluarga lain',
@@ -3309,7 +3319,14 @@ class ConversationQualifier {
       // bukan larangan) dengan interpretasi Hindari↔Prefer yang benar. Lihat
       // #buildAvoidPreferPairs untuk detail logika pemasangan.
       ...(() => {
-        const redFlagsSource   = qualState.redFlags || (profile.hasRedFlags ? custText : '');
+        // Gabungkan jawaban Q5 eksplisit DENGAN seluruh teks customer sesi aktif:
+        // preferensi sering di-volunteer di luar pertanyaan Q5 (mis. "Saya cari yang
+        // sepi / akses jalan lancar / tempat yang rindang" sebagai lanjutan jawaban
+        // Q2b) — dulu hilang total dari summary karena sumber pairs hanya
+        // qualState.redFlags (yang bisa berisi jawaban lain, mis. landmark).
+        // #buildAvoidPreferPairs berbasis regex kata-kunci sehingga aman menerima
+        // teks yang lebih luas.
+        const redFlagsSource   = [qualState.redFlags || '', custText].filter(Boolean).join(' ');
         const apartmentPrefRaw = qualState.apartmentPref || '';
         const { avoid, prefer } = ConversationQualifier.#buildAvoidPreferPairs(redFlagsSource, apartmentPrefRaw);
         return {
@@ -3508,14 +3525,18 @@ class ConversationQualifier {
   }
 
   static #extractDecisionMaker(custText, profile) {
-    if (/sendiri|alone|solo/.test(custText))              return 'Sendirian';
-    if (/sama suami|bersama suami|with husband/.test(custText)) return 'Bersama suami';
-    if (/sama istri|bersama istri|with wife/.test(custText))    return 'Bersama istri';
-    if (/sama pasangan|with partner/.test(custText))      return 'Bersama pasangan';
-    if (/sama keluarga|with family/.test(custText))       return 'Bersama keluarga';
-    if (/sama teman(-teman)?|bersama teman|teman-teman|with friends?/.test(custText)) return 'Teman';
+    // Urutan: sinyal keputusan SPESIFIK dulu. Frasa kekerabatan polos ("bersama
+    // keluarga", "sama istri") TIDAK boleh match sendirian — itu kosakata jawaban
+    // Q4 (penghuni: "tinggal bersama siapa?"), bukan jawaban Q9 (siapa yang
+    // memutuskan). Substring /sama keluarga/ dulu match di dalam "berSAMA KELUARGA"
+    // → summary salah menampilkan "Keputusan bersama: Bersama keluarga" padahal Q9
+    // tidak pernah ditanya. Kin words kini hanya dihitung saat menempel pada kata
+    // kerja keputusan (koordinasi/diskusi/tanya/izin/persetujuan/putuskan).
     if (/langsung bisa|bisa langsung/.test(custText))     return 'Solo (bisa langsung jadwalkan)';
     if (/koordinasikan?|koordinasi dulu|perlu diskusi/.test(custText)) return 'Perlu koordinasi (joint decision)';
+    const kin = custText.match(/\b(?:koordinasi(?:kan|in)?|diskusi(?:kan)?|tanya|izin|persetujuan|putus(?:kan)?|keputusan)\b[^.!?\n]{0,40}?\b(suami|istri|pasangan|keluarga|orang\s*tua|teman)\b/i);
+    if (kin) return `Koordinasi dengan ${kin[1].toLowerCase()}`;
+    if (/\b(?:putus(?:kan)?|keputusan|decide)\b[^.!?\n]{0,20}\bsendiri\b|\bsendiri\b[^.!?\n]{0,20}\byang\s+(?:putus|memutuskan)\b/i.test(custText)) return 'Sendirian';
     // NOTE: previously had `if (profile.hasHouseholdInfo) return 'Disebutkan di Q4';`
     // here — REMOVED. Household composition (Q4: "siapa saja yang tinggal") has no
     // bearing on WHO decides (Q9) — that fallback fabricated a decision-maker value
@@ -3562,7 +3583,11 @@ class ConversationQualifier {
     // Tangkap durasi sewa untuk SEMUA satuan: hari/malam/minggu/bulan/tahun (+ Inggris).
     // Sebelumnya hanya 'tahun' yang ditangkap → "2 minggu", "10 hari", "6 bulan" hilang
     // dari summary. Cari angka+satuan eksplisit (mis. "butuh sewa 2 minggu").
-    const m = custText.match(/(\d+)\s*(hari|malam|minggu|bulan|tahun|day|night|week|month|year)s?\b/i);
+    //
+    // Lookahead negatif: "N unit lagi/kedepan/besok/mendatang/dari sekarang" adalah
+    // OFFSET TANGGAL ("checkin 3 minggu lagi" = tanggal check-in +3 minggu), BUKAN
+    // durasi menginap — jangan tangkap sebagai durasi.
+    const m = custText.match(/(\d+)\s*(hari|malam|minggu|bulan|tahun|day|night|week|month|year)s?\b(?!\s*(?:lagi|kedepan|ke\s+depan|mendatang|besok|dari\s+sekarang))/i);
     if (m) {
       const unitMap = {
         hari: 'hari', day: 'hari', malam: 'malam', night: 'malam',
@@ -3806,6 +3831,7 @@ class ConversationQualifier {
       { test: /\b(tenang|sepi)\b/,                                       preferLabel: 'Suasana tenang',      avoidLabel: 'Suasana ramai',       avoidReason: 'Tidak sepi' },
       { test: /\baman\b/,                                                preferLabel: 'Lingkungan aman',     avoidLabel: 'Lingkungan rawan',    avoidReason: 'Tidak aman' },
       { test: /\bjalan\s+(raya\s+)?(lebar|besar|luas)\b/,                 preferLabel: 'Jalan lebar',         avoidLabel: 'Gang sempit',         avoidReason: 'Jalan tidak lebar' },
+      { test: /\b(?:per)?air(?:an)?\s+(lancar|bersih|bagus|jernih)\b/,   preferLabel: 'Perairan lancar',     avoidLabel: 'Perairan bermasalah', avoidReason: 'Air tidak lancar' },
       { test: /\bstrategis\b/,                                           preferLabel: 'Lokasi strategis',    avoidLabel: null,                   avoidReason: null },
     ];
     PAIRS.forEach(p => {
