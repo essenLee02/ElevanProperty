@@ -25,6 +25,9 @@ const { buildRecommendationContextForLLM,
         detectUseCase,
         isNonResidentialUse,
         useCaseLabel,
+        getBudgetTiers: svcGetBudgetTiers,
+        detectBuildingType,
+        detectBudget,
         searchProperties }                    = require('../services/propertyRecommendationService');
 const { getRumah123Listings,
         mapBuildingTypeToApify,
@@ -2272,112 +2275,11 @@ class ConversationQualifier {
    * @returns {{terjangkau:number[], menengah:number[], eksklusif:number[], period:string}|null}
    */
   static getBudgetTiers(buildingType = '', transactionType = '', periodHint = '') {
-    const type = (buildingType || '').toLowerCase();
-    const tx   = (transactionType || '').toLowerCase();
-    const txKey = (tx === 'rent') ? 'rent' : (tx === 'sale' || tx === 'purchase') ? 'sale' : null;
-    if (!txKey) return null;
-
-    const M = 1e6, B = 1e9, K = 1e3;
-    // Tabel referensi HARGA WAJAR Indonesia 2025–2026, dipisah per transaksi:
-    //   Beli   → 'sale'  (period '')
-    //   Kontrak tahunan → House, Ruko, Gudang   (period 'year')
-    //   Sewa bulanan    → Apartment, Condo, Office, Store, Mansion (period 'month')
-    //   Sewa kamar      → Kost (period 'month') + kontrak bangunan (period 'year')
-    //   Booking         → Hotel (per malam) & Villa (per malam) + opsi long-stay
-    // period: 'month'=/bln, 'night'=/malam, 'year'=/thn, ''=harga jual.
-    // Tier eksklusif bersifat open-ended (ditampilkan "+").
-    const TIERS = {
-      house: {
-        // Sewa rumah = KONTRAK TAHUNAN
-        rent: { terjangkau: [20*M, 60*M],   menengah: [60*M, 180*M],  eksklusif: [180*M, 600*M], period: 'year' },
-        sale: { terjangkau: [350*M, 900*M], menengah: [900*M, 3*B],   eksklusif: [3*B, 15*B],    period: '' },
-      },
-      apartment: {
-        rent: { terjangkau: [2*M, 5*M],     menengah: [5*M, 15*M],    eksklusif: [15*M, 50*M],   period: 'month' },
-        sale: { terjangkau: [350*M, 800*M], menengah: [800*M, 2.5*B], eksklusif: [2.5*B, 10*B],  period: '' },
-      },
-      condo: {
-        rent: { terjangkau: [4*M, 10*M],    menengah: [10*M, 30*M],   eksklusif: [30*M, 100*M],  period: 'month' },
-        sale: { terjangkau: [700*M, 1.5*B], menengah: [1.5*B, 5*B],   eksklusif: [5*B, 20*B],    period: '' },
-      },
-      hotel: {
-        // Booking kamar PER MALAM (default). Long-stay = sewa/kontrak hotel penuh per TAHUN.
-        rent: { byPeriod: {
-          night: { terjangkau: [200*K, 800*K], menengah: [800*K, 2*M],  eksklusif: [2*M, 10*M],  period: 'night' },
-          year:  { terjangkau: [100*M, 500*M], menengah: [500*M, 3*B],  eksklusif: [3*B, 50*B],  period: 'year' },
-        } },
-        sale: { terjangkau: [5*B, 20*B],    menengah: [20*B, 100*B],  eksklusif: [100*B, 500*B], period: '' },
-      },
-      villa: {
-        // Booking HARIAN (default, vacation) + sewa BULANAN (long-stay).
-        rent: { byPeriod: {
-          night: { terjangkau: [1*M, 3*M],   menengah: [3*M, 8*M],     eksklusif: [8*M, 30*M],   period: 'night' },
-          month: { terjangkau: [10*M, 30*M], menengah: [30*M, 100*M],  eksklusif: [100*M, 500*M], period: 'month' },
-        } },
-        sale: { terjangkau: [800*M, 3*B],   menengah: [3*B, 10*B],    eksklusif: [10*B, 100*B],  period: '' },
-      },
-      boarding_house: {
-        // Sewa KAMAR per bulan (default) + KONTRAK bangunan penuh per tahun.
-        rent: { byPeriod: {
-          month: { terjangkau: [600*K, 1.8*M], menengah: [1.8*M, 3.5*M], eksklusif: [3.5*M, 10*M], period: 'month' },
-          year:  { terjangkau: [30*M, 80*M],   menengah: [80*M, 300*M],  eksklusif: [300*M, 2*B],  period: 'year' },
-        } },
-        sale: { terjangkau: [500*M, 2*B],   menengah: [2*B, 8*B],     eksklusif: [8*B, 50*B],    period: '' },
-      },
-      shophouse: {
-        // Sewa ruko = KONTRAK TAHUNAN
-        rent: { terjangkau: [30*M, 100*M],  menengah: [100*M, 300*M], eksklusif: [300*M, 1.5*B], period: 'year' },
-        sale: { terjangkau: [1*B, 2.5*B],   menengah: [2.5*B, 7*B],   eksklusif: [7*B, 25*B],    period: '' },
-      },
-      office: {
-        rent: { terjangkau: [4*M, 15*M],    menengah: [15*M, 60*M],   eksklusif: [60*M, 500*M],  period: 'month' },
-        sale: { terjangkau: [1*B, 5*B],     menengah: [5*B, 20*B],    eksklusif: [20*B, 200*B],  period: '' },
-      },
-      warehouse: {
-        // Sewa gudang = KONTRAK TAHUNAN
-        rent: { terjangkau: [30*M, 100*M],  menengah: [100*M, 500*M], eksklusif: [500*M, 5*B],   period: 'year' },
-        sale: { terjangkau: [1*B, 4*B],     menengah: [4*B, 15*B],    eksklusif: [15*B, 100*B],  period: '' },
-      },
-      store: {
-        rent: { terjangkau: [1*M, 8*M],     menengah: [8*M, 30*M],    eksklusif: [30*M, 200*M],  period: 'month' },
-        sale: { terjangkau: [500*M, 2*B],   menengah: [2*B, 6*B],     eksklusif: [6*B, 25*B],    period: '' },
-      },
-      mansion: {
-        rent: { terjangkau: [30*M, 100*M],  menengah: [100*M, 300*M], eksklusif: [300*M, 2*B],   period: 'month' },
-        sale: { terjangkau: [5*B, 20*B],    menengah: [20*B, 100*B],  eksklusif: [100*B, 500*B], period: '' },
-      },
-      land: {
-        rent: { terjangkau: [50*M, 150*M],  menengah: [150*M, 500*M], eksklusif: [500*M, 2*B],   period: 'year' },
-        sale: { terjangkau: [300*M, 1*B],   menengah: [1*B, 4*B],     eksklusif: [4*B, 20*B],    period: '' },
-      },
-      kondotel: {
-        rent: { terjangkau: [500*K, 1.5*M], menengah: [1.5*M, 3*M],   eksklusif: [3*M, 8*M],     period: 'night' },
-        sale: { terjangkau: [500*M, 900*M], menengah: [900*M, 1.5*B], eksklusif: [1.5*B, 4*B],   period: '' },
-      },
-      others: {
-        rent: { terjangkau: [5*M, 20*M],    menengah: [20*M, 60*M],   eksklusif: [60*M, 200*M],  period: 'month' },
-        sale: { terjangkau: [500*M, 2*B],   menengah: [2*B, 7*B],     eksklusif: [7*B, 25*B],    period: '' },
-      },
-    };
-
-    const row = TIERS[type] || TIERS.others;
-    let entry = row[txKey] || TIERS.others[txKey] || null;
-    if (!entry) return null;
-
-    // Mode periode ganda. byPeriod bisa punya kombinasi { night, month, year }:
-    //   hotel   : night (booking, default) + year  (sewa hotel penuh)
-    //   villa   : night (booking, default) + month (sewa bulanan)
-    //   kost    : month (sewa kamar, default) + year (kontrak bangunan)
-    // Pilih long-stay HANYA jika customer eksplisit menyebut bulan/tahun/kontrak;
-    // "seminggu"/booking singkat tetap pakai night. Default = night bila ada, else month, else year.
-    if (entry.byPeriod) {
-      const bp = entry.byPeriod;
-      const hint = String(periodHint || '');
-      if (/year|tahun|thn|kontrak|tahunan/i.test(hint) && bp.year)        entry = bp.year;
-      else if (/month|bulan|bulanan/i.test(hint) && bp.month)             entry = bp.month;
-      else                                                                entry = bp.night || bp.month || bp.year;
-    }
-    return entry;
+    // Tabel HARGA WAJAR (single source of truth) kini di propertyRecommendationService
+    // agar extractPropertyFilters bisa memakainya untuk MEMBATASI katalog, bukan
+    // sekadar tampil di summary. Metode ini mendelegasikan supaya tidak ada dua
+    // salinan tabel yang bisa menyimpang.
+    return svcGetBudgetTiers(buildingType, transactionType, periodHint);
   }
 
   /** Format angka IDR penuh: 5000000 → "Rp 5.000.000". */
@@ -2404,6 +2306,144 @@ class ConversationQualifier {
       : tiers.period === 'year'  ? (lang === 'id' ? ' /thn'   : ' /year') : '';
     const plus = tierName === 'eksklusif' ? '+' : '';   // luxury = open-ended
     return `${this.#rpFull(min)} - ${this.#rpFull(max)}${plus}${suffix}`;
+  }
+
+  /* ─── Public: skill "harga wajar" — jawab pertanyaan terbuka kapan saja ──────
+   * Sebelumnya tabel _BUDGET_TIERS hanya dipakai di 2 momen sempit: (a) render
+   * ringkasan setelah Q3 dijawab kategori, (b) fallback saat katalog 0 hasil.
+   * Pertanyaan TERBUKA di luar dua momen itu ("berapa harga wajar sewa rumah di
+   * surabaya?", "booking villa di bali biasanya berapa?") tidak terjawab. Skill
+   * ini mendeteksi pertanyaan semacam itu KAPAN SAJA (termasuk di tengah Q1-Q12)
+   * dan menjawab dari tabel yang SAMA dipakai filter katalog — tanpa mereset
+   * progress qualifikasi (jawaban di-PREPEND ke pertanyaan Q berikutnya, bukan
+   * menggantikannya). Berlaku utk 3 mode: sewa (bulanan/tahunan), booking
+   * (per malam), beli (harga jual absolut).
+   */
+
+  static #PRICE_QUESTION_RE = /\b(harga\s+wajar|kisaran\s+harga|range\s+harga|harga\s+pasaran|harga\s+umum|harga\s+normal|estimasi\s+harga|berapa(?:an)?\s+(?:kira-?kira\s+)?(?:harga|budget|biaya)|harga(?:nya)?\s+(?:sekitar\s+)?berapa|biasanya\s+berapa|price\s+range|reasonable\s+price|typical\s+price|how\s+much\s+(?:is|does)|around\s+how\s+much)\b/i;
+
+  /**
+   * True bila pesan customer adalah pertanyaan TERBUKA soal harga wajar
+   * (bukan jawaban Q3 numerik/kategori — dijaga dengan syarat detectBudget()
+   * TIDAK menemukan angka konkret dalam pesan yang sama).
+   * @returns {boolean}
+   */
+  static isReasonablePriceQuestion(text = '') {
+    if (!this.#PRICE_QUESTION_RE.test(text)) return false;
+    const b = detectBudget(text);
+    // Kalau customer sekaligus menyebut angka pasti ("berapa ya kalau budget 5 juta")
+    // itu jawaban Q3, bukan pertanyaan terbuka — jangan tangani di sini.
+    return !(b && (b.min != null || b.max != null));
+  }
+
+  /**
+   * Deteksi mode transaksi dari framing pertanyaan itu sendiri:
+   *   sewa/kontrak/kontrakan   → 'rent' + periodHint bulanan/tahunan
+   *   booking/nginap/per malam → 'rent' + periodHint malam (night)
+   *   beli/jual/beli putus     → 'sale'
+   * Return null bila tidak disebutkan (→ caller tampilkan ketiganya).
+   */
+  static #detectPriceQuestionMode(text = '') {
+    const t = text.toLowerCase();
+    if (/\b(beli|jual|dijual|membeli|pembelian|beli\s*putus)\b/.test(t)) return { tx: 'sale', periodHint: '' };
+    if (/\b(booking|nginap|menginap|per\s*malam|semalam|check-?in)\b/.test(t)) return { tx: 'rent', periodHint: '' };
+    if (/\b(sewa|kontrak|kontrakan|menyewa|disewa|nyewa)\b/.test(t)) {
+      return { tx: 'rent', periodHint: /\btahun|kontrak\s*tahunan\b/.test(t) ? 'year' : 'month' };
+    }
+    return null;
+  }
+
+  /** Format satu blok tier (Terjangkau/Menengah/Eksklusif) untuk satu period tertentu. */
+  static #formatTierBlock(buildingType, tx, periodHint, lang, modeLabel) {
+    const tiers = this.getBudgetTiers(buildingType, tx, periodHint);
+    if (!tiers) return null;
+    const isId = lang === 'id';
+    const rt = (name) => this.getBudgetRangeForTier(buildingType, tx, name, lang, periodHint);
+    return `${modeLabel}${modeLabel ? ' — ' : ''}${isId ? 'Terjangkau' : 'Affordable'}: ${rt('terjangkau')}\n`
+         + `   ${isId ? 'Menengah' : 'Mid-range'}: ${rt('menengah')}\n`
+         + `   ${isId ? 'Eksklusif' : 'Premium'}: ${rt('eksklusif')}`;
+  }
+
+  /**
+   * Bangun jawaban "harga wajar" lengkap untuk satu tipe properti, mencakup
+   * SEWA (bulanan/tahunan), BOOKING (per malam, bila tipe mendukung), dan BELI —
+   * atau hanya mode yang diminta bila mode terdeteksi dari pertanyaan.
+   *
+   * @param {string}      buildingType
+   * @param {object|null} modeHint - { tx, periodHint } dari #detectPriceQuestionMode(), atau null (semua mode)
+   * @param {'id'|'en'}   lang
+   * @returns {string}
+   */
+  static buildReasonablePriceAnswer(buildingType, modeHint, lang = 'id') {
+    const isId = lang === 'id';
+    const typeLabel = PropertyFormatter.humanBuildingType(buildingType, lang);
+    const BOOKING_TYPES = new Set(['hotel', 'villa', 'kondotel', 'boarding_house']);
+    const blocks = [];
+
+    const wantRent = !modeHint || modeHint.tx === 'rent';
+    const wantSale = !modeHint || modeHint.tx === 'sale';
+
+    if (wantRent) {
+      // PENTING: cek `modeHint` (objeknya), BUKAN `modeHint.periodHint` — periodHint
+      // booking/malam bernilai '' (falsy) yang tadinya salah dianggap "tak ada mode
+      // spesifik" dan jatuh ke cabang dual-block, menampilkan blok booking DUA KALI
+      // (identik) saat customer eksplisit minta mode booking saja.
+      if (modeHint && modeHint.tx === 'rent') {
+        // Mode spesifik diminta (mis. "booking" → periodHint '', "sewa tahunan" → 'year').
+        const b = this.#formatTierBlock(buildingType, 'rent', modeHint.periodHint, lang, '');
+        if (b) blocks.push(b);
+      } else if (BOOKING_TYPES.has(buildingType)) {
+        // Tipe booking-capable & mode tak spesifik → tampilkan BOOKING (malam) + SEWA PANJANG.
+        const booking = this.#formatTierBlock(buildingType, 'rent', '', lang, isId ? '📅 Booking (per malam)' : '📅 Booking (per night)');
+        const longStay = this.#formatTierBlock(buildingType, 'rent', buildingType === 'boarding_house' ? 'year' : 'month', lang, isId ? '📆 Sewa jangka panjang' : '📆 Long-stay rent');
+        if (booking) blocks.push(booking);
+        if (longStay && longStay !== booking) blocks.push(longStay);
+      } else {
+        const b = this.#formatTierBlock(buildingType, 'rent', '', lang, isId ? '🏠 Sewa' : '🏠 Rent');
+        if (b) blocks.push(b);
+      }
+    }
+    if (wantSale) {
+      const b = this.#formatTierBlock(buildingType, 'sale', '', lang, isId ? '💵 Beli' : '💵 Buy');
+      if (b) blocks.push(b);
+    }
+
+    if (!blocks.length) {
+      return isId
+        ? `Maaf, saya belum punya acuan harga wajar untuk tipe ${typeLabel}.`
+        : `Sorry, I don't have a reasonable-price reference for ${typeLabel} yet.`;
+    }
+
+    const header = isId
+      ? `💰 Kisaran harga wajar *${typeLabel}* di Indonesia:`
+      : `💰 Reasonable price range for *${typeLabel}* in Indonesia:`;
+    return `${header}\n\n${blocks.join('\n\n')}`;
+  }
+
+  /**
+   * Entry point dipanggil dari alur utama: kalau pesan customer adalah
+   * pertanyaan harga wajar terbuka, kembalikan teks jawabannya (untuk di-PREPEND
+   * ke pertanyaan Q berikutnya); else null (tidak relevan, lanjutkan seperti biasa).
+   *
+   * @param {string} userMessage
+   * @param {object} profile - Dari buildProfile() — dipakai sbg fallback tipe/tx
+   *                            bila tidak disebut eksplisit di pesan ini.
+   * @param {'id'|'en'} lang
+   * @returns {string|null}
+   */
+  static maybeAnswerReasonablePriceQuestion(userMessage, profile, lang = 'id') {
+    if (!this.isReasonablePriceQuestion(userMessage)) return null;
+
+    const mentionedType = detectBuildingType(userMessage);
+    const buildingType = mentionedType || profile?.buildingType || '';
+    if (!buildingType) {
+      return lang === 'id'
+        ? '💰 Tentu! Tipe properti apa yang ingin Anda ketahui kisaran harganya? (rumah, apartemen, villa, hotel, dll.)'
+        : "💰 Sure! Which property type would you like the price range for? (house, apartment, villa, hotel, etc.)";
+    }
+
+    const modeHint = this.#detectPriceQuestionMode(userMessage);
+    return this.buildReasonablePriceAnswer(buildingType, modeHint, lang);
   }
 
   /* ─── Public: readiness score ───────────────────────────────────────────── */
@@ -4375,6 +4415,13 @@ class ChatbotPrivateService {
       }
     } catch (_e) { /* non-fatal — fall back to regex hasMoveInDate */ }
 
+    // ── Skill "harga wajar" — pertanyaan terbuka kapan saja (sewa/booking/beli) ──
+    // Tidak mereset atau melompati Q-flow: jawabannya di-PREPEND ke pertanyaan Q
+    // berikutnya (atau ke summary/brief bila Q-flow sudah selesai) di titik-titik
+    // return di bawah. null bila pesan ini bukan pertanyaan harga terbuka.
+    const priceAnswerNote = ConversationQualifier.maybeAnswerReasonablePriceQuestion(userMessage, profile, lang);
+    if (priceAnswerNote) console.log('[PrivateAgent/HargaWajar] Pertanyaan harga wajar terdeteksi — jawaban di-prepend.');
+
     console.log('[PrivateAgent/Qualifier]', {
       tx       : profile.transactionType || '(unknown)',
       type     : profile.buildingType    || '(unknown)',
@@ -4424,7 +4471,8 @@ class ChatbotPrivateService {
         );
         if (pilotQ) {
           console.log(`[PrivateAgent/HousePilot] Asking Q (aiCount=${profile.aiCount})`);
-          return this.#wrap(builder.qualificationQuestion(pilotQ), {
+          const qText = priceAnswerNote ? `${priceAnswerNote}\n\n${pilotQ}` : pilotQ;
+          return this.#wrap(builder.qualificationQuestion(qText), {
             skillInfo, filters, qualificationMode: true, housePilot: true,
           });
         }
@@ -4446,7 +4494,8 @@ class ChatbotPrivateService {
 
       if (nextQuestion) {
         console.log(`[PrivateAgent/SummaryMode] Asking Q (aiCount=${profile.aiCount})`);
-        return this.#wrap(builder.qualificationQuestion(nextQuestion), {
+        const qText = priceAnswerNote ? `${priceAnswerNote}\n\n${nextQuestion}` : nextQuestion;
+        return this.#wrap(builder.qualificationQuestion(qText), {
           skillInfo, filters, qualificationMode: true, summaryMode: true,
         });
       }
@@ -4454,7 +4503,8 @@ class ChatbotPrivateService {
       // All Q1–Q12 answered → generate structured brief
       console.log('[PrivateAgent/SummaryMode] ✅ All Q answered → generating agent brief');
       const brief = ConversationQualifier.buildAgentBrief(profile, filters, history, userMessage);
-      const reply = builder.agentBrief(brief);
+      const briefText = builder.agentBrief(brief);
+      const reply = priceAnswerNote ? `${priceAnswerNote}\n\n${briefText}` : briefText;
 
       console.log('[PrivateAgent/SummaryMode] Brief generated:', {
         score   : brief.score,
@@ -4487,7 +4537,8 @@ class ChatbotPrivateService {
     );
     if (nextQuestion) {
       console.log(`[PrivateAgent/CatalogMode] Asking Q (aiCount=${profile.aiCount})`);
-      return this.#wrap(builder.qualificationQuestion(nextQuestion), {
+      const qText = priceAnswerNote ? `${priceAnswerNote}\n\n${nextQuestion}` : nextQuestion;
+      return this.#wrap(builder.qualificationQuestion(qText), {
         skillInfo, filters, qualificationMode: true,
       });
     }
@@ -4526,7 +4577,7 @@ class ChatbotPrivateService {
     const briefBody   = summaryFull.includes(sigMarker)
       ? summaryFull.substring(0, summaryFull.lastIndexOf(sigMarker))
       : summaryFull;
-    const reply = briefBody + '\n\n---\n\n' + catalogReply;
+    const reply = (priceAnswerNote ? `${priceAnswerNote}\n\n` : '') + briefBody + '\n\n---\n\n' + catalogReply;
 
     return this.#wrap(reply, {
       skillInfo,

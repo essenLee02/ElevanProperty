@@ -655,28 +655,61 @@ const _FACILITY_MAP = [
   ['Ruang Meeting',  ['ruang meeting', 'meeting room', 'ruang rapat']],
 ];
 
-// ─── DB-backed facility vocabulary (bilingual augmentation) ──────────────────
-// Master `facilities` menyimpan nama fasilitas dalam BAHASA INGGRIS (BALCONY, CCTV,
-// BUSINESS CENTER, …). Hardcoded _FACILITY_MAP di atas kaya sinonim BAHASA INDONESIA.
-// initFacilityCache() memuat nama DB sekali saat startup agar detectFacilities juga
-// mengenali fasilitas apa pun yang terdaftar di master (long-tail + istilah Inggris),
-// tanpa mengubah tanda-tangan sinkron fungsi. Digabung dengan map ID → bilingual.
-let _dbFacilities = [];  // [{ lower, label }], diurutkan terpanjang dulu
+// ─── DB-DRIVEN facility vocabulary ───────────────────────────────────────────
+// SUMBER KEBENARAN sinonim fasilitas kini di DATABASE (kolom facilities.keywords,
+// JSON). _FACILITY_MAP di atas berperan sebagai (a) layer LABEL kurasi yang menang
+// duluan agar teks summary stabil ("Kolam renang" bukan "Kolam Renang"), dan (b)
+// FALLBACK penuh bila DB tak terjangkau. Master `facilities` (277+ baris) memuat
+// long-tail (PILATES STATION, TREADMILL, GYM EQUIPMENT, …) yang tak ada di map;
+// initFacilityCache() meng-expand tiap fasilitas menjadi token yang bisa dicocokkan
+// (nama + semua keyword JSON-nya) sehingga admin cukup mengisi sinonim di master,
+// tanpa menyentuh kode. Kolom keywords null → fallback ke NAMA fasilitas.
+let _dbFacilities = [];       // [{ lower, label }] token, diurutkan terpanjang dulu
+let _dbFacilityLoaded = false;
 
-function _titleCaseFacility(s) {
-  return String(s || '').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+// Label tampilan bergaya "sentence case" (huruf pertama kapital, sisanya kecil) agar
+// selaras dengan gaya label map ("Kolam renang", "Water heater", "Pilates station").
+function _sentenceCaseFacility(s) {
+  const t = String(s || '').trim();
+  return t ? t.charAt(0).toUpperCase() + t.slice(1).toLowerCase() : '';
+}
+
+/** Ekstrak array keyword dari kolom DB (JSON array, string JSON, atau null). */
+function _parseKeywordsColumn(raw) {
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === 'string' && raw.trim()) {
+    try { const p = JSON.parse(raw); if (Array.isArray(p)) return p; } catch (_) { /* ignore */ }
+  }
+  return [];
 }
 
 async function initFacilityCache() {
   try {
     const { Facility } = require('../models');
-    const rows = await Facility.findAll({ where: { status: 1 }, attributes: ['name'], raw: true });
-    _dbFacilities = rows
-      .map((r) => String(r.name || '').trim())
-      .filter((n) => n.length >= 4)  // ≥4 char: hindari noise pendek (AC/BAR/BED) yang sudah dicakup map ID
-      .map((n) => ({ lower: n.toLowerCase(), label: _titleCaseFacility(n) }))
+    const rows = await Facility.findAll({ where: { status: 1 }, attributes: ['name', 'keywords'], raw: true });
+    const tokens = [];
+    for (const r of rows) {
+      const name = String(r.name || '').trim();
+      if (!name) continue;
+      const label = _sentenceCaseFacility(name);
+      // Keyword dari kolom DB; bila kosong → pakai nama fasilitas sebagai satu-satunya token.
+      let kws = _parseKeywordsColumn(r.keywords);
+      if (!kws.length) kws = [name];
+      for (const kw of kws) {
+        const lower = String(kw || '').trim().toLowerCase();
+        // ≥3 char: token 1-2 huruf (AC/TV) rawan salah-tangkap & sudah dicakup map ID.
+        if (lower.length < 3) continue;
+        tokens.push({ lower, label });
+      }
+    }
+    // Dedup per token (yang pertama menang), urut terpanjang dulu agar frasa spesifik
+    // ("backup generator") menang atas kata umum ("generator") yang jadi substring-nya.
+    const seen = new Set();
+    _dbFacilities = tokens
+      .filter((t) => { if (seen.has(t.lower)) return false; seen.add(t.lower); return true; })
       .sort((a, b) => b.lower.length - a.lower.length);
-    console.log(`[FacilityCache] Loaded ${_dbFacilities.length} facilities from DB (bilingual augmentation).`);
+    _dbFacilityLoaded = true;
+    console.log(`[FacilityCache] Loaded ${rows.length} facilities → ${_dbFacilities.length} keyword tokens from DB.`);
   } catch (err) {
     console.warn('[FacilityCache] initFacilityCache() failed — using hardcoded map only:', err.message);
   }
@@ -709,20 +742,12 @@ function detectFacilities(message = '') {
     if (out.includes(label) || coveredKeywords.has(lower)) continue;
     // Lewati jika istilah ini hanya bagian dari fasilitas DB yang sudah dipilih.
     if (addedDbLowers.some((sel) => sel.includes(lower))) continue;
+    // Cocokkan token utuh (word-boundary). Bentuk PENDEK/parsial ("pilates" untuk
+    // "PILATES STATION") disediakan lewat kolom keywords admin — BUKAN via tebakan
+    // kata-pertama, yang dulu salah menangkap kata umum ("tempat" dari "tempat
+    // tidur", "equipment" dari "equipment storage").
     const esc = lower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    let matched = new RegExp(`(^|\\W)${esc}(\\W|$)`, 'i').test(text);
-    // Frasa multi-kata DB ("PILATES STATION", "GYM EQUIPMENT") juga dikenali dari
-    // KATA PERTAMA-nya yang khas (≥6 huruf) — customer bilang "pilates", bukan
-    // "pilates station" verbatim. Kata pendek/umum (gym, room) tetap butuh frasa
-    // penuh atau entri map supaya tidak salah tangkap.
-    if (!matched && lower.includes(' ')) {
-      const firstWord = lower.split(/\s+/)[0];
-      if (firstWord.length >= 6 && !coveredKeywords.has(firstWord)) {
-        const escFW = firstWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        matched = new RegExp(`(^|\\W)${escFW}(\\W|$)`, 'i').test(text);
-      }
-    }
-    if (matched) {
+    if (new RegExp(`(^|\\W)${esc}(\\W|$)`, 'i').test(text)) {
       out.push(label);
       addedDbLowers.push(lower);
     }
@@ -833,6 +858,122 @@ function _detectBudgetTier(text) {
   if (/\b(menengah|sedang|medium|mid(?:dle)?|menengah\s*ke\s*atas|lumayan|kompetitif|competitive|moderate)\b/.test(t)) return 'menengah';
   if (/\b(terjangkau|ekonomis|murah|termurah|hemat|low\s*budget|affordable|cheap(?:est)?|economy|low\s*(cost|price)|paling\s*murah|standar\s*bawah|budget\s*friendly|seadanya)\b/.test(t)) return 'terjangkau';
   return null;
+}
+
+// ─── Canonical budget-tier reference table (SINGLE SOURCE OF TRUTH) ──────────
+// Tabel HARGA WAJAR Indonesia 2025–2026 per tipe+transaksi. Dulu tabel ini
+// HANYA ada di chatbotPrivateController.getBudgetTiers() dan hanya dipakai untuk
+// menampilkan range di summary — sehingga jawaban KATEGORI ("terjangkau") tidak
+// pernah membatasi katalog (detectBudget mengembalikan min/max null → filter
+// meloloskan semua harga, katalog jadi campur periode). Sekarang tabel dipindah
+// ke service agar bisa dipakai extractPropertyFilters() untuk mengisi min/max
+// konkret sebelum filterProperties. Controller mendelegasikan ke sini (DRY).
+// period: 'month'=/bln, 'night'=/malam, 'year'=/thn, ''=harga jual absolut.
+const _BT_M = 1e6, _BT_B = 1e9, _BT_K = 1e3;
+const _BUDGET_TIERS = {
+  house: {
+    rent: { terjangkau: [20*_BT_M, 60*_BT_M],   menengah: [60*_BT_M, 180*_BT_M],  eksklusif: [180*_BT_M, 600*_BT_M], period: 'year' },
+    sale: { terjangkau: [350*_BT_M, 900*_BT_M], menengah: [900*_BT_M, 3*_BT_B],   eksklusif: [3*_BT_B, 15*_BT_B],    period: '' },
+  },
+  apartment: {
+    rent: { terjangkau: [2*_BT_M, 5*_BT_M],     menengah: [5*_BT_M, 15*_BT_M],    eksklusif: [15*_BT_M, 50*_BT_M],   period: 'month' },
+    sale: { terjangkau: [350*_BT_M, 800*_BT_M], menengah: [800*_BT_M, 2.5*_BT_B], eksklusif: [2.5*_BT_B, 10*_BT_B],  period: '' },
+  },
+  condo: {
+    rent: { terjangkau: [4*_BT_M, 10*_BT_M],    menengah: [10*_BT_M, 30*_BT_M],   eksklusif: [30*_BT_M, 100*_BT_M],  period: 'month' },
+    sale: { terjangkau: [700*_BT_M, 1.5*_BT_B], menengah: [1.5*_BT_B, 5*_BT_B],   eksklusif: [5*_BT_B, 20*_BT_B],    period: '' },
+  },
+  hotel: {
+    rent: { byPeriod: {
+      night: { terjangkau: [200*_BT_K, 800*_BT_K], menengah: [800*_BT_K, 2*_BT_M],  eksklusif: [2*_BT_M, 10*_BT_M],  period: 'night' },
+      year:  { terjangkau: [100*_BT_M, 500*_BT_M], menengah: [500*_BT_M, 3*_BT_B],  eksklusif: [3*_BT_B, 50*_BT_B],  period: 'year' },
+    } },
+    sale: { terjangkau: [5*_BT_B, 20*_BT_B],    menengah: [20*_BT_B, 100*_BT_B],  eksklusif: [100*_BT_B, 500*_BT_B], period: '' },
+  },
+  villa: {
+    rent: { byPeriod: {
+      night: { terjangkau: [1*_BT_M, 3*_BT_M],   menengah: [3*_BT_M, 8*_BT_M],     eksklusif: [8*_BT_M, 30*_BT_M],   period: 'night' },
+      month: { terjangkau: [10*_BT_M, 30*_BT_M], menengah: [30*_BT_M, 100*_BT_M],  eksklusif: [100*_BT_M, 500*_BT_M], period: 'month' },
+    } },
+    sale: { terjangkau: [800*_BT_M, 3*_BT_B],   menengah: [3*_BT_B, 10*_BT_B],    eksklusif: [10*_BT_B, 100*_BT_B],  period: '' },
+  },
+  boarding_house: {
+    rent: { byPeriod: {
+      month: { terjangkau: [600*_BT_K, 1.8*_BT_M], menengah: [1.8*_BT_M, 3.5*_BT_M], eksklusif: [3.5*_BT_M, 10*_BT_M], period: 'month' },
+      year:  { terjangkau: [30*_BT_M, 80*_BT_M],   menengah: [80*_BT_M, 300*_BT_M],  eksklusif: [300*_BT_M, 2*_BT_B],  period: 'year' },
+    } },
+    sale: { terjangkau: [500*_BT_M, 2*_BT_B],   menengah: [2*_BT_B, 8*_BT_B],     eksklusif: [8*_BT_B, 50*_BT_B],    period: '' },
+  },
+  shophouse: {
+    rent: { terjangkau: [30*_BT_M, 100*_BT_M],  menengah: [100*_BT_M, 300*_BT_M], eksklusif: [300*_BT_M, 1.5*_BT_B], period: 'year' },
+    sale: { terjangkau: [1*_BT_B, 2.5*_BT_B],   menengah: [2.5*_BT_B, 7*_BT_B],   eksklusif: [7*_BT_B, 25*_BT_B],    period: '' },
+  },
+  office: {
+    rent: { terjangkau: [4*_BT_M, 15*_BT_M],    menengah: [15*_BT_M, 60*_BT_M],   eksklusif: [60*_BT_M, 500*_BT_M],  period: 'month' },
+    sale: { terjangkau: [1*_BT_B, 5*_BT_B],     menengah: [5*_BT_B, 20*_BT_B],    eksklusif: [20*_BT_B, 200*_BT_B],  period: '' },
+  },
+  warehouse: {
+    rent: { terjangkau: [30*_BT_M, 100*_BT_M],  menengah: [100*_BT_M, 500*_BT_M], eksklusif: [500*_BT_M, 5*_BT_B],   period: 'year' },
+    sale: { terjangkau: [1*_BT_B, 4*_BT_B],     menengah: [4*_BT_B, 15*_BT_B],    eksklusif: [15*_BT_B, 100*_BT_B],  period: '' },
+  },
+  store: {
+    rent: { terjangkau: [1*_BT_M, 8*_BT_M],     menengah: [8*_BT_M, 30*_BT_M],    eksklusif: [30*_BT_M, 200*_BT_M],  period: 'month' },
+    sale: { terjangkau: [500*_BT_M, 2*_BT_B],   menengah: [2*_BT_B, 6*_BT_B],     eksklusif: [6*_BT_B, 25*_BT_B],    period: '' },
+  },
+  mansion: {
+    rent: { terjangkau: [30*_BT_M, 100*_BT_M],  menengah: [100*_BT_M, 300*_BT_M], eksklusif: [300*_BT_M, 2*_BT_B],   period: 'month' },
+    sale: { terjangkau: [5*_BT_B, 20*_BT_B],    menengah: [20*_BT_B, 100*_BT_B],  eksklusif: [100*_BT_B, 500*_BT_B], period: '' },
+  },
+  land: {
+    rent: { terjangkau: [50*_BT_M, 150*_BT_M],  menengah: [150*_BT_M, 500*_BT_M], eksklusif: [500*_BT_M, 2*_BT_B],   period: 'year' },
+    sale: { terjangkau: [300*_BT_M, 1*_BT_B],   menengah: [1*_BT_B, 4*_BT_B],     eksklusif: [4*_BT_B, 20*_BT_B],    period: '' },
+  },
+  kondotel: {
+    rent: { terjangkau: [500*_BT_K, 1.5*_BT_M], menengah: [1.5*_BT_M, 3*_BT_M],   eksklusif: [3*_BT_M, 8*_BT_M],     period: 'night' },
+    sale: { terjangkau: [500*_BT_M, 900*_BT_M], menengah: [900*_BT_M, 1.5*_BT_B], eksklusif: [1.5*_BT_B, 4*_BT_B],   period: '' },
+  },
+  others: {
+    rent: { terjangkau: [5*_BT_M, 20*_BT_M],    menengah: [20*_BT_M, 60*_BT_M],   eksklusif: [60*_BT_M, 200*_BT_M],  period: 'month' },
+    sale: { terjangkau: [500*_BT_M, 2*_BT_B],   menengah: [2*_BT_B, 7*_BT_B],     eksklusif: [7*_BT_B, 25*_BT_B],    period: '' },
+  },
+};
+
+/**
+ * Kembalikan tier-set {terjangkau,menengah,eksklusif,period} untuk tipe+transaksi.
+ * Menangani byPeriod (hotel/villa/kost) dengan memilih night/month/year via hint.
+ * @returns {object|null}
+ */
+function getBudgetTiers(buildingType = '', transactionType = '', periodHint = '') {
+  const type = (buildingType || '').toLowerCase();
+  const tx   = (transactionType || '').toLowerCase();
+  const txKey = (tx === 'rent') ? 'rent' : (tx === 'sale' || tx === 'purchase') ? 'sale' : null;
+  if (!txKey) return null;
+
+  const row = _BUDGET_TIERS[type] || _BUDGET_TIERS.others;
+  let entry = row[txKey] || _BUDGET_TIERS.others[txKey] || null;
+  if (!entry) return null;
+
+  if (entry.byPeriod) {
+    const bp = entry.byPeriod;
+    const hint = String(periodHint || '');
+    if (/year|tahun|thn|kontrak|tahunan/i.test(hint) && bp.year)   entry = bp.year;
+    else if (/month|bulan|bulanan/i.test(hint) && bp.month)        entry = bp.month;
+    else                                                           entry = bp.night || bp.month || bp.year;
+  }
+  return entry;
+}
+
+/**
+ * Resolusi KATEGORI budget (terjangkau/menengah/eksklusif) → {min,max,period}
+ * konkret untuk tipe+transaksi tertentu. Dipakai extractPropertyFilters agar
+ * jawaban kategori ikut MEMBATASI katalog (bukan hanya tampil di summary).
+ * @returns {{min:number,max:number,period:string}|null}
+ */
+function resolveBudgetTierRange(buildingType, transactionType, tier, periodHint = '') {
+  const tiers = getBudgetTiers(buildingType, transactionType, periodHint);
+  if (!tiers || !tiers[tier]) return null;
+  const [min, max] = tiers[tier];
+  return { min, max, period: tiers.period || '' };
 }
 
 const _BUDGET_BAND_PCT = 0.15;
@@ -1147,6 +1288,29 @@ function extractPropertyFilters(message = '', history = []) {
     fallbackTypes:  current.fallbackTypes   || accumulated.fallbackTypes   || [],
     landmark:       current.landmark        || accumulated.landmark        || '',
   };
+
+  // Resolusi KATEGORI budget → range konkret. Bila customer jawab tier
+  // ("terjangkau") tanpa angka, detectBudget mengembalikan min/max null +
+  // preference='terjangkau'. Tanpa langkah ini filterProperties meloloskan
+  // SEMUA harga (budgetMatches: min&max null → true), sehingga katalog "sewa
+  // apartemen terjangkau" ikut menampilkan listing 3.9jt/hari & 8.4jt/tahun
+  // bercampur. Begitu tipe+transaksi diketahui, isi min/max dari tabel wajar.
+  if (merged.budget && merged.budget.preference
+      && merged.budget.min == null && merged.budget.max == null
+      && merged.buildingType && merged.transactionType) {
+    const range = resolveBudgetTierRange(
+      merged.buildingType, merged.transactionType,
+      merged.budget.preference, merged.budget.period || ''
+    );
+    if (range) {
+      merged.budget = {
+        ...merged.budget,
+        min: range.min,
+        max: range.max,
+        period: merged.budget.period || range.period || '',
+      };
+    }
+  }
 
   // Auto-alias tipe percakapan baru ke tipe dasar katalog. Tipe percakapan
   // (mansion/kondotel/store) tetap dipakai untuk Q14 + budget anchor di
@@ -2016,11 +2180,14 @@ module.exports = {
   detectTransactionType,
   detectPriceSort,
   sortByPrice,
+  getBudgetTiers,
+  resolveBudgetTierRange,
   detectFallbackTypes,
   findWithExpandedBudget,
   detectBudget,
   detectFacilities,
   initFacilityCache,
+  getFacilityFallbackMap: () => _FACILITY_MAP,  // dipakai scripts/seed-facility-keywords.js
   initCityCache,
   getKnownLocations,
   initLandmarkCache,

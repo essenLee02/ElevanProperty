@@ -65,6 +65,23 @@ national level:
 
 ---
 
+## Reasonable Price Skill — Open Questions (Private Agent, July 2026)
+
+Separate from budget-expansion (below): when a customer asks an OPEN price question
+ANY TIME ("berapa harga wajar sewa rumah di Surabaya?", "booking villa di Bali biasanya
+berapa?", "harga wajar beli apartemen berapa?") — not while answering Q3 with a number —
+the Private Agent (`chatbotPrivateController.js`, `ConversationQualifier.
+maybeAnswerReasonablePriceQuestion()`) detects it and answers directly from the same
+`_BUDGET_TIERS` table used for catalog filtering, covering all 3 modes: **sewa**
+(monthly/yearly rent), **booking** (per-night, hotel/villa/kondotel/boarding_house),
+and **beli** (sale, absolute price). The building type is read from the message itself,
+or falls back to whatever type is already known mid-qualification (no need to restate it).
+
+This does **not** interrupt or reset Q1–Q12 — the price answer is prepended above
+whichever question would be asked next, so the flow continues normally afterward.
+
+---
+
 ## Budget Expansion (bounded by "harga wajar" / reasonable price)
 
 When budget is specified but no match exists at that price:

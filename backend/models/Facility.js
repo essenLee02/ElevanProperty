@@ -36,6 +36,14 @@ const Facility = sequelize.define('Facility', {
     defaultValue: null,
     comment: 'Icon identifier, mis. emoji atau CSS class (fa-wifi, 🏊, dll.)'
   },
+  keywords: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    defaultValue: null,
+    comment: 'Sinonim ID/EN untuk deteksi chatbot (mis. ["gym","fitness","fitnes"]). '
+           + 'Dipakai propertyRecommendationService.detectFacilities() agar jawaban '
+           + 'customer dikenali tanpa hardcode. Null → fallback ke nama fasilitas.'
+  },
   status: {
     type: DataTypes.INTEGER(1),
     allowNull: false,
