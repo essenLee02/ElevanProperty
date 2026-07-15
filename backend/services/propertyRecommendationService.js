@@ -477,7 +477,16 @@ function detectUseCase(text = '') {
   const t = normalizeText(text);
   if (/\b(ibadah|tempat\s+ibadah|rumah\s+ibadah|masjid|mushola|musholla|surau|langgar|gereja|kapel|pura|vihara|klenteng|kelenteng|sinagoga|pengajian|kebaktian|misa|sembahyang|rumah\s+doa|tpa|tpq|madrasah)\b/.test(t))
     return 'ibadah';
-  if (/\b(investasi|investment|invest|disewakan|sewakan|disewain|dikontrakkan|dikontrakan|jualan|warung|kafe|cafe|resto|restoran|restaurant|kos[\s-]?kosan|bangun\s+kos|kontrakan|kontrakkan|didiamkan|didiemin|dibiarkan|aset|asset|yield|roi|capital\s+gain|passive\s+income|flipping|disewa\s*kan|usaha\s+sewa|rental\s+income)\b/.test(t))
+  // Istilah investasi MURNI — aman berdiri sendiri.
+  if (/\b(investasi|investment|invest|disewakan|sewakan|disewain|dikontrakkan|dikontrakan|didiamkan|didiemin|dibiarkan|aset|asset|yield|roi|capital\s+gain|passive\s+income|flipping|disewa\s*kan|usaha\s+sewa|rental\s+income|bangun\s+kos)\b/.test(t))
+    return 'investasi';
+  // Kata bisnis (warung/cafe/resto/kos-kosan/kontrakan/jualan) HANYA dihitung
+  // bila menempel verba niat usaha. Dulu kata polos "cafe|resto|warung" ikut
+  // alternation → "Dekat pasar, resto atau cafe" (patokan lokasi Q6!) salah
+  // terbaca "Untuk investasi (non-hunian)" → Q4 penghuni di-skip + summary
+  // menampilkan use-case fiktif. Kata "kontrakan" polos juga dihapus — "cari
+  // kontrakan murah" adalah pencarian rumah sewa, bukan investasi.
+  if (/\b(buka|bangun|bikin|dijadikan|jadikan|dijadiin|buat|untuk)\s+(?:\w+\s+){0,2}?(warung|kafe|cafe|resto|restoran|restaurant|kos[\s-]?kosan|kontrakan|jualan)\b/.test(t))
     return 'investasi';
   const comm = detectCommercialUse(t);
   if (comm) return comm;
@@ -639,6 +648,7 @@ const _FACILITY_MAP = [
   // Typo-tolerant: "projectktor"/"projektor" adalah salah ketik umum "proyektor".
   ['LCD',            ['lcd']],
   ['Proyektor',      ['proyektor', 'projector', 'projektor', 'projectktor', 'projecktor']],
+  ['Pilates',        ['pilates', 'pilates station']],
   ['Breakfast',      ['breakfast', 'sarapan', 'makan pagi']],
   ['Lunch',          ['lunch', 'makan siang']],
   ['Dinner',         ['dinner', 'makan malam']],
@@ -700,7 +710,19 @@ function detectFacilities(message = '') {
     // Lewati jika istilah ini hanya bagian dari fasilitas DB yang sudah dipilih.
     if (addedDbLowers.some((sel) => sel.includes(lower))) continue;
     const esc = lower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    if (new RegExp(`(^|\\W)${esc}(\\W|$)`, 'i').test(text)) {
+    let matched = new RegExp(`(^|\\W)${esc}(\\W|$)`, 'i').test(text);
+    // Frasa multi-kata DB ("PILATES STATION", "GYM EQUIPMENT") juga dikenali dari
+    // KATA PERTAMA-nya yang khas (≥6 huruf) — customer bilang "pilates", bukan
+    // "pilates station" verbatim. Kata pendek/umum (gym, room) tetap butuh frasa
+    // penuh atau entri map supaya tidak salah tangkap.
+    if (!matched && lower.includes(' ')) {
+      const firstWord = lower.split(/\s+/)[0];
+      if (firstWord.length >= 6 && !coveredKeywords.has(firstWord)) {
+        const escFW = firstWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        matched = new RegExp(`(^|\\W)${escFW}(\\W|$)`, 'i').test(text);
+      }
+    }
+    if (matched) {
       out.push(label);
       addedDbLowers.push(lower);
     }
@@ -1171,10 +1193,20 @@ function detectPriceSort(message = '') {
  * @param {'asc'|'desc'} direction
  * @returns {object[]}
  */
+// Harga yang bisa dibandingkan lintas periode: nilai sewa dinormalisasi ke
+// per-hari (2.7jt/bulan → 90rb/hari) supaya "3.9 juta/HARI" tidak terurut
+// sebagai "lebih murah" daripada "8.4 juta/TAHUN". Harga absolut (jual) tetap apa adanya.
+function _sortablePrice(property) {
+  const parsed = parsePropertyPrice(property);
+  if (!parsed || parsed.value == null) return null;
+  const days = _PERIOD_DAYS[parsed.period];
+  return days ? parsed.value / days : parsed.value;
+}
+
 function sortByPrice(properties = [], direction = 'asc') {
   return [...properties].sort((a, b) => {
-    const pA = parsePropertyPrice(a)?.value ?? null;
-    const pB = parsePropertyPrice(b)?.value ?? null;
+    const pA = _sortablePrice(a);
+    const pB = _sortablePrice(b);
 
     // Null values go to end regardless of sort direction
     if (pA === null && pB === null) return _titleCompare(a, b);

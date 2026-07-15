@@ -456,6 +456,14 @@ the AI must likewise treat them as their real meaning (search count, bedrooms, d
 
 **Fires when:** Household info not mentioned.
 
+**⚠️ Never fabricate a non-residential use-case from landmark words.** "Dekat pasar,
+resto atau cafe" is a Q6 anchor answer — the words cafe/resto/warung there do NOT mean
+the customer is buying for business/investment. `✓ Penghuni: Untuk investasi (non-hunian)`
+may only appear when the customer explicitly states an investment/business INTENT
+("untuk investasi", "mau buka cafe", "disewakan lagi"). A booking (hotel/villa/apartemen
+sewa harian-mingguan) is a TEMPORARY STAY — if Q4 was never asked/answered, omit the
+Penghuni line entirely; never guess.
+
 ```
 ID: Nanti akan tinggal bersama siapa saja?
     Biar saya bisa carikan yang pas jumlah kamarnya 🛏️
@@ -541,6 +549,12 @@ a quiet atmosphere). The label states what to avoid; the optional `: reason` res
 | jalan lebar | *Gang sempit* : Jalan tidak lebar | Jalan lebar |
 | perairan / air lancar / bersih | *Perairan bermasalah* : Air tidak lancar | Perairan lancar |
 | strategis | *(no Hindari entry)* | Lokasi strategis |
+| **mau/suka yang RAMAI** (ingin suasana hidup) | *Tidak mau tempat yang sepi* | *(none)* |
+
+**⚠️ "ramai" is direction-sensitive.** "Tidak mau ramai" → Hindari *Tidak mau bising/ramai*.
+But "**Mau** tempat yang ramai" (customer WANTS lively surroundings) → the avoid is the
+OPPOSITE: *Tidak mau tempat yang sepi* — never emit "Tidak mau bising/ramai" from a
+want-framed "ramai".
 
 **Preferences volunteered OUTSIDE the Q5 question still count.** Customers often state
 wishes early, e.g. inside a Q2b answer: "Saya cari yang sepi / perairan lancar / akses

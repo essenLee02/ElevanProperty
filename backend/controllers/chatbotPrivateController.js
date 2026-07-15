@@ -1874,8 +1874,13 @@ class ConversationQualifier {
         // Resolve relative day words into a concrete calendar date (same treatment as
         // "minggu depan" below) so the final Viewing summary line shows an unambiguous
         // date ("7 Juli 2026") instead of a word that goes stale as days pass.
+        // "N hari lagi/kedepan/besok" HARUS dicek sebelum "besok"/"hari ini" polos —
+        // "viewing 3 hari lagi" = H+3 (18 Juli), bukan besok. Pola "besok"/"ini"
+        // yang rakus dulu menang duluan dan salah menghitung.
+        const nDays = custText.match(/\b(\d{1,2})\s*hari\s*(?:lagi|kedepan|ke\s+depan|mendatang|besok(?:\s+ini)?|dari\s+sekarang)\b/i);
+        if (nDays) return dateNDaysFromNow(parseInt(nDays[1], 10));
         if (/\bnanti\b|\bhari\s+ini\b|\bsekarang\b|(?:pagi|siang|sore|malam)\s+ini\b|\bini\s+(?:pagi|siang|sore|malam)\b/i.test(custText)) return dateNDaysFromNow(0);
-        if (/\blusa\b/i.test(custText))  return dateNDaysFromNow(2);
+        if (/\bbesok\s+lusa\b|\blusa\b/i.test(custText)) return dateNDaysFromNow(2);
         if (/\bbesok\b/i.test(custText)) return dateNDaysFromNow(1);
         // "minggu depan" (next week) = +7 hari dari hari ini → resolve ke tanggal konkret
         if (/\bminggu\s+depan\b/i.test(custText)) {
@@ -1895,12 +1900,16 @@ class ConversationQualifier {
       ]),
 
       /* ── Q10: Lease duration (sewa only) ── */
+      // Lookahead negatif: "3 hari LAGI" / "3 minggu KEDEPAN" adalah offset
+      // tanggal (jawaban Q8/viewing), BUKAN durasi — tanpa guard ini flag
+      // hasLeaseDuration aktif palsu → Q10 (durasi sewa/booking) tidak pernah
+      // ditanya padahal customer belum menyebut durasi sama sekali.
       hasLeaseDuration: this.#has(custText, [
         '1 tahun', '2 tahun', '3 tahun', '6 bulan', 'setahun', 'dua tahun',
         'tiga tahun', 'per tahun', '/tahun', 'satu tahun', 'yearly',
         '1 year', '2 years', '3 years', '6 months',
         'seminggu', 'sebulan', 'semalam',
-      ]) || /\b\d+\s*(hari|minggu|bulan|tahun|day|week|month|year)s?\b/i.test(custText),
+      ]) || /\b\d+\s*(hari|minggu|bulan|tahun|day|week|month|year)s?\b(?!\s*(?:lagi|kedepan|ke\s+depan|mendatang|besok|dari\s+sekarang))/i.test(custText),
       aiAskedLeaseDuration: this.#has(aiText, [
         'sewa untuk berapa lama', 'berapa tahun', 'durasi sewa', 'lease duration',
         'how long', 'berapa lama',
@@ -3199,7 +3208,11 @@ class ConversationQualifier {
           ? 'stated' : 'inferred',
       },
       location: {
-        value : filters.location || 'UNKNOWN',
+        // Title-case per kata: customer sering ketik lowercase ("di jakarta")
+        // dan summary menampilkannya mentah ("✓ Lokasi: jakarta").
+        value : filters.location
+          ? String(filters.location).replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+          : 'UNKNOWN',
         source: 'stated', // location always stated
       },
       budget: (() => {
@@ -3834,8 +3847,17 @@ class ConversationQualifier {
       { test: /\b(?:per)?air(?:an)?\s+(lancar|bersih|bagus|jernih)\b/,   preferLabel: 'Perairan lancar',     avoidLabel: 'Perairan bermasalah', avoidReason: 'Air tidak lancar' },
       { test: /\bstrategis\b/,                                           preferLabel: 'Lokasi strategis',    avoidLabel: null,                   avoidReason: null },
     ];
+    // "Mau/suka/cari yang RAMAI" — customer justru INGIN suasana ramai/hidup
+    // (kebalikan dari pair tenang/sepi). Hindari-nya adalah tempat sepi.
+    const wantsRamai = /\b(mau|suka|cari|pengen|pgn|ingin|prefer)\b[^.!?\n]{0,40}?\b(ramai|rame)\b/.test(lower);
+    if (wantsRamai) {
+      avoid.push({ label: 'Tidak mau tempat yang sepi', reason: null });
+    }
+
     PAIRS.forEach(p => {
       if (p.test.test(lower)) {
+        // Pair tenang/sepi tidak berlaku bila customer justru minta ramai.
+        if (wantsRamai && p.preferLabel === 'Suasana tenang') return;
         prefer.push({ label: p.preferLabel });
         if (p.avoidLabel) avoid.push({ label: p.avoidLabel, reason: p.avoidReason });
       }
@@ -3846,13 +3868,15 @@ class ConversationQualifier {
       { test: /\bbanjir\b|flood/,                                        label: 'Tidak mau banjir' },
       { test: /hadap\s+barat|west\s+facing/,                             label: 'Tidak mau hadap barat' },
       { test: /gang\s+sempit|narrow/,                                    label: 'Tidak mau gang sempit' },
-      { test: /\bbising\b|noisy|\bramai\b/,                              label: 'Tidak mau bising/ramai' },
+      // "bising/ramai" hanya avoid bila TIDAK diminta positif ("mau yang ramai").
+      { test: /\bbising\b|noisy|\bramai\b/,                              label: 'Tidak mau bising/ramai', skipIfWantsRamai: true },
       { test: /\btua\b|old\s+building/,                                  label: 'Tidak mau bangunan tua' },
       { test: /dekat\s+rel\b|rel\s+kereta|train\s+track/,                label: 'Tidak mau dekat rel kereta' },
       { test: /(?:tidak|gak|ga|ngga|enggak|jangan|anti|hindari|bukan)\s+(?:yang\s+)?panas|\bgerah\b|\bpengap\b|too hot|not hot/, label: 'Tidak mau panas' },
       { test: /(?:tidak\s+macet|bebas\s+macet|anti\s+macet|hindari\s+macet|sering\s+macet|macet\s+(?:banget|parah)|kemacetan)/, label: 'Tidak mau macet' },
     ];
     AVOID_ONLY.forEach(p => {
+      if (p.skipIfWantsRamai && wantsRamai) return;
       if (p.test.test(lower) && !avoid.some(a => a.label === p.label)) {
         avoid.push({ label: p.label, reason: null });
       }

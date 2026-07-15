@@ -46,10 +46,12 @@ const { User, ChatSession, ChatMessage } = require('../models');
 const { safeLog }                       = require('../utils/safeLog');
 const { isTerminalActive }              = require('../utils/terminalSwitch');
 const { hasPropertyKeyword,
-        isPropertyContextContinuation } = require('../utils/propertyKeywordFilter');
+        isPropertyContextContinuation,
+        isInPropertyFlow,
+        isPostSummaryDormant }          = require('../utils/propertyKeywordFilter');
 const { generateWhatsAppAIReply }       = require('../services/whatsappAIService');
 const { getConversationHistory }        = require('../services/sessionService');
-const { sanitizeLog, maskPhone, maskName, appendSentViaTag, isOwnEcho } = require('../utils/whatsappUtils');
+const { sanitizeLog, maskPhone, maskName, appendSentViaTag, isOwnEcho, buildOffTopicRedirect } = require('../utils/whatsappUtils');
 
 /* ══════════════════════════════════════════════════════════════════════════════
    BAGIAN 0 — MESSAGE-ID DEDUP CACHE
@@ -443,32 +445,55 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
   const isPropertyQuery = hasPropertyKeyword(message);
 
   let isContinuation = false;
+  let gateHistory    = [];
   if (!isPropertyQuery) {
     try {
       // Window 12 (bukan 6): alur kualifikasi panjang (Q1–Q12) butuh history lebih
       // lebar agar kata TIPE properti & bukti in-flow (≥2 pertanyaan AI) tetap terlihat
       // saat customer jawab pendek ("Boleh..", "Terserah") di pertanyaan akhir.
-      const history = await getConversationHistory(session.id, 12);
-      isContinuation = isPropertyContextContinuation(message, history);
+      gateHistory    = await getConversationHistory(session.id, 12);
+      isContinuation = isPropertyContextContinuation(message, gateHistory);
     } catch (_) { /* abaikan continuation check jika gagal ambil history */ }
   }
 
+  // ── DORMAN PASCA-SUMMARY ────────────────────────────────────────────────
+  // Summary sudah terkirim & belum ada query properti BARU → AI tidak responsif:
+  // jawaban pendek ("oke", "makasih") maupun off-topic sama-sama tidak dibalas
+  // dan tidak disimpan. Reaktivasi hanya lewat pesan ber-keyword properti
+  // (isPropertyQuery true → tidak masuk sini). TTL habis → history dilupakan
+  // (getConversationHistory → []) → dorman otomatis berakhir.
+  if (!isPropertyQuery && isPostSummaryDormant(gateHistory)) {
+    if (isTerminalActive('KIRIMI')) {
+      console.log(`[KIRIMI] ⏸️  Dorman pasca-summary — pesan dari ${maskPhone(sender)} tidak dibalas: ${sanitizeLog(message, 100)}`);
+    }
+    return; // AI dorman sampai ada query properti baru / TTL reset
+  }
+
   if (!isPropertyQuery && !isContinuation) {
+    // Off-topic DI TENGAH alur kualifikasi aktif ("Saya mau beli nasi jagung" di
+    // sela Q1-Q12) → balas pengarahan ramah kembali ke properti. Pesan off-topic
+    // TIDAK disimpan ke DB (kata "beli"-nya bisa mem-flip transaksi di state).
+    // Di luar alur aktif (broadcast/random) → tetap skip diam seperti semula.
+    const inFlow = isInPropertyFlow(gateHistory);
+    if (inFlow) {
+      const redirect = appendSentViaTag(buildOffTopicRedirect(agent.name));
+      try { await sendViaKirimi(sender, redirect, agent.kirimi_device_id); } catch (_) { /* non-fatal */ }
+    }
     if (isTerminalActive('KIRIMI')) {
       const D = '─'.repeat(62);
       console.log('');
       console.log(D);
-      console.log(`[KIRIMI] ⬇  PESAN MASUK (bukan query properti — tidak dibalas)`);
+      console.log(`[KIRIMI] ⬇  PESAN MASUK (bukan query properti${inFlow ? ' — dibalas redirect ke properti' : ' — tidak dibalas'})`);
       console.log(`[KIRIMI]    Agent    : ${sanitizeLog(agent.name, 60)} (${maskPhone(agent.phone)})`);
       console.log(`[KIRIMI]    Owner    : User ${sanitizeLog(agent.user_id || '-', 40)}`);
       console.log(`[KIRIMI]    Customer : ${maskPhone(sender)} (${maskName(name)})`);
       console.log(`[KIRIMI]    Time     : ${ts}`);
       console.log(`[KIRIMI]    Message  : ${sanitizeLog(message, 120)}`);
-      console.log(`[KIRIMI]    Status   : ⏭️  Tidak disimpan ke DB, AI skip (bukan query properti)`);
+      console.log(`[KIRIMI]    Status   : ⏭️  Tidak disimpan ke DB${inFlow ? ', redirect terkirim' : ', AI skip (bukan query properti)'}`);
       console.log(D);
       console.log('');
     }
-    return; // Tidak kirim balasan, tidak simpan ke DB
+    return; // Pesan off-topic tidak disimpan ke DB
   }
 
   // ── Simpan pesan customer ke DB (hanya untuk query properti / lanjutan) ─

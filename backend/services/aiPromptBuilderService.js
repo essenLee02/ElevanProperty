@@ -70,7 +70,8 @@ function isConditionalFallbackMessage(text = '') {
  */
 function extractAnchorTokens(text = '') {
   const tokens = [];
-  for (const am of String(text || '').matchAll(/\b(?:dekat|deket|near)\s+(?:dengan\s+)?([a-z][\w ,.\/&-]{2,60})/gi)) {
+  // Typo-tolerant: "dekay"/"dekt"/"dkt" adalah salah ketik umum "dekat".
+  for (const am of String(text || '').matchAll(/\b(?:dekat|deket|dekay|dekt|dkt|near)\s+(?:dengan\s+)?([a-z][\w ,.\/&-]{2,60})/gi)) {
     const after = am[1].trim();
     const cleaned = after.replace(/\s+(ya|dong|kak|aja|saja|nih|lainnya)\b.*$/i, '').trim();
     if (!cleaned || detectLocation(after)) continue;

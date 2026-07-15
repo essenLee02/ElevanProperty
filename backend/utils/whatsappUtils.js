@@ -272,6 +272,29 @@ function appendSentViaTag(message) {
 }
 
 /**
+ * Balasan pengarahan singkat ketika customer mengirim pesan OFF-TOPIC di TENGAH
+ * alur kualifikasi properti yang sedang aktif (mis. "Saya mau beli nasi jagung"
+ * di sela pertanyaan Q1-Q12). Dulu pesan begini di-skip diam-diam — customer
+ * merasa diabaikan; atau lebih buruk, lolos gate dan kata "beli"-nya mem-flip
+ * transaksi. Kini: balas ramah, arahkan kembali ke pencarian properti, TANPA
+ * menyimpan pesan off-topic ke DB (supaya tidak mencemari qualification state).
+ * Dipakai fonnte/kirimi/timelinesAI dengan template yang sama.
+ *
+ * @param {string} agentName - nama agent untuk tanda tangan
+ * @returns {string} pesan redirect (Bahasa Indonesia)
+ */
+function buildOffTopicRedirect(agentName = '') {
+  const appName = process.env.APP_NAME || 'Elevan Property';
+  const sig = agentName ? `\n\nSalam hangat,\n*${agentName}*\n*${appName}*` : '';
+  return (
+    `Hehe, maaf Kak — kalau soal itu saya belum bisa bantu 😄 ` +
+    `Saya asisten khusus properti.\n\n` +
+    `Kita lanjut pencarian properti Anda ya — boleh langsung dijawab pertanyaan saya sebelumnya 😊` +
+    sig
+  );
+}
+
+/**
  * Apakah pesan masuk ini sebenarnya GEMA dari pesan AI kita sendiri?
  * Pesan keluar AI diberi footer "Sent via <AI_PRIMARY_TAG>". Jika sebuah inbound
  * mengandung footer itu, berarti ia balikan dari pesan kita (mis. self-chat: nomor
@@ -300,4 +323,5 @@ module.exports = {
   maskName,
   appendSentViaTag,
   isOwnEcho,
+  buildOffTopicRedirect,
 };

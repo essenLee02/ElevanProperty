@@ -39,10 +39,12 @@ const { User, ChatSession, ChatMessage } = require('../models');
 const { safeLog }                       = require('../utils/safeLog');
 const { isTerminalActive }              = require('../utils/terminalSwitch');
 const { hasPropertyKeyword,
-        isPropertyContextContinuation } = require('../utils/propertyKeywordFilter');
+        isPropertyContextContinuation,
+        isInPropertyFlow,
+        isPostSummaryDormant }          = require('../utils/propertyKeywordFilter');
 const { generateWhatsAppAIReply }       = require('../services/whatsappAIService');
 const { getConversationHistory }        = require('../services/sessionService');
-const { sanitizeLog, maskPhone, maskName, appendSentViaTag, isOwnEcho } = require('../utils/whatsappUtils');
+const { sanitizeLog, maskPhone, maskName, appendSentViaTag, isOwnEcho, buildOffTopicRedirect } = require('../utils/whatsappUtils');
 
 /* ══════════════════════════════════════════════════════════════════════════════
    BAGIAN 0 — MESSAGE-ID DEDUP CACHE
@@ -418,33 +420,55 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
   const isPropertyQuery = hasPropertyKeyword(message);
 
   let isContinuation = false;
+  let gateHistory    = [];
   if (!isPropertyQuery) {
     try {
       // Window 12 (bukan 6): alur kualifikasi panjang butuh history lebih lebar agar
       // kata TIPE properti & bukti in-flow tetap terlihat saat jawaban pendek.
-      const history = await getConversationHistory(session.id, 12);
-      isContinuation = isPropertyContextContinuation(message, history);
+      gateHistory    = await getConversationHistory(session.id, 12);
+      isContinuation = isPropertyContextContinuation(message, gateHistory);
     } catch (_) {
       // Jika gagal ambil history, abaikan continuation check (fallthrough ke skip)
     }
   }
 
+  // ── DORMAN PASCA-SUMMARY ────────────────────────────────────────────────
+  // Summary sudah terkirim & belum ada query properti BARU → AI tidak responsif:
+  // jawaban pendek maupun off-topic tidak dibalas & tidak disimpan. Reaktivasi
+  // hanya lewat pesan ber-keyword properti (isPropertyQuery true → tidak masuk
+  // sini). TTL habis → history dilupakan → dorman otomatis berakhir.
+  if (!isPropertyQuery && isPostSummaryDormant(gateHistory)) {
+    if (isTerminalActive('TIMELINESAI')) {
+      console.log(`[TIMELINESAI] ⏸️  Dorman pasca-summary — pesan dari ${maskPhone(sender)} tidak dibalas: ${sanitizeLog(message, 100)}`);
+    }
+    return; // AI dorman sampai ada query properti baru / TTL reset
+  }
+
   if (!isPropertyQuery && !isContinuation) {
+    // Off-topic DI TENGAH alur kualifikasi aktif → balas pengarahan kembali ke
+    // properti; di luar alur (broadcast/random) → skip diam seperti semula.
+    // Pesan off-topic tetap TIDAK disimpan ke DB (mencegah kata "beli" pada
+    // kalimat makanan mem-flip transaksi di qualification state).
+    const inFlow = isInPropertyFlow(gateHistory);
+    if (inFlow) {
+      const redirect = appendSentViaTag(buildOffTopicRedirect(agent.name));
+      try { await sendViaTimelinesAI(sender, redirect); } catch (_) { /* non-fatal */ }
+    }
     if (isTerminalActive('TIMELINESAI')) {
       const D = '─'.repeat(62);
       console.log('');
       console.log(D);
-      console.log(`[TIMELINESAI] ⬇  PESAN MASUK (bukan query properti — tidak dibalas)`);
+      console.log(`[TIMELINESAI] ⬇  PESAN MASUK (bukan query properti${inFlow ? ' — dibalas redirect ke properti' : ' — tidak dibalas'})`);
       console.log(`[TIMELINESAI]    Agent    : ${sanitizeLog(agent.name, 60)} (${maskPhone(agent.phone)})`);
       console.log(`[TIMELINESAI]    Owner    : User ${sanitizeLog(agent.user_id || '-', 40)}`);
       console.log(`[TIMELINESAI]    Customer : ${maskPhone(sender)} (${maskName(name)})`);
       console.log(`[TIMELINESAI]    Time     : ${ts}`);
       console.log(`[TIMELINESAI]    Message  : ${sanitizeLog(message, 120)}`);
-      console.log(`[TIMELINESAI]    Status   : ⏭️  Tidak disimpan ke DB, AI skip (bukan query properti)`);
+      console.log(`[TIMELINESAI]    Status   : ⏭️  Tidak disimpan ke DB${inFlow ? ', redirect terkirim' : ', AI skip (bukan query properti)'}`);
       console.log(D);
       console.log('');
     }
-    return; // Tidak kirim balasan, tidak simpan ke DB
+    return; // Pesan off-topic tidak disimpan ke DB
   }
 
   // ── Simpan pesan customer ke DB (hanya untuk query properti / lanjutan) ─

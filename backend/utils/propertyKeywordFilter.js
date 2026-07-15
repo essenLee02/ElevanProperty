@@ -524,6 +524,11 @@ const DAILY_LIFE_OFFTOPIC = [
   // properti (yang biasanya BYPASS gate panjang-pesan via hasBudgetAnswer/hasStrongAnswerCue).
   /\bopen\s*po\b|\bpre[\s-]?order\b|\btutup\s*po\b|\bpo\s+(dibuka|closed?|ditutup|tutup)\b/i,
   /\byang\s+mau\s+order\b|\btolong\s+list\s+nama\b|\blist\s+nama\s+(di\s*bawah|yang\s+mau)\b/i,
+  // ── Beli/pesan MAKANAN-MINUMAN — "Saya mau beli nasi jagung" ────────────────
+  // Kata "beli/pesan" di kalimat makanan pernah lolos gate (via context-bypass
+  // in-flow) lalu MEM-FLIP transaksi sewa→beli ("Untuk beli Hotel di surabaya").
+  // Dicek unconditional: verba beli/pesan/order + kata kuliner = bukan properti.
+  /\b(beli|pesan|order|mau\s+makan|lagi\s+makan)\s+(?:\w+\s+){0,2}?(nasi|bakso|mie|mi\b|bubur|ayam|sate|soto|rawon|rendang|pecel|gado[\s-]?gado|martabak|roti|kue|gorengan|jajan(an)?|snack|c[ae]milan|kopi|teh|es\s+\w+|jus|boba|seblak|batagor|siomay|pentol|lontong|ketoprak|nasgor|makanan|minuman)\b/i,
 ];
 
 /** Pesan adalah obrolan harian non-properti (mati listrik, banjir, macet, dll)? */
@@ -537,6 +542,43 @@ function isDailyLifeOffTopic(lower) {
     return true;
   }
   return false;
+}
+
+/**
+ * DORMAN PASCA-SUMMARY — siklus responsivitas AI:
+ *   Q1-4 terpenuhi → AI responsif → interview Q1-Q12 → summary terkirim →
+ *   AI DORMAN (tidak membalas apa pun) → customer mengirim query properti BARU
+ *   (hasPropertyKeyword true → tidak lewat fungsi ini) → responsif lagi.
+ *
+ * Return true bila pesan AI TERAKHIR yang mengandung summary brief
+ * ("✓ Rencana:") belum disusul query properti baru dari customer. Selama
+ * dorman: jawaban lanjutan pendek ("oke", "makasih") dan obrolan off-topic
+ * sama-sama TIDAK dibalas (redirect off-topic hanya berlaku saat responsif).
+ * History yang sudah dilupakan TTL (getConversationHistory → []) otomatis
+ * membuat fungsi ini false → evaluasi gate mulai dari nol.
+ *
+ * @param {Array} history - [{role, message}] history sesi aktif
+ * @returns {boolean}
+ */
+function isPostSummaryDormant(history) {
+  if (!Array.isArray(history) || history.length === 0) return false;
+  const SUMMARY_RE = /[✓✔]\s*Rencana\s*:/i;
+  let lastSummaryIdx = -1;
+  for (let i = 0; i < history.length; i++) {
+    const m = history[i];
+    if ((m.role === 'ai' || m.role === 'assistant') && SUMMARY_RE.test(m.message || '')) {
+      lastSummaryIdx = i;
+    }
+  }
+  if (lastSummaryIdx === -1) return false;
+  // Query properti baru dari customer SETELAH summary → sudah reaktivasi.
+  for (let i = lastSummaryIdx + 1; i < history.length; i++) {
+    const m = history[i];
+    if ((m.role === 'user' || m.role === 'customer') && hasPropertyKeyword(m.message || '')) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /** Apakah salah satu dari ≤2 pesan AI terakhir adalah pertanyaan properti? */
@@ -976,6 +1018,8 @@ function isPropertyContextContinuation(message, history = []) {
 module.exports = {
   hasPropertyKeyword,
   isPropertyContextContinuation,
+  isInPropertyFlow,
+  isPostSummaryDormant,
   extractLocationFromMessage,
   extractPropertyTypeFromMessage,
   extractTransactionTypeFromMessage,

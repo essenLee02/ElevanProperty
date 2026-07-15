@@ -101,6 +101,21 @@ async function getConversationHistory(sessionId, limit = 12) {
     limit
   });
 
+  // ── TTL memori percakapan (CHATBOT_COOKIE_TTL_MINUTES) ────────────────────
+  // Bila pesan TERAKHIR lebih tua dari TTL → seluruh history dianggap
+  // kedaluwarsa/dilupakan (return []). Customer yang kembali setelah jeda
+  // panjang diperlakukan sebagai percakapan baru: gate Q1-4 dievaluasi dari
+  // nol dan status dorman pasca-summary ikut ter-reset. Idle-based (jeda sejak
+  // pesan terakhir), BUKAN umur pesan — percakapan panjang yang masih aktif
+  // tidak kehilangan awal obrolannya.
+  if (messages.length) {
+    const idleMs = Date.now() - new Date(messages[0].createdAt).getTime();
+    if (idleMs > _cookieTtlMs()) {
+      console.log(`[SessionService] History session ${sessionId} dilupakan (idle ${Math.round(idleMs / 60000)} mnt > TTL ${Math.round(_cookieTtlMs() / 60000)} mnt) — mulai fresh.`);
+      return [];
+    }
+  }
+
   return messages.reverse().map((item) => ({
     role: item.role,
     message: item.message,
