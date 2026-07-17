@@ -63,6 +63,9 @@ function parseCustomerDate(text, now = new Date()) {
   const curY = now.getFullYear();
   const curM = now.getMonth() + 1;
   const curD = now.getDate();
+  // Diset true oleh rule "tahun depan" bila kalimat JUGA berisi tanggal eksplisit
+  // ("28 mei tahun depan") — rule hari+bulan di bawah memaksa tahun = curY+1.
+  let forceNextYear = false;
 
   // ── Rule 35: "Segera" → mandatory ask, never auto-resolve ────────────────
   if (/\b(segera|asap|secepatnya|sesegera mungkin|secepat mungkin)\b/.test(t)) {
@@ -110,8 +113,19 @@ function parseCustomerDate(text, now = new Date()) {
     return { status: 'ok', date: d, formatted: fmt(d) };
   }
   if (/\b(tahun depan|next year)\b/.test(t)) {
-    const d = new Date(curY + 1, curM - 1, curD);
-    return { status: 'ok', date: d, formatted: fmt(d) };
+    // "tanggal 28 mei TAHUN DEPAN" — frasa relatif TIDAK boleh menang atas tanggal
+    // eksplisit di kalimat yang sama. Dulu rule ini return duluan (hari-ini +1 thn)
+    // → "28 mei tahun depan" jadi "16 Juli 2027". Bila ada pola hari+bulan eksplisit,
+    // lewati rule ini — rule "<DD> <bulan>" di bawah yang resolve, dengan tahun
+    // dipaksa curY+1 via forceNextYear (tanpa itu, "1 desember tahun depan" yang
+    // diucap bulan Juli akan salah jadi Desember TAHUN INI karena belum lewat).
+    const hasExplicitDate = new RegExp(`\\b\\d{1,2}\\s+(${MONTH_ALT})\\b`).test(t)
+      || new RegExp(`\\b(${MONTH_ALT})\\b\\.?,?\\s+\\d{1,2}\\b`).test(t);
+    if (!hasExplicitDate) {
+      const d = new Date(curY + 1, curM - 1, curD);
+      return { status: 'ok', date: d, formatted: fmt(d) };
+    }
+    forceNextYear = true;
   }
 
   // ── "N hari/minggu/bulan/tahun lagi" / "dalam N ..." — relative offset ──
@@ -173,6 +187,8 @@ function parseCustomerDate(text, now = new Date()) {
       const mon = MONTH_LOOKUP[m[2]];
       if (day >= 1 && day <= 31) {
         if (m[3]) return ok(normYear(m[3], now), mon, day);
+        // "tahun depan" eksplisit di kalimat yang sama → paksa tahun berikutnya.
+        if (forceNextYear) return ok(curY + 1, mon, day);
         // no year → nearest future occurrence (already passed → next year)
         const isPast = mon < curM || (mon === curM && day < curD);
         return ok(isPast ? curY + 1 : curY, mon, day);
@@ -189,6 +205,7 @@ function parseCustomerDate(text, now = new Date()) {
       const maybeYear = parseInt(m[2], 10) > 31 ? null : m[3];
       if (day >= 1 && day <= 31) {
         if (maybeYear) return ok(normYear(maybeYear, now), mon, day);
+        if (forceNextYear) return ok(curY + 1, mon, day);
         const isPast = mon < curM || (mon === curM && day < curD);
         return ok(isPast ? curY + 1 : curY, mon, day);
       }

@@ -48,6 +48,7 @@ const logController              = require('../controllers/logController');
 const rumah123Controller         = require('../controllers/rumah123Controller');
 const timelinesAIChatController  = require('../controllers/timelinesAIChatController');
 const fonnteChatController       = require('../controllers/fonnteChatController');
+const viewingScheduleController  = require('../controllers/viewingScheduleController');
 const kirimiChatController       = require('../controllers/kirimiChatController');
 
 // Auth controllers
@@ -265,5 +266,12 @@ router.post('/location/insert',                           verifyToken, locationM
 router.put('/location/update/:location_id',               verifyToken, locationMasterController.updateDataLocation);
 router.patch('/location/toggle-status/:location_id',      verifyToken, locationMasterController.toggleStatusLocation);
 router.delete('/location/delete/:location_id',            verifyToken, locationMasterController.deleteDataLocation);
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   VIEWING SCHEDULE — Google Calendar Integration (Viewing/Survey Appointments)
+══════════════════════════════════════════════════════════════════════════════ */
+
+router.post('/viewing/schedule',                          viewingScheduleController.scheduleViewingAppointment);
+router.post('/viewing/detect',                            viewingScheduleController.detectViewingRequest);
 
 module.exports = router;

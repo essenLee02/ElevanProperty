@@ -36,7 +36,7 @@ const { loadResponseSkillPrompt,
         getSkillRegistryStatus }              = require('../services/skillPromptService');
 const { hasPropertyKeyword,
         isPropertyContextContinuation }       = require('../utils/propertyKeywordFilter');
-const { extractQualificationState, isConditionalFallbackMessage } = require('../services/aiPromptBuilderService');
+const { extractQualificationState, isConditionalFallbackMessage, isCorrectionMessage } = require('../services/aiPromptBuilderService');
 
 // Per-city landmark reference (Q2c sub-area & Q6 anchor point examples) — moved to its
 // own module so this controller file isn't dominated by static data. See file for docs.
@@ -1148,6 +1148,10 @@ class ResponseBuilderWhatsApp {
     if (dmL) lines.push(dmL);
     const furL = fmt(isId ? 'Furnitur' : 'Furnishing', brief.furnishing);
     if (furL) lines.push(furL);
+    // Kondisi (Q_COND, beli) — jawaban customer atas baru/ready | second | inden,
+    // termasuk gabungan ("baru atau second"). Tersembunyi bila tidak dijawab.
+    const condL = fmt(isId ? 'Kondisi' : 'Condition', brief.propertyCondition);
+    if (condL) lines.push(condL);
     const facL = fmt(isId ? 'Fasilitas' : 'Facilities', brief.facilities);
     if (facL) lines.push(facL);
     const altL = fmt(isId ? 'Area alternatif' : 'Alt. areas', brief.alternativeAreas);
@@ -1472,6 +1476,65 @@ class ConversationQualifier {
     const custText = this.#customerText(activeHistory, userMessage);
     const aiText   = this.#aiText(activeHistory);
     const aiCount  = activeHistory.filter(h => h.role === 'assistant' || h.role === 'ai').length;
+
+    // ── RALAT JADWAL VIEWING ─────────────────────────────────────────────────
+    // Bila ada pesan customer berisi kata ralat + topik viewing/jam/jadwal
+    // ("ralat, viewingnya jam 2 siang aja"), semua field viewing di bawah dibaca
+    // HANYA dari pesan ralat terakhir ke belakang — nilai lama ("jam 11") yang
+    // muncul lebih dulu di custText tidak boleh menang lagi di summary.
+    const viewingText = (() => {
+      const msgs = [
+        ...activeHistory.filter(m => m.role === 'user' || m.role === 'customer').map(m => m.message || ''),
+        userMessage || '',
+      ];
+      const VIEW_TOPIC_RE = /\b(viewing\w*|survei\w*|survey\w*|jadwal\w*|jam|pukul)\b/i;
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        if (isCorrectionMessage(msgs[i]) && VIEW_TOPIC_RE.test(msgs[i])) {
+          return msgs.slice(i).join('\n').toLowerCase();
+        }
+      }
+      return null;   // tidak ada ralat viewing → pakai custText penuh
+    })();
+    const vText = viewingText || custText;
+
+    // Field viewing dihitung dari vText DULU (nilai pasca-ralat menang); bagian
+    // yang TIDAK ikut diralat (mis. customer ralat jam saja, harinya tetap "rabu
+    // minggu depan") di-fallback ke custText penuh supaya tidak hilang dari summary.
+    // Sufiks -an kolokial ikut dikenali: "sorean"/"siangan"/"pagian"/"malaman"
+    // ("Saya bisa sorean" = preferensi sore) — \bsore\b polos gagal match "sorean".
+    const _todOf = (s) =>
+      /\bmalam(?:an)?\b|\bmalem(?:an)?\b/i.test(s) ? 'malam'
+      : /\bpagi(?:an)?\b/i.test(s) ? 'pagi'
+      : /\bsiang(?:an)?\b/i.test(s) ? 'siang'
+      : /\bsore(?:an)?\b/i.test(s) ? 'sore' : null;
+    const _viewingTod = _todOf(vText) || (viewingText ? _todOf(custText) : null);
+    const _dayRefOf = (s) => {
+      const M = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+      const dateNDaysFromNow = (n) => {
+        const d = new Date(); d.setDate(d.getDate() + n);
+        return `${d.getDate()} ${M[d.getMonth()]} ${d.getFullYear()}`;
+      };
+      const nDays = s.match(/\b(\d{1,2})\s*hari\s*(?:lagi|kedepan|ke\s+depan|mendatang|besok(?:\s+ini)?|dari\s+sekarang)\b/i);
+      if (nDays) return dateNDaysFromNow(parseInt(nDays[1], 10));
+      if (/\bnanti\b|\bhari\s+ini\b|\bsekarang\b|(?:pagi|siang|sore|malam)\s+ini\b|\bini\s+(?:pagi|siang|sore|malam)\b/i.test(s)) return dateNDaysFromNow(0);
+      if (/\bbesok\s+lusa\b|\blusa\b/i.test(s)) return dateNDaysFromNow(2);
+      if (/\bbesok\b/i.test(s)) return dateNDaysFromNow(1);
+      // Nama hari + depan/minggu depan → resolve ke HARI ITU yang benar, bukan
+      // flat +7. Bug nyata: "rabu minggu depan" diucap Kamis 16 Juli → dulu
+      // dijawab "23 Juli" (Kamis lagi!), harusnya Rabu 22 Juli.
+      const DOW = { minggu: 0, ahad: 0, senin: 1, selasa: 2, rabu: 3, kamis: 4, jumat: 5, sabtu: 6 };
+      const wd = s.match(/\b(senin|selasa|rabu|kamis|jumat|sabtu|ahad)\s+(?:minggu\s+)?depan\b/i)
+              || s.match(/\bminggu\s+depan\s+(?:hari\s+)?(senin|selasa|rabu|kamis|jumat|sabtu|ahad)\b/i);
+      if (wd) {
+        const target = DOW[wd[1].toLowerCase()];
+        const todayDow = new Date().getDay();
+        const ahead = ((target - todayDow + 7) % 7) || 7;   // hari sama → +7
+        return dateNDaysFromNow(ahead);
+      }
+      if (/\bminggu\s+depan\b/i.test(s)) return dateNDaysFromNow(7);
+      return null;
+    };
+    const _viewingDayRef = _dayRefOf(vText) || (viewingText ? _dayRefOf(custText) : null);
 
     // ── Pre-compute: summary-already-shown detection ─────────────────────────
     // Same logic as aiPromptBuilderService.js Phase 3A.
@@ -1843,6 +1906,9 @@ class ConversationQualifier {
                /\b(senin|selasa|rabu|kamis|jumat|sabtu|ahad|minggu)\s*(ini|depan)?\b/i.test(custText) ||
                /\b\d{1,2}\s*(januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)\b/i.test(custText) ||
                /\btanggal\s*\d{1,2}\b/i.test(custText) ||
+               // Offset relatif "N hari/minggu/bulan lagi" juga = tanggal survei diberikan
+               // (mis. "survei 3 minggu lagi") — tanpa ini flow bisa terus menanyakan tanggal.
+               /\b\d{1,3}\s*(hari|minggu|bulan|tahun)\s+(lagi|kedepan|ke\s+depan|mendatang|dari\s+sekarang)\b/i.test(custText) ||
                /\bjam\s*\d{1,2}(?:[.:]\d{2})?\b/i.test(custText);
       })(),
       aiAskedViewingDate: this.#has(aiText, [
@@ -1860,43 +1926,13 @@ class ConversationQualifier {
        *  - hanya time-of-day (mis. "boleh siang") tanpa hari → default BESOK
        *  - "malam" → di luar jam survey (pagi–sore), AI tolak halus + minta jam pagi–sore
        */
-      viewingTimeOfDay: (() => {
-        if (/\bmalam\b/i.test(custText))  return 'malam';
-        if (/\bpagi\b/i.test(custText))   return 'pagi';
-        if (/\bsiang\b/i.test(custText))  return 'siang';
-        if (/\bsore\b/i.test(custText))   return 'sore';
-        return null;
-      })(),
-      viewingIsNight: /\bmalam\b/i.test(custText),
-      viewingDayRef: (() => {
-        const M = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
-        const dateNDaysFromNow = (n) => {
-          const d = new Date(); d.setDate(d.getDate() + n);
-          return `${d.getDate()} ${M[d.getMonth()]} ${d.getFullYear()}`;
-        };
-        // Resolve relative day words into a concrete calendar date (same treatment as
-        // "minggu depan" below) so the final Viewing summary line shows an unambiguous
-        // date ("7 Juli 2026") instead of a word that goes stale as days pass.
-        // "N hari lagi/kedepan/besok" HARUS dicek sebelum "besok"/"hari ini" polos —
-        // "viewing 3 hari lagi" = H+3 (18 Juli), bukan besok. Pola "besok"/"ini"
-        // yang rakus dulu menang duluan dan salah menghitung.
-        const nDays = custText.match(/\b(\d{1,2})\s*hari\s*(?:lagi|kedepan|ke\s+depan|mendatang|besok(?:\s+ini)?|dari\s+sekarang)\b/i);
-        if (nDays) return dateNDaysFromNow(parseInt(nDays[1], 10));
-        if (/\bnanti\b|\bhari\s+ini\b|\bsekarang\b|(?:pagi|siang|sore|malam)\s+ini\b|\bini\s+(?:pagi|siang|sore|malam)\b/i.test(custText)) return dateNDaysFromNow(0);
-        if (/\bbesok\s+lusa\b|\blusa\b/i.test(custText)) return dateNDaysFromNow(2);
-        if (/\bbesok\b/i.test(custText)) return dateNDaysFromNow(1);
-        // "minggu depan" (next week) = +7 hari dari hari ini → resolve ke tanggal konkret
-        if (/\bminggu\s+depan\b/i.test(custText)) {
-          return dateNDaysFromNow(7);
-        }
-        // "selasa depan", "rabu depan", dll (hari + depan tanpa "minggu")
-        if (/\b(senin|selasa|rabu|kamis|jumat|sabtu|ahad)\s+depan\b/i.test(custText)) {
-          return dateNDaysFromNow(7);
-        }
-        return null;
-      })(),
-      hasViewingHour: /\b(jam|pukul)\s*\d{1,2}(?:[.:]\d{2})?\b/i.test(custText)
-                   || /\b(jam|pukul)\s*(satu|dua|tiga|empat|lima|enam|tujuh|delapan|sembilan|sepuluh|sebelas|dua\s*belas)\b/i.test(custText),
+      // Dihitung di atas (helper _todOf/_dayRefOf): vText (pasca-ralat) menang,
+      // fallback ke custText penuh untuk bagian yang tidak ikut diralat.
+      viewingTimeOfDay: _viewingTod,
+      viewingIsNight: _viewingTod === 'malam',
+      viewingDayRef: _viewingDayRef,
+      hasViewingHour: /\b(jam|pukul)\s*\d{1,2}(?:[.:]\d{2})?\b/i.test(vText)
+                   || /\b(jam|pukul)\s*(satu|dua|tiga|empat|lima|enam|tujuh|delapan|sembilan|sepuluh|sebelas|dua\s*belas)\b/i.test(vText),
       aiAskedViewingHour: this.#has(aiText, [
         'mau viewing jam berapa', 'survey jam berapa', 'survei jam berapa',
         'viewing jam berapa', 'jam berapa', 'pukul berapa', 'what time',
@@ -2163,6 +2199,22 @@ class ConversationQualifier {
     // Store active-session custText on profile so buildAgentBrief can reuse it
     // without re-reading FULL history (which would leak stale data from old sessions).
     profile._custText = custText;
+    // Teks scope viewing (dari ralat viewing terakhir bila ada) — dipakai
+    // #extractViewingPreference agar jam/hari hasil RALAT yang tampil di summary.
+    profile._viewingText = vText;
+    // Pesan customer SAAT INI — dipakai #buildViewingHourQuestion untuk mendeteksi
+    // pertanyaan balik soal ketersediaan agen ("Kakak bisa kapan?") di giliran ini.
+    profile._currentMsg = userMessage || '';
+    // Pesan AI TERAKHIR (yang sedang dijawab customer) — dipakai untuk memastikan
+    // sub-dialog viewing memang topik BERJALAN, bukan flag "pernah ditanya" yang
+    // bocor dari pencarian lama di sesi yang sama (mis. "sorean" & pertanyaan jam
+    // viewing dari flow sebelumnya yang ditinggalkan lalu customer memulai pencarian
+    // baru). Tanpa ini, AI tiba-tiba tanya "Sore jam berapa?" padahal sedang tanya
+    // fasilitas/furnitur.
+    {
+      const _lastAi = [...activeHistory].reverse().find(m => m.role === 'ai' || m.role === 'assistant');
+      profile._lastAiText = (_lastAi?.message || '').toLowerCase();
+    }
 
     // ── Re-scope budget to the ACTIVE session (anti-leak) ─────────────────────
     // `filters` di atas diisi extractPropertyFilters() yang membaca FULL history,
@@ -2418,6 +2470,54 @@ class ConversationQualifier {
       ? `💰 Kisaran harga wajar *${typeLabel}* di Indonesia:`
       : `💰 Reasonable price range for *${typeLabel}* in Indonesia:`;
     return `${header}\n\n${blocks.join('\n\n')}`;
+  }
+
+  /**
+   * Balasan pengakuan RALAT — supaya AI terasa responsif & adaptif saat customer
+   * memperbaiki jawaban ("ralat, budget 1-2 miliar", "ganti viewingnya jam 2").
+   * Return teks singkat berisi nilai yang diperbarui (di-prepend ke balasan
+   * berikutnya), atau null bila pesan bukan ralat / tidak ada nilai baru dikenali.
+   * Nilai state-nya sendiri sudah di-overwrite oleh extractQualificationState
+   * (budget/moveInDate) dan scope _viewingText (jam/hari viewing) — helper ini
+   * hanya membuat pengakuannya eksplisit ke customer.
+   */
+  static buildCorrectionAck(userMessage = '', lang = 'id') {
+    if (!isCorrectionMessage(userMessage)) return null;
+    const isId = lang === 'id';
+    const updated = [];
+
+    const isViewingTopic = /\b(viewing\w*|survei\w*|survey\w*|jadwal\w*)\b/i.test(userMessage);
+
+    // Budget baru di pesan ralat?
+    const b = detectBudget(userMessage);
+    if (b && !b.ambiguous) {
+      updated.push(isId ? `Budget → *${b.preference === 'affordable' ? 'terjangkau' : b.text}*`
+                        : `Budget → *${b.preference === 'affordable' ? 'affordable' : b.text}*`);
+    }
+
+    // Jam/hari viewing baru?
+    const hourM = userMessage.match(/\b(?:jam|pukul)\s*(\d{1,2}(?:[.:]\d{2})?)\b/i);
+    if (isViewingTopic && hourM) {
+      const tod = (userMessage.match(/\b(pagi|siang|sore)\b/i) || [])[1] || '';
+      updated.push(isId ? `Jadwal viewing → *jam ${hourM[1]}${tod ? ' ' + tod : ''}*`
+                        : `Viewing time → *${hourM[1]}${tod ? ' ' + tod : ''}*`);
+    }
+
+    // Tanggal target/masuk baru? (bukan konteks viewing)
+    if (!isViewingTopic) {
+      try {
+        const { parseCustomerDate } = require('../utils/customerDateParser');
+        const parsed = parseCustomerDate(userMessage, new Date());
+        if (parsed && parsed.status === 'ok') {
+          updated.push(isId ? `Tanggal target → *${parsed.formatted}*` : `Target date → *${parsed.formatted}*`);
+        }
+      } catch (_e) { /* non-fatal */ }
+    }
+
+    if (!updated.length) return null;
+    return isId
+      ? `✏️ Siap, sudah saya perbarui ya:\n${updated.map(u => `• ${u}`).join('\n')}\nTerima kasih koreksinya! 🙏`
+      : `✏️ Got it, I have updated:\n${updated.map(u => `• ${u}`).join('\n')}\nThanks for the correction! 🙏`;
   }
 
   /**
@@ -3332,16 +3432,29 @@ class ConversationQualifier {
         source: (qualState.decisionMaker || profile.hasDecisionMaker) ? 'stated' : 'UNKNOWN',
       },
       household: {
-        value : profile.hasHouseholdInfo
-          ? this.#extractHouseholdSummary(custText)
-          : 'UNKNOWN',
-        source: profile.hasHouseholdInfo ? 'stated' : 'UNKNOWN',
+        // Prefer qualState.household (Phase-2 per-message extraction, anchored ke
+        // jawaban Q4 asli: "Saya tinggal sendirian" → "1 orang (sendiri)"). Fallback
+        // #extractHouseholdSummary memindai SELURUH custText — kata nyasar dari
+        // jawaban lain ("dekat wisata BNS" di patokan lokasi Q6) pernah membajak
+        // baris ini jadi "Untuk liburan/menginap sementara" pada transaksi BELI,
+        // menimpa jawaban penghuni yang sebenarnya.
+        value : qualState.household
+          ? qualState.household
+          : (profile.hasHouseholdInfo ? this.#extractHouseholdSummary(custText) : 'UNKNOWN'),
+        source: (qualState.household || profile.hasHouseholdInfo) ? 'stated' : 'UNKNOWN',
       },
       furnishing: {
         value : profile.hasFurnishing
           ? this.#extractFurnishing(custText)
           : 'UNKNOWN',
         source: profile.hasFurnishing ? 'stated' : 'inferred',
+      },
+      // Q_COND (beli): kondisi unit — baru/ready | second | inden | gabungan
+      // ("baru atau second"). Diambil dari qualState (extractor multi-pilih);
+      // null bila tidak pernah dijawab → baris disembunyikan oleh renderer.
+      propertyCondition: {
+        value : qualState.propertyCondition || null,
+        source: qualState.propertyCondition ? 'stated' : 'UNKNOWN',
       },
       leaseDuration: {
         // Prefer qualState.leaseDuration (exact customer response to Q10). Jika customer
@@ -3600,11 +3713,11 @@ class ConversationQualifier {
   }
 
   static #extractHouseholdSummary(custText) {
-    // Non-residential / temporary use (worship, investment, office/business, or a
-    // vacation/temporary stay) — not a residential occupancy, so show the USE instead
-    // of a bedroom-oriented label. We never asked "tinggal bersama siapa" here.
-    const use = detectUseCase(custText);
-    if (use) return useCaseLabel(use);
+    // URUTAN PENTING: jawaban penghuni EKSPLISIT ("tinggal sendirian", "berdua",
+    // "2 anak") diperiksa DULUAN — itu jawaban langsung atas Q4 dan harus menang.
+    // Label use-case (liburan/investasi/dll) hanya fallback bila customer tidak
+    // pernah menjawab komposisi penghuni — dulu use-case dicek duluan sehingga
+    // kata nyasar dari jawaban lain menimpa jawaban Q4 yang sebenarnya.
     const childM = custText.match(/(\d+)\s*anak/);
     if (childM) return `Keluarga dengan ${childM[1]} anak`;
     // Explicit headcount of any size (e.g. "15 orang") — a group (≥6) is flagged.
@@ -3620,6 +3733,11 @@ class ConversationQualifier {
     if (/rombongan|grup|group|reuni|arisan|gathering/.test(custText)) return 'Rombongan/grup';
     if (/keluarga besar/.test(custText))         return 'Keluarga besar';
     if (/keluarga/.test(custText))               return 'Keluarga';
+    // Fallback: non-residential / temporary use (ibadah, investasi, kantor/usaha,
+    // liburan) — bukan komposisi penghuni, tampilkan PENGGUNAANNYA. Hanya sampai
+    // sini bila tidak ada satu pun jawaban komposisi penghuni di atas.
+    const use = detectUseCase(custText);
+    if (use) return useCaseLabel(use);
     return 'Disebutkan';
   }
 
@@ -3683,6 +3801,49 @@ class ConversationQualifier {
     // Hanya dalam konteks viewing (AI sudah tanya decision-maker / tanggal survey)
     const inViewingCtx = profile.aiAskedDecisionMaker || profile.aiAskedViewingDate;
     if (!inViewingCtx) return null;
+
+    // ⚠️ Viewing harus jadi topik BERJALAN, bukan sekadar "pernah ditanya". Flag
+    // aiAskedDecisionMaker/aiAskedViewingDate bernilai true bila AI PERNAH menanyakannya
+    // di mana pun sepanjang sesi — sehingga bisa bocor dari pencarian LAMA yang
+    // ditinggalkan (customer lalu mulai pencarian baru tanpa greeting/ganti tipe →
+    // boundary tak reset). Gejala nyata: setelah AI tanya "Untuk furnitur…?", AI malah
+    // nyeletuk "Sore jam berapa?" (sore & jam bocor dari flow sebelumnya). Guard:
+    // topik viewing dianggap berjalan HANYA bila pesan AI terakhir memang soal
+    // viewing/survei/jadwal/koordinasi/jam, ATAU pesan customer saat ini menyinggung
+    // viewing/survei/jadwal.
+    const _lastAi = profile._lastAiText || '';
+    const _curMsgLo = (profile._currentMsg || '').toLowerCase();
+    const viewingIsCurrentTopic =
+      /\b(viewing|survei|survey|jadwalkan|jadwal|koordinasi|check.?in)\b/i.test(_lastAi)
+      || /\bjam\s+berapa\b/i.test(_lastAi)
+      || /\b(viewing|survei|survey|jadwal|ketemu|janjian|ketemuan)\b/i.test(_curMsgLo);
+    if (!viewingIsCurrentTopic) return null;
+
+    // ── Customer BALIK BERTANYA ketersediaan agen ─────────────────────────────
+    // "Kakak bisa survei dengan saya, kapan bisa ya?" / "Tanggal berapa bisa?" /
+    // "Sebaiknya enak kapan ya kita survei bareng?" — customer sedang bertanya ke
+    // KITA, bukan menjawab. Dulu dijawab robotik "Itu jam berapa, Kak? 📅" (pertanyaan
+    // diabaikan). Kini: jawab adaptif — tawarkan 2 tanggal konkret + kisaran jam
+    // yang mengikuti preferensi waktu yang sudah disebut ("Saya bisa sorean" → sore).
+    const curMsg = profile._currentMsg || '';
+    const asksAvailability =
+      /\b(?:kapan|tanggal\s+berapa|hari\s+apa)\b[^.!?\n]{0,30}\b(?:bisa|kosong|luang|available|free)\b/i.test(curMsg) ||
+      /\b(?:bisa|kosong|luang)\b[^.!?\n]{0,30}\b(?:kapan|tanggal\s+berapa|hari\s+apa)\b/i.test(curMsg) ||
+      /\benak(?:nya)?\s+kapan\b/i.test(curMsg) ||
+      /\bkapan\s+(?:bisa|enak(?:nya)?|ya)\b/i.test(curMsg);
+    if (asksAvailability && !profile.hasViewingHour) {
+      const M = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+      const dLabel = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return `${d.getDate()} ${M[d.getMonth()]}`; };
+      const todPref = profile.viewingTimeOfDay;
+      const hourHint = todPref === 'sore'  ? (isId ? 'sore — sekitar jam 3 atau jam 4' : 'in the afternoon — around 3 or 4 PM')
+        : todPref === 'siang' ? (isId ? 'siang — sekitar jam 12 atau jam 1' : 'midday — around 12 or 1 PM')
+        : todPref === 'pagi'  ? (isId ? 'pagi — sekitar jam 9 atau jam 10' : 'in the morning — around 9 or 10 AM')
+        : (isId ? '— jam 10 pagi atau jam 3 sore' : '— 10 AM or 3 PM');
+      return isId
+        ? `Saya fleksibel kok, Kak — tinggal menyesuaikan jadwal Kakak 😊\nBagaimana kalau *besok (${dLabel(1)})* atau *lusa (${dLabel(2)})* ${hourHint}?\nKalau kurang pas, sebut saja tanggal & jam yang paling nyaman ya 📅`
+        : `I'm flexible, Kak — happy to follow your schedule 😊\nHow about *tomorrow (${dLabel(1)})* or *the day after (${dLabel(2)})* ${hourHint}?\nIf that doesn't suit, just tell me any date & time 📅`;
+    }
+
     // Customer sudah usulkan hari ATAU time-of-day, tapi belum sebut jam
     const proposedTiming = profile.viewingTimeOfDay || profile.hasViewingDate;
     // ⚠️ WAJIB: jangan return null hanya karena aiAskedViewingHour sudah true — itu
@@ -3743,7 +3904,11 @@ class ConversationQualifier {
       const tod    = profile.viewingTimeOfDay;
       const dayRef = profile.viewingDayRef || (tod ? 'besok' : '');
       const dayRefCap = dayRef ? dayRef.charAt(0).toUpperCase() + dayRef.slice(1) : '';
-      const hourM  = custText.match(/\bjam\s*(\d{1,2}(?:[.:]\d{2})?)\b/i);
+      // Scope ke teks pasca-ralat bila ada, dan ambil match jam TERAKHIR — customer
+      // yang meralat ("ralat, jam 2 aja") harus menang atas jam pertama ("jam 11").
+      const hourSrc = profile._viewingText || custText;
+      const hourMs  = [...hourSrc.matchAll(/\b(?:jam|pukul)\s*(\d{1,2}(?:[.:]\d{2})?)\b/gi)];
+      const hourM   = hourMs.length ? hourMs[hourMs.length - 1] : null;
       const hourStr = hourM ? `jam ${hourM[1]}` : '';
       // Resolved date (contains month name, e.g. "9 Juli 2026") → "Jam 7 pagi, 9 Juli 2026"
       const MONTHS_LO = ['januari','februari','maret','april','mei','juni','juli','agustus','september','oktober','november','desember'];
@@ -3755,6 +3920,29 @@ class ConversationQualifier {
       }
       const parts  = [dayRefCap, tod, hourStr].filter(Boolean);
       return parts.length ? parts.join(' ') : 'Sudah dikonfirmasi';
+    }
+
+    // Waktu survei RELATIF menempel konteks survei → resolve ke tanggal konkret.
+    // "Saya mau survei 3 minggu lagi" = hari ini + 21 hari → "Survey dijadwalkan:
+    // 7 Agustus 2026". Ambil offset HANYA dari klausa yang menyebut survei/viewing
+    // (dipisah per kalimat) supaya tidak salah pakai tanggal MASUK (Q8, "20-30 Mei").
+    {
+      const viewSrc = [profile._currentMsg, profile._viewingText, custText].filter(Boolean).join('  ');
+      const relRe = /\b(\d{1,3})\s*(hari|minggu|bulan|tahun)\s+(?:lagi|kedepan|ke\s+depan|mendatang|dari\s+sekarang)\b/i;
+      const survClause = viewSrc.split(/[.!?\n]+/)
+        .find(s => /\b(survei|survey|viewing|lihat\s+(?:unit|rumah|properti|lokasi))\b/i.test(s) && relRe.test(s));
+      if (survClause) {
+        const rm = survClause.match(relRe);
+        const n = parseInt(rm[1], 10);
+        const unit = rm[2].toLowerCase();
+        const d = new Date();
+        if (unit === 'hari')        d.setDate(d.getDate() + n);
+        else if (unit === 'minggu') d.setDate(d.getDate() + n * 7);
+        else if (unit === 'bulan')  d.setMonth(d.getMonth() + n);
+        else                        d.setFullYear(d.getFullYear() + n);
+        const M = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+        return `Survey dijadwalkan: ${d.getDate()} ${M[d.getMonth()]} ${d.getFullYear()}`;
+      }
     }
 
     // AI already asked for viewing date — check if customer confirmed a date
@@ -4422,6 +4610,15 @@ class ChatbotPrivateService {
     const priceAnswerNote = ConversationQualifier.maybeAnswerReasonablePriceQuestion(userMessage, profile, lang);
     if (priceAnswerNote) console.log('[PrivateAgent/HargaWajar] Pertanyaan harga wajar terdeteksi — jawaban di-prepend.');
 
+    // ── RALAT (koreksi budget / tanggal / jadwal viewing) — akui secara eksplisit ──
+    // Nilai barunya sudah otomatis menang di state (overwrite di extractor); catatan
+    // ini membuat AI terasa responsif: customer tahu ralatnya diterima.
+    const correctionNote = ConversationQualifier.buildCorrectionAck(userMessage, lang);
+    if (correctionNote) console.log('[PrivateAgent/Ralat] Koreksi terdeteksi — pengakuan di-prepend.');
+
+    // Catatan yang di-prepend ke balasan berikutnya (ralat dulu, lalu harga wajar).
+    const preNote = [correctionNote, priceAnswerNote].filter(Boolean).join('\n\n') || null;
+
     console.log('[PrivateAgent/Qualifier]', {
       tx       : profile.transactionType || '(unknown)',
       type     : profile.buildingType    || '(unknown)',
@@ -4471,7 +4668,7 @@ class ChatbotPrivateService {
         );
         if (pilotQ) {
           console.log(`[PrivateAgent/HousePilot] Asking Q (aiCount=${profile.aiCount})`);
-          const qText = priceAnswerNote ? `${priceAnswerNote}\n\n${pilotQ}` : pilotQ;
+          const qText = preNote ? `${preNote}\n\n${pilotQ}` : pilotQ;
           return this.#wrap(builder.qualificationQuestion(qText), {
             skillInfo, filters, qualificationMode: true, housePilot: true,
           });
@@ -4494,7 +4691,7 @@ class ChatbotPrivateService {
 
       if (nextQuestion) {
         console.log(`[PrivateAgent/SummaryMode] Asking Q (aiCount=${profile.aiCount})`);
-        const qText = priceAnswerNote ? `${priceAnswerNote}\n\n${nextQuestion}` : nextQuestion;
+        const qText = preNote ? `${preNote}\n\n${nextQuestion}` : nextQuestion;
         return this.#wrap(builder.qualificationQuestion(qText), {
           skillInfo, filters, qualificationMode: true, summaryMode: true,
         });
@@ -4504,7 +4701,7 @@ class ChatbotPrivateService {
       console.log('[PrivateAgent/SummaryMode] ✅ All Q answered → generating agent brief');
       const brief = ConversationQualifier.buildAgentBrief(profile, filters, history, userMessage);
       const briefText = builder.agentBrief(brief);
-      const reply = priceAnswerNote ? `${priceAnswerNote}\n\n${briefText}` : briefText;
+      const reply = preNote ? `${preNote}\n\n${briefText}` : briefText;
 
       console.log('[PrivateAgent/SummaryMode] Brief generated:', {
         score   : brief.score,
@@ -4537,7 +4734,7 @@ class ChatbotPrivateService {
     );
     if (nextQuestion) {
       console.log(`[PrivateAgent/CatalogMode] Asking Q (aiCount=${profile.aiCount})`);
-      const qText = priceAnswerNote ? `${priceAnswerNote}\n\n${nextQuestion}` : nextQuestion;
+      const qText = preNote ? `${preNote}\n\n${nextQuestion}` : nextQuestion;
       return this.#wrap(builder.qualificationQuestion(qText), {
         skillInfo, filters, qualificationMode: true,
       });
@@ -4577,7 +4774,7 @@ class ChatbotPrivateService {
     const briefBody   = summaryFull.includes(sigMarker)
       ? summaryFull.substring(0, summaryFull.lastIndexOf(sigMarker))
       : summaryFull;
-    const reply = (priceAnswerNote ? `${priceAnswerNote}\n\n` : '') + briefBody + '\n\n---\n\n' + catalogReply;
+    const reply = (preNote ? `${preNote}\n\n` : '') + briefBody + '\n\n---\n\n' + catalogReply;
 
     return this.#wrap(reply, {
       skillInfo,

@@ -490,7 +490,27 @@ function detectUseCase(text = '') {
     return 'investasi';
   const comm = detectCommercialUse(t);
   if (comm) return comm;
-  if (/\b(liburan|berlibur|vacation|holiday|staycation|wisata|honeymoon|bulan\s+madu|dinas|perjalanan\s+dinas|business\s+trip|sementara|transit|short\s*stay|workation)\b/.test(t))
+  // 'liburan' — kata lemah TIDAK boleh berdiri sendiri. "wisata" adalah deskriptor
+  // TEMPAT ("dekat wisata BNS" = jawaban patokan lokasi Q6!), "dinas" muncul di nama
+  // kantor ("dekat kantor dinas pendidikan"), "sementara" adalah konjungsi umum
+  // ("sementara saya masih kerja di..."). Dulu semuanya polos di alternation →
+  // jawaban landmark "dekat lowokwaru dan wisata BNS" membajak use-case jadi
+  // 'liburan' → summary beli rumah menulis "Penghuni: Untuk liburan/menginap
+  // sementara" (menimpa jawaban asli "tinggal sendirian") + Q4 bisa ter-skip.
+  // Kini: verba/frasa kuat boleh sendiri; kata lemah wajib menempel frasa niat.
+  if (
+    // Kuat — hampir mustahil muncul dalam konteks lokasi/landmark:
+    /\b(berlibur|berwisata|staycation|honeymoon|bulan\s+madu|workation|perjalanan\s+dinas|tugas\s+dinas|dinas\s+luar\s+kota|business\s+trip|short\s*stay)\b/.test(t)
+    // Lemah + anchor niat: "untuk/buat/mau liburan", "buat dinas kerja", dst.
+    // ("dinas" polos tetap TIDAK match — "dekat kantor dinas pendidikan" aman;
+    //  "untuk kantor dinas" tertangkap detectCommercialUse('kantor') lebih dulu.)
+    || /\b(?:untuk|buat|keperluan|mau|pengen|pingin|rencana)\s+(?:\w+\s+){0,2}?(?:liburan|wisata|vacation|holiday|menginap|nginap|dinas)\b/.test(t)
+    || /\bliburan\s+(?:keluarga|bersama|panjang|akhir\s+tahun)\b/.test(t)
+    // "sementara" hanya bila menempel kata hunian: "tinggal/menginap sementara".
+    || /\b(?:tinggal|menginap|nginap|hunian|tempat)\s+sementara\b|\bsementara\s+waktu\b/.test(t)
+    // Jawaban langsung super-pendek atas pertanyaan motivasi ("Liburan", "buat liburan aja").
+    || /^\s*(?:untuk\s+|buat\s+)?(?:liburan|staycation|vacation|holiday)\s*(?:aja|saja|sih|kak|pak|bu)?\s*[.!]?\s*$/.test(t)
+  )
     return 'liburan';
   return '';
 }
@@ -567,7 +587,12 @@ function detectLocation(message = '') {
   // "kisaran" sebagai kata keterangan harga ("kisaran 900K", "kisaran Rp 1,5 juta",
   // "kisaran 2M") BUKAN nama kota Kisaran (Sumatera Utara). Strip sebelum deteksi
   // agar tidak salah-match kota dari JSON catalog.
-  const textForLoc = text.replace(/\bkisaran\s+(?:rp\.?\s*)?\d[\d.,kKmMjJ]*/gi, '');
+  let textForLoc = text.replace(/\bkisaran\s+(?:rp\.?\s*)?\d[\d.,kKmMjJ]*/gi, '');
+
+  // Idiom ASAL-USUL "orang <kota>" / "asli <kota>" = tempat customer BERASAL,
+  // BUKAN lokasi properti yang dicari. "Karena saya orang Surabaya" tidak boleh
+  // menjadikan Surabaya lokasi pencarian (padahal dia cari rumah di Jakarta).
+  textForLoc = textForLoc.replace(/\b(?:orang|asli|warga|penduduk)\s+[a-z]+(?:\s+(?:selatan|utara|barat|timur|pusat))?/gi, ' ');
 
   // ──── ALIAS MATCHING (prioritas tertinggi) ────
   // Cocokkan informal names / shorthand dulu. Misal "sby" → "Surabaya", "jogja" → "Yogyakarta".
@@ -1020,10 +1045,23 @@ function detectBudget(message = '') {
   // juta/miliar?"). Mencakup: "lantai 15", "lt 27", "tower 3", "floor 15-20",
   // "lantai 15 sampai 20", "lantai 15 - 20", DAN "lantai antara 12-15" (konektor
   // "antara"/"di" boleh muncul di ANTARA kata kunci & angka, bukan cuma sebelumnya).
-  const budgetText = text.replace(
+  let budgetText = text.replace(
     /\b(lantai|lt|tower|menara|floor|lvl|level)\s*(?:antara|di)?\s*\d+(?:\s*(?:-|–|sampai|s\/d|hingga|ke)\s*\d+)?/gi,
     ' '
   );
+
+  // Buang konteks TANGGAL sebelum parsing angka budget. "beli 20-30 Mei tahun depan"
+  // atau "tanggal 20-30 Mei" adalah rentang TANGGAL, bukan harga — tanpa strip ini
+  // "20-30" salah terbaca sebagai budget ambigu → memicu "Untuk harga 20-30 —
+  // maksudnya ribu/juta/miliar?" dan menimpa budget asli yang sudah jelas ("2-5 miliar").
+  const _MONTH_RE = '(?:jan(?:uari)?|feb(?:ruari)?|mar(?:et)?|apr(?:il)?|mei|jun[i]?|jul[i]?|agu(?:stus)?|agt|sep(?:tember)?|okt(?:ober)?|nov(?:ember)?|des(?:ember)?|january|february|march|april|june|july|august|september|october|november|december)';
+  budgetText = budgetText
+    // "(tanggal) 20-30 Mei" / "20 mei" → hapus (angka+bulan)
+    .replace(new RegExp(`\\b(?:tanggal\\s*)?\\d{1,2}(?:\\s*(?:-|–|sampai|s\\/d|hingga|ke)\\s*\\d{1,2})?\\s+${_MONTH_RE}\\b`, 'gi'), ' ')
+    // "Mei 20-30" / "mei 2027" → hapus (bulan+angka)
+    .replace(new RegExp(`\\b${_MONTH_RE}\\s+\\d{1,4}(?:\\s*(?:-|–|sampai|s\\/d|hingga|ke)\\s*\\d{1,4})?\\b`, 'gi'), ' ')
+    // "tanggal 20-30" tanpa bulan (dalam konteks jadwal) → hapus
+    .replace(/\btanggal\s*\d{1,2}(?:\s*(?:-|–|sampai|s\/d|hingga|ke)\s*\d{1,2})?/gi, ' ');
 
   // Apakah budget berupa PLAFON/CEILING ("maksimal 5jt", "di bawah 5jt", "max 5jt")?
   // Jika ya → simpan sebagai batas atas saja. Jika TIDAK (customer tembak harga absolut,
@@ -1173,8 +1211,18 @@ function extractFromHistory(history = []) {
 
     if (h.buildingType)          accumulated.buildingType    = h.buildingType;
     if (h.transactionType)       accumulated.transactionType = h.transactionType;
-    if (h.location)              accumulated.location        = h.location;
-    if (h.budget)                accumulated.budget          = h.budget;
+    // LOKASI — first-wins + overwrite hanya bila pesan punya CUE ganti lokasi.
+    // Tanpa guard ini, kota yang kebetulan disebut dalam konteks non-pencarian
+    // menimpa lokasi asli: "Karena saya orang surabaya" (asal-usul) atau "survei
+    // bareng" (bareng=bersama, tapi 'Bareng' juga nama tempat) → lokasi Jakarta
+    // customer hilang. Cue = di/ke/area/kawasan/daerah/lokasi/pindah/cari/nyari.
+    if (h.location && _shouldOverwriteLocation(accumulated.location, h.location, histMsg.message || '')) {
+      accumulated.location = h.location;
+    }
+    // BUDGET — pakai _mergeBudget (bukan last-wins): budget RESOLVED ("2-5 miliar")
+    // tidak boleh ditimpa oleh angka ambigu yang muncul belakangan (mis. sisa
+    // "20-30" bila strip tanggal meleset). Budget resolved baru tetap menang.
+    if (h.budget)                accumulated.budget          = _mergeBudget(h.budget, accumulated.budget);
     // Fasilitas AKUMULATIF (union) — customer bisa menyebut "kolam renang, gym"
     // di satu pesan dan "dapur lengkap" di pesan lain; semuanya diinginkan.
     // Sebelumnya pakai '=' sehingga pesan terakhir menimpa yang sebelumnya
@@ -1260,6 +1308,26 @@ function _mergeBudget(current, accumulated) {
   return current || accumulated || null;
 }
 
+// Cue bahwa pesan memang MENGGANTI lokasi pencarian (bukan sekadar menyebut kota
+// dalam konteks lain: "orang surabaya", "kota bandung bagus ya", "survei bareng").
+const _LOCATION_CHANGE_CUE = /\b(di|ke|area|kawasan|daerah|lokasi|pindah|cari(?:kan|in)?|nyari|prefer|mau)\b/i;
+
+/**
+ * Haruskah lokasi baru (next) menimpa lokasi yang sudah ada (prev)?
+ * - prev kosong                     → ya (lokasi pertama)
+ * - next kosong / sama              → tidak
+ * - REFINEMENT (Jakarta↔Jakarta Selatan, salah satu memuat yang lain) → ya
+ * - kota BERBEDA                    → hanya bila pesan punya cue ganti lokasi
+ * Mencegah kota yang kebetulan disebut (asal-usul, small talk) menghapus lokasi asli.
+ */
+function _shouldOverwriteLocation(prev, next, msg = '') {
+  if (!prev) return true;
+  if (!next || next === prev) return false;
+  const p = prev.toLowerCase(), n = next.toLowerCase();
+  if (p.includes(n) || n.includes(p)) return true;   // refinement
+  return _LOCATION_CHANGE_CUE.test(msg);
+}
+
 function extractPropertyFilters(message = '', history = []) {
   const current    = extractSingleMessageFilters(message);
   const accumulated = extractFromHistory(history);
@@ -1282,7 +1350,12 @@ function extractPropertyFilters(message = '', history = []) {
   const merged = {
     buildingType:   current.buildingType    || accumulated.buildingType    || '',
     transactionType:current.transactionType || (typeChangedToNew ? '' : accumulated.transactionType) || '',
-    location:       current.location        || accumulated.location        || '',
+    // Lokasi current hanya menang bila memang mengganti/merinci lokasi (punya cue
+    // atau refinement); kota yang kebetulan disebut di pesan terakhir tidak menimpa
+    // lokasi pencarian yang sudah mapan. Lihat _shouldOverwriteLocation.
+    location:       (current.location && _shouldOverwriteLocation(accumulated.location, current.location, message))
+                      ? current.location
+                      : (accumulated.location || current.location || ''),
     budget:         _mergeBudget(current.budget, accumulated.budget),
     facilities:     current.facilities?.length ? current.facilities : accumulated.facilities || [],
     fallbackTypes:  current.fallbackTypes   || accumulated.fallbackTypes   || [],

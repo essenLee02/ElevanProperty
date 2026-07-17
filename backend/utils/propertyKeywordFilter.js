@@ -712,6 +712,13 @@ function isPropertyContextContinuation(message, history = []) {
   // char saat customer merinci ("semi furnished, pokok ada peralatan dapur, lemari,
   // ranjang"). Kosakata furnitur tidak ada di hasPropertyFacility, jadi perlu sendiri.
   const hasFurnishingAnswer = /\b(furnished|unfurnished|furnish|furnitur|furniture|semi[\s-]?furnish\w*|full[\s-]?furnish\w*|fully[\s-]?furnish\w*|kosongan|perabot(?:an)?|peralatan\s+(dapur|rumah|masak|elektronik)|lemari|ranjang|kasur|tempat\s+tidur|spring\s*bed|springbed|sofa|kompor|kulkas|mesin\s+cuci|dispenser|kitchen\s+set|wardrobe)\b/i.test(lower);
+  // Jawaban KONDISI (Q_COND, beli) — baru/ready/second/bekas/inden, atau "kondisi
+  // bagus/baik/prima/mulus/terawat". Sering > 70 char saat customer merinci ("second
+  // atau baru, cuma untuk second. Saya mau kondisi bagus") → tanpa sinyal ini ter-drop
+  // oleh gate 70-char, lalu SALAH dibalas off-topic ("saya asisten khusus properti")
+  // atau di-skip total ("bukan query properti"). Kondisi = kosakata kualifikasi properti.
+  const hasConditionAnswer  = /\b(second|bekas|inden|indent)\b/i.test(lower)
+                              || /\bkondisi\s+(bagus|baik|prima|terawat|mulus|oke|ok|siap|baru|second|layak|ready)\b/i.test(lower);
   const hasPropertyContent  = hasPropertyFacility || isLandmarkAnswer || isMotivationAnswer || isPreferenceAnswer || isAmenityVicinity || isSchedulingRequest || isTowerFloorAnswer;
   // Sinyal jawaban kualifikasi yang KUAT (budget/nego Q3, furnishing Q11) cukup untuk
   // MELEWATI batas panjang 70-char, tapi SENGAJA tidak melewati screening
@@ -719,7 +726,7 @@ function isPropertyContextContinuation(message, history = []) {
   // Jawaban KATEGORI budget (Q3): terjangkau / menengah / eksklusif / mahal / murah /
   // kompetitif. Customer boleh jawab kategori daripada angka. Sinyal properti yang KUAT.
   const hasBudgetCategory   = /\b(terjangkau|ekonomis|murah|termurah|hemat|menengah|sedang|standar|eksklusif|ekslusif|mewah|premium|luxur(y|ious)|mahal|kompetitif|competitive|low\s*budget|affordable|mid[\s-]*range|budget[\s-]*friendly|exclusive)\b/i.test(lower);
-  const hasStrongAnswerCue  = hasBudgetAnswer || hasNegotiationCue || hasFurnishingAnswer || hasBudgetCategory;
+  const hasStrongAnswerCue  = hasBudgetAnswer || hasNegotiationCue || hasFurnishingAnswer || hasBudgetCategory || hasConditionAnswer;
 
   // Pesan pendek (≤ 70 karakter) → proses normal
   // Pesan medium (71–200) dengan konten properti / sinyal budget-nego-furnishing → jawaban Q2b/Q3/Q5/Q6/Q11

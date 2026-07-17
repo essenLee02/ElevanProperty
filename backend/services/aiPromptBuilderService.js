@@ -62,6 +62,20 @@ function isConditionalFallbackMessage(text = '') {
 }
 
 /**
+ * Pesan RALAT/KOREKSI — customer memperbaiki jawaban sebelumnya ("ralat, budget
+ * 1-2 miliar aja", "eh salah, viewingnya jam 2 siang", "ganti jadi tanggal 5").
+ * Slot yang biasanya first-wins (budget, tanggal masuk, jadwal viewing) BOLEH
+ * di-overwrite oleh nilai baru dalam pesan yang match regex ini — nilai baru hanya
+ * ditulis bila memang ada (pesan ralat tanpa nilai baru tidak menghapus apa pun).
+ */
+const CORRECTION_RE = /\b(ralat|koreksi|revisi|ganti(?:\s+(?:jadi|ke))?|diganti|ubah(?:\s+(?:jadi|ke))?|diubah|rubah|dirubah|salah\s+(?:sebut|tulis|ketik|kirim|info)|maksud\s?(?:ku|saya|nya)|bukan\s+itu|yang\s+benar|yg\s+bener|harusnya|seharusnya|sebenarnya|eh\s+salah|maaf\s+salah|batal(?:kan)?\s+yang\s+tadi)\b/i;
+
+/** True bila pesan adalah ralat/koreksi atas jawaban sebelumnya. */
+function isCorrectionMessage(text = '') {
+  return CORRECTION_RE.test(String(text || ''));
+}
+
+/**
  * Extract individual anchor-landmark tokens from a text: every "dekat/deket/near X"
  * phrase, split into per-landmark tokens (commas / "dan" / "&"), with filler words
  * stripped and city names excluded (a city is the Q2 location, not a Q6 anchor).
@@ -289,6 +303,10 @@ function extractQualificationState(history = [], currentMessage = '') {
     if (!QS_CUST_ROLES.has(msg.role)) continue;
     const raw  = msg.message || '';
     const text = raw.toLowerCase().trim();
+    // Pesan ralat → slot first-wins (budget, tanggal masuk) boleh di-overwrite
+    // dengan nilai baru di pesan ini. Loop berjalan kronologis, jadi ralat yang
+    // datang belakangan otomatis menang atas nilai lama.
+    const isCorrectionMsg = CORRECTION_RE.test(text);
 
     // Q1 — Transaction type. "booking/pesan" = rent frame (hotel/kondotel/villa)
     if (!state.transactionType) {
@@ -415,7 +433,9 @@ function extractQualificationState(history = [], currentMessage = '') {
     //   • rejects counts ("2 kali" is NOT 2 ribu, "3 kamar" is NOT budget)
     //   • maps affordability words → terjangkau/affordable
     // Ambiguous ranges (no unit on either side) are left ❓ so Q3 is re-asked.
-    if (!state.budget) {
+    // Pesan ralat boleh menimpa budget lama ("ralat, budget 1-2 miliar aja") —
+    // hanya bila pesan ralat memang berisi angka budget baru yang valid.
+    if (!state.budget || isCorrectionMsg) {
       const b = detectBudget(raw);
       if (b && !b.ambiguous) {
         if (b.preference === 'affordable') {
@@ -471,7 +491,9 @@ function extractQualificationState(history = [], currentMessage = '') {
       if (!state.household && /\b(rombongan|grup|group|gathering|arisan|reuni|keluarga besar)\b/.test(text)) {
         state.household = 'rombongan/grup';
       }
-      if (!state.household && (/\bsendiri\b|\bsendiran\b|\bjust me\b|\balone\b/.test(text))) {
+      // "sendirian" TIDAK match \bsendiri\b (boundary gagal di "-an") dan "sendiran"
+      // adalah typo — pakai sendiri(?:an)? agar "Saya tinggal sendirian" tertangkap.
+      if (!state.household && (/\bsendiri(?:an)?\b|\bsendiran\b|\bjust me\b|\balone\b/.test(text))) {
         state.household = '1 orang (sendiri)';
       } else if (!state.household && /\bsama (istri|suami)\b|\bbersama (istri|suami)\b/.test(text)) {
         state.household = '2 orang (bersama pasangan)';
@@ -508,7 +530,10 @@ function extractQualificationState(history = [], currentMessage = '') {
     // 'ask_current_month' → customer menyebut bulan berjalan tanpa tanggal (rule 25)
     // 'ask_soon'          → customer bilang "segera" (rule 35)
     // Keduanya WAJIB diklarifikasi dulu; jika customer tidak tahu → "Waiting the update".
-    if (!state.moveInDate) {
+    // Pesan ralat boleh menimpa tanggal masuk ("ralat, jadinya 5 agustus") —
+    // KECUALI ralat itu tentang JADWAL VIEWING ("ralat viewingnya besok aja"):
+    // tanggal viewing bukan tanggal masuk, jangan sampai saling menimpa.
+    if (!state.moveInDate || (isCorrectionMsg && !/\b(viewing|survei|survey|jadwal\w*)\b/.test(text))) {
       const parsed = parseCustomerDate(raw, now);
       if (parsed) {
         if (parsed.status === 'ok') {
@@ -532,9 +557,15 @@ function extractQualificationState(history = [], currentMessage = '') {
         else if (hasKpr)        state.financing = 'KPR';
         else if (hasCash)       state.financing = 'cash';
       }
-      // Q_COND — kondisi (beli residensial): baru/ready | second | inden
+      // Q_COND — kondisi (beli residensial): baru/ready | second | inden.
+      // Jawaban GABUNGAN ("kondisi baru atau second") harus utuh — dulu hanya
+      // "second" yang match sehingga summary kehilangan opsi "baru"-nya.
       if (!state.propertyCondition) {
-        if (/\bready\s*stock\b|\bbaru\/ready\b/.test(text))      state.propertyCondition = 'baru/ready';
+        const pairNewSecond =
+          /\b(?:baru|ready)\b[^.!?\n]{0,25}\b(?:atau|\/|or|maupun)\b[^.!?\n]{0,25}\b(?:second|bekas)\b/.test(text) ||
+          /\b(?:second|bekas)\b[^.!?\n]{0,25}\b(?:atau|\/|or|maupun)\b[^.!?\n]{0,25}\b(?:baru|ready)\b/.test(text);
+        if (pairNewSecond)                                        state.propertyCondition = 'baru atau second';
+        else if (/\bready\s*stock\b|\bbaru\/ready\b|\bkondisi\s+baru\b/.test(text)) state.propertyCondition = 'baru/ready';
         else if (/\b(second|bekas)\b/.test(text))                 state.propertyCondition = 'second';
         else if (/\binden\b/.test(text))                          state.propertyCondition = 'inden';
       }
@@ -625,7 +656,17 @@ function extractQualificationState(history = [], currentMessage = '') {
         }
         state.anchorPoint = joinAnchorTokens(_anchorParts);
       } else {
-        state.anchorPoint = custResp;
+        // Customer sering menjawab Q6 (patokan lokasi) dengan daftar FASILITAS
+        // ("AC, kolam renang, gym, one gate system, kulkas") — itu bukan patokan
+        // lokasi. Fasilitas sudah ditangkap terpisah (detectFacilities). Jangan
+        // simpan jawaban yang murni fasilitas (tanpa kata dekat/di jalan/kawasan &
+        // bukan nama kota) sebagai anchorPoint — biarkan null supaya baris "Patokan
+        // lokasi" tidak menampilkan fasilitas. Jawaban negatif/fleksibel ("bebas",
+        // "terserah") tetap disimpan agar dinormalisasi jadi "Bebas".
+        const facils = detectFacilities(custResp);
+        const hasLocationCue = /\b(dekat|deket|dekay|dekt|dkt|near|di\s+jalan|di\s+sekitar|sekitar|kawasan|daerah|jalan|jl\.?|komplek|perumahan|cluster)\b/i.test(custResp);
+        const isFacilityOnly = facils.length >= 1 && !hasLocationCue && !detectLocation(custResp);
+        if (!isFacilityOnly) state.anchorPoint = custResp;
       }
     }
     // Q7 — alternative areas
@@ -702,12 +743,20 @@ function extractQualificationState(history = [], currentMessage = '') {
       state.kprDetails = custResp;
     }
 
-    // Q_COND — kondisi properti (fires jika AI menanyakan baru/second/inden)
+    // Q_COND — kondisi properti (fires jika AI menanyakan baru/second/inden).
+    // MULTI-PILIH: customer boleh menjawab lebih dari satu opsi ("baru atau
+    // second") — kumpulkan SEMUA yang disebut, jangan berhenti di match pertama
+    // (dulu if/else-if → "Saya mau beli dalam kondisi baru atau second" hanya
+    // tercatat "baru/ready", opsi "second"-nya hilang dari summary).
     if (!state.propertyCondition && /baru.{0,30}second|second.{0,30}inden|kondisi.{0,20}(rumah|unit|properti)|ready.{0,10}stock.{0,20}inden/.test(aiText)) {
-      if (/\b(baru|ready)\b/i.test(custResp))       state.propertyCondition = 'baru/ready';
-      else if (/\b(second|bekas)\b/i.test(custResp)) state.propertyCondition = 'second';
-      else if (/\binden\b/i.test(custResp))          state.propertyCondition = 'inden';
-      else if (custResp.trim())                      state.propertyCondition = custResp.trim();
+      const opts = [];
+      if (/\b(baru|ready)\b/i.test(custResp))  opts.push('baru');
+      if (/\b(second|bekas)\b/i.test(custResp)) opts.push('second');
+      if (/\binden\b/i.test(custResp))          opts.push('inden');
+      if (opts.length > 1)      state.propertyCondition = opts.join(' atau ');
+      else if (opts[0] === 'baru') state.propertyCondition = 'baru/ready';
+      else if (opts.length)     state.propertyCondition = opts[0];
+      else if (custResp.trim()) state.propertyCondition = custResp.trim();
     }
 
     // Q_FAC — facilities (opsional). AI tanya fasilitas → customer jawab apapun → catat.
@@ -1874,4 +1923,5 @@ module.exports = {
   buildQualificationStateBlock,
   findNextQuestion,
   isConditionalFallbackMessage,
+  isCorrectionMessage,
 };
