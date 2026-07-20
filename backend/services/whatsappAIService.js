@@ -30,6 +30,7 @@ const { buildRecommendationContextForLLM,
 const { getConversationHistory }                    = require('./sessionService');
 const { loadAIContextBlocks }                       = require('./aiContextService');
 const { splitCatalogReply }                         = require('../utils/replySplitter');
+const { resolveCatalogMode, envFallbackMode }       = require('./catalogModeService');
 
 /* ══════════════════════════════════════════════════════════════════════════════
    QUALIFICATION GATE — 4 Minimum Info Required
@@ -137,7 +138,7 @@ function agentSignature(agentName, isId) {
  * @param {Array}  history   - Conversation history (untuk language detection)
  * @returns {{ reply, provider, contextSource } | null}
  */
-function buildQualifyReply(filters, message, agentName, contextSource, history = []) {
+function buildQualifyReply(filters, message, agentName, contextSource, history = [], catalogMode = null) {
   const { buildingType: type, transactionType: tx, location: loc, budget: bud } = filters;
   // Nama perusahaan dari APP_NAME env (bisa diubah di .env). JANGAN hardcode.
   const appName = process.env.APP_NAME || 'Elevan Property';
@@ -160,7 +161,8 @@ function buildQualifyReply(filters, message, agentName, contextSource, history =
   //
   // Di catalog mode (ON): qual gate selalu dijalankan penuh — AI butuh 4 info
   // sebelum bisa menampilkan listing.
-  const summaryMode = String(process.env.RESPOND_CATALOG_RUN || 'OFF').toUpperCase() !== 'ON';
+  // Mode per-agent (users.catalog_summary) dilewatkan caller; fallback env bila null.
+  const summaryMode = (catalogMode || envFallbackMode()) !== 'ON';
   if (summaryMode && (type || tx || loc)) {
     // Property context sudah ada → AI handle Q1–Q12 naturally (termasuk Q3 budget)
     return null;
@@ -275,6 +277,13 @@ async function generateWhatsAppAIReply(params) {
   // listing miliknya sendiri). Disimpan di session agar ikut ke Private Agent fallback.
   if (session && agentUserId && !session.agentUserId) session.agentUserId = agentUserId;
 
+  // ── Mode katalog PER-AGENT (users.catalog_summary) ─────────────────────────
+  // Sumber kebenaran mode summary/katalog kini kolom users.catalog_summary
+  // ('ON'/'OFF', diubah agent via chat "matikan/nyalakan summary") — BUKAN env
+  // RESPOND_CATALOG_RUN (env tinggal fallback saat kolom NULL). Dipanggil di sini
+  // (awal pipeline) supaya cache hangat untuk pembaca sync di prompt builder.
+  const catalogMode = await resolveCatalogMode(agentUserId);   // 'ON' | 'OFF'
+
   // ── Step 1: Get conversation history ───────────────────────────────────────
   // Diambil DULU (sebelum property context) supaya katalog DB (Property/
   // PropertyFacility/PropertyLocation) bisa memakai filter yang diekstrak dari
@@ -313,7 +322,7 @@ async function generateWhatsAppAIReply(params) {
     console.warn('[WhatsAppAI] Filter extraction failed:', err.message);
   }
 
-  const qualResponse = buildQualifyReply(filters, message, agentName, contextSource, history);
+  const qualResponse = buildQualifyReply(filters, message, agentName, contextSource, history, catalogMode);
 
   if (qualResponse) {
     console.log('[WhatsAppAI] 🛑 Qualification gate triggered — asking for missing info:', {
@@ -368,7 +377,8 @@ async function generateWhatsAppAIReply(params) {
   // AI selalu menjalankan Q1-Q12 interview. RESPOND_CATALOG_RUN hanya mengontrol
   // apakah setelah brief ditampilkan, rekomendasi catalog juga ikut ditampilkan atau tidak.
   const primaryProvider       = String(process.env.AI_PRIMARY_PROVIDER || 'chatgpt').toLowerCase().trim();
-  const showCatalogAfterBrief = String(process.env.RESPOND_CATALOG_RUN || 'OFF').toUpperCase() === 'ON';
+  // Per-agent (users.catalog_summary), sudah di-resolve di awal pipeline.
+  const showCatalogAfterBrief = catalogMode === 'ON';
   const shouldCallAIProviders = primaryProvider !== 'private';
 
   if (!shouldCallAIProviders) {

@@ -12,6 +12,7 @@ const Country = require('./Country');
 const Province = require('./Province');
 const City = require('./City');
 const Location = require('./Location');
+const Customer = require('./Customer');
 
 ChatSession.hasMany(ChatMessage, { foreignKey: 'chatSessionId', as: 'messages' });
 ChatMessage.belongsTo(ChatSession, { foreignKey: 'chatSessionId', as: 'session' });
@@ -41,6 +42,11 @@ Property.hasMany(PropertyFacility,   { foreignKey: 'property_id', sourceKey: 'pr
 PropertyFacility.belongsTo(Property, { foreignKey: 'property_id', targetKey: 'property_id', as: 'property',   constraints: false });
 PropertyFacility.belongsTo(Facility, { foreignKey: 'facility_id', targetKey: 'facility_id', as: 'facility',   constraints: false });
 
+// Customer ↔ User (agent) — 1 customer bisa terdaftar ke beberapa agent (baris per agent)
+Customer.belongsTo(User, { foreignKey: 'user_id',    targetKey: 'user_id', as: 'agent',   constraints: false });
+Customer.belongsTo(User, { foreignKey: 'created_by', targetKey: 'user_id', as: 'creator', constraints: false });
+User.hasMany(Customer,   { foreignKey: 'user_id',    sourceKey: 'user_id', as: 'customers', constraints: false });
+
 // Property → Location relationship (many-to-many through property_locations table)
 Property.hasMany(PropertyLocation,  { foreignKey: 'property_id', sourceKey: 'property_id', as: 'locations', constraints: false });
 PropertyLocation.belongsTo(Property, { foreignKey: 'property_id', targetKey: 'property_id', as: 'property',  constraints: false });
@@ -61,5 +67,6 @@ module.exports = {
   Country,
   Province,
   City,
-  Location
+  Location,
+  Customer
 };

@@ -18,6 +18,8 @@ import CityListView from '../views/City/CityListView.vue'
 import CityMasterView from '../views/City/CityMasterView.vue'
 import LocationListView from '../views/Location/LocationListView.vue'
 import LocationMasterView from '../views/Location/LocationMasterView.vue'
+import CustomerListView from '../views/Customer_Master/CustomerListView.vue'
+import CustomerMasterView from '../views/Customer_Master/CustomerMasterView.vue'
 import PropertyListView from '../views/Property/PropertyListView.vue'
 import PropertyMasterView from '../views/Property/PropertyMasterView.vue'
 
@@ -136,6 +138,25 @@ const router = createRouter({
       path: '/city/edit/:city_id',
       name: 'city-edit',
       component: CityMasterView,
+      meta: { layout: 'auth', requiresAuth: true }
+    },
+    // Master Data — Customer (terisi otomatis oleh AI WhatsApp + manual agent)
+    {
+      path: '/customer',
+      name: 'customer-list',
+      component: CustomerListView,
+      meta: { layout: 'auth', requiresAuth: true }
+    },
+    {
+      path: '/customer/add',
+      name: 'customer-add',
+      component: CustomerMasterView,
+      meta: { layout: 'auth', requiresAuth: true }
+    },
+    {
+      path: '/customer/edit/:customer_id',
+      name: 'customer-edit',
+      component: CustomerMasterView,
       meta: { layout: 'auth', requiresAuth: true }
     },
     // Master Data — Location

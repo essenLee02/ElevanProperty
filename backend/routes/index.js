@@ -49,6 +49,7 @@ const rumah123Controller         = require('../controllers/rumah123Controller');
 const timelinesAIChatController  = require('../controllers/timelinesAIChatController');
 const fonnteChatController       = require('../controllers/fonnteChatController');
 const viewingScheduleController  = require('../controllers/viewingScheduleController');
+const customerMasterController   = require('../controllers/customerMasterController');
 const kirimiChatController       = require('../controllers/kirimiChatController');
 
 // Auth controllers
@@ -266,6 +267,19 @@ router.post('/location/insert',                           verifyToken, locationM
 router.put('/location/update/:location_id',               verifyToken, locationMasterController.updateDataLocation);
 router.patch('/location/toggle-status/:location_id',      verifyToken, locationMasterController.toggleStatusLocation);
 router.delete('/location/delete/:location_id',            verifyToken, locationMasterController.deleteDataLocation);
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   MASTER DATA — CUSTOMER (Butuh login)
+   Terisi otomatis oleh AI (saat summary WhatsApp) + input manual agent.
+══════════════════════════════════════════════════════════════════════════════ */
+
+router.get('/customer/list',                              verifyToken, customerMasterController.showDataCustomer);
+router.get('/customer/detail/:customer_id',               verifyToken, customerMasterController.getDetailCustomer);
+router.post('/customer/insert',                           verifyToken, customerMasterController.insertDataCustomer);
+router.put('/customer/update/:customer_id',               verifyToken, customerMasterController.updateDataCustomer);
+router.patch('/customer/toggle-status/:customer_id',      verifyToken, customerMasterController.toggleStatusCustomer);
+router.patch('/customer/toggle-ai/:customer_id',          verifyToken, customerMasterController.toggleAiResponseCustomer);
+router.delete('/customer/delete/:customer_id',            verifyToken, customerMasterController.deleteCustomer);
 
 /* ══════════════════════════════════════════════════════════════════════════════
    VIEWING SCHEDULE — Google Calendar Integration (Viewing/Survey Appointments)

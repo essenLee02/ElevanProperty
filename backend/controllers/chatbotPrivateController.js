@@ -2473,6 +2473,45 @@ class ConversationQualifier {
   }
 
   /**
+   * Q_NAME / Q_EMAIL — pertanyaan identitas customer TEPAT sebelum summary.
+   * - NAMA: dibutuhkan registrasi customer (tabel customers). TIDAK ditanya bila
+   *   customer sudah memperkenalkan diri ("Hi saya Rina, ...", "Perkenalkan, saya
+   *   Rizal", "Nama saya Kezia") — atau sudah pernah ditanya (tanya SEKALI saja;
+   *   tidak dijawab pun summary tetap lanjut, fallback nama profil WhatsApp).
+   * - EMAIL: hanya bila jadwal viewing sudah disepakati (undangan kalender) dan
+   *   belum ada email di chat — juga maksimal SEKALI.
+   * Return teks pertanyaan, atau null bila tidak perlu bertanya (lanjut summary).
+   */
+  static buildIdentityQuestion(history, userMessage, profile, lang = 'id') {
+    const isId = lang === 'id';
+    try {
+      const {
+        extractIdentityFromChat, aiAlreadyAskedName, aiAlreadyAskedEmail,
+      } = require('../services/customerRegistrationService');
+      const identity = extractIdentityFromChat(history, userMessage);
+
+      // Q_NAME — belum kenal nama & belum pernah tanya
+      if (!identity.name && !aiAlreadyAskedName(history)) {
+        return isId
+          ? 'Sebelum saya buatkan ringkasannya — boleh saya tahu nama Kakak? 😊'
+          : 'Before I prepare your summary — may I know your name? 😊';
+      }
+
+      // Q_EMAIL — viewing sudah dijadwalkan, email belum ada & belum pernah tanya
+      const viewingPlanned = !!(profile?.hasViewingHour || profile?.hasViewingDate
+                               || profile?.wantsViewingScheduled);
+      if (viewingPlanned && !identity.email && !aiAlreadyAskedEmail(history)) {
+        return isId
+          ? 'Untuk undangan jadwal viewing-nya, boleh minta alamat email Kakak? 📧\n(Kalau tidak berkenan, balas "lewati" saja — tidak wajib 😊)'
+          : 'For the viewing invitation, may I have your email address? 📧\n(Reply "skip" if you prefer not to — it\'s optional 😊)';
+      }
+    } catch (err) {
+      console.warn('[PrivateAgent/Q_NAME] identity check failed (non-fatal):', err.message);
+    }
+    return null;
+  }
+
+  /**
    * Balasan pengakuan RALAT — supaya AI terasa responsif & adaptif saat customer
    * memperbaiki jawaban ("ralat, budget 1-2 miliar", "ganti viewingnya jam 2").
    * Return teks singkat berisi nilai yang diperbarui (di-prepend ke balasan
@@ -4627,10 +4666,14 @@ class ChatbotPrivateService {
       aiCount  : profile.aiCount,
     });
 
-    // ── CHECK MODE: RESPOND_CATALOG_RUN ─────────────────────────────────────
+    // ── CHECK MODE: users.catalog_summary (per-agent) ────────────────────────
     // OFF (default) → Full Q1–Q12 flow → show structured brief only
     // ON            → Full Q1–Q12 flow → show summary brief + catalog listing
-    const showCatalogDirect = String(process.env.RESPOND_CATALOG_RUN || 'OFF').toUpperCase() === 'ON';
+    // Sumber kebenaran kini kolom users.catalog_summary milik agent (diubah agent
+    // via chat "matikan/nyalakan summary"); env RESPOND_CATALOG_RUN tinggal fallback
+    // saat kolom NULL / agent tidak dikenal.
+    const { resolveCatalogMode } = require('../services/catalogModeService');
+    const showCatalogDirect = (await resolveCatalogMode(scopedUserId)) === 'ON';
 
     // ── Shared: fetch price anchors for Q3 (needed in both modes) ────────────
     // Only fetch when BOTH location AND type are known — avoids a heavy DB query
@@ -4697,6 +4740,21 @@ class ChatbotPrivateService {
         });
       }
 
+      // ── Q_NAME/Q_EMAIL — identitas customer SEBELUM summary (tanya SEKALI) ──
+      // Nama: wajib utk registrasi customer. Tidak ditanya bila customer sudah
+      // memperkenalkan diri ("Hi saya Rina...") — extractIdentityFromChat mendeteksinya.
+      // Email: hanya bila jadwal viewing sudah ada (untuk undangan kalender).
+      // Masing-masing maksimal SEKALI — customer tidak menjawab → summary tetap lanjut.
+      {
+        const idQ = ConversationQualifier.buildIdentityQuestion(history, userMessage, profile, lang);
+        if (idQ) {
+          const qText = preNote ? `${preNote}\n\n${idQ}` : idQ;
+          return this.#wrap(builder.qualificationQuestion(qText), {
+            skillInfo, filters, qualificationMode: true, summaryMode: true,
+          });
+        }
+      }
+
       // All Q1–Q12 answered → generate structured brief
       console.log('[PrivateAgent/SummaryMode] ✅ All Q answered → generating agent brief');
       const brief = ConversationQualifier.buildAgentBrief(profile, filters, history, userMessage);
@@ -4738,6 +4796,17 @@ class ChatbotPrivateService {
       return this.#wrap(builder.qualificationQuestion(qText), {
         skillInfo, filters, qualificationMode: true,
       });
+    }
+
+    // ── Q_NAME/Q_EMAIL — identitas customer SEBELUM summary (tanya SEKALI) ──
+    {
+      const idQ = ConversationQualifier.buildIdentityQuestion(history, userMessage, profile, lang);
+      if (idQ) {
+        const qText = preNote ? `${preNote}\n\n${idQ}` : idQ;
+        return this.#wrap(builder.qualificationQuestion(qText), {
+          skillInfo, filters, qualificationMode: true,
+        });
+      }
     }
 
     // All Q answered → build summary brief + fetch listings in parallel

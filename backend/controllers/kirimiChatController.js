@@ -427,6 +427,24 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
   const message = combinedMessage;
   const ts      = new Date().toISOString();
 
+  // ── PERINTAH AGENT: toggle summary/katalog via chat ─────────────────────
+  // "matikan summary" / "nyalakan summary" / "turn off the summary" DARI NOMOR
+  // AGENT sendiri → update users.catalog_summary (ON/OFF) + balas konfirmasi.
+  // Customer yang mengirim frasa serupa diabaikan (bukan perintah, bukan query).
+  try {
+    const { maybeHandleCatalogCommand } = require('../services/catalogModeService');
+    const cmdReply = await maybeHandleCatalogCommand({ message, senderPhone: sender, agent });
+    if (cmdReply) {
+      await sendViaKirimi(sender, cmdReply, agent.kirimi_device_id);
+      if (isTerminalActive('KIRIMI')) {
+        console.log(`[KIRIMI] ⚙️  Perintah agent: catalog_summary di-update oleh ${sanitizeLog(agent.name, 40)} — "${sanitizeLog(message, 80)}"`);
+      }
+      return;   // perintah admin — tidak disimpan sebagai chat customer
+    }
+  } catch (cmdErr) {
+    console.warn('[KIRIMI] Catalog command check failed:', cmdErr.message);
+  }
+
   let session = await ChatSession.findOne({ where: { normalizedPhone: normSender, source } });
   if (!session) {
     session = await ChatSession.create({
@@ -537,6 +555,18 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
     channel       : 'whatsapp',
     metadata      : JSON.stringify({ aiProvider: aiResult.provider, contextSource: ctxSource })
   });
+
+  // ── Registrasi customer otomatis saat SUMMARY terkirim ──────────────
+  // Marker "✓ Rencana:" di balasan → daftarkan customer ke tabel customers
+  // (idempoten via UNIQUE user_id+phone; nama dari perkenalan chat / pushname,
+  // email bila sudah diberikan). Non-fatal — tidak mengganggu pengiriman.
+  try {
+    const { maybeRegisterOnSummary } = require('../services/customerRegistrationService');
+    await maybeRegisterOnSummary({
+      reply: aiResult.reply, sessionId: session.id, currentMessage: message,
+      agentUserId: agent.user_id, phone: sender, waName: name,
+    });
+  } catch (_) { /* non-fatal */ }
 
   // ── Kirim via Kirimi (device milik agent) ────────────────────────────
   // replyParts: summary/lead-in as one message, then one message per catalog

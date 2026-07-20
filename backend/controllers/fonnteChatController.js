@@ -330,6 +330,21 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
   const message = combinedMessage;
   const ts      = new Date().toISOString();
 
+  // ── PERINTAH AGENT: toggle summary/katalog via chat ─────────────────────
+  // "matikan summary" / "nyalakan summary" DARI NOMOR AGENT sendiri → update
+  // users.catalog_summary (ON/OFF) + balas konfirmasi. Customer diabaikan.
+  try {
+    const { maybeHandleCatalogCommand } = require('../services/catalogModeService');
+    const cmdReply = await maybeHandleCatalogCommand({ message, senderPhone: sender, agent });
+    if (cmdReply) {
+      await sendViaFonnte(sender, cmdReply, agent.fonnte_token);
+      console.log(`[FONNTE] ⚙️  Perintah agent: catalog_summary di-update oleh ${agent.name}`);
+      return;   // perintah admin — tidak disimpan sebagai chat customer
+    }
+  } catch (cmdErr) {
+    console.warn('[FONNTE] Catalog command check failed:', cmdErr.message);
+  }
+
   let session = await ChatSession.findOne({ where: { normalizedPhone: normSender, source } });
 
   if (!session) {
@@ -452,6 +467,15 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
     channel       : 'whatsapp',
     metadata      : JSON.stringify({ aiProvider: aiResult.provider, contextSource: ctxSource })
   });
+
+  // ── Registrasi customer otomatis saat SUMMARY terkirim ──────────────
+  try {
+    const { maybeRegisterOnSummary } = require('../services/customerRegistrationService');
+    await maybeRegisterOnSummary({
+      reply: aiResult.reply, sessionId: session.id, currentMessage: message,
+      agentUserId: agent.user_id, phone: sender, waName: name,
+    });
+  } catch (_) { /* non-fatal */ }
 
   // ── Kirim via Fonnte (pakai token agent sendiri) ─────────────────────
   // replyParts: summary/lead-in as one message, then one message per catalog

@@ -493,6 +493,10 @@ const PROPERTY_QUESTION_PATTERNS = [
   /what'?s?\s+prompting.*search/, /what\s+made\s+you/, /why.*looking.*now/,
   // QF (house pilot) — financing: "rencana pakai KPR atau cash?"
   /kpr\s+atau\s+cash/, /cash\s+atau\s+kpr/, /mortgage.*or.*cash/, /cash.*or.*mortgage/,
+  // Q_NAME / Q_EMAIL — identitas customer sebelum summary (registrasi customer).
+  // Jawaban polos ("Rina", "budi@gmail.com") wajib dianggap lanjutan properti.
+  /boleh\s+(?:saya\s+)?tahu\s+nama/, /may\s+i\s+know\s+your\s+name/,
+  /boleh\s+minta\s+(?:alamat\s+)?email/, /alamat\s+email/, /your\s+email\s+address/,
 ];
 
 // Obrolan harian / kondisi sehari-hari (mati listrik, banjir, macet, wifi mati, dll).
@@ -874,6 +878,19 @@ function isPropertyContextContinuation(message, history = []) {
   if (_toks.length > 0 && _core.length === 0) return true;                              // murni filler: "oke deh", "ya kak"
   if (_core.length > 0 && _core.every(t => _AFFIRM.has(t))) return true;                // "boleh", "iya boleh", "mau"
   if (_core.length > 0 && _core.every(t => _NEGATE.has(t) || _AFFIRM.has(t))) return true; // "gak dulu", "belum ada"
+
+  // 4b) Jawaban identitas (Q_NAME/Q_EMAIL pra-summary — registrasi customer):
+  //     email valid di pesan mana pun, atau jawaban PENDEK huruf-saja ("Rina",
+  //     "Budi Santoso") tepat setelah AI menanyakan nama.
+  if (/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/.test(lower)) return true;
+  {
+    const lastAiMsg = [...(history || [])].reverse()
+      .find(m => m.role === 'ai' || m.role === 'assistant');
+    if (lastAiMsg && /boleh\s+(?:saya\s+)?tahu\s+nama|may\s+i\s+know\s+your\s+name|minta\s+(?:alamat\s+)?email/i
+        .test(lastAiMsg.message || '')) {
+      if (/^[a-z][a-z'.\s-]{1,40}$/i.test(lower.trim()) || /\b(lewati|skip|tidak\s+usah|ga\s+usah)\b/i.test(lower)) return true;
+    }
+  }
 
   // 5) Jawaban spesifikasi properti (luas, kamar, furnishing, dll)
   if (/\b(furnished|unfurnished|kosong|semi|ac|wifi|parkir|garasi|kolam|renang)\b/.test(lower))

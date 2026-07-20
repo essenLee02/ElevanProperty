@@ -1646,11 +1646,14 @@ function buildWhatsappReplyPrompt(session, history, userMessage, propertyContext
     ? `\n⚠️ FORCED REPLY LANGUAGE: Bahasa Indonesia\nCustomer ini berbicara dalam Bahasa Indonesia. SELALU balas dalam Bahasa Indonesia — termasuk ketika pesan terbaru adalah jawaban singkat, angka, nama bulan, atau tanggal seperti "Juni 2026", "2-4 juta/seminggu", "iya", "1 tahun". JANGAN beralih ke Bahasa Inggris dalam kondisi apapun.\n`
     : `\n⚠️ FORCED REPLY LANGUAGE: English\nThe customer is writing in English. Always reply in English.\n`;
 
-  // ── RESPOND_CATALOG_RUN: hanya mengontrol ISI BRIEF — bukan mode interview ─
-  // Q1-Q12 interview SELALU berjalan, apapun nilai RESPOND_CATALOG_RUN.
+  // ── Mode katalog PER-AGENT: hanya mengontrol ISI BRIEF — bukan mode interview ─
+  // Q1-Q12 interview SELALU berjalan, apapun nilai modenya.
   //   OFF (default) → brief summary saja, tanpa rekomendasi katalog
   //   ON            → brief summary + rekomendasi properti dari catalog context
-  const showCatalogAfterBrief = String(process.env.RESPOND_CATALOG_RUN || 'OFF').toUpperCase() === 'ON';
+  // Sumber: users.catalog_summary via cache (dihangatkan resolveCatalogMode() di
+  // awal pipeline whatsappAIService); fallback env RESPOND_CATALOG_RUN bila NULL.
+  const { getCachedCatalogMode } = require('./catalogModeService');
+  const showCatalogAfterBrief = getCachedCatalogMode(session?.agentUserId) === 'ON';
 
   // ── Build server-side qualification state (prevents repeated questions) ──
   // Selalu dihitung — Q1-Q12 selalu aktif.
