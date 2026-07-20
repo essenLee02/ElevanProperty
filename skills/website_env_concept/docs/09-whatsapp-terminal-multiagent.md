@@ -140,44 +140,23 @@ isPropertyContextContinuation("saya beli", history) = TRUE  ← ada konteks prop
 ### Implementasi di Controller
 
 ```javascript
-// Semua 3 controller menggunakan pattern ini (Updated Juli 2026):
+// Semua 3 controller menggunakan pattern ini:
 const isPropertyQuery = hasPropertyKeyword(message);
 
 let isContinuation = false;
-let gateHistory    = [];
 if (!isPropertyQuery) {
   try {
-    gateHistory    = await getConversationHistory(session.id, 12);
-    isContinuation = isPropertyContextContinuation(message, gateHistory);
+    const history = await getConversationHistory(session.id, 6);
+    isContinuation = isPropertyContextContinuation(message, history);
   } catch (_) { /* skip jika history gagal */ }
 }
 
-// DORMAN PASCA-SUMMARY: summary sudah terkirim & belum ada query properti baru
-// → AI tidak responsif (tidak balas, tidak simpan). Reaktivasi hanya lewat
-// pesan ber-keyword properti (isPropertyQuery=true tidak masuk cabang ini).
-if (!isPropertyQuery && isPostSummaryDormant(gateHistory)) return;
-
 if (!isPropertyQuery && !isContinuation) {
-  // Off-topic DI TENGAH alur aktif (isInPropertyFlow) → kirim redirect ramah
-  // via buildOffTopicRedirect() (whatsappUtils), pesan TIDAK disimpan ke DB.
-  // Di luar alur aktif (broadcast/random) → skip diam, log "tidak dibalas".
+  // Log "tidak dibalas" dan return
   return;
 }
 // Lanjut ke generateWhatsAppAIReply(...)
 ```
-
-### Siklus Responsivitas AI (Juli 2026)
-
-1. **Gate Q1-4** (`buildQualifyReply`) — AI mulai merespons penuh saat info minimum
-   terkumpul; interview Q1-Q12 berjalan sampai summary.
-2. **Summary terkirim** → **DORMAN** (`isPostSummaryDormant`, propertyKeywordFilter):
-   jawaban pendek ("oke", "makasih") dan off-topic sama-sama tidak dibalas.
-3. **Reaktivasi** — customer mengirim query properti baru (`hasPropertyKeyword`) →
-   alur normal berjalan lagi dari gate; Phase 3A/Boundary A me-reset state Q1-Q12.
-4. **Redirect off-topic** hanya berlaku saat RESPONSIF (mid-flow, belum summary).
-5. **TTL memori** — `getConversationHistory` (sessionService) me-return `[]` bila
-   pesan terakhir lebih tua dari `CHATBOT_COOKIE_TTL_MINUTES` (idle-based, bukan
-   umur pesan) → history dilupakan, dorman berakhir, gate dievaluasi dari nol.
 
 ---
 

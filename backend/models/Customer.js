@@ -37,9 +37,8 @@ const Customer = sequelize.define('Customer', {
   },
   phone: {
     type: DataTypes.STRING(30),
-    allowNull: true,
-    defaultValue: null,
-    comment: 'Nomor WhatsApp customer (otomatis dari chat; nullable utk input manual)'
+    allowNull: false,
+    comment: 'Nomor WhatsApp customer (otomatis dari chat)'
   },
   email: {
     type: DataTypes.STRING(200),

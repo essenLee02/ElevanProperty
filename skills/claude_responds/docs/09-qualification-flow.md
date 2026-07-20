@@ -456,14 +456,6 @@ the AI must likewise treat them as their real meaning (search count, bedrooms, d
 
 **Fires when:** Household info not mentioned.
 
-**⚠️ Never fabricate a non-residential use-case from landmark words.** "Dekat pasar,
-resto atau cafe" is a Q6 anchor answer — the words cafe/resto/warung there do NOT mean
-the customer is buying for business/investment. `✓ Penghuni: Untuk investasi (non-hunian)`
-may only appear when the customer explicitly states an investment/business INTENT
-("untuk investasi", "mau buka cafe", "disewakan lagi"). A booking (hotel/villa/apartemen
-sewa harian-mingguan) is a TEMPORARY STAY — if Q4 was never asked/answered, omit the
-Penghuni line entirely; never guess.
-
 ```
 ID: Nanti akan tinggal bersama siapa saja?
     Biar saya bisa carikan yang pas jumlah kamarnya 🛏️
@@ -535,36 +527,36 @@ cool place. Instead, split into **two paired sections**: `Hindari` (the inverted
 each positive wish, plus any genuine negatives as-is) and `Prefer` (the positive wishes as
 stated). Each positive wish gets ONE entry in each list:
 
-**The `Hindari` LABEL is the avoided thing itself** — never an echo of the Prefer label.
-`1. *Suasana tenang* : Hindari tempat bising/ramai` is WRONG (label says the customer avoids
-a quiet atmosphere). The label states what to avoid; the optional `: reason` restates it as
-"Tidak [want]":
-
-| Customer's positive wish | `Hindari` entry (label : reason) | `Prefer` entry (as-is) |
+| Customer's positive wish | `Hindari` entry (opposite) | `Prefer` entry (as-is) |
 |---|---|---|
-| sejuk / adem / rindang / teduh / asri | *Tempat panas* : Tidak sejuk | Tempat yang sejuk |
-| akses jalan lancar / mudah | *Akses jalan lancar* | Akses jalan lancar |
-| tenang / sepi | *Suasana ramai* : Tidak sepi | Suasana tenang |
-| aman | *Lingkungan rawan* : Tidak aman | Lingkungan aman |
-| jalan lebar | *Gang sempit* : Jalan tidak lebar | Jalan lebar |
-| perairan / air lancar / bersih | *Perairan bermasalah* : Air tidak lancar | Perairan lancar |
-| strategis | *(no Hindari entry)* | Lokasi strategis |
-| **mau/suka yang RAMAI** (ingin suasana hidup) | *Tidak mau tempat yang sepi* | *(none)* |
-
-**⚠️ "ramai" is direction-sensitive.** "Tidak mau ramai" → Hindari *Tidak mau bising/ramai*.
-But "**Mau** tempat yang ramai" (customer WANTS lively surroundings) → the avoid is the
-OPPOSITE: *Tidak mau tempat yang sepi* — never emit "Tidak mau bising/ramai" from a
-want-framed "ramai".
-
-**Preferences volunteered OUTSIDE the Q5 question still count.** Customers often state
-wishes early, e.g. inside a Q2b answer: "Saya cari yang sepi / perairan lancar / akses
-jalan lancar / tempat yang rindang". ALL of them must appear in the Hindari/Prefer
-pairs above — do not drop them just because the dedicated red-flags question was
-answered with something else (e.g. landmarks) later.
+| sejuk / adem / rindang / teduh / asri | Hindari tempat yang panas | Tempat yang sejuk |
+| akses jalan lancar / mudah | Hindari tempat macet | Akses jalan lancar |
+| tenang / sepi | Hindari tempat bising/ramai | Suasana tenang |
+| **ramai / hidup / rame / crowded / lively** | **Tidak mau tempat yang sepi** | **Tempat yang ramai** |
+| aman | Hindari lingkungan rawan | Lingkungan aman |
+| jalan lebar | Hindari gang sempit | Jalan lebar |
 
 Statements that are ALREADY avoidance-framed (banjir, hadap barat, gang sempit, bising, rumah
 tua, dekat rel kereta) go straight into `Hindari` as-is — they have no natural "Prefer"
 counterpart, so no matching Prefer entry is added for them.
+
+**⚠️ "mau ramai" is a POSITIVE wish, not a red flag.** When the customer says they *want* a lively/
+crowded area ("mau yang ramai", "suka rame", "tempat ramai"), it means they want to **avoid a quiet/
+dead area** → `Hindari: Tidak mau tempat yang sepi` + `Prefer: Tempat yang ramai`. Do **NOT** flag "ramai"
+as `Tidak mau bising/ramai` in this case. Only treat "ramai" as avoidance when it is explicitly
+negated or qualified ("jangan ramai", "jalan terlalu ramai", "bising"). This mirrors the
+server-side `#buildAvoidPreferPairs` inference.
+
+**⚠️ Negation variants must all be caught** — `enggak / gak / gk / ga / nggak / ngga / tdk / ndak`
+are all equivalent to `tidak`. "Gk banjir" = `Tidak mau banjir`, "Gk panas" = `Tidak mau panas`,
+"Gk macet" = `Tidak mau macet`. These short WA forms are the MOST common; never drop a red flag just
+because the customer used an informal negation. A multi-message batch ("Gk banjir" / "Gk panas" /
+"Saya mau tempat yang ramai" sent as separate lines) is ONE red-flag answer — capture **every** part.
+
+**⚠️ Red-flag answers are ALWAYS property-context, never off-topic.** When the customer replies to the
+Q5 "yang dihindari?" question — even with terse fragments like "Gk banjir", "Gk panas", "Gk macet",
+or "mau yang ramai" — treat it as a valid qualification answer and continue the flow. **Never** deflect
+it with "maaf, saya asisten khusus properti" — that discards the customer's red-flag data.
 
 **Q12 sun-orientation also feeds this pair** (see Q12 section above): if the customer wants to
 avoid BOTH sunrise and sunset facing, add ONE more pair: `Hindari` = "Lokasi kamar yang hadap
@@ -572,17 +564,18 @@ sinar matahari terbenam dan terbit", `Prefer` = "Tempat yang nyaman dari sinar m
 membuat mata terasa silau".
 
 **Summary display format** — numbered list, each `Hindari` item may carry a `: reason`
-annotation (omitted when the statement is already avoidance-framed). Example for
-"akses lancar, tidak banjir, tempat yang sepi":
+annotation (omitted when the statement is already avoidance-framed):
 ```
 ✓ Hindari:
-1. *Akses jalan lancar*
-2. *Suasana ramai* : Tidak sepi
+1. *Tempat yang sejuk* : Hindari tempat yang panas
+2. *Akses jalan lancar* : Hindari tempat macet
 3. *Tidak mau banjir*
+4. *Lokasi kamar yang hadap sinar matahari terbenam dan terbit*
 
 ✓ Prefer:
-1. *Akses jalan lancar*
-2. *Suasana tenang*
+1. *Tempat yang sejuk*
+2. *Akses jalan lancar*
+3. *Tempat yang nyaman dari sinar matahari yang membuat mata terasa silau*
 ```
 Omit either header entirely (no empty `✓ Hindari:` with zero items) if that list is empty.
 
@@ -632,18 +625,6 @@ Copy the **full anchor phrase** from the Q6 state block — do NOT truncate at c
 | `"dekat kampus ubaya"` | `✓ Patokan lokasi: *Dekat kampus ubaya*` |
 
 **FORBIDDEN:** `✓ Patokan lokasi: *deket indomaret,*` — the comma-truncated partial text.
-
-**Merge & dedupe multiple anchor mentions into ONE clean line:**
-Customers often volunteer landmarks across SEVERAL messages ("Saya mau dekat Manguharjo
-dan Suncity mall" … later … "Dekat dengan Suncity mall" … "Dekat stasiun bus"). The summary
-must merge these into a single deduplicated phrase — never concatenate the raw fragments.
-
-| Customer mentions (across messages) | ❌ Wrong (raw concat, duplicate, multi-line) | ✅ Correct (merged, deduped, one line) |
-|---|---|---|
-| "dekat Manguharjo dan Suncity mall" + "Dekat dengan Suncity mall" + "Dekat stasiun bus" | `Dekat Manguharjo dan Suncity mall, dekat dengan Suncity mall`<br>`Dekat stasiun bus` | `Dekat Manguharjo, Suncity Mall dan stasiun bus` |
-
-Rules: list each landmark ONCE (case-insensitive dedupe), join with commas + final "dan",
-keep everything on one line, single leading "Dekat".
 
 **Strip instruction phrases directed AT the bot — they are not part of the anchor itself:**
 Customers sometimes phrase Q6 answers as a request to the bot rather than a pure landmark
@@ -710,12 +691,7 @@ Never ask "siapa yang memutuskan" directly.
 
 **Q9 Summary labels — Keputusan bersama:**
 
-⚠️ These labels apply ONLY to answers given TO the Q9 question. Kin phrases inside a
-**Q4 household answer** ("Saya **bersama keluarga** saja" ← answer to "tinggal bersama
-siapa?") are NOT decision-maker signals — they go to `✓ Penghuni:`, and `Keputusan
-bersama` stays unanswered/omitted. Never fabricate a Keputusan line from Q4 wording.
-
-| Customer answer (to Q9) | Summary shows |
+| Customer answer | Summary shows |
 |---|---|
 | `"sendiri"`, `"solo"`, `"seorang diri"` | `✓ Keputusan bersama: *Sendirian*` |
 | `"langsung bisa"`, `"bisa langsung"` | `✓ Keputusan bersama: *Solo (bisa langsung jadwalkan)*` |
@@ -739,15 +715,6 @@ bersama` stays unanswered/omitted. Never fabricate a Keputusan line from Q4 word
 | Customer usul `"boleh siang"` (hanya time-of-day) → AI tanya jam → customer jawab jam | `✓ Viewing: *Besok siang jam 1*` (default hari = besok bila tidak disebutkan) |
 | Customer sebut hari-dalam-minggu + "minggu depan" → AI tanya jam → customer jawab jam | `✓ Viewing: *Jam 7 pagi, 9 Juli 2026*` (hari X minggu depan = tanggal konkret +7 hari dari hari ini) |
 
-**⚠️ Hitungan tanggal RELATIF — jangan salah offset** (hari ini = H):
-| Customer says | Tanggal viewing |
-|---|---|
-| `"besok"` | H+1 |
-| `"lusa"` / `"besok lusa"` | H+2 |
-| `"2 hari besok ini"` / `"2 hari kedepan"` / `"2 hari lagi"` | **H+2** (BUKAN H+1 — kata "besok" di sini bagian dari frasa "N hari", bukan besok polos) |
-| `"4 hari kedepan"` | H+4 |
-Contoh: hari ini 13 Juli → "viewing 2 hari besok ini" = **15 Juli**, bukan 14 Juli.
-
 **⚠️ Viewing wajib ada di summary** jika ada jadwal survey yang sudah dikonfirmasi (hari/jam). Jangan hilangkan baris Viewing dari brief hanya karena tidak ada tanggal kalender eksplisit — "besok siang jam 1" sudah cukup sebagai jadwal.
 
 **⛔ JANGAN mengarang label.** Salin nilai persis dari state block. Jangan tulis "Mandiri", "Koordinasi dengan pasangan" — ikuti tabel di atas.
@@ -767,12 +734,6 @@ EN: How long are you planning to rent? ⏱️ (a duration, not a date — e.g. 6
 Only include `✓ Durasi:` in the summary brief if the customer explicitly stated a specific duration. Valid for **ALL units** — `10 hari`, `2 minggu`, `6 bulan`, `1 tahun`, `2 tahun` — not just years. A short-stay weekly/daily rental ("butuh sewa 2 minggu") must show `✓ Durasi: *2 minggu*`.
 
 **FORBIDDEN:** Writing `✓ Durasi sewa: *Disebutkan*` or any vague placeholder when no specific duration was given. If Q10 was not answered with a specific value, omit the line entirely.
-
-**⚠️ "N minggu/hari/bulan LAGI" is a DATE OFFSET, never a duration.** "Kita rencana
-checkin **3 minggu lagi**" answers Q8 (check-in = today+3 weeks), NOT Q10 — the stay
-duration is still unknown and must be asked separately. Same for "N hari kedepan/besok/
-mendatang". Only a bare "N unit" without those suffixes ("menginap 3 minggu", "sewa 2
-hari saja") is a duration.
 
 **Short duration answers are always property continuation:**
 A message like `"1 tahun"` or `"6 bulan"` as the entire customer message is **always** treated as a property continuation (answer to Q10), even if it appears shortly after the Q10 question was asked. The server-side keyword filter has an early fast-path rule that passes these through before checking conversation history — this prevents race conditions where the AI's question isn't yet persisted to the database.
@@ -796,6 +757,19 @@ ID: Untuk furnitur, lebih prefer yang sudah *furnished*,
 EN: For furnishing, do you prefer *fully furnished*,
     *semi-furnished*, or *unfurnished*? 🛋️
 ```
+
+**Furnishing value normalization (summary must show the resolved label, NEVER "Disebutkan"):**
+
+| Customer says | `✓ Furnitur:` value |
+|---|---|
+| "furnished", "yang furnished", "berperabot", "sudah ada perabot/furnitur" | **Full furnished** |
+| "full furnished", "fully furnished", "full" | Full furnished |
+| "semi", "semi furnished", "semi-furnish" | Semi furnished |
+| "kosongan", "unfurnished", "kosong", "tanpa perabot" | Kosongan |
+
+Plain "furnished" (without "semi"/"full") = **Full furnished** by convention (customer means
+turnkey / tinggal bawa koper). ⛔ Never render `✓ Furnitur: *Disebutkan*` — if furnishing was
+answered, resolve it to one of the four labels above; if truly not answered, omit the line.
 
 **CRITICAL — "Kosongan" is a furnishing answer, NOT a building type change:**
 
@@ -854,19 +828,9 @@ EN: Any specific facilities you'd like?
 
 - Detected amenities accumulate across the session and appear as `✓ Fasilitas: Kids zone, Gym`
   in the summary. Common labels: AC, WiFi, Kolam renang, Gym, Kids zone, Keamanan 24 jam, Lift,
-  Parkir, Carport, Garasi, Taman, Dapur, Water heater, Balkon, Rooftop. Office/meeting &
-  meal-plan labels (booking kantor/hotel): LCD, Proyektor (typo-tolerant: "projectktor",
-  "projektor"), Breakfast, Lunch, Dinner, Ruang Meeting — capture ALL of them, none may be
-  dropped from the summary even when volunteered across several separate messages.
-- Jika customer jawab **"standar", "biasa", "terserah", "apa saja", "gak ada", "tidak apa-apa
-  dengan semua fasilitas"** (semua jawaban fleksibel/tanpa-preferensi) → catat sebagai
-  fasilitas standar, lalu tampilkan daftar standar berdasarkan tipe properti + furnishing.
-  **Jika customer BELAKANGAN menambahkan item spesifik** (mis. "saya one gate system dan smart
-  door" beberapa giliran setelah jawaban fleksibel) → summary menampilkan GABUNGAN: item
-  spesifik dulu, lalu daftar standar yang belum tercakup — contoh:
-  `✓ Fasilitas: One Gate System, Smart Door + standar rumah: AC, Kitchen set, CCTV camera, Lemari, Kamar Mandi, Kulkas`
-  Jangan tampilkan item spesifik saja — permintaan "semua fasilitas tidak apa-apa" berarti
-  fasilitas standar tetap relevan sebagai baseline:
+  Parkir, Carport, Garasi, Taman, Dapur, Water heater, Balkon, Rooftop.
+- Jika customer jawab **"standar", "biasa", "terserah", "apa saja", "gak ada"** → catat sebagai
+  fasilitas standar, lalu tampilkan daftar standar berdasarkan tipe properti + furnishing:
   - Rumah **semi-furnished**: `AC, Kitchen set, CCTV camera, Lemari, Kamar Mandi, Kulkas, One gate system`
   - Rumah **fully furnished**: tambah `Tempat Tidur, TV`
   - Rumah **unfurnished**: `Kamar Mandi, One gate system`
@@ -876,6 +840,17 @@ EN: Any specific facilities you'd like?
   - Kos **semi-furnished**: `AC, Kamar Mandi dalam`
   - Villa: `AC, Kitchen set, Kolam renang, Kamar Mandi`
   → Tampil di summary sebagai: `✗ Fasilitas: *[daftar standar] (Fasilitas standar)*`
+- **Fasilitas standar SELALU dilampirkan setelah fasilitas spesifik customer.** Meskipun customer
+  menyebut fasilitas tertentu (mis. "gym, AC, smart door, dinner"), summary tetap **menambahkan**
+  fasilitas standar tipe tsb (mis. apartemen: `Kamar Tidur, Kamar Mandi, Dapur/Pantry, Listrik, Air,
+  Lift, Keamanan 24 jam, Parkir`) yang belum tercakup — supaya agent & katalog punya gambaran lengkap.
+  Contoh: customer minta `Gym, AC, Smart Door, Dinner` → `✓ Fasilitas: Gym, AC, Smart Door, Dinner,
+  Kamar Tidur, Kamar Mandi, Dapur/Pantry, Lift, Keamanan 24 jam, Parkir`. (Item spesifik customer di
+  DEPAN, standar menyusul; dedupe yang sama.)
+- **Catalog facility ranking (server-side):** the requested facilities feed a `LIKE '%X%' OR …`
+  overlap score (`facilityMatchScore`) that **prioritizes** listings having the most requested
+  amenities. It is a ranking boost, never a hard filter — listings without those facilities still
+  appear, just lower — so the customer always gets the closest available alternatives.
 - **Do NOT show the summary for a sewa transaction until facilities has been asked.** If still
   un-asked at summary time → it appears as `✗ Fasilitas: (Belum ditanyakan)` (a gap for the agent).
 
@@ -967,6 +942,13 @@ A question is skipped if **any** of these is true:
 - AI already asked it in a prior turn
 - Customer explicitly requested a listing (`kasih daftarnya`, `tampilkan`, `show me`, etc.)
 - Readiness score ≥ 3 and mode=ON → switch to listing
+
+> **Completeness ≠ skipping.** Skip only when a slot is genuinely ✅ or not applicable to the
+> active type/transaction. A slot that is empty, vague, or only *partially* answered is NOT skippable —
+> it must be re-asked (one per message) per **`docs/20-answer-completeness-and-reask.md`**. That doc
+> defines what "answered" means per slot, how to capture partial answers, how to convert a
+> non-answer ("gak tau"/"terserah") into an anchored choice, and the two-try anti-loop limit before
+> defaulting-and-proceeding.
 
 ---
 
@@ -1120,6 +1102,10 @@ Terima kasih sudah menghubungi saya. 🙏
 - **✓ Durasi (Q10) mencakup SEMUA satuan**, bukan hanya tahun: "2 minggu", "10 hari", "6 bulan", "1 tahun" semuanya valid. Jika customer menyebut durasi di awal ("butuh sewa 2 minggu") walau belum ditanya Q10, tetap catat di `✓ Durasi`.
 - **✓ Viewing (Q9/Q9b/Q9c)**: lima kemungkinan label — (a) tidak mau survei/katalog saja → `*Minta listing*`; (b) mau viewing tapi koordinasi dulu → `*koordinasikan sama teman (Belum ditanyakan)*`; (c) AI sudah tanya tanggal, customer sudah jawab → `*Survey dijadwalkan: [hari/tanggal]*`; (d) AI sudah tanya tapi belum ada tanggal → `*Mau viewing (tanggal belum dikonfirmasi)*`; **(e) AI tanya jam viewing → customer jawab jam → gabung jam+waktu+tanggal:** jika hari adalah tanggal konkret (mis. "9 Juli 2026"), format `*Jam 7 pagi, 9 Juli 2026*`; jika hari relatif (besok/lusa), format `*Besok siang jam 1*` ← **WAJIB ada di summary!** Jika tidak disebut sama sekali → omit.
 - **⛔ JANGAN tampilkan summary jika Q3 (Budget) masih ❓** — walaupun budget muncul di old session history.
+- **✓ Budget WAJIB muncul di summary bila customer PERNAH menyebutnya di sesi aktif ini** — termasuk bila
+  disebut di pesan PERTAMA ("rumah 600-800 juta cash") lalu tidak diulang. Contoh: `✓ Budget: *Rp 600.000.000 - Rp 800.000.000*`.
+  Jangan pernah menghilangkan baris Budget dari summary hanya karena harganya disebut jauh di awal
+  percakapan — nilai yang pernah dinyatakan harus tetap terbawa (server memindai ulang seluruh history).
 - **⛔ JANGAN tampilkan summary jika Q8 (Tanggal masuk) masih ❓** — ini mandatory, tidak ada pengecualian.
 - **⛔ JANGAN tampilkan summary setelah Q2b dijawab jika Q3/Q8/Q4 masih ❓.**
 - One question per message only.

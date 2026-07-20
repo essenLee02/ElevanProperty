@@ -508,12 +508,18 @@ const PROPERTY_QUESTION_PATTERNS = [
 // "banjir" / "macet" generik (obrolan harian), KECUALI bila dipakai sebagai PREFERENSI
 // red-flag (tidak macet, bebas banjir, hindari kemacetan) — itu jawaban Q5 yang valid.
 const BANJIR_DAILY = /\bbanjir\b(?!\s*kanal)/;
-const FLOOD_AVOID_PREFERENCE = /\b(bebas|tidak|tdk|anti|hindari|terhindar(?:i)?|menghindari|jauh\s+dari|aman\s+dari|rawan|jangan|ga\s+mau|gak\s+mau|nggak\s+mau|enggak\s+mau)\b[\s\w]*\bbanjir\b/i;
+// Negasi termasuk bentuk singkat informal WA: "gk", "gak", "ga", "nggak", "ngga",
+// "ndak" (standalone, tanpa "mau") — "gk banjir" / "ga panas" adalah jawaban Q5 valid.
+const FLOOD_AVOID_PREFERENCE = /\b(bebas|tidak|tdk|anti|hindari|terhindar(?:i)?|menghindari|jauh\s+dari|aman\s+dari|rawan|jangan|gk|gak|ga|nggak|ngga|enggak|ndak|ga\s+mau|gak\s+mau|nggak\s+mau|enggak\s+mau)\b[\s\w]*\bbanjir\b/i;
 
 // "macet"/"kemacetan" sebagai preferensi (jawaban Q5) bukan obrolan kemacetan.
-// Contoh valid Q5: "tidak macet", "bebas macet", "hindari kemacetan", "anti macet".
+// Contoh valid Q5: "tidak macet", "bebas macet", "hindari kemacetan", "anti macet", "gk macet".
 const MACET_DAILY = /\b(macet|kemacetan)\b/;
-const MACET_AVOID_PREFERENCE = /\b(bebas|tidak|tdk|anti|hindari|terhindar(?:i)?|menghindari|jauh\s+dari|aman\s+dari|jangan|ga\s+mau|gak\s+mau|nggak\s+mau|enggak\s+mau)\b[\s\w]*\b(macet|kemacetan)\b/i;
+const MACET_AVOID_PREFERENCE = /\b(bebas|tidak|tdk|anti|hindari|terhindar(?:i)?|menghindari|jauh\s+dari|aman\s+dari|jangan|gk|gak|ga|nggak|ngga|enggak|ndak|ga\s+mau|gak\s+mau|nggak\s+mau|enggak\s+mau)\b[\s\w]*\b(macet|kemacetan)\b/i;
+
+// "panas" sebagai preferensi red-flag Q5 ("gk panas", "tidak panas", "area panas",
+// "jangan yang panas") — jawaban valid, bukan obrolan cuaca.
+const PANAS_AVOID_PREFERENCE = /\b(bebas|tidak|tdk|anti|hindari|terhindar(?:i)?|menghindari|jauh\s+dari|jangan|gk|gak|ga|nggak|ngga|enggak|ndak|area|tempat)\b[\s\w]*\bpanas\b/i;
 
 const DAILY_LIFE_OFFTOPIC = [
   /\b(mati\s+listrik|listrik\s+(mati|padam)|pemadaman|\bpln\b|byar\s*pet|mati\s+lampu|lampu\s+(mati|padam))\b/,
@@ -682,9 +688,10 @@ function isPropertyContextContinuation(message, history = []) {
   const isMotivationAnswer  = /\b(pindah|pindahan|mutasi|relokasi|relocat|kontrak\s+(habis|abis)|ngontrak|keluarga\s+(nambah|bertambah)|nambah\s+anak|anak\s+(masuk|sekolah)|sekolah\s+anak|investasi|invest|disewakan|pensiun|menikah|nikah|kerja\s+baru|pindah\s+kerja|mutasi\s+kerja|menetap|growing\s+family|relocation|moving|job\s+(relocat|transfer)|dinas|perjalanan\s+dinas|ditugaskan|penugasan|tugas\s+(kerja|dinas|kantor)|kerja\s+(dinas|sementara|sebentar)|pindah\s+tugas|liburan|berlibur|vacation|holiday|staycation|wisata|honeymoon|bulan\s+madu|business\s+trip|work\s+trip|workation)\b/i.test(lower);
   // Jawaban preferensi Q5/Q6 (red-flags / lokasi): jalan, akses, orientasi, suasana.
   // Contoh: "Saya mau jalan lebar, access strategis", "yang tenang tidak bising".
-  const isPreferenceAnswer  = /\b(jalan\s+(raya|lebar|besar|utama|kecil)|akses|access|strategis|hook|pojok|sudut|menghadap|hadap\s+(timur|barat|utara|selatan|matahari)|jalan\s+ramai|bising|tenang|sepi|aman|nyaman|asri|sejuk|rindang|pepohonan|pohon|hijau|teduh|gelap|terang|pencahayaan)\b/i.test(lower)
+  const isPreferenceAnswer  = /\b(jalan\s+(raya|lebar|besar|utama|kecil)|akses|access|strategis|hook|pojok|sudut|menghadap|hadap\s+(timur|barat|utara|selatan|matahari)|jalan\s+ramai|bising|tenang|sepi|ramai|rame|hidup|aman|nyaman|asri|sejuk|adem|dingin|rindang|pepohonan|pohon|hijau|teduh|gelap|terang|pencahayaan|panas|gerah|pengap)\b/i.test(lower)
                               || FLOOD_AVOID_PREFERENCE.test(lower)
-                              || MACET_AVOID_PREFERENCE.test(lower);
+                              || MACET_AVOID_PREFERENCE.test(lower)
+                              || PANAS_AVOID_PREFERENCE.test(lower);
   // Jawaban preferensi TOWER / LANTAI / ORIENTASI (khusus apartemen/kondotel/kondominium).
   // Pertanyaan AI: "ada preferensi tower atau lantai tertentu? hadap timur, lantai rendah/tengah/tinggi?"
   // Contoh valid yang harus LOLOS (sebelumnya ter-drop karena > 70 char & tanpa sinyal):

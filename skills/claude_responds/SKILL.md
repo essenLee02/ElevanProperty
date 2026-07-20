@@ -352,7 +352,7 @@ Extended types (Kavling, Tanah, Resort, Loft, Penthouse, Studio) → `others`.
 
 ## 10. Document Index
 
-Docs are concatenated in numeric order (`01` → `15`). Three layers, read top-to-bottom:
+Docs are concatenated in numeric order (`01` → `20`). Three layers, read top-to-bottom:
 
 **Layer A — Core behavior (always applies)**
 
@@ -380,9 +380,14 @@ Docs are concatenated in numeric order (`01` → `15`). Three layers, read top-t
 
 | File | Topic |
 |------|-------|
-| `docs/13-customer-conditions-and-tone.md` | Tone adaptation per customer state, C1–C7 conditions (*how* to ask) |
+| `docs/13-customer-conditions-and-tone.md` | Tone adaptation per customer state, C1–C9 conditions (*how* to ask) |
 | `docs/14-intent-detection-diagnosis-response.md` | Type/transaction disambiguation, ambiguity resolution, topic-change focus |
 | `docs/15-date-money-parsing-reference.md` | Deterministic date (35 rules) + money parsing — copy canonical state strings verbatim |
+| `docs/16-facilities-reference.md` | Facility vocabulary + standard-facility fallback per type |
+| `docs/17-location-anchor-recognition.md` | Landmark/wisata/kawasan anchors as Q6 proximity references |
+| `docs/18-facilities-recognition.md` | Bilingual facility recognition & normalization |
+| `docs/19-landmark-reference.md` | Named-landmark master reference (malls, campuses, hospitals) |
+| `docs/20-answer-completeness-and-reask.md` | **Completeness gate** — verify every mandatory slot ✅ before summary; partial-answer capture, non-answer/deflection escalation, lazy/confused re-ask, anti-loop |
 
 ---
 

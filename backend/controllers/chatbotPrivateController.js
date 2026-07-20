@@ -3438,13 +3438,32 @@ class ConversationQualifier {
           return { value: qb, source: 'stated' };
         }
         // (c) Angka / range konkret dari filters. Skip yang AMBIGU ("15-20" dari "lantai 15-20").
-        return {
-          value : (b?.text && !b?.ambiguous)
-            ? b.text + ConversationQualifier.#budgetPeriodSuffix(custText)
-            : 'UNKNOWN',
-          source: wasStated(custText, ['juta', 'ribu', 'miliar', 'jt', 'm ', 'rb', 'budget', 'harga'])
-            ? 'stated' : 'inferred',
-        };
+        if (b?.text && !b?.ambiguous) {
+          return {
+            value : b.text + ConversationQualifier.#budgetPeriodSuffix(custText),
+            source: 'stated',
+          };
+        }
+        // (d) FALLBACK anti-hilang: budget disebut customer di AWAL percakapan
+        //     ("rumah 600-800 juta cash" di pesan pertama) bisa lolos dari
+        //     filters/qualState bila upstream (recommendationContext / active-session
+        //     scoping) menghapusnya. Pindai ULANG SELURUH history sebagai jaring
+        //     pengaman — budget yang pernah dinyatakan HARUS muncul di summary.
+        try {
+          const histText = (Array.isArray(history) ? history : [])
+            .filter(m => m && (m.role === 'user' || m.role === 'customer'))
+            .map(m => m.message || '')
+            .concat(userMessage || '')
+            .join(' ');
+          const scanned = extractPropertyFilters(histText, []).budget;
+          if (scanned && scanned.text && !scanned.ambiguous) {
+            return {
+              value : scanned.text + ConversationQualifier.#budgetPeriodSuffix(histText),
+              source: 'stated',
+            };
+          }
+        } catch (_) { /* jaring pengaman non-fatal */ }
+        return { value: 'UNKNOWN', source: 'inferred' };
       })(),
 
       // ─ Extended fields ─
@@ -4115,9 +4134,11 @@ class ConversationQualifier {
       { test: /\bstrategis\b/,                                           preferLabel: 'Lokasi strategis',    avoidLabel: null,                   avoidReason: null },
     ];
     // "Mau/suka/cari yang RAMAI" — customer justru INGIN suasana ramai/hidup
-    // (kebalikan dari pair tenang/sepi). Hindari-nya adalah tempat sepi.
-    const wantsRamai = /\b(mau|suka|cari|pengen|pgn|ingin|prefer)\b[^.!?\n]{0,40}?\b(ramai|rame)\b/.test(lower);
+    // (kebalikan dari pair tenang/sepi). Prefer = tempat ramai; Hindari = tempat sepi.
+    const wantsRamai = /\b(mau|suka|cari|pengen|pgn|ingin|prefer)\b[^.!?\n]{0,40}?\b(ramai|rame)\b/.test(lower)
+                    || /\btempat\s+(?:yang\s+)?ramai\b/.test(lower);
     if (wantsRamai) {
+      prefer.push({ label: 'Tempat yang ramai' });
       avoid.push({ label: 'Tidak mau tempat yang sepi', reason: null });
     }
 
@@ -4139,8 +4160,8 @@ class ConversationQualifier {
       { test: /\bbising\b|noisy|\bramai\b/,                              label: 'Tidak mau bising/ramai', skipIfWantsRamai: true },
       { test: /\btua\b|old\s+building/,                                  label: 'Tidak mau bangunan tua' },
       { test: /dekat\s+rel\b|rel\s+kereta|train\s+track/,                label: 'Tidak mau dekat rel kereta' },
-      { test: /(?:tidak|gak|ga|ngga|enggak|jangan|anti|hindari|bukan)\s+(?:yang\s+)?panas|\bgerah\b|\bpengap\b|too hot|not hot/, label: 'Tidak mau panas' },
-      { test: /(?:tidak\s+macet|bebas\s+macet|anti\s+macet|hindari\s+macet|sering\s+macet|macet\s+(?:banget|parah)|kemacetan)/, label: 'Tidak mau macet' },
+      { test: /(?:tidak|tdk|gak|gk|ga|ngga|nggak|enggak|ndak|jangan|anti|hindari|bukan)\s+(?:yang\s+)?panas|\bgerah\b|\bpengap\b|too hot|not hot/, label: 'Tidak mau panas' },
+      { test: /(?:tidak|tdk|gak|gk|ga|ngga|nggak|enggak|ndak|bebas|anti|hindari)\s+macet|sering\s+macet|macet\s+(?:banget|parah)|kemacetan/, label: 'Tidak mau macet' },
     ];
     AVOID_ONLY.forEach(p => {
       if (p.skipIfWantsRamai && wantsRamai) return;

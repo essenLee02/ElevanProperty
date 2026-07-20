@@ -458,6 +458,21 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
     });
   }
 
+  // ── GATE ai_response=OFF (agent takeover) ───────────────────────────────
+  // Agent sudah mematikan AI untuk customer ini (module Customer → toggle AI).
+  // AI HARUS diam untuk SEMUA pesan customer ini sampai di-ON-kan lagi.
+  try {
+    const { isAiDisabledForCustomer } = require('../services/customerRegistrationService');
+    if (await isAiDisabledForCustomer({ agentUserId: agent.user_id, phone: sender })) {
+      if (isTerminalActive('KIRIMI')) {
+        console.log(`[KIRIMI] 🤖⛔ ai_response=OFF — AI diam untuk ${maskPhone(sender)} (agent takeover)`);
+      }
+      return; // agent takeover — AI tidak membalas
+    }
+  } catch (offErr) {
+    console.warn('[KIRIMI] ai_response gate check failed (fail-open):', offErr.message);
+  }
+
   // ── Cek apakah pesan properti / lanjutan percakapan properti ──────────
   // (Identik dengan Fonnte: gate-before-save. Pesan non-properti tidak disimpan.)
   const isPropertyQuery = hasPropertyKeyword(message);

@@ -245,6 +245,40 @@ async function registerCustomerFromChat({ agentUserId, phone, chatName = null, w
   }
 }
 
+/**
+ * Apakah AI di-NONAKTIFKAN untuk customer ini? (ai_response = 'OFF')
+ * Dipakai chat controllers sebagai GATE sebelum memanggil AI: bila agent sudah
+ * mengambil-alih percakapan manual (toggle ai_response=OFF di module Customer),
+ * AI HARUS diam untuk SEMUA pesan customer ini sampai di-ON-kan lagi.
+ *
+ * Dikenali via (user_id agent, phone) — sama seperti registrasi. Customer yang
+ * belum terdaftar / tidak ditemukan → tidak OFF (AI tetap jalan seperti biasa).
+ * Non-fatal: error apa pun → anggap tidak OFF (fail-open, jangan blokir chat).
+ *
+ * @param {object} p
+ * @param {string} p.agentUserId - users.user_id agent
+ * @param {string} p.phone       - nomor WA customer
+ * @returns {Promise<boolean>} true = AI harus diam (agent takeover)
+ */
+async function isAiDisabledForCustomer({ agentUserId, phone }) {
+  if (!agentUserId || !phone) return false;
+  try {
+    const { Customer } = require('../models');
+    const normPhone = _normPhone(phone);
+    if (normPhone.length < 8) return false;
+    const row = await Customer.findOne({
+      where: { user_id: String(agentUserId).toUpperCase(), phone: normPhone },
+      attributes: ['ai_response', 'status'],
+    });
+    // status 3 (deleted) → abaikan record, AI jalan normal.
+    if (!row || row.status === 3) return false;
+    return String(row.ai_response || 'ON').toUpperCase() === 'OFF';
+  } catch (err) {
+    console.warn('[CustomerReg] isAiDisabledForCustomer failed (fail-open):', err.message);
+    return false;
+  }
+}
+
 /** Balasan AI berisi SUMMARY brief? (marker baris "✓ Rencana:") */
 function replyContainsSummary(reply = '') {
   return /[✓✔]\s*Rencana\s*:/i.test(String(reply || ''));
@@ -286,6 +320,7 @@ module.exports = {
   aiAlreadyAskedName,
   aiAlreadyAskedEmail,
   registerCustomerFromChat,
+  isAiDisabledForCustomer,
   replyContainsSummary,
   maybeRegisterOnSummary,
 };
