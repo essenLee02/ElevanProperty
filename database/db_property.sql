@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Jul 17, 2026 at 12:20 PM
+-- Generation Time: Jul 20, 2026 at 12:29 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.1.25
 
@@ -152,7 +152,9 @@ INSERT INTO `chat_messages` (`id`, `chatSessionId`, `user_id`, `role`, `message`
 (106, 1, 'LFGKT49002', 'customer', 'Saya mau survei 3 minggu lagi..', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1784273700183\",\"platform\":\"kirimi\"}', '2026-07-17 07:35:12', '2026-07-17 07:35:12'),
 (107, 1, 'LFGKT49002', 'ai', 'Nanti akan tinggal bersama siapa saja? Biar saya bisa carikan yang pas jumlah kamarnya 🛏️', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-17 07:35:14', '2026-07-17 07:35:14'),
 (108, 1, 'LFGKT49002', 'customer', 'Saya bersama keluarga', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1784273765049\",\"platform\":\"kirimi\"}', '2026-07-17 07:36:17', '2026-07-17 07:36:17'),
-(109, 1, 'LFGKT49002', 'ai', 'Baik, semua sudah saya catat! 📝 🔥 Prioritas Tinggi\n\n✓ Rencana: *Beli*\n✓ Tipe: *Rumah*\n✓ Lokasi: *Senayan*\n✓ Budget: *Rp 2.000.000.000 - Rp 5.000.000.000*\n✓ Masuk: *30 Mei 2027*\n✓ Penghuni: *keluarga*\n✓ Furnitur: *Disebutkan*\n✓ Kondisi: *baru atau second*\n✓ Fasilitas: *Gym, Kolam renang, Keamanan 24 jam, AC, Carport, Garasi, Kulkas, One gate system*\n✓ Patokan lokasi: *AC, kolam renang, gym, carport/garasi, keamanan 24 jam, one gate system, kulkas*\n✓ Viewing: *Mau dijadwalkan viewing*\n\nSaya akan segera menghubungi Anda dengan rekomendasi properti yang paling sesuai! 🏠\nTerima kasih sudah menghubungi saya. 🙏\n\n---\n\n⚠️ Maaf, saat ini belum ada *Rumah* tersedia di *senayan* dengan kriteria yang Anda minta (jual, budget Rp 3.000.000.000 - Rp 5.000.000.000).\n\n📍 Berikut pilihan *Rumah* terdekat dari kota lain yang mungkin sesuai:\n\n1. *Deli Serdang Suburban Area House Sale*\n   ![Deli Serdang Suburban Area House Sale](/assets/image_data/properties/house.png)\n   📍 Lokasi: SEKOLAH DASAR, MUSHOLA LINGKUNGAN, PUSKESMAS, INDOMARET\n   💰 Harga: *934.8 juta nego*\n   🏠 Tipe: Rumah — dijual\n   📐 Luas: bangunan 120 m2, tanah 259 m2\n   ✨ Fasilitas: AC, WI-FI, SECURITY, CCTV, LAUNDRY ROOM, SHOWER, DINING ROOM\n\n2. *Dharmasraya Near Market House Sale*\n   ![Dharmasraya Near Market House Sale](/assets/image_data/properties/house.png)\n   📍 Lokasi: WARUNG MAKAN, PASAR TRADISIONAL, PASAR MODERN, HALTE BUS\n   💰 Harga: *1.9 miliar*\n   🏠 Tipe: Rumah — dijual\n   📐 Luas: bangunan 278 m2, tanah 478 m2\n   ✨ Fasilitas: AC, WI-FI, SECURITY, CCTV, WATER HEATER, PARKING, CARPORT, GUEST ROOM\n\n3. *Blangpidie Green Zone House Sale*\n   ![Blangpidie Green Zone House Sale](/assets/image_data/properties/house.png)\n   📍 Lokasi: RUANG TERBUKA HIJAU, INDOMARET, TAMAN KOTA, MASJID BESAR\n   💰 Harga: *2.4 miliar nego*\n   🏠 Tipe: Rumah — dijual\n   📐 Luas: bangunan 150 m2, tanah 393 m2\n   ✨ Fasilitas: AC, WI-FI, SECURITY, CCTV, WATER HEATER, PARKING, SHOWER, PRIVATE POOL\n\n4. *Takengon Residential Area House Sale*\n   ![Takengon Residential Area House Sale](/assets/image_data/properties/house.png)\n   📍 Lokasi: SEKOLAH DASAR, TAMAN RT/RW, MUSHOLA LINGKUNGAN, INDOMARET\n   💰 Harga: *2.5 miliar*\n   🏠 Tipe: Rumah — dijual\n   📐 Luas: bangunan 482 m2, tanah 778 m2\n   ✨ Fasilitas: AC, WI-FI, SECURITY, CCTV, WATER HEATER, PDAM WATER, PLN ELECTRICITY\n\n5. *Binjai Waterfront House Sale*\n   ![Binjai Waterfront House Sale](/assets/image_data/properties/house.png)\n   📍 Lokasi: RESTORAN SEAFOOD, PANTAI PUBLIK, PELABUHAN LAUT, HALTE BUS\n   💰 Harga: *2.9 miliar nego*\n   🏠 Tipe: Rumah — dijual\n   📐 Luas: bangunan 534 m2, tanah 771 m2\n   ✨ Fasilitas: AC, WI-FI, SECURITY, CCTV, WATER HEATER, PDAM WATER\n\n6. *Banda Aceh Green Zone House Sale*\n   ![Banda Aceh Green Zone House Sale](/assets/image_data/properties/house.png)\n   📍 Lokasi: RUANG TERBUKA HIJAU, INDOMARET, TAMAN KOTA, MASJID BESAR\n   💰 Harga: *3 miliar nego*\n   🏠 Tipe: Rumah — dijual\n   📐 Luas: bangunan 204 m2, tanah 244 m2\n   ✨ Fasilitas: AC, WI-FI, SECURITY, CCTV, WATER HEATER, PARKING, GARDEN, DINING ROOM, WASHING MACHINE, CARPORT, SMART TV, SHOWER\n\n\nSaya siap membantu Anda menemukan rumah, villa, apartemen, atau properti lainnya yang cocok untuk Anda.\nApakah ada yang ingin Anda tanyakan lebih lanjut?\n\n\nSalam hangat,\n*LEO FELIX*\n*Elevan Property*', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-17 07:36:19', '2026-07-17 07:36:19');
+(109, 1, 'LFGKT49002', 'ai', 'Baik, semua sudah saya catat! 📝 🔥 Prioritas Tinggi\n\n✓ Rencana: *Beli*\n✓ Tipe: *Rumah*\n✓ Lokasi: *Senayan*\n✓ Budget: *Rp 2.000.000.000 - Rp 5.000.000.000*\n✓ Masuk: *30 Mei 2027*\n✓ Penghuni: *keluarga*\n✓ Furnitur: *Disebutkan*\n✓ Kondisi: *baru atau second*\n✓ Fasilitas: *Gym, Kolam renang, Keamanan 24 jam, AC, Carport, Garasi, Kulkas, One gate system*\n✓ Patokan lokasi: *AC, kolam renang, gym, carport/garasi, keamanan 24 jam, one gate system, kulkas*\n✓ Viewing: *Mau dijadwalkan viewing*\n\nSaya akan segera menghubungi Anda dengan rekomendasi properti yang paling sesuai! 🏠\nTerima kasih sudah menghubungi saya. 🙏\n\n---\n\n⚠️ Maaf, saat ini belum ada *Rumah* tersedia di *senayan* dengan kriteria yang Anda minta (jual, budget Rp 3.000.000.000 - Rp 5.000.000.000).\n\n📍 Berikut pilihan *Rumah* terdekat dari kota lain yang mungkin sesuai:\n\n1. *Deli Serdang Suburban Area House Sale*\n   ![Deli Serdang Suburban Area House Sale](/assets/image_data/properties/house.png)\n   📍 Lokasi: SEKOLAH DASAR, MUSHOLA LINGKUNGAN, PUSKESMAS, INDOMARET\n   💰 Harga: *934.8 juta nego*\n   🏠 Tipe: Rumah — dijual\n   📐 Luas: bangunan 120 m2, tanah 259 m2\n   ✨ Fasilitas: AC, WI-FI, SECURITY, CCTV, LAUNDRY ROOM, SHOWER, DINING ROOM\n\n2. *Dharmasraya Near Market House Sale*\n   ![Dharmasraya Near Market House Sale](/assets/image_data/properties/house.png)\n   📍 Lokasi: WARUNG MAKAN, PASAR TRADISIONAL, PASAR MODERN, HALTE BUS\n   💰 Harga: *1.9 miliar*\n   🏠 Tipe: Rumah — dijual\n   📐 Luas: bangunan 278 m2, tanah 478 m2\n   ✨ Fasilitas: AC, WI-FI, SECURITY, CCTV, WATER HEATER, PARKING, CARPORT, GUEST ROOM\n\n3. *Blangpidie Green Zone House Sale*\n   ![Blangpidie Green Zone House Sale](/assets/image_data/properties/house.png)\n   📍 Lokasi: RUANG TERBUKA HIJAU, INDOMARET, TAMAN KOTA, MASJID BESAR\n   💰 Harga: *2.4 miliar nego*\n   🏠 Tipe: Rumah — dijual\n   📐 Luas: bangunan 150 m2, tanah 393 m2\n   ✨ Fasilitas: AC, WI-FI, SECURITY, CCTV, WATER HEATER, PARKING, SHOWER, PRIVATE POOL\n\n4. *Takengon Residential Area House Sale*\n   ![Takengon Residential Area House Sale](/assets/image_data/properties/house.png)\n   📍 Lokasi: SEKOLAH DASAR, TAMAN RT/RW, MUSHOLA LINGKUNGAN, INDOMARET\n   💰 Harga: *2.5 miliar*\n   🏠 Tipe: Rumah — dijual\n   📐 Luas: bangunan 482 m2, tanah 778 m2\n   ✨ Fasilitas: AC, WI-FI, SECURITY, CCTV, WATER HEATER, PDAM WATER, PLN ELECTRICITY\n\n5. *Binjai Waterfront House Sale*\n   ![Binjai Waterfront House Sale](/assets/image_data/properties/house.png)\n   📍 Lokasi: RESTORAN SEAFOOD, PANTAI PUBLIK, PELABUHAN LAUT, HALTE BUS\n   💰 Harga: *2.9 miliar nego*\n   🏠 Tipe: Rumah — dijual\n   📐 Luas: bangunan 534 m2, tanah 771 m2\n   ✨ Fasilitas: AC, WI-FI, SECURITY, CCTV, WATER HEATER, PDAM WATER\n\n6. *Banda Aceh Green Zone House Sale*\n   ![Banda Aceh Green Zone House Sale](/assets/image_data/properties/house.png)\n   📍 Lokasi: RUANG TERBUKA HIJAU, INDOMARET, TAMAN KOTA, MASJID BESAR\n   💰 Harga: *3 miliar nego*\n   🏠 Tipe: Rumah — dijual\n   📐 Luas: bangunan 204 m2, tanah 244 m2\n   ✨ Fasilitas: AC, WI-FI, SECURITY, CCTV, WATER HEATER, PARKING, GARDEN, DINING ROOM, WASHING MACHINE, CARPORT, SMART TV, SHOWER\n\n\nSaya siap membantu Anda menemukan rumah, villa, apartemen, atau properti lainnya yang cocok untuk Anda.\nApakah ada yang ingin Anda tanyakan lebih lanjut?\n\n\nSalam hangat,\n*LEO FELIX*\n*Elevan Property*', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-17 07:36:19', '2026-07-17 07:36:19'),
+(110, 1, 'LFGKT49002', 'customer', 'Buatkan model customer, dimana ketentuannya sebagai berikut :\nCustomer :\nuser_id: string(50)\ncustomer_id: string(50)\nname: string(100)\nphone: string(30) null\nemail: string(200) null\nai_response: string(5) // default : ON; Value : ON, OFF\nstatus: int(1) // Value : 1 = aktif, 2 = disabled/blocked, 3 = deleted (soft delete)\ncreated_date : date\ncreated_by : string(50)\nupdated_date : date null\nupdated_by : string(50) null\n-------\nJika ada customer yang chat tentang property, maka datanya akan dimasukan ke database, dimana jika AI memberikan summary ke customer, maka data customer akan langsung didaftarkan ke database. Jika data customer sudah ada di database, maka AI tidak perlu INSERT data customer ke database. Saat AI insert ke database, maka default value pada kolom status=1, ai_response=ON, created_date=today, created_by=users.user_id. Untuk email: AI bisa tanyakan kepada customer, saat AI memimintal jadwal viewing ke customer, maka saat pemberian summary, AI juga insert data email customer. Sedangkan phone, pastinya akan didapat saat customer chat AI di WhatsApp. Jika data diri phone sudah ada, maka saat data nomer telpon chat kembali ke AI di WhatsApp, sudah bisa dikenali dan tidak perlu insert data customer baru lagi ke database. Untuk tau nama pada phone tersebut, AI bisa tanyakan nama customer, jika customer tidak memberi tahu namanya, saat mau memberi summary. Kecuali customer sudah memberi tahu namanya, AI tidak perlu tanya. Case tidak perlu tanya nama customer :\n\n1. Hi saya Rina, saya mau cari rumah di Surabaya\n2. Perkenalkan, saya Rizal. Saya mau beli rumah di Malang\n3. Nama saya Kezia. Saya sedang cari booking hotel di Jakarta\n\nDari case di atas; ada customer bernama Rina, Rizal dan Kezia. Maka AI akan mengenali itu akan masuk ke kolom name, saat INSERT data customer ke database. Untuk contrain unique berdasarkan phone dan user_id. Karena 1 customer bisa aja chat ke beberapa agent di ElevanLab., serta kadang bisa memberikan nama berbeda antar agent. Selain insert customer bisa melalui chat di WhatsApp, agent juga bisa daftarkan data customer sendiri melalui module customer. Buatkan cutomerMasterController.js, frontend\\src\\views\\Customer_Master\\CustomerListView.vue dan frontend\\src\\views\\Customer_Master\\CustomerMasterView.vue.\n\n/real-estate-analyzer\n \n/whatsapp-automation\n \n/context-engine\n \n/chatbot-builder\n \n/ai-customer-service\n \n/code-review-testing', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1784542266764\",\"platform\":\"kirimi\"}', '2026-07-20 10:11:18', '2026-07-20 10:11:18'),
+(111, 1, 'LFGKT49002', 'ai', 'Sudah lihat berapa Hotel di *Surabaya*? Apa yang membuat belum cocok dari yang sudah dilihat?', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 10:11:27', '2026-07-20 10:11:27');
 
 -- --------------------------------------------------------
 
@@ -199,7 +201,8 @@ INSERT INTO `chat_sessions` (`id`, `name`, `normalizedName`, `phone`, `normalize
 (18, 'L', 'l', '120363411400623594', '120363411400623594', NULL, NULL, 'kirimi_leo_felix', NULL, '2026-07-15 08:34:55', '2026-07-15 08:34:55'),
 (19, 'Nigel 期凡努', 'nigel 期凡努', '6282233556796', '6282233556796', NULL, NULL, 'kirimi_nigel_kuncoro', NULL, '2026-07-15 09:52:23', '2026-07-15 09:52:23'),
 (20, 'Agent Assistant', 'agent assistant', '628213311936', '628213311936', NULL, NULL, 'kirimi_nigel_kuncoro', NULL, '2026-07-15 09:58:36', '2026-07-15 09:58:36'),
-(21, 'Lidya Veronika', 'lidya veronika', '120363423459038657', '120363423459038657', NULL, NULL, 'kirimi_leo_felix', NULL, '2026-07-17 04:00:47', '2026-07-17 04:00:47');
+(21, 'Lidya Veronika', 'lidya veronika', '120363423459038657', '120363423459038657', NULL, NULL, 'kirimi_leo_felix', NULL, '2026-07-17 04:00:47', '2026-07-17 04:00:47'),
+(22, 'Customer', 'customer', '120363300105016659', '120363300105016659', NULL, NULL, 'kirimi_leo_felix', NULL, '2026-07-20 03:01:44', '2026-07-20 03:01:44');
 
 -- --------------------------------------------------------
 
@@ -1005,6 +1008,27 @@ INSERT INTO `countries` (`id`, `country_id`, `name`, `status`, `created_date`, `
 (18, 'JAMBNK4018', 'JAMAIKA', 1, '2024-08-10', 'SA6EDRU001', NULL, NULL),
 (19, 'KORQTJ2019', 'SOUTH KOREA', 1, '2024-08-10', 'SA6EDRU001', NULL, NULL),
 (20, 'LBNRZQ8020', 'LIBANON', 1, '2024-08-10', 'SA6EDRU001', NULL, NULL);
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `customers`
+--
+
+CREATE TABLE `customers` (
+  `id` int(11) NOT NULL,
+  `user_id` varchar(50) NOT NULL COMMENT 'FK ke users.user_id — agent pemilik relasi customer ini',
+  `customer_id` varchar(50) NOT NULL COMMENT 'Generated ID: prefix nama + random alphanumeric + count padded 3 digit',
+  `name` varchar(100) NOT NULL COMMENT 'Nama customer (dari perkenalan chat, ditanya AI, atau input agent)',
+  `phone` varchar(30) DEFAULT NULL COMMENT 'Nomor WhatsApp customer (otomatis dari chat; nullable utk input manual)',
+  `email` varchar(200) DEFAULT NULL COMMENT 'Email customer (ditanya AI saat penjadwalan viewing; nullable)',
+  `ai_response` varchar(5) NOT NULL DEFAULT 'ON' COMMENT 'ON = AI membalas customer ini; OFF = AI diam (agent takeover manual)',
+  `status` int(1) NOT NULL DEFAULT 1 COMMENT '1 = aktif, 2 = disabled/blocked, 3 = deleted (soft delete)',
+  `created_date` date NOT NULL COMMENT 'Tanggal pembuatan data',
+  `created_by` varchar(50) NOT NULL COMMENT 'FK ke users.user_id — agent yang mendaftarkan (AI memakai user_id agent)',
+  `updated_date` date DEFAULT NULL COMMENT 'Tanggal update terakhir',
+  `updated_by` varchar(50) DEFAULT NULL COMMENT 'FK ke users.user_id — siapa yang terakhir mengubah'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
 
@@ -1997,7 +2021,13 @@ INSERT INTO `logs` (`id`, `action`, `details`, `level`, `createdAt`, `updatedAt`
 (430, 'PAGE_VIEW', 'Navigated from /login to /', 'info', '2026-07-15 08:58:43', '2026-07-15 08:58:43'),
 (431, 'PAGE_VIEW', 'Navigated from / to /profile', 'info', '2026-07-15 08:58:46', '2026-07-15 08:58:46'),
 (432, 'PAGE_VIEW', 'Navigated from / to /profile', 'info', '2026-07-15 09:24:19', '2026-07-15 09:24:19'),
-(433, 'PAGE_VIEW', 'Navigated from / to /', 'info', '2026-07-16 10:28:43', '2026-07-16 10:28:43');
+(433, 'PAGE_VIEW', 'Navigated from / to /', 'info', '2026-07-16 10:28:43', '2026-07-16 10:28:43'),
+(434, 'PAGE_VIEW', 'Navigated from / to /', 'info', '2026-07-20 10:09:17', '2026-07-20 10:09:17'),
+(435, 'PAGE_VIEW', 'Navigated from / to /', 'info', '2026-07-20 10:10:00', '2026-07-20 10:10:00'),
+(436, 'PAGE_VIEW', 'Navigated from / to /login', 'info', '2026-07-20 10:10:02', '2026-07-20 10:10:02'),
+(437, 'PAGE_VIEW', 'Navigated from /login to /', 'info', '2026-07-20 10:10:07', '2026-07-20 10:10:07'),
+(438, 'PAGE_VIEW', 'Navigated from / to /customer', 'info', '2026-07-20 10:10:10', '2026-07-20 10:10:10'),
+(439, 'PAGE_VIEW', 'Navigated from /customer to /customer/add', 'info', '2026-07-20 10:10:24', '2026-07-20 10:10:24');
 
 -- --------------------------------------------------------
 
@@ -103610,7 +103640,7 @@ CREATE TABLE `users` (
 
 INSERT INTO `users` (`id`, `user_id`, `name`, `birthdate`, `phone`, `username`, `password`, `email`, `catalog_summary`, `refresh_token`, `status`, `privilege`, `fonnte_token`, `kirimi_device_id`, `created_date`, `created_by`, `updated_date`, `update_by`) VALUES
 (1, 'SA6EDRU001', 'NIGEL KUNCORO', '1998-05-04', '628213311936', 'nigel123', '$2b$10$Rld5zga/CswkKyQPgPi6GO./sa5.OuVwgApiGxbZmCRudUD9TNHD2', 'stefanus.nigel.anggriawan12345@gmail.com', 'ON', 'TEST_PREVIEW_TOKEN_3730407f3f30e99e', 1, 'agent', 'm5HDmV4hAYRFBgTdkfDR', 'D-F3PQ5', '2026-05-22 03:26:55', 'Self-Register', '2026-06-25 07:17:43', 'nigel123'),
-(2, 'LFGKT49002', 'LEO FELIX', '2000-05-25', '0881036588874', 'leon123', '$2b$10$7VJl93nbQ./Un0PK1QlFkuzPBDOIes4/kCNdZFamn739Wtk3USeOm', 'dokumen.nigel2@gmail.com', 'ON', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJMRkdLVDQ5MDAyIiwidXNlck5hbWUiOiJMRU8gRkVMSVgiLCJ1c2VybmFtZSI6Imxlb24xMjMiLCJwcml2aWxlZ2UiOiJhZ2VudCIsImlhdCI6MTc4NDEwNTkyMiwiZXhwIjoxNzg0MTkyMzIyfQ.o6Xvi3nwDpRVBzYLF04y0VQ8_7mdhPysuF5tLM-L9Ig', 1, 'agent', 'PiBSZQXu6HKWhKkEDu9e', 'D-3OCA6', '2026-05-25 10:05:33', 'Self-Register', '2026-07-15 08:58:42', 'leon123'),
+(2, 'LFGKT49002', 'LEO FELIX', '2000-05-25', '0881036588874', 'leon123', '$2b$10$7VJl93nbQ./Un0PK1QlFkuzPBDOIes4/kCNdZFamn739Wtk3USeOm', 'dokumen.nigel2@gmail.com', 'ON', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJMRkdLVDQ5MDAyIiwidXNlck5hbWUiOiJMRU8gRkVMSVgiLCJ1c2VybmFtZSI6Imxlb24xMjMiLCJwcml2aWxlZ2UiOiJhZ2VudCIsImlhdCI6MTc4NDU0MjIwNywiZXhwIjoxNzg0NjI4NjA3fQ.jIkAMfOYWuwGAG13-sn88P6SLLtMipQcFjrbVnTrN68', 1, 'agent', 'PiBSZQXu6HKWhKkEDu9e', 'D-3OCA6', '2026-05-25 10:05:33', 'Self-Register', '2026-07-20 10:10:07', 'leon123'),
 (3, 'CEMPL3Z003', 'CLARENCE MARIO', '1993-03-24', '0821-1136-7154', 'clarence123', '$2b$10$jvnn536K239gxQRcOqNIauJxZxTq9iBcJYLWDstvTItZGkAIsA07e', NULL, 'ON', NULL, 1, 'agent', NULL, NULL, '2026-05-26 01:56:29', 'Self-Register', '2026-06-29 06:22:00', 'clarence123'),
 (4, 'DTDE8RX004', 'DESY TALIM', '1995-08-27', '0821-1331-8191', 'desy54321', '$2b$10$PoQCO4FZRc.KNTJt/iZ8s.Qk5J.Ek7V.5ylhqFLQNQmr6YTWYrvoW', 'dokumen.nigel3@gmail.com', 'OFF', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJEVERFOFJYMDA0IiwidXNlck5hbWUiOiJERVNZIFRBTElNIiwidXNlcm5hbWUiOiJkZXN5NTQzMjEiLCJwcml2aWxlZ2UiOiJhZ2VudCIsImlhdCI6MTc4MzQxNDUxMiwiZXhwIjoxNzgzNTAwOTEyfQ.STbq1WLKVc3__zFeEh-P_iUKZHruQQYS98k78auqt0s', 1, 'agent', NULL, NULL, '2026-05-26 01:57:21', 'Self-Register', '2026-07-07 08:55:12', 'desy54321'),
 (5, 'ITJMESP005', 'OTNIEL TJANDRA ISHAK', '2000-05-12', '+62881036588874', 'otniel', '$2b$10$lIUrzLSMMu3QmBzKNKHVQ.TSmluhqm9uU7KH9Yl/17AzOguAuoIsK', NULL, 'OFF', NULL, 1, 'agent', NULL, NULL, '2026-05-26 01:58:48', 'Self-Register', '2026-07-03 07:18:29', 'otniel'),
@@ -103691,6 +103721,19 @@ ALTER TABLE `countries`
   ADD KEY `countries_country_id` (`country_id`),
   ADD KEY `countries_status` (`status`),
   ADD KEY `countries_name` (`name`);
+
+--
+-- Indexes for table `customers`
+--
+ALTER TABLE `customers`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `customer_id` (`customer_id`),
+  ADD UNIQUE KEY `uq_customers_user_phone` (`user_id`,`phone`),
+  ADD KEY `customers_customer_id` (`customer_id`),
+  ADD KEY `customers_user_id` (`user_id`),
+  ADD KEY `customers_phone` (`phone`),
+  ADD KEY `customers_status` (`status`),
+  ADD KEY `customers_name` (`name`);
 
 --
 -- Indexes for table `facilities`
@@ -103813,13 +103856,13 @@ ALTER TABLE `whatsapp_inbound_messages`
 -- AUTO_INCREMENT for table `chat_messages`
 --
 ALTER TABLE `chat_messages`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=110;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=112;
 
 --
 -- AUTO_INCREMENT for table `chat_sessions`
 --
 ALTER TABLE `chat_sessions`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=22;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=23;
 
 --
 -- AUTO_INCREMENT for table `cities`
@@ -103840,6 +103883,12 @@ ALTER TABLE `countries`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=21;
 
 --
+-- AUTO_INCREMENT for table `customers`
+--
+ALTER TABLE `customers`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+
+--
 -- AUTO_INCREMENT for table `facilities`
 --
 ALTER TABLE `facilities`
@@ -103849,7 +103898,7 @@ ALTER TABLE `facilities`
 -- AUTO_INCREMENT for table `logs`
 --
 ALTER TABLE `logs`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=434;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=440;
 
 --
 -- AUTO_INCREMENT for table `properties`
