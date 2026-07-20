@@ -300,6 +300,9 @@ function replyContainsSummary(reply = '') {
 async function maybeRegisterOnSummary({ reply, sessionId, currentMessage, agentUserId, phone, waName = null }) {
   try {
     if (!replyContainsSummary(reply)) return { action: 'skipped' };
+    // Summary terkirim → pencarian ini selesai. Bersihkan sticky anchor sesi supaya
+    // pencarian BERIKUTNYA mulai dari nol (tidak mewarisi tipe/transaksi/lokasi lama).
+    try { require('../utils/sessionAnchors').clearAnchors(sessionId); } catch (_) { /* non-fatal */ }
     let history = [];
     try {
       const { getConversationHistory } = require('./sessionService');

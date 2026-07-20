@@ -31,6 +31,7 @@ const { getConversationHistory }                    = require('./sessionService'
 const { loadAIContextBlocks }                       = require('./aiContextService');
 const { splitCatalogReply }                         = require('../utils/replySplitter');
 const { resolveCatalogMode, envFallbackMode }       = require('./catalogModeService');
+const sessionAnchors                                = require('../utils/sessionAnchors');
 
 // Jendela history untuk ekstraksi filter & state kualifikasi. Cukup besar agar
 // pesan pembuka (tipe/transaksi/lokasi) tidak keluar scope di alur panjang, tapi
@@ -335,6 +336,17 @@ async function generateWhatsAppAIReply(params) {
     filters = extractPropertyFilters(message, history);
   } catch (err) {
     console.warn('[WhatsAppAI] Filter extraction failed:', err.message);
+  }
+
+  // ── STICKY ANCHORS (anti-reset) ──────────────────────────────────────────
+  // Lengkapi tipe/transaksi/lokasi dari cache sesi bila "keluar window" di
+  // percakapan panjang → cegah gate reset ke Q1 ("Tipe properti apa?") di tengah
+  // alur. Ganti-tipe & summary tetap mereset (lihat sessionAnchors.reconcile /
+  // clearAnchors). Jaring pengaman selain HISTORY_WINDOW yang sudah diperbesar.
+  try {
+    if (session?.id) sessionAnchors.reconcile(session.id, filters);
+  } catch (anchErr) {
+    console.warn('[WhatsAppAI] anchor reconcile failed (non-fatal):', anchErr.message);
   }
 
   const qualResponse = buildQualifyReply(filters, message, agentName, contextSource, history, catalogMode);
