@@ -32,6 +32,14 @@ const { loadAIContextBlocks }                       = require('./aiContextServic
 const { splitCatalogReply }                         = require('../utils/replySplitter');
 const { resolveCatalogMode, envFallbackMode }       = require('./catalogModeService');
 
+// Jendela history untuk ekstraksi filter & state kualifikasi. Cukup besar agar
+// pesan pembuka (tipe/transaksi/lokasi) tidak keluar scope di alur panjang, tapi
+// tetap dibatasi agar tidak menarik terlalu banyak data. Bisa di-override via env.
+const HISTORY_WINDOW = (() => {
+  const n = parseInt(process.env.AI_HISTORY_WINDOW || '', 10);
+  return Number.isFinite(n) && n >= 24 ? n : 60;
+})();
+
 /* ══════════════════════════════════════════════════════════════════════════════
    QUALIFICATION GATE — 4 Minimum Info Required
    (Runs before ANY AI provider is called)
@@ -291,7 +299,14 @@ async function generateWhatsAppAIReply(params) {
   // chatbotPrivateController.js memanggil buildRecommendationContextForLLM().
   let history = [];
   try {
-    history = await getConversationHistory(session.id, 24);
+    // Window HARUS cukup besar untuk menampung SATU sesi kualifikasi penuh
+    // (Q1–Q14 + identitas nama/email). Customer sering mengetik 1–3 kata per pesan,
+    // sehingga satu kualifikasi bisa 40–60 pesan total. Window 24 terlalu kecil:
+    // pesan pembuka yang membawa TIPE/TRANSAKSI/LOKASI (mis. "book apartemen di
+    // Surabaya") keluar dari window → gate keliru menganggap tipe kosong → RESET
+    // ke Q1 di tengah alur (loop). Boundary sesi (summary/ganti-tipe/greeting) +
+    // TTL idle tetap mencegah kebocoran sesi lama meski window besar.
+    history = await getConversationHistory(session.id, HISTORY_WINDOW);
   } catch (err) {
     console.warn('[WhatsAppAI] History fetch failed:', err.message);
   }

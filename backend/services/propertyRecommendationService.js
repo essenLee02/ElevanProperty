@@ -1182,7 +1182,7 @@ function extractFromHistory(history = []) {
   // di loop untuk mencegah warisan dari pencarian lama).
   const recentUserMsgs = (history || [])
     .filter((item) => CUSTOMER_ROLES.has(item.role))
-    .slice(-24);
+    .slice(-40);   // ≤40 pesan customer: cukup untuk kualifikasi terpanjang (customer sering 1–3 kata/pesan)
 
   const accumulated = {
     buildingType:   '',

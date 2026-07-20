@@ -51,7 +51,7 @@ const { hasPropertyKeyword,
         isPostSummaryDormant }          = require('../utils/propertyKeywordFilter');
 const { generateWhatsAppAIReply }       = require('../services/whatsappAIService');
 const { getConversationHistory }        = require('../services/sessionService');
-const { sanitizeLog, maskPhone, maskName, appendSentViaTag, isOwnEcho, buildOffTopicRedirect } = require('../utils/whatsappUtils');
+const { sanitizeLog, maskPhone, maskName, appendSentViaTag, isOwnEcho, stripOwnEcho, buildOffTopicRedirect } = require('../utils/whatsappUtils');
 
 /* ══════════════════════════════════════════════════════════════════════════════
    BAGIAN 0 — MESSAGE-ID DEDUP CACHE
@@ -357,7 +357,7 @@ async function sendViaKirimi(targetPhone, message, deviceId) {
 ══════════════════════════════════════════════════════════════════════════════ */
 
 async function processIncomingMessage(body, agent) {
-  const { sender, name, message, messageId, fromMe, isGroup } = extractMessage(body);
+  let { sender, name, message, messageId, fromMe, isGroup } = extractMessage(body);
 
   // ── Skip pesan kosong, grup & pesan kita sendiri ────────────────────
   if (!message) return;
@@ -369,10 +369,17 @@ async function processIncomingMessage(body, agent) {
     console.log(`[KIRIMI] Skip pesan grup dari ${maskPhone(sender)}`);
     return;
   }
-  // Gema pesan AI kita sendiri (footer "Sent via …") — jangan diproses (anti-loop).
+  // Gema pesan AI kita sendiri (footer "Sent via …"). Bila customer mengutip pesan
+  // AI + menambahkan balasan asli, AMBIL balasan aslinya (jangan buang seluruhnya);
+  // hanya skip bila murni gema tanpa teks tambahan (anti-loop).
   if (isOwnEcho(message)) {
-    console.log(`[KIRIMI] Skip gema pesan AI sendiri (footer Sent via) dari ${maskPhone(sender)}`);
-    return;
+    const real = stripOwnEcho(message);
+    if (!real) {
+      console.log(`[KIRIMI] Skip gema murni pesan AI sendiri dari ${maskPhone(sender)}`);
+      return;
+    }
+    console.log(`[KIRIMI] Gema AI terdeteksi — ambil balasan asli customer: "${sanitizeLog(real, 80)}"`);
+    message = real;
   }
 
   // ── Dedup guard layer 1: stable messageId (in-memory, cepat) ────────
@@ -443,6 +450,23 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
     }
   } catch (cmdErr) {
     console.warn('[KIRIMI] Catalog command check failed:', cmdErr.message);
+  }
+
+  // ── PERINTAH AGENT: nyalakan/matikan AI per-customer (by name) ───────────
+  // "matikan AI untuk Clarence" / "nyalakan chat dengan AI untuk Rizal, Kezia dan Lia"
+  // DARI NOMOR AGENT → update customers.ai_response (ON/OFF) + balas konfirmasi.
+  try {
+    const { maybeHandleAiToggleCommand } = require('../services/customerAiToggleService');
+    const aiReply = await maybeHandleAiToggleCommand({ message, senderPhone: sender, agent });
+    if (aiReply) {
+      await sendViaKirimi(sender, aiReply, agent.kirimi_device_id);
+      if (isTerminalActive('KIRIMI')) {
+        console.log(`[KIRIMI] ⚙️  Perintah agent: customers.ai_response di-update oleh ${sanitizeLog(agent.name, 40)} — "${sanitizeLog(message, 80)}"`);
+      }
+      return;   // perintah admin — tidak disimpan sebagai chat customer
+    }
+  } catch (aiCmdErr) {
+    console.warn('[KIRIMI] AI toggle command check failed:', aiCmdErr.message);
   }
 
   let session = await ChatSession.findOne({ where: { normalizedPhone: normSender, source } });

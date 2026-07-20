@@ -3,9 +3,9 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Jul 20, 2026 at 12:29 PM
--- Server version: 10.4.32-MariaDB
--- PHP Version: 8.1.25
+-- Waktu pembuatan: 20 Jul 2026 pada 17.36
+-- Versi server: 10.4.32-MariaDB
+-- Versi PHP: 8.1.25
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
@@ -24,7 +24,7 @@ SET time_zone = "+00:00";
 -- --------------------------------------------------------
 
 --
--- Table structure for table `chat_messages`
+-- Struktur dari tabel `chat_messages`
 --
 
 CREATE TABLE `chat_messages` (
@@ -40,7 +40,7 @@ CREATE TABLE `chat_messages` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `chat_messages`
+-- Dumping data untuk tabel `chat_messages`
 --
 
 INSERT INTO `chat_messages` (`id`, `chatSessionId`, `user_id`, `role`, `message`, `channel`, `metadata`, `createdAt`, `updatedAt`) VALUES
@@ -154,12 +154,91 @@ INSERT INTO `chat_messages` (`id`, `chatSessionId`, `user_id`, `role`, `message`
 (108, 1, 'LFGKT49002', 'customer', 'Saya bersama keluarga', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1784273765049\",\"platform\":\"kirimi\"}', '2026-07-17 07:36:17', '2026-07-17 07:36:17'),
 (109, 1, 'LFGKT49002', 'ai', 'Baik, semua sudah saya catat! 📝 🔥 Prioritas Tinggi\n\n✓ Rencana: *Beli*\n✓ Tipe: *Rumah*\n✓ Lokasi: *Senayan*\n✓ Budget: *Rp 2.000.000.000 - Rp 5.000.000.000*\n✓ Masuk: *30 Mei 2027*\n✓ Penghuni: *keluarga*\n✓ Furnitur: *Disebutkan*\n✓ Kondisi: *baru atau second*\n✓ Fasilitas: *Gym, Kolam renang, Keamanan 24 jam, AC, Carport, Garasi, Kulkas, One gate system*\n✓ Patokan lokasi: *AC, kolam renang, gym, carport/garasi, keamanan 24 jam, one gate system, kulkas*\n✓ Viewing: *Mau dijadwalkan viewing*\n\nSaya akan segera menghubungi Anda dengan rekomendasi properti yang paling sesuai! 🏠\nTerima kasih sudah menghubungi saya. 🙏\n\n---\n\n⚠️ Maaf, saat ini belum ada *Rumah* tersedia di *senayan* dengan kriteria yang Anda minta (jual, budget Rp 3.000.000.000 - Rp 5.000.000.000).\n\n📍 Berikut pilihan *Rumah* terdekat dari kota lain yang mungkin sesuai:\n\n1. *Deli Serdang Suburban Area House Sale*\n   ![Deli Serdang Suburban Area House Sale](/assets/image_data/properties/house.png)\n   📍 Lokasi: SEKOLAH DASAR, MUSHOLA LINGKUNGAN, PUSKESMAS, INDOMARET\n   💰 Harga: *934.8 juta nego*\n   🏠 Tipe: Rumah — dijual\n   📐 Luas: bangunan 120 m2, tanah 259 m2\n   ✨ Fasilitas: AC, WI-FI, SECURITY, CCTV, LAUNDRY ROOM, SHOWER, DINING ROOM\n\n2. *Dharmasraya Near Market House Sale*\n   ![Dharmasraya Near Market House Sale](/assets/image_data/properties/house.png)\n   📍 Lokasi: WARUNG MAKAN, PASAR TRADISIONAL, PASAR MODERN, HALTE BUS\n   💰 Harga: *1.9 miliar*\n   🏠 Tipe: Rumah — dijual\n   📐 Luas: bangunan 278 m2, tanah 478 m2\n   ✨ Fasilitas: AC, WI-FI, SECURITY, CCTV, WATER HEATER, PARKING, CARPORT, GUEST ROOM\n\n3. *Blangpidie Green Zone House Sale*\n   ![Blangpidie Green Zone House Sale](/assets/image_data/properties/house.png)\n   📍 Lokasi: RUANG TERBUKA HIJAU, INDOMARET, TAMAN KOTA, MASJID BESAR\n   💰 Harga: *2.4 miliar nego*\n   🏠 Tipe: Rumah — dijual\n   📐 Luas: bangunan 150 m2, tanah 393 m2\n   ✨ Fasilitas: AC, WI-FI, SECURITY, CCTV, WATER HEATER, PARKING, SHOWER, PRIVATE POOL\n\n4. *Takengon Residential Area House Sale*\n   ![Takengon Residential Area House Sale](/assets/image_data/properties/house.png)\n   📍 Lokasi: SEKOLAH DASAR, TAMAN RT/RW, MUSHOLA LINGKUNGAN, INDOMARET\n   💰 Harga: *2.5 miliar*\n   🏠 Tipe: Rumah — dijual\n   📐 Luas: bangunan 482 m2, tanah 778 m2\n   ✨ Fasilitas: AC, WI-FI, SECURITY, CCTV, WATER HEATER, PDAM WATER, PLN ELECTRICITY\n\n5. *Binjai Waterfront House Sale*\n   ![Binjai Waterfront House Sale](/assets/image_data/properties/house.png)\n   📍 Lokasi: RESTORAN SEAFOOD, PANTAI PUBLIK, PELABUHAN LAUT, HALTE BUS\n   💰 Harga: *2.9 miliar nego*\n   🏠 Tipe: Rumah — dijual\n   📐 Luas: bangunan 534 m2, tanah 771 m2\n   ✨ Fasilitas: AC, WI-FI, SECURITY, CCTV, WATER HEATER, PDAM WATER\n\n6. *Banda Aceh Green Zone House Sale*\n   ![Banda Aceh Green Zone House Sale](/assets/image_data/properties/house.png)\n   📍 Lokasi: RUANG TERBUKA HIJAU, INDOMARET, TAMAN KOTA, MASJID BESAR\n   💰 Harga: *3 miliar nego*\n   🏠 Tipe: Rumah — dijual\n   📐 Luas: bangunan 204 m2, tanah 244 m2\n   ✨ Fasilitas: AC, WI-FI, SECURITY, CCTV, WATER HEATER, PARKING, GARDEN, DINING ROOM, WASHING MACHINE, CARPORT, SMART TV, SHOWER\n\n\nSaya siap membantu Anda menemukan rumah, villa, apartemen, atau properti lainnya yang cocok untuk Anda.\nApakah ada yang ingin Anda tanyakan lebih lanjut?\n\n\nSalam hangat,\n*LEO FELIX*\n*Elevan Property*', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-17 07:36:19', '2026-07-17 07:36:19'),
 (110, 1, 'LFGKT49002', 'customer', 'Buatkan model customer, dimana ketentuannya sebagai berikut :\nCustomer :\nuser_id: string(50)\ncustomer_id: string(50)\nname: string(100)\nphone: string(30) null\nemail: string(200) null\nai_response: string(5) // default : ON; Value : ON, OFF\nstatus: int(1) // Value : 1 = aktif, 2 = disabled/blocked, 3 = deleted (soft delete)\ncreated_date : date\ncreated_by : string(50)\nupdated_date : date null\nupdated_by : string(50) null\n-------\nJika ada customer yang chat tentang property, maka datanya akan dimasukan ke database, dimana jika AI memberikan summary ke customer, maka data customer akan langsung didaftarkan ke database. Jika data customer sudah ada di database, maka AI tidak perlu INSERT data customer ke database. Saat AI insert ke database, maka default value pada kolom status=1, ai_response=ON, created_date=today, created_by=users.user_id. Untuk email: AI bisa tanyakan kepada customer, saat AI memimintal jadwal viewing ke customer, maka saat pemberian summary, AI juga insert data email customer. Sedangkan phone, pastinya akan didapat saat customer chat AI di WhatsApp. Jika data diri phone sudah ada, maka saat data nomer telpon chat kembali ke AI di WhatsApp, sudah bisa dikenali dan tidak perlu insert data customer baru lagi ke database. Untuk tau nama pada phone tersebut, AI bisa tanyakan nama customer, jika customer tidak memberi tahu namanya, saat mau memberi summary. Kecuali customer sudah memberi tahu namanya, AI tidak perlu tanya. Case tidak perlu tanya nama customer :\n\n1. Hi saya Rina, saya mau cari rumah di Surabaya\n2. Perkenalkan, saya Rizal. Saya mau beli rumah di Malang\n3. Nama saya Kezia. Saya sedang cari booking hotel di Jakarta\n\nDari case di atas; ada customer bernama Rina, Rizal dan Kezia. Maka AI akan mengenali itu akan masuk ke kolom name, saat INSERT data customer ke database. Untuk contrain unique berdasarkan phone dan user_id. Karena 1 customer bisa aja chat ke beberapa agent di ElevanLab., serta kadang bisa memberikan nama berbeda antar agent. Selain insert customer bisa melalui chat di WhatsApp, agent juga bisa daftarkan data customer sendiri melalui module customer. Buatkan cutomerMasterController.js, frontend\\src\\views\\Customer_Master\\CustomerListView.vue dan frontend\\src\\views\\Customer_Master\\CustomerMasterView.vue.\n\n/real-estate-analyzer\n \n/whatsapp-automation\n \n/context-engine\n \n/chatbot-builder\n \n/ai-customer-service\n \n/code-review-testing', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1784542266764\",\"platform\":\"kirimi\"}', '2026-07-20 10:11:18', '2026-07-20 10:11:18'),
-(111, 1, 'LFGKT49002', 'ai', 'Sudah lihat berapa Hotel di *Surabaya*? Apa yang membuat belum cocok dari yang sudah dilihat?', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 10:11:27', '2026-07-20 10:11:27');
+(111, 1, 'LFGKT49002', 'ai', 'Sudah lihat berapa Hotel di *Surabaya*? Apa yang membuat belum cocok dari yang sudah dilihat?', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 10:11:27', '2026-07-20 10:11:27'),
+(112, 19, 'SA6EDRU001', 'customer', 'Saya mau beli rumah di Surabaya', 'whatsapp', '{\"agentName\":\"NIGEL KUNCORO\",\"messageId\":\"kirimi_1784556378117\",\"platform\":\"kirimi\"}', '2026-07-20 14:06:30', '2026-07-20 14:06:30'),
+(113, 19, 'SA6EDRU001', 'ai', 'Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 14:06:48', '2026-07-20 14:06:48'),
+(114, 19, 'SA6EDRU001', 'customer', 'Saya bali di daerah Gubeng\nDeket pasar\nDeket cafe Solaria', 'whatsapp', '{\"agentName\":\"NIGEL KUNCORO\",\"messageId\":\"kirimi_1784556557223\",\"platform\":\"kirimi\"}', '2026-07-20 14:09:29', '2026-07-20 14:09:29'),
+(115, 19, 'SA6EDRU001', 'ai', 'Sudah lihat berapa Rumah di *Bali*? Apa yang membuat belum cocok dari yang sudah dilihat?', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"none\"}', '2026-07-20 14:09:33', '2026-07-20 14:09:33'),
+(116, 19, 'SA6EDRU001', 'customer', 'Saya mau beli rumah di Surabaya, bukan di Bali', 'whatsapp', '{\"agentName\":\"NIGEL KUNCORO\",\"messageId\":\"kirimi_1784556647369\",\"platform\":\"kirimi\"}', '2026-07-20 14:10:59', '2026-07-20 14:10:59'),
+(117, 19, 'SA6EDRU001', 'ai', 'Untuk *Rumah* beli di *Surabaya*, Kak lebih prefer yang *terjangkau*, *menengah*, atau *eksklusif*? 💰', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 14:11:02', '2026-07-20 14:11:02'),
+(118, 19, 'SA6EDRU001', 'customer', 'Saya mau rumah dengan harga 600-800j uta cash\n[unknown]', 'whatsapp', '{\"agentName\":\"NIGEL KUNCORO\",\"messageId\":\"kirimi_1784556790468\",\"platform\":\"kirimi\"}', '2026-07-20 14:13:22', '2026-07-20 14:13:22'),
+(119, 19, 'SA6EDRU001', 'ai', 'Ada target kapan proses belinya mau selesai? 📅', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 14:13:38', '2026-07-20 14:13:38'),
+(120, 19, 'SA6EDRU001', 'customer', 'Saya rencana beli bulan depan', 'whatsapp', '{\"agentName\":\"NIGEL KUNCORO\",\"messageId\":\"kirimi_1784556846199\",\"platform\":\"kirimi\"}', '2026-07-20 14:14:18', '2026-07-20 14:14:18'),
+(121, 19, 'SA6EDRU001', 'ai', 'Ada fasilitas tertentu yang Anda inginkan? Misalnya AC, kolam renang, gym, carport/garasi, keamanan 24 jam, atau yang lainnya? 🏊', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 14:14:21', '2026-07-20 14:14:21'),
+(122, 19, 'SA6EDRU001', 'customer', 'Saya mau fasiltas standar\nCuma ada one gate sistem', 'whatsapp', '{\"agentName\":\"NIGEL KUNCORO\",\"messageId\":\"kirimi_1784556882639\",\"platform\":\"kirimi\"}', '2026-07-20 14:14:54', '2026-07-20 14:14:54'),
+(123, 19, 'SA6EDRU001', 'ai', 'Untuk kondisi, lebih prefer yang *baru/ready*, *second* kondisi baik, atau *inden* tidak masalah? 🏠', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 14:14:56', '2026-07-20 14:14:56'),
+(124, 19, 'SA6EDRU001', 'customer', 'Baru kak', 'whatsapp', '{\"agentName\":\"NIGEL KUNCORO\",\"messageId\":\"kirimi_1784556914690\",\"platform\":\"kirimi\"}', '2026-07-20 14:15:26', '2026-07-20 14:15:26'),
+(125, 19, 'SA6EDRU001', 'ai', 'Untuk furnitur, prefer yang sudah *furnished*, *semi-furnished*, atau *kosongan*? 🛋️', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 14:15:28', '2026-07-20 14:15:28'),
+(126, 19, 'SA6EDRU001', 'customer', 'Yang semi..', 'whatsapp', '{\"agentName\":\"NIGEL KUNCORO\",\"messageId\":\"kirimi_1784556940730\",\"platform\":\"kirimi\"}', '2026-07-20 14:15:52', '2026-07-20 14:15:52'),
+(127, 19, 'SA6EDRU001', 'ai', 'Ada yang pasti tidak cocok atau ingin dihindari? Misalnya rawan banjir, area panas, hadap barat, dekat jalan ramai, gang sempit, atau dekat rel kereta? 🚫', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 14:15:55', '2026-07-20 14:15:55'),
+(128, 19, 'SA6EDRU001', 'customer', 'Tempat yang gk panas\nSaya ingin tempat strategis dan tempat yang ramai. Dekat pasar juga', 'whatsapp', '{\"agentName\":\"NIGEL KUNCORO\",\"messageId\":\"kirimi_1784557086182\",\"platform\":\"kirimi\"}', '2026-07-20 14:18:18', '2026-07-20 14:18:18'),
+(129, 19, 'SA6EDRU001', 'ai', 'Kalau nanti ada yang cocok, langsung bisa jadwalkan viewing atau perlu koordinasi dulu sama keluarga lain? 📅', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 14:18:20', '2026-07-20 14:18:20'),
+(130, 19, 'SA6EDRU001', 'customer', 'Saya mau survei 4 hari lagi, jam 11 siang', 'whatsapp', '{\"agentName\":\"NIGEL KUNCORO\",\"messageId\":\"kirimi_1784557132428\",\"platform\":\"kirimi\"}', '2026-07-20 14:19:04', '2026-07-20 14:19:04'),
+(131, 19, 'SA6EDRU001', 'ai', 'Sebelum saya buatkan ringkasannya — boleh saya tahu nama Kakak? 😊', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 14:19:13', '2026-07-20 14:19:13'),
+(132, 19, 'SA6EDRU001', 'customer', 'Nama saya Clarence', 'whatsapp', '{\"agentName\":\"NIGEL KUNCORO\",\"messageId\":\"kirimi_1784557167817\",\"platform\":\"kirimi\"}', '2026-07-20 14:19:39', '2026-07-20 14:19:39'),
+(133, 19, 'SA6EDRU001', 'ai', 'Untuk undangan jadwal viewing-nya, boleh minta alamat email Kakak? 📧\n(Kalau tidak berkenan, balas \"lewati\" saja — tidak wajib 😊)', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 14:19:42', '2026-07-20 14:19:42'),
+(134, 19, 'SA6EDRU001', 'customer', 'dokumen.nigel2@gmail.com itu email saya; Kak', 'whatsapp', '{\"agentName\":\"NIGEL KUNCORO\",\"messageId\":\"kirimi_1784557211000\",\"platform\":\"kirimi\"}', '2026-07-20 14:20:23', '2026-07-20 14:20:23'),
+(135, 19, 'SA6EDRU001', 'ai', 'Baik, semua sudah saya catat! 📝 🔥 Prioritas Tinggi\n\n✓ Rencana: *Beli*\n✓ Tipe: *Rumah*\n✓ Lokasi: *Surabaya*\n✓ Masuk: *20 Agustus 2026*\n✓ Furnitur: *Semi furnished*\n✓ Kondisi: *baru/ready*\n✓ Fasilitas: *Keamanan 24 jam, AC, Kitchen set, Lemari, Kulkas, CCTV, Kamar Tidur, Kamar Mandi, Listrik, Air, Dapur, Ruang Tamu, Carport/Garasi, One gate system*\n✓ Hindari:\n1. *Tidak mau tempat yang sepi*\n✓ Prefer:\n1. *Lokasi strategis*\n✓ Patokan lokasi: *Dekat pasar juga*\n✓ Viewing: *Jam 11 siang, 24 Juli 2026*\n\nSaya akan segera menghubungi Anda dengan rekomendasi properti yang paling sesuai! 🏠\nTerima kasih sudah menghubungi saya. 🙏\n\n---\n\n⚠️ Maaf, saat ini belum ada *Rumah* tersedia di *Surabaya* dengan kriteria yang Anda minta (jual, budget 600-800).\n\n📍 Berikut pilihan *Rumah* terdekat dari kota lain yang mungkin sesuai:\n\n1. *Sigli Business District House Sale*\n   ![Sigli Business District House Sale](/assets/image_data/properties/house.png)\n   📍 Lokasi: BANK BESAR, RESTORAN FINE DINING, MALL PREMIUM, STASIUN KERETA API\n   💰 Harga: *387.7 juta nego*\n   🏠 Tipe: Rumah — dijual\n   📐 Luas: bangunan 174 m2, tanah 329 m2\n   ✨ Fasilitas: AC, WI-FI, SECURITY, CCTV, WATER HEATER, PARKING, GARDEN, KITCHEN, WASHING MACHINE, SHOWER, SMART TV, STORAGE ROOM\n\n2. *Sabang Green Zone House Sale*\n   ![Sabang Green Zone House Sale](/assets/image_data/properties/house.png)\n   📍 Lokasi: RUANG TERBUKA HIJAU, INDOMARET, TAMAN KOTA, MASJID BESAR\n   💰 Harga: *655.5 juta nego*\n   🏠 Tipe: Rumah — dijual\n   📐 Luas: bangunan 298 m2, tanah 500 m2\n   ✨ Fasilitas: AC, WI-FI, SECURITY, WASHING MACHINE, PRIVATE POOL, STORAGE ROOM\n\n3. *Dharmasraya Heritage Zone House Sale*\n   ![Dharmasraya Heritage Zone House Sale](/assets/image_data/properties/house.png)\n   📍 Lokasi: RESTORAN FINE DINING, MUSEUM SENI, KUIL BUDDHA, HALTE BUS\n   💰 Harga: *1.5 miliar*\n   🏠 Tipe: Rumah — dijual\n   📐 Luas: bangunan 376 m2, tanah 605 m2\n   ✨ Fasilitas: AC, WI-FI, SECURITY, CCTV, WATER HEATER, PARKING, GARDEN, KITCHEN, LIVING ROOM, PDAM WATER, LAUNDRY ROOM, PRIVATE POOL, CARPORT, STORAGE ROOM\n\n4. *Bukittinggi Heritage Zone House Sale*\n   ![Bukittinggi Heritage Zone House Sale](/assets/image_data/properties/house.png)\n   📍 Lokasi: RESTORAN FINE DINING, MUSEUM SENI, KUIL BUDDHA, HALTE BUS\n   💰 Harga: *1.9 miliar*\n   🏠 Tipe: Rumah — dijual\n   📐 Luas: bangunan 238 m2, tanah 515 m2\n   ✨ Fasilitas: AC, WI-FI, SECURITY, STORAGE ROOM, CARPORT, FENCE, GUEST ROOM, PRIVATE POOL\n\n5. *Bukittinggi Tourism Area House Sale*\n   ![Bukittinggi Tourism Area House Sale](/assets/image_data/properties/house.png)\n   📍 Lokasi: RESTORAN FINE DINING, TAMAN HIBURAN, TAMAN BOTANI, HALTE BUS\n   💰 Harga: *2.8 miliar*\n   🏠 Tipe: Rumah — dijual\n   📐 Luas: bangunan 584 m2, tanah 720 m2\n   ✨ Fasilitas: AC, WI-FI, SECURITY, CCTV, WATER HEATER, PARKING, GARDEN, KITCHEN, PRIVATE POOL, LAUNDRY ROOM, PDAM WATER, SHOWER\n\n6. *Dharmasraya Near Beach House Sale*\n   ![Dharmasraya Near Beach House Sale](/assets/image_data/properties/house.png)\n   📍 Lokasi: RESTORAN SEAFOOD, PUSKESMAS, PANTAI PUBLIK, PELABUHAN LAUT\n   💰 Harga: *3.6 miliar nego*\n   🏠 Tipe: Rumah — dijual\n   📐 Luas: bangunan 497 m2, tanah 700 m2\n   ✨ Fasilitas: AC, WI-FI, SECURITY, CCTV, WATER HEATER, PARKING, GARDEN, KITCHEN, PDAM WATER, SMART TV, FENCE\n\n\nSaya siap membantu Anda menemukan rumah, villa, apartemen, atau properti lainnya yang cocok untuk Anda.\nApakah ada yang ingin Anda tanyakan lebih lanjut?\n\n\nSalam hangat,\n*NIGEL KUNCORO*\n*Elevan Property*', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 14:20:25', '2026-07-20 14:20:25'),
+(136, 1, 'LFGKT49002', 'customer', 'Saya mau book apartemen di Surabaya', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1784560175046\",\"platform\":\"kirimi\"}', '2026-07-20 15:09:47', '2026-07-20 15:09:47'),
+(137, 1, 'LFGKT49002', 'ai', 'Hampir lengkap! Untuk *sewa Apartemen di Surabaya* — 💰\n\nKisaran harga yang Anda inginkan berapa?\n_(Contoh: 3-7 juta/bulan, di bawah 500 juta, atau 1-2 miliar)_\n\nJika belum ada angka pasti, cukup ceritakan apakah lebih prefer yang *terjangkau* atau *menengah ke atas* — saya tetap bisa carikan yang sesuai 😊\n\nSalam hangat,\n*LEO FELIX*\n*Elevan Property*', 'whatsapp', '{\"aiProvider\":\"qualification\",\"contextSource\":\"db_catalog\"}', '2026-07-20 15:09:52', '2026-07-20 15:09:52'),
+(138, 1, 'LFGKT49002', 'customer', 'Saya booking dengan badget 2-4 juta/minggu', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1784560250010\",\"platform\":\"kirimi\"}', '2026-07-20 15:11:02', '2026-07-20 15:11:02'),
+(139, 1, 'LFGKT49002', 'ai', 'Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 15:11:05', '2026-07-20 15:11:05');
+INSERT INTO `chat_messages` (`id`, `chatSessionId`, `user_id`, `role`, `message`, `channel`, `metadata`, `createdAt`, `updatedAt`) VALUES
+(140, 1, 'LFGKT49002', 'customer', 'Saya mau daerah Rungkut\nDeket Indomaret', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1784560290195\",\"platform\":\"kirimi\"}', '2026-07-20 15:11:42', '2026-07-20 15:11:42'),
+(141, 1, 'LFGKT49002', 'ai', 'Sudah lihat berapa Apartemen di *Surabaya*? Apa yang membuat belum cocok dari yang sudah dilihat?', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 15:11:45', '2026-07-20 15:11:45'),
+(142, 1, 'LFGKT49002', 'customer', 'Deket sama cafe dan restoran', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1784560305644\",\"platform\":\"kirimi\"}', '2026-07-20 15:11:57', '2026-07-20 15:11:57'),
+(143, 1, 'LFGKT49002', 'ai', 'Rencananya masuk atau pindah bulan apa? 📅', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 15:12:00', '2026-07-20 15:12:00'),
+(144, 1, 'LFGKT49002', 'customer', 'Belum pernah survei, Kak', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1784560323938\",\"platform\":\"kirimi\"}', '2026-07-20 15:12:15', '2026-07-20 15:12:15'),
+(145, 1, 'LFGKT49002', 'ai', 'Untuk furnitur, lebih prefer yang sudah *furnished*, *semi-furnished*, atau *kosongan* saja? 🛋️', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 15:12:19', '2026-07-20 15:12:19'),
+(146, 1, 'LFGKT49002', 'customer', 'Saya mau checking 2 bulan depan', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1784560344812\",\"platform\":\"kirimi\"}', '2026-07-20 15:12:36', '2026-07-20 15:12:36'),
+(147, 1, 'LFGKT49002', 'ai', 'Ada fasilitas apartemen tertentu yang Anda inginkan? Misalnya kolam renang, gym, rooftop, keamanan 24 jam, atau yang lainnya? 🏊', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 15:12:39', '2026-07-20 15:12:39'),
+(148, 1, 'LFGKT49002', 'customer', 'Saya mau semi\n[unknown]', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1784560365718\",\"platform\":\"kirimi\"}', '2026-07-20 15:12:57', '2026-07-20 15:12:57'),
+(149, 1, 'LFGKT49002', 'ai', 'Ada yang pasti tidak cocok atau ingin dihindari? Misalnya rawan banjir, area panas, hadap barat, dekat jalan ramai, gang sempit, atau dekat rel kereta? 🚫', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 15:13:00', '2026-07-20 15:13:00'),
+(150, 1, 'LFGKT49002', 'customer', 'Saya ada tempat gym, yoga, kids zone\nKulkas', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1784560396061\",\"platform\":\"kirimi\"}', '2026-07-20 15:13:28', '2026-07-20 15:13:28'),
+(151, 1, 'LFGKT49002', 'ai', 'Kalau nanti ada yang cocok, langsung bisa jadwalkan viewing atau perlu koordinasi dulu sama keluarga lain? 📅', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 15:13:31', '2026-07-20 15:13:31'),
+(152, 1, 'LFGKT49002', 'customer', 'Saya mau besok', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1784560429512\",\"platform\":\"kirimi\"}', '2026-07-20 15:14:01', '2026-07-20 15:14:01'),
+(153, 1, 'LFGKT49002', 'ai', 'Baik, Kak untuk 21 Juli 2026 — kira-kira mau viewing jam berapa? ⏰', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 15:14:05', '2026-07-20 15:14:05'),
+(154, 1, 'LFGKT49002', 'customer', 'Jam 9 pagi, Kak', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1784560463741\",\"platform\":\"kirimi\"}', '2026-07-20 15:14:35', '2026-07-20 15:14:35'),
+(155, 1, 'LFGKT49002', 'ai', 'Untuk apartemen, ada preferensi tower atau lantai tertentu? Misalnya hadap timur, lantai rendah/tengah/tinggi? 🏢', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 15:14:38', '2026-07-20 15:14:38'),
+(156, 1, 'LFGKT49002', 'customer', 'Terserah hadap mana\nYang penting tempatnya dingin', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1784560503791\",\"platform\":\"kirimi\"}', '2026-07-20 15:15:15', '2026-07-20 15:15:15'),
+(157, 1, 'LFGKT49002', 'ai', 'Untuk undangan jadwal viewing-nya, boleh minta alamat email Kakak? 📧\n(Kalau tidak berkenan, balas \"lewati\" saja — tidak wajib 😊)', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 15:15:32', '2026-07-20 15:15:32'),
+(158, 1, 'LFGKT49002', 'customer', 'ini emal saya nigel@iil.co.id; Kak', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1784560569829\",\"platform\":\"kirimi\"}', '2026-07-20 15:16:21', '2026-07-20 15:16:21'),
+(159, 1, 'LFGKT49002', 'ai', 'Sebelum saya buatkan ringkasannya — boleh saya tahu nama Kakak? 😊', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 15:16:25', '2026-07-20 15:16:25'),
+(160, 1, 'LFGKT49002', 'customer', 'Nama saya Hanzel, Kak', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1784560601471\",\"platform\":\"kirimi\"}', '2026-07-20 15:16:53', '2026-07-20 15:16:53'),
+(161, 1, 'LFGKT49002', 'ai', 'Siap, mau *sewa* properti! 🏡\n\nTipe properti apa yang Anda cari?\n_Rumah, Apartemen, Villa, Kos-kosan, Ruko, Kantor, Gudang, atau lainnya_\n\nDan juga:\n• Di kota atau area mana? 📍\n\nSalam hangat,\n*LEO FELIX*\n*Elevan Property*', 'whatsapp', '{\"aiProvider\":\"qualification\",\"contextSource\":\"db_catalog\"}', '2026-07-20 15:16:53', '2026-07-20 15:16:53'),
+(162, 1, 'LFGKT49002', 'customer', 'Saya cari apartemen, Kak', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1784560630463\",\"platform\":\"kirimi\"}', '2026-07-20 15:17:22', '2026-07-20 15:17:22'),
+(163, 1, 'LFGKT49002', 'ai', 'Terima kasih! 😊 Untuk *Apartemen* yang Anda cari, saya butuh beberapa informasi tambahan:\n\n1️⃣ Apakah rencananya untuk *sewa* atau *beli*?\n2️⃣ Di kota atau area mana?\n3️⃣ Kisaran harga yang diinginkan? _(Contoh: 5-10 juta/bulan, atau di bawah 1 miliar)_\n\nSilakan ceritakan kebutuhannya, saya siap bantu! 🏡\n\nSalam hangat,\n*LEO FELIX*\n*Elevan Property*', 'whatsapp', '{\"aiProvider\":\"qualification\",\"contextSource\":\"db_catalog\"}', '2026-07-20 15:17:22', '2026-07-20 15:17:22'),
+(164, 1, 'LFGKT49002', 'customer', 'Saya rencana booking apartemen di Surabaya', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1784560669887\",\"platform\":\"kirimi\"}', '2026-07-20 15:18:01', '2026-07-20 15:18:01'),
+(165, 1, 'LFGKT49002', 'ai', 'Hampir lengkap! Untuk *sewa Apartemen di Surabaya* — 💰\n\nKisaran harga yang Anda inginkan berapa?\n_(Contoh: 3-7 juta/bulan, di bawah 500 juta, atau 1-2 miliar)_\n\nJika belum ada angka pasti, cukup ceritakan apakah lebih prefer yang *terjangkau* atau *menengah ke atas* — saya tetap bisa carikan yang sesuai 😊\n\nSalam hangat,\n*LEO FELIX*\n*Elevan Property*', 'whatsapp', '{\"aiProvider\":\"qualification\",\"contextSource\":\"db_catalog\"}', '2026-07-20 15:18:02', '2026-07-20 15:18:02'),
+(166, 1, 'LFGKT49002', 'customer', 'Saya cari badget 2-4 juta/minggu', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1784560688590\",\"platform\":\"kirimi\"}', '2026-07-20 15:18:20', '2026-07-20 15:18:20'),
+(167, 1, 'LFGKT49002', 'ai', 'Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 15:18:28', '2026-07-20 15:18:28'),
+(168, 1, 'LFGKT49002', 'customer', 'Saya mau di area Rungkut', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1784560759456\",\"platform\":\"kirimi\"}', '2026-07-20 15:19:31', '2026-07-20 15:19:31'),
+(169, 1, 'LFGKT49002', 'ai', 'Nanti akan tinggal bersama siapa saja? Biar saya bisa carikan yang pas jumlah kamarnya 🛏️', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 15:19:35', '2026-07-20 15:19:35'),
+(170, 1, 'LFGKT49002', 'customer', 'Saya bersama keluarga', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1784560785624\",\"platform\":\"kirimi\"}', '2026-07-20 15:19:57', '2026-07-20 15:19:57'),
+(171, 1, 'LFGKT49002', 'ai', 'Ada lokasi atau tempat tertentu yang jadi patokan? Misalnya dekat Pakuwon, Darmo, Rungkut, sekolah anak, atau jalan tertentu? 📍', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 15:20:01', '2026-07-20 15:20:01'),
+(172, 1, 'LFGKT49002', 'customer', 'Iya, saya cari di Rungkut\nDekat cafe, resto', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1784560827761\",\"platform\":\"kirimi\"}', '2026-07-20 15:20:39', '2026-07-20 15:20:39'),
+(173, 1, 'LFGKT49002', 'ai', 'Untuk furnitur, lebih prefer yang sudah *furnished*, *semi-furnished*, atau *kosongan* saja? 🛋️', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 15:20:54', '2026-07-20 15:20:54'),
+(174, 1, 'LFGKT49002', 'customer', 'Saya mau furnished', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1784560874166\",\"platform\":\"kirimi\"}', '2026-07-20 15:21:26', '2026-07-20 15:21:26'),
+(175, 1, 'LFGKT49002', 'ai', 'Ada fasilitas apartemen tertentu yang Anda inginkan? Misalnya kolam renang, gym, rooftop, keamanan 24 jam, atau yang lainnya? 🏊', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 15:21:29', '2026-07-20 15:21:29'),
+(176, 1, 'LFGKT49002', 'customer', 'Saya ada tempat gym, yoga, kids zone\nAda AC dan kulkas', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1784560914147\",\"platform\":\"kirimi\"}', '2026-07-20 15:22:06', '2026-07-20 15:22:06'),
+(177, 1, 'LFGKT49002', 'ai', 'Rencananya masuk atau pindah bulan apa? 📅', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 15:22:10', '2026-07-20 15:22:10'),
+(178, 1, 'LFGKT49002', 'customer', 'Saya mau checkin 2 bulan kedepan', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1784560952071\",\"platform\":\"kirimi\"}', '2026-07-20 15:22:44', '2026-07-20 15:22:44'),
+(179, 1, 'LFGKT49002', 'ai', 'Kalau nanti ada yang cocok, langsung bisa jadwalkan viewing atau perlu koordinasi dulu sama keluarga lain? 📅', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 15:22:47', '2026-07-20 15:22:47'),
+(180, 1, 'LFGKT49002', 'customer', 'Enggak perlu\nSaya survei sendiri', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1784560984827\",\"platform\":\"kirimi\"}', '2026-07-20 15:23:16', '2026-07-20 15:23:16'),
+(181, 1, 'LFGKT49002', 'ai', 'Baik, Kak — kira-kira mau viewing jam berapa? ⏰', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 15:23:19', '2026-07-20 15:23:19'),
+(182, 1, 'LFGKT49002', 'customer', 'Saya mau besok survei, jam 9 pagi', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1784561029084\",\"platform\":\"kirimi\"}', '2026-07-20 15:24:01', '2026-07-20 15:24:01'),
+(183, 1, 'LFGKT49002', 'ai', 'Rencananya sewa untuk berapa lama? ⏱️', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 15:24:03', '2026-07-20 15:24:03'),
+(184, 1, 'LFGKT49002', 'customer', 'Saya booking untuk 1 Minggu saja', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1784561062786\",\"platform\":\"kirimi\"}', '2026-07-20 15:24:34', '2026-07-20 15:24:34'),
+(185, 1, 'LFGKT49002', 'ai', 'Untuk apartemen, ada preferensi tower atau lantai tertentu? Misalnya hadap timur, lantai rendah/tengah/tinggi? 🏢', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 15:24:37', '2026-07-20 15:24:37'),
+(186, 1, 'LFGKT49002', 'customer', 'Terserah hadap mana', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1784561110999\",\"platform\":\"kirimi\"}', '2026-07-20 15:25:23', '2026-07-20 15:25:23'),
+(187, 1, 'LFGKT49002', 'ai', 'Sebelum saya buatkan ringkasannya — boleh saya tahu nama Kakak? 😊', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-07-20 15:25:25', '2026-07-20 15:25:25'),
+(188, 1, 'LFGKT49002', 'customer', 'Nama saya Hanzel', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1784561148565\",\"platform\":\"kirimi\"}', '2026-07-20 15:26:00', '2026-07-20 15:26:00'),
+(189, 1, 'LFGKT49002', 'ai', 'Siap, mau *sewa* properti! 🏡\n\nTipe properti apa yang Anda cari?\n_Rumah, Apartemen, Villa, Kos-kosan, Ruko, Kantor, Gudang, atau lainnya_\n\nSalam hangat,\n*LEO FELIX*\n*Elevan Property*', 'whatsapp', '{\"aiProvider\":\"qualification\",\"contextSource\":\"db_catalog\"}', '2026-07-20 15:26:05', '2026-07-20 15:26:05');
 
 -- --------------------------------------------------------
 
 --
--- Table structure for table `chat_sessions`
+-- Struktur dari tabel `chat_sessions`
 --
 
 CREATE TABLE `chat_sessions` (
@@ -177,7 +256,7 @@ CREATE TABLE `chat_sessions` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `chat_sessions`
+-- Dumping data untuk tabel `chat_sessions`
 --
 
 INSERT INTO `chat_sessions` (`id`, `name`, `normalizedName`, `phone`, `normalizedPhone`, `location`, `normalizedLocation`, `source`, `lastMessageAt`, `createdAt`, `updatedAt`) VALUES
@@ -207,7 +286,7 @@ INSERT INTO `chat_sessions` (`id`, `name`, `normalizedName`, `phone`, `normalize
 -- --------------------------------------------------------
 
 --
--- Table structure for table `cities`
+-- Struktur dari tabel `cities`
 --
 
 CREATE TABLE `cities` (
@@ -224,7 +303,7 @@ CREATE TABLE `cities` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `cities`
+-- Dumping data untuk tabel `cities`
 --
 
 INSERT INTO `cities` (`id`, `city_id`, `province_id`, `country_id`, `name`, `status`, `created_date`, `created_by`, `updated_date`, `updated_by`) VALUES
@@ -882,7 +961,7 @@ INSERT INTO `cities` (`id`, `city_id`, `province_id`, `country_id`, `name`, `sta
 -- --------------------------------------------------------
 
 --
--- Table structure for table `contacts`
+-- Struktur dari tabel `contacts`
 --
 
 CREATE TABLE `contacts` (
@@ -897,7 +976,7 @@ CREATE TABLE `contacts` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `contacts`
+-- Dumping data untuk tabel `contacts`
 --
 
 INSERT INTO `contacts` (`id`, `name`, `email`, `phone`, `subject`, `message`, `createdAt`, `updatedAt`) VALUES
@@ -969,7 +1048,7 @@ INSERT INTO `contacts` (`id`, `name`, `email`, `phone`, `subject`, `message`, `c
 -- --------------------------------------------------------
 
 --
--- Table structure for table `countries`
+-- Struktur dari tabel `countries`
 --
 
 CREATE TABLE `countries` (
@@ -984,7 +1063,7 @@ CREATE TABLE `countries` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `countries`
+-- Dumping data untuk tabel `countries`
 --
 
 INSERT INTO `countries` (`id`, `country_id`, `name`, `status`, `created_date`, `created_by`, `updated_date`, `updated_by`) VALUES
@@ -1012,7 +1091,7 @@ INSERT INTO `countries` (`id`, `country_id`, `name`, `status`, `created_date`, `
 -- --------------------------------------------------------
 
 --
--- Table structure for table `customers`
+-- Struktur dari tabel `customers`
 --
 
 CREATE TABLE `customers` (
@@ -1030,10 +1109,17 @@ CREATE TABLE `customers` (
   `updated_by` varchar(50) DEFAULT NULL COMMENT 'FK ke users.user_id — siapa yang terakhir mengubah'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Dumping data untuk tabel `customers`
+--
+
+INSERT INTO `customers` (`id`, `user_id`, `customer_id`, `name`, `phone`, `email`, `ai_response`, `status`, `created_date`, `created_by`, `updated_date`, `updated_by`) VALUES
+(4, 'SA6EDRU001', 'CLCSZ3Q001', 'Clarence', '6282233556796', 'dokumen.nigel2@gmail.com', 'ON', 1, '2026-07-20', 'SA6EDRU001', '2026-07-20', 'SA6EDRU001');
+
 -- --------------------------------------------------------
 
 --
--- Table structure for table `facilities`
+-- Struktur dari tabel `facilities`
 --
 
 CREATE TABLE `facilities` (
@@ -1051,7 +1137,7 @@ CREATE TABLE `facilities` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `facilities`
+-- Dumping data untuk tabel `facilities`
 --
 
 INSERT INTO `facilities` (`id`, `facility_id`, `name`, `description`, `icon`, `keywords`, `status`, `created_date`, `created_by`, `updated_date`, `updated_by`) VALUES
@@ -1336,7 +1422,7 @@ INSERT INTO `facilities` (`id`, `facility_id`, `name`, `description`, `icon`, `k
 -- --------------------------------------------------------
 
 --
--- Table structure for table `locations`
+-- Struktur dari tabel `locations`
 --
 
 CREATE TABLE `locations` (
@@ -1351,7 +1437,7 @@ CREATE TABLE `locations` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `locations`
+-- Dumping data untuk tabel `locations`
 --
 
 INSERT INTO `locations` (`id`, `location_id`, `name`, `status`, `created_date`, `created_by`, `updated_date`, `updated_by`) VALUES
@@ -1572,7 +1658,7 @@ INSERT INTO `locations` (`id`, `location_id`, `name`, `status`, `created_date`, 
 -- --------------------------------------------------------
 
 --
--- Table structure for table `logs`
+-- Struktur dari tabel `logs`
 --
 
 CREATE TABLE `logs` (
@@ -1585,7 +1671,7 @@ CREATE TABLE `logs` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `logs`
+-- Dumping data untuk tabel `logs`
 --
 
 INSERT INTO `logs` (`id`, `action`, `details`, `level`, `createdAt`, `updatedAt`) VALUES
@@ -2032,7 +2118,7 @@ INSERT INTO `logs` (`id`, `action`, `details`, `level`, `createdAt`, `updatedAt`
 -- --------------------------------------------------------
 
 --
--- Table structure for table `properties`
+-- Struktur dari tabel `properties`
 --
 
 CREATE TABLE `properties` (
@@ -2069,7 +2155,7 @@ CREATE TABLE `properties` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `properties`
+-- Dumping data untuk tabel `properties`
 --
 
 INSERT INTO `properties` (`id`, `property_id`, `city_id`, `province_id`, `country_id`, `user_id`, `title`, `description`, `price`, `price_type`, `address`, `area`, `district`, `postal_code`, `furnished_status`, `bed_rooms`, `bath_rooms`, `electricity_capacity`, `building_area`, `land_area`, `floor_location`, `floor_quantity`, `kpr_status`, `building_type`, `transaction_type`, `status`, `created_date`, `created_by`, `updated_date`, `updated_by`) VALUES
@@ -11328,7 +11414,7 @@ INSERT INTO `properties` (`id`, `property_id`, `city_id`, `province_id`, `countr
 -- --------------------------------------------------------
 
 --
--- Table structure for table `property_facilities`
+-- Struktur dari tabel `property_facilities`
 --
 
 CREATE TABLE `property_facilities` (
@@ -11343,7 +11429,7 @@ CREATE TABLE `property_facilities` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `property_facilities`
+-- Dumping data untuk tabel `property_facilities`
 --
 
 INSERT INTO `property_facilities` (`id`, `property_id`, `facility_id`, `facility_qty`, `created_date`, `created_by`, `updated_date`, `updated_by`) VALUES
@@ -70213,7 +70299,7 @@ INSERT INTO `property_facilities` (`id`, `property_id`, `facility_id`, `facility
 -- --------------------------------------------------------
 
 --
--- Table structure for table `property_images`
+-- Struktur dari tabel `property_images`
 --
 
 CREATE TABLE `property_images` (
@@ -70224,7 +70310,7 @@ CREATE TABLE `property_images` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `property_images`
+-- Dumping data untuk tabel `property_images`
 --
 
 INSERT INTO `property_images` (`id`, `property_id`, `name`, `url`) VALUES
@@ -79413,7 +79499,7 @@ INSERT INTO `property_images` (`id`, `property_id`, `name`, `url`) VALUES
 -- --------------------------------------------------------
 
 --
--- Table structure for table `property_locations`
+-- Struktur dari tabel `property_locations`
 --
 
 CREATE TABLE `property_locations` (
@@ -79427,7 +79513,7 @@ CREATE TABLE `property_locations` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `property_locations`
+-- Dumping data untuk tabel `property_locations`
 --
 
 INSERT INTO `property_locations` (`id`, `property_id`, `location_id`, `created_date`, `created_by`, `updated_date`, `updated_by`) VALUES
@@ -103534,7 +103620,7 @@ INSERT INTO `property_locations` (`id`, `property_id`, `location_id`, `created_d
 -- --------------------------------------------------------
 
 --
--- Table structure for table `provinces`
+-- Struktur dari tabel `provinces`
 --
 
 CREATE TABLE `provinces` (
@@ -103550,7 +103636,7 @@ CREATE TABLE `provinces` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `provinces`
+-- Dumping data untuk tabel `provinces`
 --
 
 INSERT INTO `provinces` (`id`, `province_id`, `country_id`, `name`, `status`, `created_date`, `created_by`, `updated_date`, `updated_by`) VALUES
@@ -103610,7 +103696,7 @@ INSERT INTO `provinces` (`id`, `province_id`, `country_id`, `name`, `status`, `c
 -- --------------------------------------------------------
 
 --
--- Table structure for table `users`
+-- Struktur dari tabel `users`
 --
 
 CREATE TABLE `users` (
@@ -103635,7 +103721,7 @@ CREATE TABLE `users` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `users`
+-- Dumping data untuk tabel `users`
 --
 
 INSERT INTO `users` (`id`, `user_id`, `name`, `birthdate`, `phone`, `username`, `password`, `email`, `catalog_summary`, `refresh_token`, `status`, `privilege`, `fonnte_token`, `kirimi_device_id`, `created_date`, `created_by`, `updated_date`, `update_by`) VALUES
@@ -103649,7 +103735,7 @@ INSERT INTO `users` (`id`, `user_id`, `name`, `birthdate`, `phone`, `username`, 
 -- --------------------------------------------------------
 
 --
--- Table structure for table `whatsapp_inbound_messages`
+-- Struktur dari tabel `whatsapp_inbound_messages`
 --
 
 CREATE TABLE `whatsapp_inbound_messages` (
@@ -103676,20 +103762,20 @@ CREATE TABLE `whatsapp_inbound_messages` (
 --
 
 --
--- Indexes for table `chat_messages`
+-- Indeks untuk tabel `chat_messages`
 --
 ALTER TABLE `chat_messages`
   ADD PRIMARY KEY (`id`),
   ADD KEY `chatSessionId` (`chatSessionId`);
 
 --
--- Indexes for table `chat_sessions`
+-- Indeks untuk tabel `chat_sessions`
 --
 ALTER TABLE `chat_sessions`
   ADD PRIMARY KEY (`id`);
 
 --
--- Indexes for table `cities`
+-- Indeks untuk tabel `cities`
 --
 ALTER TABLE `cities`
   ADD PRIMARY KEY (`id`),
@@ -103704,13 +103790,13 @@ ALTER TABLE `cities`
   ADD KEY `cities_name` (`name`);
 
 --
--- Indexes for table `contacts`
+-- Indeks untuk tabel `contacts`
 --
 ALTER TABLE `contacts`
   ADD PRIMARY KEY (`id`);
 
 --
--- Indexes for table `countries`
+-- Indeks untuk tabel `countries`
 --
 ALTER TABLE `countries`
   ADD PRIMARY KEY (`id`),
@@ -103723,7 +103809,7 @@ ALTER TABLE `countries`
   ADD KEY `countries_name` (`name`);
 
 --
--- Indexes for table `customers`
+-- Indeks untuk tabel `customers`
 --
 ALTER TABLE `customers`
   ADD PRIMARY KEY (`id`),
@@ -103736,7 +103822,7 @@ ALTER TABLE `customers`
   ADD KEY `customers_name` (`name`);
 
 --
--- Indexes for table `facilities`
+-- Indeks untuk tabel `facilities`
 --
 ALTER TABLE `facilities`
   ADD PRIMARY KEY (`id`),
@@ -103749,7 +103835,7 @@ ALTER TABLE `facilities`
   ADD KEY `facilities_name` (`name`);
 
 --
--- Indexes for table `locations`
+-- Indeks untuk tabel `locations`
 --
 ALTER TABLE `locations`
   ADD KEY `locations_location_id` (`location_id`),
@@ -103757,13 +103843,13 @@ ALTER TABLE `locations`
   ADD KEY `locations_name` (`name`);
 
 --
--- Indexes for table `logs`
+-- Indeks untuk tabel `logs`
 --
 ALTER TABLE `logs`
   ADD PRIMARY KEY (`id`);
 
 --
--- Indexes for table `properties`
+-- Indeks untuk tabel `properties`
 --
 ALTER TABLE `properties`
   ADD PRIMARY KEY (`id`),
@@ -103780,7 +103866,7 @@ ALTER TABLE `properties`
   ADD KEY `properties_user_id` (`user_id`);
 
 --
--- Indexes for table `property_facilities`
+-- Indeks untuk tabel `property_facilities`
 --
 ALTER TABLE `property_facilities`
   ADD PRIMARY KEY (`id`),
@@ -103788,14 +103874,14 @@ ALTER TABLE `property_facilities`
   ADD KEY `property_facilities_facility_id` (`facility_id`);
 
 --
--- Indexes for table `property_images`
+-- Indeks untuk tabel `property_images`
 --
 ALTER TABLE `property_images`
   ADD PRIMARY KEY (`id`),
   ADD KEY `property_images_property_id` (`property_id`);
 
 --
--- Indexes for table `property_locations`
+-- Indeks untuk tabel `property_locations`
 --
 ALTER TABLE `property_locations`
   ADD PRIMARY KEY (`id`),
@@ -103804,7 +103890,7 @@ ALTER TABLE `property_locations`
   ADD KEY `property_locations_location_id` (`location_id`);
 
 --
--- Indexes for table `provinces`
+-- Indeks untuk tabel `provinces`
 --
 ALTER TABLE `provinces`
   ADD PRIMARY KEY (`id`),
@@ -103818,7 +103904,7 @@ ALTER TABLE `provinces`
   ADD KEY `provinces_name` (`name`);
 
 --
--- Indexes for table `users`
+-- Indeks untuk tabel `users`
 --
 ALTER TABLE `users`
   ADD PRIMARY KEY (`id`),
@@ -103839,7 +103925,7 @@ ALTER TABLE `users`
   ADD KEY `users_phone` (`phone`);
 
 --
--- Indexes for table `whatsapp_inbound_messages`
+-- Indeks untuk tabel `whatsapp_inbound_messages`
 --
 ALTER TABLE `whatsapp_inbound_messages`
   ADD PRIMARY KEY (`id`),
@@ -103849,111 +103935,111 @@ ALTER TABLE `whatsapp_inbound_messages`
   ADD KEY `whatsapp_inbound_messages_created_at` (`createdAt`);
 
 --
--- AUTO_INCREMENT for dumped tables
+-- AUTO_INCREMENT untuk tabel yang dibuang
 --
 
 --
--- AUTO_INCREMENT for table `chat_messages`
+-- AUTO_INCREMENT untuk tabel `chat_messages`
 --
 ALTER TABLE `chat_messages`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=112;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=190;
 
 --
--- AUTO_INCREMENT for table `chat_sessions`
+-- AUTO_INCREMENT untuk tabel `chat_sessions`
 --
 ALTER TABLE `chat_sessions`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=23;
 
 --
--- AUTO_INCREMENT for table `cities`
+-- AUTO_INCREMENT untuk tabel `cities`
 --
 ALTER TABLE `cities`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=743;
 
 --
--- AUTO_INCREMENT for table `contacts`
+-- AUTO_INCREMENT untuk tabel `contacts`
 --
 ALTER TABLE `contacts`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=65;
 
 --
--- AUTO_INCREMENT for table `countries`
+-- AUTO_INCREMENT untuk tabel `countries`
 --
 ALTER TABLE `countries`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=21;
 
 --
--- AUTO_INCREMENT for table `customers`
+-- AUTO_INCREMENT untuk tabel `customers`
 --
 ALTER TABLE `customers`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
 
 --
--- AUTO_INCREMENT for table `facilities`
+-- AUTO_INCREMENT untuk tabel `facilities`
 --
 ALTER TABLE `facilities`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=278;
 
 --
--- AUTO_INCREMENT for table `logs`
+-- AUTO_INCREMENT untuk tabel `logs`
 --
 ALTER TABLE `logs`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=440;
 
 --
--- AUTO_INCREMENT for table `properties`
+-- AUTO_INCREMENT untuk tabel `properties`
 --
 ALTER TABLE `properties`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9168;
 
 --
--- AUTO_INCREMENT for table `property_facilities`
+-- AUTO_INCREMENT untuk tabel `property_facilities`
 --
 ALTER TABLE `property_facilities`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=58890;
 
 --
--- AUTO_INCREMENT for table `property_images`
+-- AUTO_INCREMENT untuk tabel `property_images`
 --
 ALTER TABLE `property_images`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9168;
 
 --
--- AUTO_INCREMENT for table `property_locations`
+-- AUTO_INCREMENT untuk tabel `property_locations`
 --
 ALTER TABLE `property_locations`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=24062;
 
 --
--- AUTO_INCREMENT for table `provinces`
+-- AUTO_INCREMENT untuk tabel `provinces`
 --
 ALTER TABLE `provinces`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=53;
 
 --
--- AUTO_INCREMENT for table `users`
+-- AUTO_INCREMENT untuk tabel `users`
 --
 ALTER TABLE `users`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
 
 --
--- AUTO_INCREMENT for table `whatsapp_inbound_messages`
+-- AUTO_INCREMENT untuk tabel `whatsapp_inbound_messages`
 --
 ALTER TABLE `whatsapp_inbound_messages`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
--- Constraints for dumped tables
+-- Ketidakleluasaan untuk tabel pelimpahan (Dumped Tables)
 --
 
 --
--- Constraints for table `chat_messages`
+-- Ketidakleluasaan untuk tabel `chat_messages`
 --
 ALTER TABLE `chat_messages`
   ADD CONSTRAINT `chat_messages_ibfk_1` FOREIGN KEY (`chatSessionId`) REFERENCES `chat_sessions` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
--- Constraints for table `property_locations`
+-- Ketidakleluasaan untuk tabel `property_locations`
 --
 ALTER TABLE `property_locations`
   ADD CONSTRAINT `property_locations_ibfk_1` FOREIGN KEY (`property_id`) REFERENCES `properties` (`property_id`) ON DELETE CASCADE,

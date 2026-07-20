@@ -311,6 +311,37 @@ function isOwnEcho(message) {
   return new RegExp(`sent\\s+via\\s+${escaped}`, 'i').test(String(message || ''));
 }
 
+/**
+ * Buang bagian GEMA pesan AI dari sebuah inbound, sisakan HANYA balasan asli
+ * customer. Terjadi saat customer mengutip/menyalin pesan AI (mis. akibat kegagalan
+ * kirim → customer paste ulang) sehingga body inbound = "[pesan AI + footer Sent via]
+ * [balasan asli customer]". Tanpa ini, seluruh pesan ter-skip (isOwnEcho) → jawaban
+ * asli customer HILANG → AI mengulang pertanyaan.
+ *
+ * Strategi: ambil teks SETELAH kemunculan footer "Sent via <tag>" TERAKHIR, buang
+ * penanda kutipan (">"), rapikan. Jika tidak ada footer → kembalikan pesan apa adanya.
+ * Jika setelah footer tidak ada teks bermakna → kembalikan '' (murni gema → skip).
+ *
+ * @param {string} message
+ * @returns {string} balasan asli customer (atau pesan asli bila bukan gema)
+ */
+function stripOwnEcho(message) {
+  const raw = String(message || '');
+  const tag = String(process.env.AI_PRIMARY_TAG || '').trim();
+  if (!tag) return raw.trim();
+  const escaped = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`sent\\s+via\\s+${escaped}[^\\n]*`, 'gi');
+  if (!re.test(raw)) return raw.trim();
+  // Ambil segmen setelah footer TERAKHIR.
+  const parts = raw.split(re);
+  let tail = parts[parts.length - 1] || '';
+  tail = tail
+    .replace(/^[>\s_*·—–-]+/g, '')   // buang penanda kutipan / bullet di awal
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  return tail;
+}
+
 module.exports = {
   normalizePhone,
   isValidPhone,
@@ -323,5 +354,6 @@ module.exports = {
   maskName,
   appendSentViaTag,
   isOwnEcho,
+  stripOwnEcho,
   buildOffTopicRedirect,
 };

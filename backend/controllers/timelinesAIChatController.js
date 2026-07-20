@@ -44,7 +44,7 @@ const { hasPropertyKeyword,
         isPostSummaryDormant }          = require('../utils/propertyKeywordFilter');
 const { generateWhatsAppAIReply }       = require('../services/whatsappAIService');
 const { getConversationHistory }        = require('../services/sessionService');
-const { sanitizeLog, maskPhone, maskName, appendSentViaTag, isOwnEcho, buildOffTopicRedirect } = require('../utils/whatsappUtils');
+const { sanitizeLog, maskPhone, maskName, appendSentViaTag, isOwnEcho, stripOwnEcho, buildOffTopicRedirect } = require('../utils/whatsappUtils');
 
 /* ══════════════════════════════════════════════════════════════════════════════
    BAGIAN 0 — MESSAGE-ID DEDUP CACHE
@@ -332,7 +332,7 @@ async function sendViaTimelinesAI(targetPhone, message) {
 ══════════════════════════════════════════════════════════════════════════════ */
 
 async function processIncomingMessage(body, agent) {
-  const { sender, name, message, messageId, isGroup, fromMe } = extractMessage(body);
+  let { sender, name, message, messageId, isGroup, fromMe } = extractMessage(body);
 
   // ── Skip media/non-teks, grup & pesan kita sendiri ───────────────────
   if (!message) return;
@@ -344,10 +344,16 @@ async function processIncomingMessage(body, agent) {
     console.log(`[TIMELINESAI] Skip pesan grup dari ${maskPhone(sender)}`);
     return;
   }
-  // Gema pesan AI kita sendiri (footer "Sent via …") → skip (anti-loop).
+  // Gema pesan AI kita sendiri (footer "Sent via …"). Ambil balasan asli customer
+  // bila ada; skip hanya bila murni gema tanpa teks tambahan (anti-loop).
   if (isOwnEcho(message)) {
-    console.log(`[TIMELINESAI] Skip gema pesan AI sendiri dari ${maskPhone(sender)}`);
-    return;
+    const real = stripOwnEcho(message);
+    if (!real) {
+      console.log(`[TIMELINESAI] Skip gema murni pesan AI sendiri dari ${maskPhone(sender)}`);
+      return;
+    }
+    console.log(`[TIMELINESAI] Gema AI terdeteksi — ambil balasan asli customer: "${sanitizeLog(real, 80)}"`);
+    message = real;
   }
 
   // ── Dedup guard layer 1: stable message_uid (webhook retries) ───────
@@ -414,6 +420,21 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
     }
   } catch (cmdErr) {
     console.warn('[TimelinesAI] Catalog command check failed:', cmdErr.message);
+  }
+
+  // ── PERINTAH AGENT: nyalakan/matikan AI per-customer (by name) ───────────
+  // "matikan AI untuk Clarence" / "nyalakan chat dengan AI untuk Rizal, Kezia dan Lia"
+  // DARI NOMOR AGENT → update customers.ai_response (ON/OFF) + balas konfirmasi.
+  try {
+    const { maybeHandleAiToggleCommand } = require('../services/customerAiToggleService');
+    const aiReply = await maybeHandleAiToggleCommand({ message, senderPhone: sender, agent });
+    if (aiReply) {
+      await sendViaTimelinesAI(sender, aiReply);
+      console.log(`[TimelinesAI] ⚙️  Perintah agent: customers.ai_response di-update oleh ${agent.name}`);
+      return;   // perintah admin — tidak disimpan sebagai chat customer
+    }
+  } catch (aiCmdErr) {
+    console.warn('[TimelinesAI] AI toggle command check failed:', aiCmdErr.message);
   }
 
   let session = await ChatSession.findOne({ where: { normalizedPhone: normSender, source } });

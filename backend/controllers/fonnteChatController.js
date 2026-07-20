@@ -30,7 +30,7 @@ const { hasPropertyKeyword,
         isPostSummaryDormant }          = require('../utils/propertyKeywordFilter');
 const { generateWhatsAppAIReply }       = require('../services/whatsappAIService');
 const { getConversationHistory }        = require('../services/sessionService');
-const { sanitizeLog, maskPhone, maskName, appendSentViaTag, isOwnEcho, buildOffTopicRedirect } = require('../utils/whatsappUtils');
+const { sanitizeLog, maskPhone, maskName, appendSentViaTag, isOwnEcho, stripOwnEcho, buildOffTopicRedirect } = require('../utils/whatsappUtils');
 
 /* ══════════════════════════════════════════════════════════════════════════════
    BAGIAN 0 — MESSAGE-ID DEDUP CACHE
@@ -254,7 +254,7 @@ async function sendViaFonnte(targetPhone, message, agentToken) {
 async function processIncomingMessage(body, agent) {
   const sender    = String(body.sender || '').trim();
   const name      = String(body.name || body.pushname || 'Customer').trim();
-  const message   = String(body.message || '').trim();
+  let   message   = String(body.message || '').trim();
   const messageId = body.inboxid || body.key || body.id || `fonnte_${Date.now()}`;
   const fromMe    = body.fromMe === true || String(body.fromMe).toLowerCase() === 'true';
   const isGroup   = body.isgroup === true || String(body.isgroup).toLowerCase() === 'true' ||
@@ -271,10 +271,16 @@ async function processIncomingMessage(body, agent) {
     console.log(`[FONNTE] Skip pesan grup dari ${maskPhone(sender)}`);
     return;
   }
-  // Gema pesan AI kita sendiri (footer "Sent via …") → skip (anti-loop).
+  // Gema pesan AI kita sendiri (footer "Sent via …"). Ambil balasan asli customer
+  // bila ada; skip hanya bila murni gema tanpa teks tambahan (anti-loop).
   if (isOwnEcho(message)) {
-    console.log(`[FONNTE] Skip gema pesan AI sendiri dari ${maskPhone(sender)}`);
-    return;
+    const real = stripOwnEcho(message);
+    if (!real) {
+      console.log(`[FONNTE] Skip gema murni pesan AI sendiri dari ${maskPhone(sender)}`);
+      return;
+    }
+    console.log(`[FONNTE] Gema AI terdeteksi — ambil balasan asli customer: "${sanitizeLog(real, 80)}"`);
+    message = real;
   }
 
   // ── Dedup guard layer 1: stable message-ID (Fonnte webhook retries) ─
@@ -343,6 +349,21 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
     }
   } catch (cmdErr) {
     console.warn('[FONNTE] Catalog command check failed:', cmdErr.message);
+  }
+
+  // ── PERINTAH AGENT: nyalakan/matikan AI per-customer (by name) ───────────
+  // "matikan AI untuk Clarence" / "nyalakan chat dengan AI untuk Rizal, Kezia dan Lia"
+  // DARI NOMOR AGENT → update customers.ai_response (ON/OFF) + balas konfirmasi.
+  try {
+    const { maybeHandleAiToggleCommand } = require('../services/customerAiToggleService');
+    const aiReply = await maybeHandleAiToggleCommand({ message, senderPhone: sender, agent });
+    if (aiReply) {
+      await sendViaFonnte(sender, aiReply, agent.fonnte_token);
+      console.log(`[FONNTE] ⚙️  Perintah agent: customers.ai_response di-update oleh ${agent.name}`);
+      return;   // perintah admin — tidak disimpan sebagai chat customer
+    }
+  } catch (aiCmdErr) {
+    console.warn('[FONNTE] AI toggle command check failed:', aiCmdErr.message);
   }
 
   let session = await ChatSession.findOne({ where: { normalizedPhone: normSender, source } });
