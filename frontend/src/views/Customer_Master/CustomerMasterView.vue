@@ -40,7 +40,7 @@
 
               <!-- Nama Customer -->
               <div class="form-group">
-                <label for="name">Nama Customer <span class="required">*</span></label>
+                <label class="col-form-label" for="name">Nama Customer <span class="required">*</span></label>
                 <input
                   id="name"
                   v-model.trim="form.name"
@@ -50,21 +50,24 @@
                   maxlength="100"
                   required
                   autocomplete="off"
+                  class="form-control form-control-lg form-control-sm"
                 />
                 <p class="field-hint">Maksimal 100 karakter</p>
               </div>
 
               <!-- No. WhatsApp -->
               <div class="form-group">
-                <label for="phone">No. WhatsApp</label>
+                <label class="col-form-label" for="phone">No. WhatsApp</label>
                 <input
                   id="phone"
-                  v-model.trim="form.phone"
+                  :value="form.phone"
+                  @input="onPhoneInput"
                   type="tel"
-                  placeholder="Contoh: 0812xxxxxx atau 62812xxxxxx"
-                  :disabled="isSubmitting"
+                  :placeholder="fnReady ? 'Contoh: 0812xxxxxx atau 62812xxxxxx' : 'Menyiapkan form...'"
+                  :disabled="isSubmitting || !fnReady"
                   maxlength="30"
                   autocomplete="off"
+                  class="form-control form-control-lg form-control-sm"
                 />
                 <p class="field-hint">
                   Nomor akan dinormalisasi ke format 62. Satu nomor hanya boleh terdaftar sekali per agent —
@@ -74,7 +77,7 @@
 
               <!-- Email -->
               <div class="form-group">
-                <label for="email">Email</label>
+                <label class="col-form-label" for="email">Email</label>
                 <input
                   id="email"
                   v-model.trim="form.email"
@@ -83,20 +86,21 @@
                   :disabled="isSubmitting"
                   maxlength="200"
                   autocomplete="off"
+                  class="form-control form-control-lg form-control-sm"
                 />
                 <p class="field-hint">Opsional — dipakai untuk undangan jadwal viewing (Google Calendar)</p>
               </div>
 
               <!-- AI Response -->
               <div class="form-group">
-                <label for="ai_response">AI Response</label>
+                <label class="col-form-label" for="ai_response">AI Response</label>
                 <div class="select-wrapper">
-                  <select id="ai_response" v-model="form.ai_response" class="filter-select" :disabled="isSubmitting">
+                  <select id="ai_response" v-model="form.ai_response" class="form-control form-control-lg form-control-sm" :disabled="isSubmitting">
                     <option value="ON">ON — AI membalas chat customer ini</option>
                     <option value="OFF">OFF — AI diam (agent takeover manual)</option>
                   </select>
                 </div>
-                <p class="field-hint">Matikan bila agent ingin menangani chat customer ini secara manual</p>
+                <p class="field-hint label">Matikan bila agent ingin menangani chat customer ini secara manual</p>
               </div>
 
               <!-- ── Info Pembuat/Pengubah (Edit mode only) ── -->
@@ -163,7 +167,7 @@
               <!-- Actions -->
               <div class="form-actions">
                 <router-link to="/customer" class="btn-cancel">Batal</router-link>
-                <button type="submit" class="btn-submit" :disabled="isSubmitting || !hasChanges">
+                <button type="submit" class="btn-submit" :disabled="isSubmitting || !hasChanges || !fnReady">
                   <span v-if="isSubmitting"><span class="spinner-sm"></span> Menyimpan...</span>
                   <span v-else>{{ isEditMode ? '💾 Simpan Perubahan' : '+ Tambah Customer' }}</span>
                 </button>
@@ -215,6 +219,7 @@ const isLoadingDetail  = ref(false);
 const isSubmitting     = ref(false);
 const isTogglingStatus = ref(false);
 const isDeleting       = ref(false);
+const fnReady          = ref(false);   // true setelah Function_Path (window.formatPhone/formatEmail) siap
 
 const deleteModal = reactive({ show: false });
 
@@ -271,6 +276,33 @@ const syncOriginal = () => {
   originalForm.ai_response = form.ai_response;
 };
 
+/* ── No. WhatsApp — auto-format pakai window.formatPhone() (Function_Path) ──
+   Guard kesiapan TIDAK dicek di sini — input phone di template sudah
+   :disabled="!fnReady", jadi event @input ini secara struktural mustahil
+   terpicu sebelum window.formatPhone ada (browser tidak mengirim event pada
+   elemen disabled). Satu guard di level UI, bukan typeof-check berulang di
+   tiap fungsi. formatPhone() membersihkan karakter non-digit lalu menyisipkan
+   strip tiap 4 digit ("081234567890" → "0812-3456-7890"). Backend
+   menormalisasi ulang ke digit murni (format 62xxx) saat disimpan. */
+const onPhoneInput = (e) => {
+  const formatted = window.formatPhone(e.target.value);
+  form.phone = formatted;
+  e.target.value = formatted;
+};
+
+/* ── Guard TUNGGAL: tunggu Function_Path (window.formatPhone/formatEmail) siap ──
+   Sama seperti waitForFunctions() di List views (CityListView, CustomerListView,
+   dll) untuk window.tableModal — App.vue menyuntikkan script secara ASYNC
+   (document.createElement('script') tanpa async=false), jadi TIDAK ada jaminan
+   ia sudah tersedia saat komponen form ini mount. Guard ini SATU-SATUNYA titik
+   pemeriksaan; setelah fnReady=true, seluruh pemanggilan window.formatXXX di
+   bawah tidak perlu diguard ulang. */
+const waitForFunctions = () => new Promise((resolve) => {
+  const ready = () => typeof window.formatPhone === 'function' && typeof window.formatEmail === 'function';
+  if (ready()) return resolve();
+  const timer = setInterval(() => { if (ready()) { clearInterval(timer); resolve(); } }, 50);
+});
+
 /* ── Load detail (edit mode) ─────────────────────────────────────── */
 const loadDetail = async () => {
   isLoadingDetail.value = true;
@@ -284,7 +316,7 @@ const loadDetail = async () => {
         user_id:         c.user_id         || '',
         agent_name:      c.agent_name      || '',
         name:            c.name            || '',
-        phone:           c.phone           || '',
+        phone:           c.phone ? window.formatPhone(c.phone) : '',
         email:           c.email           || '',
         ai_response:     c.ai_response     || 'ON',
         status:          c.status          ?? 1,
@@ -318,7 +350,17 @@ const submitForm = async () => {
     setAlert('warning', 'Nama customer wajib diisi');
     return;
   }
-  if (form.email && !/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(form.email)) {
+  // Guard TUNGGAL: kalau Function_Path (script global App.vue) belum sempat
+  // termuat (race condition — lihat waitForFunctions), tolak submit di sini
+  // saja daripada menyebar typeof-check di tiap pemanggilan window.formatXXX.
+  if (!fnReady.value) {
+    setAlert('warning', 'Form belum siap sepenuhnya, coba lagi sebentar lagi.');
+    return;
+  }
+  // formatEmail() (Function_Path, dimuat global oleh App.vue) — validator
+  // boolean, bukan formatter string. Dipanggil langsung tanpa guard lagi —
+  // fnReady di atas sudah menjamin window.formatEmail ada.
+  if (form.email && !window.formatEmail(form.email)) {
     setAlert('warning', 'Format email tidak valid');
     return;
   }
@@ -420,7 +462,9 @@ const handleDelete = async () => {
 };
 
 /* ── Lifecycle ──────────────────────────────────────────────────── */
-onMounted(() => {
+onMounted(async () => {
+  await waitForFunctions();
+  fnReady.value = true;
   if (isEditMode.value) loadDetail();
 });
 </script>

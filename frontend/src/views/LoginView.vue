@@ -52,7 +52,7 @@
 
           <!-- Username -->
           <div class="form-group">
-            <label class="form-label" for="username">
+            <label class="form-label col-form-label" for="username">
               Username <span class="required">*</span>
             </label>
             <div class="input-icon-wrapper">
@@ -61,7 +61,7 @@
                 id="username"
                 v-model.trim="form.username"
                 type="text"
-                class="form-control"
+                class="form-control form-control-lg form-control-sm"
                 placeholder="Masukkan username"
                 autocomplete="username"
                 :disabled="isSubmitting"
@@ -72,7 +72,7 @@
 
           <!-- Password -->
           <div class="form-group">
-            <label class="form-label" for="password">
+            <label class="form-label col-form-label" for="password">
               Password <span class="required">*</span>
             </label>
             <div class="input-password-wrapper">
@@ -80,7 +80,7 @@
                 id="password"
                 v-model="form.password"
                 :type="showPassword ? 'text' : 'password'"
-                class="form-control"
+                class="form-control form-control-lg form-control-sm"
                 placeholder="Masukkan password"
                 autocomplete="current-password"
                 :disabled="isSubmitting"

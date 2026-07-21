@@ -15,9 +15,9 @@
 
       <div v-if="!profileReady" class="chat-profile">
         <p class="mb-2">Please enter your name, phone number, and location before chatting.</p>
-        <input v-model.trim="profile.name"     class="form-control mb-2" placeholder="Name" />
-        <input v-model="profile.phone"          class="form-control mb-2" placeholder="Phone" inputmode="tel" @input="sanitizePhone" />
-        <input v-model.trim="profile.location" class="form-control mb-2" placeholder="Your location, e.g. Surabaya" />
+        <input v-model.trim="profile.name"     class="form-control mb-2 form-control-lg form-control-sm" placeholder="Name" />
+        <input v-model="profile.phone"          class="form-control mb-2 form-control-lg form-control-sm" placeholder="Phone" inputmode="tel" @input="sanitizePhone" />
+        <input v-model.trim="profile.location" class="form-control mb-2 form-control-lg form-control-sm" placeholder="Your location, e.g. Surabaya" />
         <small class="text-muted d-block mb-2">Your chat profile cookie follows the backend .env TTL setting.</small>
         <button class="btn primary-btn rounded-full w-100" type="button" @click="startChat">Start Chat</button>
         <p v-if="errorMessage" class="text-danger small mt-2">{{ errorMessage }}</p>
@@ -35,7 +35,7 @@
           </div>
         </div>
         <form class="chat-input" @submit.prevent="sendMessage">
-          <input v-model.trim="draft" type="text" placeholder="Type your property question..." :disabled="isSending" />
+          <input class="form-control form-control-lg form-control-sm" v-model.trim="draft" type="text" placeholder="Type your property question..." :disabled="isSending" />
           <button type="submit" :disabled="isSending || !draft">{{ isSending ? '...' : 'Send' }}</button>
         </form>
         <p v-if="errorMessage" class="text-danger small px-3 pb-2 mb-0">{{ errorMessage }}</p>

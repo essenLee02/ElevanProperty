@@ -44,8 +44,8 @@
 
               <!-- Nama Lokasi -->
               <div class="form-group">
-                <label for="name">Nama Lokasi <span class="required">*</span></label>
-                <input
+                <label class="col-form-label" for="name">Nama Lokasi <span class="required">*</span></label>
+                <input class="form-control form-control-lg form-control-sm"
                   id="name"
                   v-model.trim="form.name"
                   type="text"

@@ -40,9 +40,9 @@
 
               <!-- Negara (pilih via modal — terhubung database) -->
               <div class="form-group">
-                <label for="country_name">Negara <span class="required">*</span></label>
+                <label class="col-form-label" for="country_name">Negara <span class="required">*</span></label>
                 <div class="picker-field" :class="{ disabled: isSubmitting }">
-                  <input
+                  <input class="form-control form-control-lg form-control-sm"
                     id="country_name"
                     v-model="form.country_name"
                     type="text"
@@ -61,8 +61,8 @@
 
               <!-- Nama Provinsi -->
               <div class="form-group">
-                <label for="name">Nama Provinsi <span class="required">*</span></label>
-                <input
+                <label class="col-form-label" for="name">Nama Provinsi <span class="required">*</span></label>
+                <input class="form-control form-control-lg form-control-sm"
                   id="name"
                   v-model.trim="form.name"
                   type="text"

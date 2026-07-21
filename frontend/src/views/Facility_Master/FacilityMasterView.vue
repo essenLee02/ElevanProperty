@@ -44,8 +44,8 @@
 
               <!-- Nama Fasilitas -->
               <div class="form-group">
-                <label for="name">Nama Fasilitas <span class="required">*</span></label>
-                <input
+                <label class="col-form-label" for="name">Nama Fasilitas <span class="required">*</span></label>
+                <input class="form-control form-control-lg form-control-sm"
                   id="name"
                   v-model.trim="form.name"
                   type="text"
@@ -60,11 +60,11 @@
 
               <!-- Icon -->
               <div class="form-group">
-                <label for="icon">Icon</label>
+                <label class="col-form-label" for="icon">Icon</label>
                 <div class="icon-input-wrapper">
                   <span class="icon-preview" v-if="form.icon">{{ form.icon }}</span>
                   <span class="icon-preview icon-placeholder" v-else>?</span>
-                  <input
+                  <input class="form-control form-control-lg form-control-sm"
                     id="icon"
                     v-model.trim="form.icon"
                     type="text"
@@ -89,8 +89,8 @@
 
               <!-- Deskripsi -->
               <div class="form-group">
-                <label for="description">Deskripsi</label>
-                <textarea
+                <label class="col-form-label" for="description">Deskripsi</label>
+                <textarea class="form-control form-control-lg form-control-sm"
                   id="description"
                   v-model.trim="form.description"
                   placeholder="Deskripsi singkat fasilitas (opsional)"

@@ -20,16 +20,16 @@
 
             <form @submit.prevent="submitForm" class="contact-form">
               <div class="row">
-                <div class="col-md-6"><input type="text" v-model.trim="form.name" placeholder="Name" /></div>
-                <div class="col-md-6"><input type="email" v-model.trim="form.email" placeholder="Email" /></div>
+                <div class="col-md-6"><input class="form-control form-control-lg form-control-sm" type="text" v-model.trim="form.name" placeholder="Name" /></div>
+                <div class="col-md-6"><input class="form-control form-control-lg form-control-sm" type="email" v-model.trim="form.email" placeholder="Email" /></div>
               </div>
               <div class="row">
                 <div class="col-md-6">
-                  <input ref="phoneInput" id="phone" type="text" v-model="form.phone" placeholder="Phone" inputmode="tel" autocomplete="tel" @input="sanitizePhone" />
+                  <input class="form-control form-control-lg form-control-sm" ref="phoneInput" id="phone" type="text" v-model="form.phone" placeholder="Phone" inputmode="tel" autocomplete="tel" @input="sanitizePhone" />
                 </div>
-                <div class="col-md-6"><input type="text" v-model.trim="form.subject" placeholder="Subject" /></div>
+                <div class="col-md-6"><input class="form-control form-control-lg form-control-sm" type="text" v-model.trim="form.subject" placeholder="Subject" /></div>
               </div>
-              <div class="row"><div class="col-12"><textarea v-model.trim="form.message" placeholder="Type Message" rows="5"></textarea></div></div>
+              <div class="row"><div class="col-12"><textarea class="form-control form-control-lg form-control-sm" v-model.trim="form.message" placeholder="Type Message" rows="5"></textarea></div></div>
               <div class="row"><div class="col-12"><div class="button text-center rounded-buttons"><button type="submit" class="btn primary-btn rounded-full" :disabled="isSubmitting">{{ isSubmitting ? 'Sending...' : 'Send Message' }}</button></div></div></div>
             </form>
           </div>

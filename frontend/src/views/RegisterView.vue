@@ -59,7 +59,7 @@
           <div class="row g-3 mb-0">
             <div class="col-sm-7">
               <div class="form-group">
-                <label class="form-label" for="name">
+                <label class="form-label col-form-label" for="name">
                   Nama Lengkap <span class="required">*</span>
                 </label>
                 <div class="input-icon-wrapper">
@@ -68,7 +68,7 @@
                     id="name"
                     v-model.trim="form.name"
                     type="text"
-                    class="form-control"
+                    class="form-control form-control-lg form-control-sm"
                     placeholder="Nama lengkap Anda"
                     :disabled="isSubmitting"
                     required
@@ -78,7 +78,7 @@
             </div>
             <div class="col-sm-5">
               <div class="form-group">
-                <label class="form-label" for="birthdate">Tanggal Lahir</label>
+                <label class="form-label col-form-label" for="birthdate">Tanggal Lahir</label>
                 <input
                   id="birthdate"
                   v-model="form.birthdate"
@@ -94,14 +94,14 @@
           <div class="row g-3 mb-0">
             <div class="col-sm-5">
               <div class="form-group">
-                <label class="form-label" for="phone">No. Telepon</label>
+                <label class="form-label col-form-label" for="phone">No. Telepon</label>
                 <div class="input-icon-wrapper">
                   <i class="fa-solid fa-phone input-icon"></i>
                   <input
                     id="phone"
                     v-model.trim="form.phone"
                     type="tel"
-                    class="form-control"
+                    class="form-control form-control-lg form-control-sm"
                     placeholder="08123..."
                     @input="sanitizePhone"
                     :disabled="isSubmitting"
@@ -111,7 +111,7 @@
             </div>
             <div class="col-sm-7">
               <div class="form-group">
-                <label class="form-label" for="username">
+                <label class="form-label col-form-label" for="username">
                   Username <span class="required">*</span>
                 </label>
                 <div class="input-icon-wrapper">
@@ -120,7 +120,7 @@
                     id="username"
                     v-model.trim="form.username"
                     type="text"
-                    class="form-control"
+                    class="form-control form-control-lg form-control-sm"
                     placeholder="Username unik"
                     autocomplete="username"
                     :disabled="isSubmitting"
@@ -133,14 +133,14 @@
 
           <!-- Email -->
           <div class="form-group">
-            <label class="form-label" for="email">Email</label>
+            <label class="form-label col-form-label" for="email">Email</label>
             <div class="input-icon-wrapper">
               <i class="fa-regular fa-envelope input-icon"></i>
               <input
                 id="email"
                 v-model.trim="form.email"
                 type="email"
-                class="form-control"
+                class="form-control form-control-lg form-control-sm"
                 placeholder="nama@email.com"
                 autocomplete="email"
                 :disabled="isSubmitting"
@@ -150,7 +150,7 @@
 
           <!-- Password -->
           <div class="form-group">
-            <label class="form-label" for="password">
+            <label class="form-label col-form-label" for="password">
               Password <span class="required">*</span>
             </label>
             <div class="input-password-wrapper">
@@ -158,7 +158,7 @@
                 id="password"
                 v-model="form.password"
                 :type="showPassword ? 'text' : 'password'"
-                class="form-control"
+                class="form-control form-control-lg form-control-sm"
                 placeholder="Min. 6 karakter"
                 autocomplete="new-password"
                 :disabled="isSubmitting"
@@ -177,7 +177,7 @@
 
           <!-- Konfirmasi Password -->
           <div class="form-group">
-            <label class="form-label" for="konfirmasi">
+            <label class="form-label col-form-label" for="konfirmasi">
               Konfirmasi Password <span class="required">*</span>
             </label>
             <div class="input-password-wrapper">
@@ -185,7 +185,7 @@
                 id="konfirmasi"
                 v-model="form.konfirmasi"
                 :type="showConfirm ? 'text' : 'password'"
-                class="form-control"
+                class="form-control form-control-lg form-control-sm"
                 :class="{ 'is-invalid': form.konfirmasi && form.password !== form.konfirmasi }"
                 placeholder="Ulangi password"
                 autocomplete="new-password"

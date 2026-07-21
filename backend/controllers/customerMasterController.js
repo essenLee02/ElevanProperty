@@ -214,12 +214,13 @@ class CustomerMasterController extends GeneralController {
 
       const where = { status: { [Op.ne]: 3 } };
       if (!showAll && userId) where.user_id = String(userId).toUpperCase();
+      // Search HANYA nama, email, phone — customer_id sengaja tidak diikutkan
+      // (bukan sesuatu yang customer/agent ketik natural saat mencari).
       if (search) {
         where[Op.or] = [
           { name:  { [Op.like]: `%${search}%` } },
-          { phone: { [Op.like]: `%${search}%` } },
           { email: { [Op.like]: `%${search}%` } },
-          { customer_id: { [Op.like]: `%${search}%` } },
+          { phone: { [Op.like]: `%${search}%` } },
         ];
       }
       if (aiResp === 'ON' || aiResp === 'OFF') where.ai_response = aiResp;

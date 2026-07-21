@@ -360,9 +360,13 @@
       });
   };
 
-  /* ── Tunggu Function_Path siap (dimuat global di App.vue) ────────── */
+  /* ── Tunggu Function_Path siap (dimuat global di App.vue) ──────────
+     Cek eksplisit SEMUA fungsi yang dipakai file ini (tableModal, loadModalPagination
+     untuk tabel/pagination; formatPriceDisplay dipakai formatPrice()) — bukan hanya
+     tableModal — supaya guard-nya benar-benar mencerminkan dependensi nyata. */
   const waitForFunctions = () => new Promise((resolve) => {
-    const ready = () => window.tableModal && window.loadModalPagination && window.jQuery;
+    const ready = () => window.tableModal && window.loadModalPagination
+      && typeof window.formatPriceDisplay === 'function' && window.jQuery;
     if (ready()) return resolve();
     const timer = setInterval(() => { if (ready()) { clearInterval(timer); resolve(); } }, 50);
   });

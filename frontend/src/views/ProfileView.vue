@@ -28,20 +28,20 @@
 
               <!-- User ID (read-only) -->
               <div class="form-group">
-                <label for="userId">User ID</label>
+                <label class="col-form-label" for="userId">User ID</label>
                 <input
                   id="userId"
                   :value="form.user_id"
                   type="text"
                   disabled
-                  class="form-control-static"
+                  class="form-control-static form-control form-control-lg form-control-sm"
                 />
               </div>
 
               <!-- Nama Lengkap (wajib) -->
               <div class="form-group">
-                <label for="name">Nama Lengkap <span class="required">*</span></label>
-                <input
+                <label class="col-form-label" for="name">Nama Lengkap <span class="required">*</span></label>
+                <input class="form-control form-control-lg form-control-sm"
                   id="name"
                   v-model.trim="form.name"
                   type="text"
@@ -53,8 +53,8 @@
 
               <!-- Nomor HP (wajib) -->
               <div class="form-group">
-                <label for="phone">Nomor HP <span class="required">*</span></label>
-                <input
+                <label class="col-form-label" for="phone">Nomor HP <span class="required">*</span></label>
+                <input class="form-control form-control-lg form-control-sm"
                   id="phone"
                   v-model.trim="form.phone"
                   type="tel"
@@ -67,7 +67,7 @@
 
               <!-- Tanggal Lahir (opsional) -->
               <div class="form-group">
-                <label for="birthdate">Tanggal Lahir</label>
+                <label class="col-form-label" for="birthdate">Tanggal Lahir</label>
                 <input
                   id="birthdate"
                   v-model="form.birthdate"
@@ -78,8 +78,8 @@
 
               <!-- Email (opsional) -->
               <div class="form-group">
-                <label for="email">Email</label>
-                <input
+                <label class="col-form-label" for="email">Email</label>
+                <input class="form-control form-control-lg form-control-sm"
                   id="email"
                   v-model.trim="form.email"
                   type="email"
@@ -90,7 +90,7 @@
 
               <!-- Catalog Summary Status (ON/OFF) -->
               <div class="form-group">
-                <label for="catalogSummary">Catalog Summary Status</label>
+                <label class="col-form-label" for="catalogSummary">Catalog Summary Status</label>
                 <select
                   id="catalogSummary"
                   v-model="form.catalog_summary"
@@ -110,7 +110,7 @@
               
               <!-- Username (disabled — tidak bisa diubah) -->
               <div class="form-group">
-                <label for="username">
+                <label class="col-form-label" for="username">
                   Username
                   <span class="badge-locked">🔒 Tidak dapat diubah</span>
                 </label>
@@ -119,17 +119,17 @@
                   :value="form.username"
                   type="text"
                   disabled
-                  class="form-control-static"
+                  class="form-control-static form-control form-control-lg form-control-sm"
                 />
               </div>
               
               <!-- Password Baru (wajib) -->
               <div class="form-group">
-                <label for="password">
+                <label class="col-form-label" for="password">
                   Password <span class="required">*</span>
                 </label>
                 <div class="input-password-wrapper">
-                  <input
+                  <input class="form-control form-control-lg form-control-sm"
                     id="password"
                     v-model="form.password"
                     :type="showPassword ? 'text' : 'password'"
@@ -152,8 +152,8 @@
 
               <!-- Fonnte API (opsional) -->
               <div class="form-group">
-                <label for="fonnteApi">Fonnte API</label>
-                <input
+                <label class="col-form-label" for="fonnteApi">Fonnte API</label>
+                <input class="form-control form-control-lg form-control-sm"
                   id="fonnteApi"
                   v-model.trim="form.fonnte_token"
                   type="text"
@@ -165,8 +165,8 @@
 
               <!-- Kirimi Device ID (opsional) -->
               <div class="form-group">
-                <label for="kirimiDeviceId">Kirimi Device ID</label>
-                <input
+                <label class="col-form-label" for="kirimiDeviceId">Kirimi Device ID</label>
+                <input class="form-control form-control-lg form-control-sm"
                   id="kirimiDeviceId"
                   v-model.trim="form.kirimi_device_id"
                   type="text"

@@ -44,9 +44,9 @@
               <div class="form-row">
                 <!-- Negara (modal — terhubung database) -->
                 <div class="form-group">
-                  <label for="country_name">Negara <span class="required">*</span></label>
+                  <label class="col-form-label" for="country_name">Negara <span class="required">*</span></label>
                   <div class="picker-field" :class="{ disabled: isSubmitting }">
-                    <input
+                    <input class="form-control form-control-lg form-control-sm"
                       id="country_name"
                       v-model="form.country_name"
                       type="text"
@@ -63,9 +63,9 @@
                 </div>
                 <!-- Provinsi (modal — terhubung database) -->
                 <div class="form-group">
-                  <label for="province_name">Provinsi <span class="required">*</span></label>
+                  <label class="col-form-label" for="province_name">Provinsi <span class="required">*</span></label>
                   <div class="picker-field" :class="{ disabled: isSubmitting || !form.country_id }">
-                    <input
+                    <input class="form-control form-control-lg form-control-sm"
                       id="province_name"
                       v-model="form.province_name"
                       type="text"
@@ -82,9 +82,9 @@
                 </div>
                 <!-- Kota (modal — terhubung database) -->
                 <div class="form-group">
-                  <label for="city_name">Kota <span class="required">*</span></label>
+                  <label class="col-form-label" for="city_name">Kota <span class="required">*</span></label>
                   <div class="picker-field" :class="{ disabled: isSubmitting || !form.province_id }">
-                    <input
+                    <input class="form-control form-control-lg form-control-sm"
                       id="city_name"
                       v-model="form.city_name"
                       type="text"
@@ -103,59 +103,59 @@
 
               <div class="form-row">
                 <div class="form-group">
-                  <label for="district">Kecamatan</label>
-                  <input id="district" v-model.trim="form.district" type="text" placeholder="Kecamatan" :disabled="isSubmitting" maxlength="255" autocomplete="off" />
+                  <label class="col-form-label" for="district">Kecamatan</label>
+                  <input class="form-control form-control-lg form-control-sm" id="district" v-model.trim="form.district" type="text" placeholder="Kecamatan" :disabled="isSubmitting" maxlength="255" autocomplete="off" />
                 </div>
                 <div class="form-group">
-                  <label for="area">Area / Kawasan</label>
-                  <input id="area" v-model.trim="form.area" type="text" placeholder="Contoh: Citraland, Pakuwon Indah" :disabled="isSubmitting" maxlength="255" autocomplete="off" />
+                  <label class="col-form-label" for="area">Area / Kawasan</label>
+                  <input class="form-control form-control-lg form-control-sm" id="area" v-model.trim="form.area" type="text" placeholder="Contoh: Citraland, Pakuwon Indah" :disabled="isSubmitting" maxlength="255" autocomplete="off" />
                 </div>
                 <div class="form-group">
-                  <label for="postal_code">Kode Pos</label>
-                  <input id="postal_code" v-model.trim="form.postal_code" type="text" placeholder="60123" :disabled="isSubmitting" maxlength="15" autocomplete="off" />
+                  <label class="col-form-label" for="postal_code">Kode Pos</label>
+                  <input class="form-control form-control-lg form-control-sm" id="postal_code" v-model.trim="form.postal_code" type="text" placeholder="60123" :disabled="isSubmitting" maxlength="15" autocomplete="off" />
                 </div>
               </div>
 
               <div class="form-group">
-                <label for="address">Alamat Lengkap</label>
-                <input id="address" v-model.trim="form.address" type="text" placeholder="Jl. Contoh No. 1" :disabled="isSubmitting" maxlength="255" autocomplete="off" />
+                <label class="col-form-label" for="address">Alamat Lengkap</label>
+                <input class="form-control form-control-lg form-control-sm" id="address" v-model.trim="form.address" type="text" placeholder="Jl. Contoh No. 1" :disabled="isSubmitting" maxlength="255" autocomplete="off" />
               </div>
 
               <!-- ── Informasi Utama ── -->
               <div class="section-divider"><span>Informasi Utama</span></div>
 
               <div class="form-group">
-                <label for="title">Judul <span class="required">*</span></label>
-                <input id="title" v-model.trim="form.title" type="text" placeholder="Contoh: Rumah 2 Lantai Citraland Surabaya" :disabled="isSubmitting" maxlength="100" required autocomplete="off" />
+                <label class="col-form-label" for="title">Judul <span class="required">*</span></label>
+                <input class="form-control form-control-lg form-control-sm" id="title" v-model.trim="form.title" type="text" placeholder="Contoh: Rumah 2 Lantai Citraland Surabaya" :disabled="isSubmitting" maxlength="100" required autocomplete="off" />
                 <p class="field-hint">Maksimal 100 karakter</p>
               </div>
 
               <div class="form-group">
-                <label for="description">Deskripsi</label>
-                <textarea id="description" v-model.trim="form.description" rows="4" placeholder="Deskripsi lengkap properti..." :disabled="isSubmitting"></textarea>
+                <label class="col-form-label" for="description">Deskripsi</label>
+                <textarea class="form-control form-control-lg form-control-sm" id="description" v-model.trim="form.description" rows="4" placeholder="Deskripsi lengkap properti..." :disabled="isSubmitting"></textarea>
               </div>
 
               <div class="form-row">
                 <div class="form-group">
-                  <label for="transaction_type">Transaksi <span class="required">*</span></label>
+                  <label class="col-form-label" for="transaction_type">Transaksi <span class="required">*</span></label>
                   <select id="transaction_type" v-model="form.transaction_type" :disabled="isSubmitting" required @change="onTransactionChange">
                     <option value="" disabled>— Pilih Transaksi —</option>
                     <option v-for="t in TRANSACTION_TYPES" :key="t.value" :value="t.value">{{ t.label }}</option>
                   </select>
                 </div>
                 <div class="form-group">
-                  <label for="building_type">Tipe Bangunan <span class="required">*</span></label>
+                  <label class="col-form-label" for="building_type">Tipe Bangunan <span class="required">*</span></label>
                   <select id="building_type" v-model="form.building_type" :disabled="isSubmitting" required>
                     <option value="" disabled>— Pilih Tipe —</option>
                     <option v-for="b in BUILDING_TYPES" :key="b.value" :value="b.value">{{ b.label }}</option>
                   </select>
                 </div>
                 <div class="form-group">
-                  <label for="price">Harga (Rp) <span class="required">*</span></label>
-                  <input id="price" :value="priceDisplay" @input="onPriceInput" type="text" inputmode="numeric" placeholder="0" autocomplete="off" :disabled="isSubmitting" required />
+                  <label class="col-form-label" for="price">Harga (Rp) <span class="required">*</span></label>
+                  <input id="price" :value="priceDisplay" @input="onPriceInput" type="text" inputmode="numeric" :placeholder="fnReady ? '0' : 'Menyiapkan form...'" autocomplete="off" :disabled="isSubmitting || !fnReady" required class="form-control form-control-lg form-control-sm" />
                 </div>
                 <div class="form-group">
-                  <label for="price_type">Tipe Harga <span class="required">*</span></label>
+                  <label class="col-form-label" for="price_type">Tipe Harga <span class="required">*</span></label>
                   <select id="price_type" v-model="form.price_type" :disabled="isSubmitting" required>
                     <option value="" disabled>— Pilih Tipe Harga —</option>
                     <option v-for="pt in filteredPriceTypeOptions" :key="pt.value" :value="pt.value">{{ pt.label }}</option>
@@ -168,16 +168,16 @@
 
               <div class="form-row">
                 <div class="form-group">
-                  <label for="bed_rooms">Kamar Tidur</label>
-                  <input id="bed_rooms" v-model="form.bed_rooms" type="number" min="0" placeholder="0" :disabled="isSubmitting" />
+                  <label class="col-form-label" for="bed_rooms">Kamar Tidur</label>
+                  <input class="form-control form-control-lg form-control-sm" id="bed_rooms" v-model="form.bed_rooms" type="number" min="0" placeholder="0" :disabled="isSubmitting" />
                 </div>
                 <div class="form-group">
-                  <label for="bath_rooms">Kamar Mandi</label>
-                  <input id="bath_rooms" v-model="form.bath_rooms" type="number" min="0" placeholder="0" :disabled="isSubmitting" />
+                  <label class="col-form-label" for="bath_rooms">Kamar Mandi</label>
+                  <input class="form-control form-control-lg form-control-sm" id="bath_rooms" v-model="form.bath_rooms" type="number" min="0" placeholder="0" :disabled="isSubmitting" />
                 </div>
                 <div class="form-group">
-                  <label :for="isFloorPosition ? 'floor_location' : 'floor_quantity'">{{ floorLabel }}</label>
-                  <input
+                  <label class="col-form-label" :for="isFloorPosition ? 'floor_location' : 'floor_quantity'">{{ floorLabel }}</label>
+                  <input class="form-control form-control-lg form-control-sm"
                     v-if="isFloorPosition"
                     id="floor_location"
                     v-model.trim="form.floor_location"
@@ -186,7 +186,7 @@
                     :disabled="isSubmitting"
                     maxlength="100"
                   />
-                  <input
+                  <input class="form-control form-control-lg form-control-sm"
                     v-else
                     id="floor_quantity"
                     v-model="form.floor_quantity"
@@ -201,29 +201,29 @@
 
               <div class="form-row">
                 <div class="form-group">
-                  <label for="building_area">Luas Bangunan</label>
-                  <input id="building_area" v-model.trim="form.building_area" type="text" placeholder="Contoh: 120 m2" :disabled="isSubmitting" maxlength="100" />
+                  <label class="col-form-label" for="building_area">Luas Bangunan</label>
+                  <input class="form-control form-control-lg form-control-sm" id="building_area" v-model.trim="form.building_area" type="text" placeholder="Contoh: 120 m2" :disabled="isSubmitting" maxlength="100" />
                 </div>
                 <div class="form-group">
-                  <label for="land_area">Luas Tanah</label>
-                  <input id="land_area" v-model.trim="form.land_area" type="text" placeholder="Contoh: 150 m2" :disabled="isSubmitting" maxlength="100" />
+                  <label class="col-form-label" for="land_area">Luas Tanah</label>
+                  <input class="form-control form-control-lg form-control-sm" id="land_area" v-model.trim="form.land_area" type="text" placeholder="Contoh: 150 m2" :disabled="isSubmitting" maxlength="100" />
                 </div>
                 <div class="form-group">
-                  <label for="electricity_capacity">Daya Listrik (watt)</label>
-                  <input id="electricity_capacity" v-model="form.electricity_capacity" type="number" min="0" placeholder="Contoh: 2200" :disabled="isSubmitting" />
+                  <label class="col-form-label" for="electricity_capacity">Daya Listrik (watt)</label>
+                  <input class="form-control form-control-lg form-control-sm" id="electricity_capacity" v-model="form.electricity_capacity" type="number" min="0" placeholder="Contoh: 2200" :disabled="isSubmitting" />
                 </div>
               </div>
 
               <div class="form-row">
                 <div class="form-group">
-                  <label for="furnished_status">Status Perabotan</label>
+                  <label class="col-form-label" for="furnished_status">Status Perabotan</label>
                   <select id="furnished_status" v-model="form.furnished_status" :disabled="isSubmitting">
                     <option value="">— Pilih —</option>
                     <option v-for="f in FURNISHED_OPTIONS" :key="f" :value="f">{{ f }}</option>
                   </select>
                 </div>
                 <div class="form-group">
-                  <label for="kpr_status">KPR</label>
+                  <label class="col-form-label" for="kpr_status">KPR</label>
                   <select id="kpr_status" v-model="form.kpr_status" :disabled="isSubmitting || form.transaction_type === 'Rent'">
                     <option value="N">Tidak</option>
                     <option value="Y">Ya</option>
@@ -237,7 +237,7 @@
               <div class="section-divider"><span>Fasilitas</span></div>
 
               <div class="form-group">
-                <label>Fasilitas Properti</label>
+                <label class="col-form-label">Fasilitas Properti</label>
                 <div class="facility-box">
                   <div v-if="form.facilities.length === 0" class="facility-empty">
                     Belum ada fasilitas dipilih
@@ -261,7 +261,7 @@
               <div class="section-divider"><span>Lokasi Patokan (Landmarks)</span></div>
 
               <div class="form-group">
-                <label>Lokasi/Patokan Terdekat</label>
+                <label class="col-form-label">Lokasi/Patokan Terdekat</label>
                 <p class="field-hint">Tambahkan landmark terdekat (Indomaret, Sekolah, Stasiun, dll) yang membantu pelanggan menemukan properti</p>
                 <div class="location-box">
                   <div v-if="form.locations.length === 0" class="location-empty">
@@ -331,7 +331,7 @@
               <!-- Actions -->
               <div class="form-actions">
                 <router-link to="/property" class="btn-cancel">Batal</router-link>
-                <button type="submit" class="btn-submit" :disabled="isSubmitting">
+                <button type="submit" class="btn-submit" :disabled="isSubmitting || !fnReady">
                   <span v-if="isSubmitting"><span class="spinner-sm"></span> Menyimpan...</span>
                   <span v-else>{{ isEditMode ? '💾 Simpan Perubahan' : '+ Tambah Properti' }}</span>
                 </button>
@@ -435,6 +435,7 @@ const isLoadingDetail   = ref(false);
 const isSubmitting      = ref(false);
 const isTogglingStatus  = ref(false);
 const isDeleting        = ref(false);
+const fnReady           = ref(false);   // true setelah Function_Path (window.formatPriceDisplay) siap
 
 const deleteModal     = reactive({ show: false });
 
@@ -947,8 +948,21 @@ const handleDelete = async () => {
   }
 };
 
+/* ── Guard TUNGGAL: tunggu Function_Path (window.formatPriceDisplay) siap ──
+   Sama seperti pola di CustomerMasterView / List views — App.vue menyuntikkan
+   script secara ASYNC, jadi tidak ada jaminan window.formatPriceDisplay sudah
+   ada saat komponen ini mount. Satu guard di sini; loadDetail() (satu-satunya
+   pemanggil window.formatPriceDisplay di file ini) baru dijalankan sesudahnya. */
+const waitForFunctions = () => new Promise((resolve) => {
+  const ready = () => typeof window.formatPriceDisplay === 'function';
+  if (ready()) return resolve();
+  const timer = setInterval(() => { if (ready()) { clearInterval(timer); resolve(); } }, 50);
+});
+
 /* ── Lifecycle ──────────────────────────────────────────────────── */
-onMounted(() => {
+onMounted(async () => {
+  await waitForFunctions();
+  fnReady.value = true;
   if (isEditMode.value) loadDetail();
 });
 </script>
