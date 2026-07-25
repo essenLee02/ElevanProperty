@@ -353,7 +353,7 @@ Extended types (Kavling, Tanah, Resort, Loft, Penthouse, Studio) → `others`.
 
 ## 10. Document Index
 
-Docs are concatenated in numeric order (`01` → `20`). Three layers, read top-to-bottom:
+Docs are concatenated in numeric order (`01` → `21`). Three layers, read top-to-bottom:
 
 **Layer A — Core behavior (always applies)**
 
@@ -389,6 +389,7 @@ Docs are concatenated in numeric order (`01` → `20`). Three layers, read top-t
 | `docs/18-facilities-recognition.md` | Bilingual facility recognition & normalization |
 | `docs/19-landmark-reference.md` | Named-landmark master reference (malls, campuses, hospitals) |
 | `docs/20-answer-completeness-and-reask.md` | **Completeness gate** — verify every mandatory slot ✅ before summary; partial-answer capture, non-answer/deflection escalation, lazy/confused re-ask, anti-loop |
+| `docs/21-house-listing-referral-pilot.md` | **Listing-referral pilot** (rumah/apartemen, beli+sewa) — listing reference fills slots, availability holding script, VALUE CHECKPOINT [BRIEF_READY_EARLY], 6–7 question cap, per-flow scoring |
 
 ---
 

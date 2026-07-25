@@ -262,9 +262,42 @@ function logTerminalSkip({ platform, tag, agent, customerPhone, customerName, ts
  * @param {string} message
  * @returns {string}
  */
+/**
+ * Ubah markdown standar → format WhatsApp.
+ *
+ * WhatsApp memakai notasi SENDIRI: *tebal*, _miring_, ~coret~, ```mono```.
+ * Model LLM (khususnya DeepSeek V4 & GPT) menulis markdown umum `**tebal**`,
+ * `__tebal__`, `~~coret~~`, dan heading `### Judul` — di WhatsApp semua itu
+ * TAMPIL APA ADANYA (customer melihat literal "**Surabaya**"), bukan tebal.
+ * Fungsi ini menormalkan sebelum pesan dikirim.
+ *
+ * Konservatif: hanya menyentuh notasi yang pasti salah di WhatsApp; `_miring_`
+ * dan `*tebal*` yang sudah benar dibiarkan.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+function toWhatsAppMarkdown(text) {
+  let s = String(text == null ? '' : text);
+  // Lindungi blok kode agar isinya tidak ikut diubah.
+  const blocks = [];
+  s = s.replace(/```[\s\S]*?```/g, (m) => ` ${blocks.push(m) - 1} `);
+
+  s = s
+    .replace(/\*\*\*(.+?)\*\*\*/gs, '*_$1_*')   // ***tebal-miring*** → *_x_*
+    .replace(/\*\*(.+?)\*\*/gs,     '*$1*')     // **tebal**          → *tebal*
+    .replace(/__(.+?)__/gs,         '*$1*')     // __tebal__          → *tebal*
+    .replace(/~~(.+?)~~/gs,         '~$1~')     // ~~coret~~          → ~coret~
+    .replace(/^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/gm, '*$1*');  // ### Judul → *Judul*
+
+  return s.replace(/ (\d+) /g, (_, i) => blocks[Number(i)]);
+}
+
 function appendSentViaTag(message) {
   const tag = String(process.env.AI_PRIMARY_TAG || '').trim();
-  const body = String(message == null ? '' : message).replace(/\s+$/, '');
+  // Normalisasi markdown → WhatsApp di SATU choke point untuk semua pesan keluar
+  // (Fonnte/Kirimi/TimelinesAI semuanya memanggil fungsi ini sebelum kirim).
+  const body = toWhatsAppMarkdown(String(message == null ? '' : message)).replace(/\s+$/, '');
   if (!tag) return body;
   const escaped = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   if (new RegExp(`sent\\s+via\\s+${escaped}`, 'i').test(body)) return body; // sudah ada → jangan dobel
@@ -354,6 +387,7 @@ module.exports = {
   maskName,
   appendSentViaTag,
   isOwnEcho,
+  toWhatsAppMarkdown,
   stripOwnEcho,
   buildOffTopicRedirect,
 };

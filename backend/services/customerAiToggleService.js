@@ -1,23 +1,27 @@
 /**
  * customerAiToggleService.js
  *
- * Perintah AGENT via chat untuk menyalakan/mematikan AI PER-CUSTOMER (by name).
+ * Perintah AGENT via chat untuk menyalakan/mematikan AI PER-CUSTOMER.
  * Sumber kebenaran: kolom `customers.ai_response` ('ON' = AI membalas, 'OFF' =
- * AI diam / agent takeover). Menggantikan/menemani toggle manual di module Customer.
+ * AI diam / agent takeover). Menemani toggle manual di module Customer Master.
  *
- * Agent mengetik ke bot-nya, menyebut nama customer:
- *   OFF : "matikan AI untuk Clarence" · "matikan chat AI Clarence" · "AI mati untuk Nia"
- *         "nonaktifkan chat AI untuk Rizal, Kezia dan Lia"
- *   ON  : "nyalakan AI untuk Nia" · "nyalakan AI pada Hendry" · "turn on AI pada Clarence"
- *         "tolong turn on chat AI untuk Siska" · "nyalakan chat dengan AI untuk Rizal, Kezia dan Lia"
+ * ⚠️ IDENTIFIKASI CUSTOMER = NOMOR WHATSAPP SAJA (bukan nama).
+ * Nama TIDAK dipakai karena ambigu: satu agent bisa punya beberapa customer dengan
+ * nama sama/mirip, dan nama default WhatsApp bisa berubah sewaktu-waktu — salah
+ * target berarti AI mati untuk customer yang keliru. Nomor WA unik & stabil
+ * (UNIQUE (user_id, phone)), jadi hanya nomor yang diterima.
  *
- * BISA banyak nama sekaligus (dipisah koma / "dan" / "&" / "serta").
- * Nama dicocokkan (case-insensitive) ke `customers.name` DALAM scope agent
- * (user_id = agent.user_id) — 1 customer bisa beda nama antar agent.
+ * Agent mengetik ke bot-nya, menyebut NOMOR:
+ *   OFF : "matikan AI untuk 628123456789" · "matikan chat AI 0812-3456-789"
+ *         "nonaktifkan chat AI untuk 628111, 628222 dan 628333"
+ *   ON  : "nyalakan AI untuk 0812345678" · "turn on chat AI untuk +62 812 3456 789"
+ *
+ * BISA banyak nomor sekaligus (dipisah koma / "dan" / "&" / spasi).
+ * Nomor dinormalisasi ke 62xxx lalu dicocokkan ke `customers.phone` DALAM scope
+ * agent (user_id = agent.user_id).
  *
  * Deteksi: detectAiToggleCommand · Eksekusi + konfirmasi: maybeHandleAiToggleCommand.
- * Hanya berlaku bila PENGIRIM adalah agent (isSenderTheAgent) — customer tidak
- * boleh mengubah setelan ini.
+ * Hanya berlaku bila PENGIRIM adalah agent (isSenderTheAgent).
  */
 
 'use strict';
@@ -40,9 +44,6 @@ const AI_TOPIC = '(?:chat\\s*(?:dengan\\s+)?ai|ai\\s*chat|chatbot|\\bbot\\b|\\ba
 const _OFF_RE = new RegExp(`\\b${OFF_VERBS}\\b[\\w\\s,'-]{0,20}?${AI_TOPIC}|${AI_TOPIC}[\\w\\s,:=-]{0,20}?\\b${OFF_VERBS}\\b`, 'i');
 const _ON_RE  = new RegExp(`\\b${ON_VERBS}\\b[\\w\\s,'-]{0,20}?${AI_TOPIC}|${AI_TOPIC}[\\w\\s,:=-]{0,20}?\\b${ON_VERBS}\\b`, 'i');
 
-// Preposisi/pengantar nama customer ("untuk", "pada", "buat", "for", "to", "ke", "dengan").
-const NAME_LEAD = '(?:untuk|pada|buat|kepada|ke|bagi|dengan|for|to|atas\\s+nama|si)';
-
 /**
  * Deteksi mode toggle AI dari teks. Return 'ON' | 'OFF' | null.
  * Menuntut objek AI hadir (AI_TOPIC) + verb yang jelas.
@@ -60,49 +61,41 @@ function detectAiToggleCommand(text = '') {
   return null;
 }
 
+/* ══════════════════════════════════════════════════════════════════════════════
+   EKSTRAKSI NOMOR WHATSAPP
+══════════════════════════════════════════════════════════════════════════════ */
+
+/** Normalisasi nomor ke digit 62xxx (samakan dgn registrasi & module Customer). */
+function normPhone(p) {
+  let s = String(p || '').replace(/\D/g, '');
+  if (!s) return '';
+  if (s.startsWith('0'))      s = '62' + s.slice(1);
+  else if (s.startsWith('8')) s = '62' + s;      // "81234…" ditulis tanpa 0/62
+  return s;
+}
+
+// Nomor Indonesia: diawali +62 / 62 / 0 / 8, boleh diselingi spasi, titik, dash,
+// kurung. Minimal 9 digit total setelah normalisasi.
+const PHONE_RE = /(?:\+?62|0|8)[\s.\-()]*\d(?:[\s.\-()]*\d){6,14}/g;
+
 /**
- * Ekstrak daftar nama customer dari perintah. Prioritas: segmen setelah preposisi
- * ("untuk/pada/buat …") yang datang SETELAH objek AI. Fallback: nama tepat setelah "ai".
- * Pisah pada koma / "dan" / "and" / "&" / "serta" / "/".
+ * Ambil semua nomor WhatsApp dari perintah agent (ternormalisasi 62xxx, unik).
+ * Contoh: "matikan AI untuk 628123456789, 0812-3456-789 dan +62 813 999 111"
+ *   → ['628123456789', '628123456789'…] (duplikat dibuang)
  * @param {string} text
- * @returns {string[]} kandidat nama (mentah, sudah dibersihkan)
+ * @returns {string[]}
  */
-function extractNames(text = '') {
-  const t = String(text || '');
-
-  // Ambil bagian setelah preposisi nama TERAKHIR (agar "dengan AI untuk X" → "X",
-  // bukan menangkap kata setelah "dengan").
-  let seg = null;
-  const prepRe = new RegExp(`\\b${NAME_LEAD}\\b\\s+(.+)$`, 'i');
-  const prepAll = [...t.matchAll(new RegExp(`\\b${NAME_LEAD}\\b\\s+`, 'gi'))];
-  if (prepAll.length) {
-    const last = prepAll[prepAll.length - 1];
-    seg = t.slice(last.index + last[0].length);
-  } else {
-    const m = t.match(prepRe);
-    if (m) seg = m[1];
+function extractPhones(text = '') {
+  const out = [];
+  const matches = String(text || '').match(PHONE_RE) || [];
+  for (const m of matches) {
+    const norm = normPhone(m);
+    // 62 + 9..13 digit → total 11..15. Tolak yang terlalu pendek/panjang.
+    if (norm.startsWith('62') && norm.length >= 10 && norm.length <= 15 && !out.includes(norm)) {
+      out.push(norm);
+    }
   }
-  // Fallback: "…AI Clarence" tanpa preposisi.
-  if (!seg) {
-    const after = t.match(/\bai\b\s+(.+)$/i);
-    if (after) seg = after[1];
-  }
-  if (!seg) return [];
-
-  // Buang sisa kata perintah di depan segmen (chat, dengan, ai, chatbot, bot, nya).
-  seg = seg.replace(/^(?:chat\s+|dengan\s+|ai\s+|chatbot\s+|bot\s+|nya\s+|:\s*|nomor\s+|no\s+)+/i, '');
-
-  return seg
-    .split(/\s*(?:,|;|\bdan\b|\band\b|&|\bserta\b|\/|\+)\s*/i)
-    .map(s =>
-      s.replace(/[.!?]+$/g, '')                 // buang tanda baca akhir
-       .replace(/[^\p{L}\s'.-]/gu, '')          // sisakan huruf, spasi, apostrof, titik, hyphen
-       .replace(/\s{2,}/g, ' ')
-       .trim()
-    )
-    // Buang token filler yang jelas bukan nama.
-    .filter(s => s.length >= 2 && s.length <= 40)
-    .filter(s => !/^(?:ya|dong|kak|deh|aja|saja|semua|semuanya|itu|ini|tolong|mohon|sekarang|please|thanks?|makasih)$/i.test(s));
+  return out;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -115,44 +108,27 @@ function _todayDate() {
 }
 
 /**
- * Cocokkan kandidat nama ke customers milik agent (case-insensitive).
- * Cocok bila: nama sama persis, ATAU kata-pertama nama = kandidat (mis. DB "Rizal
- * Pratama", agent tulis "Rizal"), ATAU nama diawali kandidat.
- * @returns {{ matched: object[], notFound: string[] }}
- */
-function _matchCustomers(candidates, customers) {
-  const matched = new Map();     // customer_id → row (dedupe)
-  const notFound = [];
-  for (const cand of candidates) {
-    const cl = cand.toLowerCase();
-    const hits = customers.filter(c => {
-      const nm = String(c.name || '').toLowerCase().trim();
-      if (!nm) return false;
-      return nm === cl || nm.split(/\s+/)[0] === cl || nm.startsWith(cl + ' ');
-    });
-    if (hits.length) hits.forEach(h => matched.set(h.customer_id, h));
-    else notFound.push(cand);
-  }
-  return { matched: [...matched.values()], notFound };
-}
-
-/**
- * Update ai_response untuk daftar customer milik agent.
+ * Update ai_response untuk daftar NOMOR customer milik agent.
  * @param {string} agentUserId
  * @param {'ON'|'OFF'} mode
- * @param {string[]} candidateNames
- * @returns {Promise<{ updated: string[], notFound: string[], noChange: string[] }>}
+ * @param {string[]} phones - sudah ternormalisasi (62xxx)
+ * @returns {Promise<{updated:object[], notFound:string[], noChange:object[]}>}
  */
-async function setAiResponseByNames(agentUserId, mode, candidateNames) {
+async function setAiResponseByPhones(agentUserId, mode, phones) {
   const { Customer } = require('../models');
-  const customers = await Customer.findAll({
-    where: { user_id: String(agentUserId).toUpperCase(), status: { [Op.ne]: 3 } },
-    attributes: ['customer_id', 'name', 'ai_response'],
+  const rows = await Customer.findAll({
+    where: {
+      user_id: String(agentUserId).toUpperCase(),
+      phone:   { [Op.in]: phones },
+      status:  { [Op.ne]: 3 },
+    },
+    attributes: ['customer_id', 'name', 'phone', 'ai_response'],
   });
 
-  const { matched, notFound } = _matchCustomers(candidateNames, customers);
-  const toUpdate = matched.filter(c => String(c.ai_response || 'ON').toUpperCase() !== mode);
-  const noChange = matched.filter(c => String(c.ai_response || 'ON').toUpperCase() === mode);
+  const foundPhones = new Set(rows.map(r => r.phone));
+  const notFound    = phones.filter(p => !foundPhones.has(p));
+  const toUpdate    = rows.filter(r => String(r.ai_response || 'ON').toUpperCase() !== mode);
+  const noChange    = rows.filter(r => String(r.ai_response || 'ON').toUpperCase() === mode);
 
   if (toUpdate.length) {
     await Customer.update(
@@ -161,10 +137,15 @@ async function setAiResponseByNames(agentUserId, mode, candidateNames) {
     );
   }
   return {
-    updated : toUpdate.map(c => c.name),
+    updated : toUpdate.map(c => ({ name: c.name, phone: c.phone })),
     notFound,
-    noChange: noChange.map(c => c.name),
+    noChange: noChange.map(c => ({ name: c.name, phone: c.phone })),
   };
+}
+
+/** Format "Nama (62812…)" untuk baris konfirmasi. */
+function _label(c) {
+  return c.name ? `${c.name} (${c.phone})` : c.phone;
 }
 
 /**
@@ -187,28 +168,34 @@ async function maybeHandleAiToggleCommand({ message, senderPhone, agent }) {
     return null;
   }
 
-  const names = extractNames(message);
+  const phones   = extractPhones(message);
   const verbWord = mode === 'ON' ? 'dinyalakan' : 'dimatikan';
+  const verbCmd  = mode === 'ON' ? 'nyalakan'   : 'matikan';
 
-  if (!names.length) {
-    return `Sebutkan nama customer-nya ya, Kak 🙂 Contoh: *${mode === 'ON' ? 'nyalakan' : 'matikan'} AI untuk Clarence* (boleh beberapa: *…untuk Rizal, Kezia dan Lia*).`;
+  // WAJIB nomor — nama tidak diterima (ambigu, bisa salah target).
+  if (!phones.length) {
+    return `Mohon sebutkan *nomor WhatsApp* customer-nya ya, Kak 🙂\n` +
+           `Contoh: *${verbCmd} AI untuk 628123456789*\n` +
+           `Boleh beberapa sekaligus: *${verbCmd} AI untuk 628111111111, 628222222222 dan 628333333333*\n\n` +
+           `_Catatan: identifikasi memakai nomor WA (bukan nama) supaya tidak salah target._`;
   }
 
   try {
-    const { updated, notFound, noChange } = await setAiResponseByNames(agent.user_id, mode, names);
+    const { updated, notFound, noChange } = await setAiResponseByPhones(agent.user_id, mode, phones);
 
     if (!updated.length && !noChange.length) {
-      return `⚠️ Customer *${notFound.join(', ')}* belum terdaftar di daftar Anda, jadi belum bisa saya set. Pastikan namanya sudah ada di module Customer ya.`;
+      return `⚠️ Nomor *${notFound.join(', ')}* belum terdaftar sebagai customer Anda, jadi belum bisa di-set.\n` +
+             `Pastikan customer tsb sudah pernah chat / terdaftar di module Customer ya.`;
     }
 
     const lines = [];
-    if (updated.length)  lines.push(`✅ AI *${verbWord}* untuk: *${updated.join(', ')}*`);
-    if (noChange.length) lines.push(`ℹ️ Sudah ${mode} sebelumnya: ${noChange.join(', ')}`);
-    if (notFound.length) lines.push(`⚠️ Tidak ditemukan: ${notFound.join(', ')}`);
+    if (updated.length)  lines.push(`✅ AI *${verbWord}* untuk: *${updated.map(_label).join(', ')}*`);
+    if (noChange.length) lines.push(`ℹ️ Sudah ${mode} sebelumnya: ${noChange.map(_label).join(', ')}`);
+    if (notFound.length) lines.push(`⚠️ Nomor tidak terdaftar: ${notFound.join(', ')}`);
     if (mode === 'OFF' && updated.length) lines.push('AI tidak akan membalas chat mereka sampai dinyalakan kembali.');
     if (mode === 'ON'  && updated.length) lines.push('AI kembali membalas chat mereka secara otomatis.');
 
-    console.log(`[CustomerAIToggle] ✅ ${agent.user_id} → ai_response=${mode} | updated=[${updated.join(',')}] notFound=[${notFound.join(',')}]`);
+    console.log(`[CustomerAIToggle] ✅ ${agent.user_id} → ai_response=${mode} | updated=[${updated.map(u => u.phone).join(',')}] notFound=[${notFound.join(',')}]`);
     return lines.join('\n');
   } catch (err) {
     console.error('[CustomerAIToggle] update failed:', err.message);
@@ -218,7 +205,8 @@ async function maybeHandleAiToggleCommand({ message, senderPhone, agent }) {
 
 module.exports = {
   detectAiToggleCommand,
-  extractNames,
-  setAiResponseByNames,
+  extractPhones,
+  normPhone,
+  setAiResponseByPhones,
   maybeHandleAiToggleCommand,
 };

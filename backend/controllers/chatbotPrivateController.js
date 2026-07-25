@@ -1694,6 +1694,13 @@ class ConversationQualifier {
         'kuliah', 'study', 'liburan', 'berlibur', 'vacation', 'holiday', 'staycation',
         'wisata', 'honeymoon', 'bulan madu', 'business trip', 'work trip', 'kerja di',
       ]) || !!detectUseCase(custText),   // menyebut PENGGUNAAN (investasi/usaha/ibadah/liburan/dinas) = motivasi terjawab
+      /* ── Pilot: VALUE CHECKPOINT sudah pernah dikirim? (sekali per pencarian) ── */
+      valueCheckpointFired: this.#has(aiText, [
+        'udah kebayang kebutuhan', 'sudah kebayang kebutuhan',
+        'lagi cek beberapa opsi', 'saya cek beberapa opsi',
+        'have a clear picture of what you need',
+      ]),
+
       aiAskedMotivation: this.#has(aiText, [
         'apa yang membuat', 'apa yang bikin cari', 'kenapa cari', 'mulai cari rumah sekarang',
         'why now', 'what made you', 'apa yang bikin kak cari',
@@ -2154,7 +2161,7 @@ class ConversationQualifier {
         'aiAskedKprDetails', 'hasPropertyCondition', 'aiAskedPropertyCondition',
         'hasTenantStatus', 'aiAskedTenantStatus', 'hasZonasi', 'aiAskedZonasi',
         // House v2 pilot (motivation + financing contingency)
-        'hasMotivation', 'aiAskedMotivation', 'financingCash', 'financingFromSale',
+        'hasMotivation', 'aiAskedMotivation', 'valueCheckpointFired', 'financingCash', 'financingFromSale',
         'hasContingencyStatus', 'aiAskedContingency',
         'hasFacilities', 'aiAskedFacilities',
       ];
@@ -2482,16 +2489,31 @@ class ConversationQualifier {
    *   belum ada email di chat — juga maksimal SEKALI.
    * Return teks pertanyaan, atau null bila tidak perlu bertanya (lanjut summary).
    */
-  static buildIdentityQuestion(history, userMessage, profile, lang = 'id') {
+  static async buildIdentityQuestion(history, userMessage, profile, lang = 'id', identityCtx = {}) {
     const isId = lang === 'id';
     try {
       const {
-        extractIdentityFromChat, aiAlreadyAskedName, aiAlreadyAskedEmail,
+        extractIdentityFromChat, aiAlreadyAskedName, aiAlreadyAskedEmail, getIdentityStatus,
       } = require('../services/customerRegistrationService');
       const identity = extractIdentityFromChat(history, userMessage);
 
-      // Q_NAME — belum kenal nama & belum pernah tanya
-      if (!identity.name && !aiAlreadyAskedName(history)) {
+      // ── GATE CUSTOMER BARU ────────────────────────────────────────────────
+      // Nama & email HANYA ditanyakan ke customer BARU (belum pernah menyelesaikan
+      // percakapan dengan agent ini). Customer lama: datanya sudah tersimpan —
+      // bertanya ulang bikin chat panjang & terasa tidak mengenal. Sumber status:
+      // customers.name (bukan nama default WA) / customers.email sudah terisi.
+      const { agentUserId, phone, waName } = identityCtx || {};
+      let status = { isReturning: false, hasRealName: false, hasEmail: false };
+      if (agentUserId && phone) {
+        status = await getIdentityStatus({ agentUserId, phone, waName });
+        if (status.isReturning) {
+          console.log(`[PrivateAgent/Q_IDENTITY] Customer lama (${status.name || 'known'}) → lewati tanya nama & email`);
+          return null;
+        }
+      }
+
+      // Q_NAME — belum kenal nama & belum pernah tanya (customer BARU saja)
+      if (!identity.name && !status.hasRealName && !aiAlreadyAskedName(history)) {
         return isId
           ? 'Sebelum saya buatkan ringkasannya — boleh saya tahu nama Kakak? 😊'
           : 'Before I prepare your summary — may I know your name? 😊';
@@ -2500,7 +2522,7 @@ class ConversationQualifier {
       // Q_EMAIL — viewing sudah dijadwalkan, email belum ada & belum pernah tanya
       const viewingPlanned = !!(profile?.hasViewingHour || profile?.hasViewingDate
                                || profile?.wantsViewingScheduled);
-      if (viewingPlanned && !identity.email && !aiAlreadyAskedEmail(history)) {
+      if (viewingPlanned && !identity.email && !status.hasEmail && !aiAlreadyAskedEmail(history)) {
         return isId
           ? 'Untuk undangan jadwal viewing-nya, boleh minta alamat email Kakak? 📧\n(Kalau tidak berkenan, balas "lewati" saja — tidak wajib 😊)'
           : 'For the viewing invitation, may I have your email address? 📧\n(Reply "skip" if you prefer not to — it\'s optional 😊)';
@@ -3075,8 +3097,43 @@ class ConversationQualifier {
    * Returns the next question text, or null when ready to hand off.
    * ═══════════════════════════════════════════════════════════════════════════ */
   static housePilotEnabled(profile) {
-    return String(process.env.HOUSE_PILOT_V2 || 'ON').toUpperCase() !== 'OFF'
-      && profile.buildingType === 'house';
+    if (String(process.env.HOUSE_PILOT_V2 || 'ON').toUpperCase() === 'OFF') return false;
+    // Cakupan tipe pilot. SKILL_HOUSE_v1_pilot menyebut scope "Rumah / Apartemen",
+    // tetapi apartemen punya slot khusus (Q12 tower/lantai/view) di alur standar.
+    // Default tetap `house` saja agar perilaku apartemen tidak berubah diam-diam;
+    // aktifkan lewat env bila memang ingin: HOUSE_PILOT_TYPES=house,apartment
+    const types = String(process.env.HOUSE_PILOT_TYPES || 'house')
+      .toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
+    return types.includes(String(profile.buildingType || '').toLowerCase());
+  }
+
+  /**
+   * Peta slot INTI pilot (SKILL_HOUSE_v1_pilot) → dipakai VALUE CHECKPOINT.
+   * BELI: listing_reference · motivation · location · price_band
+   * SEWA: listing_reference · move_in_urgency · location · price_band
+   *
+   * `listing_reference` = customer membuka chat merujuk sebuah listing yang ia
+   * lihat (portal/broadcast) — pesan itu SEKALIGUS mengisi lokasi & price band,
+   * jadi tidak boleh ditanyakan ulang.
+   *
+   * @returns {object} map slot→boolean
+   */
+  static buildPilotCoreSlots(profile = {}, filters = {}, userMessage = '', history = []) {
+    const hp = require('../utils/houseListingPilot');
+    // Cari referensi listing di SELURUH pesan customer (biasanya pesan pertama).
+    const custMsgs = [
+      ...(history || []).filter(h => h.role === 'user' || h.role === 'customer').map(h => h.message || ''),
+      userMessage || '',
+    ];
+    const listingRef = custMsgs.some(m => hp.extractListingReference(m).isListingReferral);
+
+    return {
+      listing_reference: listingRef,
+      motivation       : !!profile.hasMotivation,
+      move_in_urgency  : !!profile.hasMoveInDate,
+      location         : !!(filters.location || profile.location),
+      price_band       : !!(filters.budget || profile.budget),
+    };
   }
 
   static getNextQuestionHousePilot(profile, lang = 'id', priceAnchors = null, agentName = '', appName = '') {
@@ -4727,10 +4784,58 @@ class ChatbotPrivateService {
       //    financing readiness, handoff + INTERNAL [BRIEF_READY] (no customer summary).
       if (ConversationQualifier.housePilotEnabled(profile)) {
         const resolvedAppName = process.env.APP_NAME || 'Elevan Property';
+        const hp   = require('../utils/houseListingPilot');
+        const isId = lang === 'id';
         const pilotQ = ConversationQualifier.getNextQuestionHousePilot(
           profile, lang, priceAnchors, agentName, resolvedAppName
         );
-        if (pilotQ) {
+
+        // ── (A) AVAILABILITY DEFLECTION / HOLDING SCRIPT ────────────────────
+        // "Masih ada?" JANGAN dijawab "saya cek dulu" polos — itu menandakan
+        // tidak mengenal stok sendiri. Konfirmasi ke tim + langsung sambung slot
+        // berikutnya. Dorongan KEDUA → berhenti mengelak, eskalasi ke agent.
+        if (hp.isAvailabilityQuestion(userMessage)) {
+          const pushes = hp.countAvailabilityPushes(history, userMessage);
+          if (pushes >= 2) {
+            console.log(`[PrivateAgent/HousePilot] ⚠️ Desakan ketersediaan ke-${pushes} → eskalasi ke agent`);
+            return this.#wrap(
+              builder.qualificationQuestion(hp.buildAvailabilityEscalation(agentName, isId)),
+              { skillInfo, filters, housePilot: true, escalateToAgent: true }
+            );
+          }
+          if (pilotQ) {
+            console.log('[PrivateAgent/HousePilot] Holding script + slot berikutnya');
+            return this.#wrap(
+              builder.qualificationQuestion(hp.buildHoldingScript(pilotQ, isId)),
+              { skillInfo, filters, qualificationMode: true, housePilot: true, holdingScript: true }
+            );
+          }
+        }
+
+        // ── (B) VALUE CHECKPOINT → [BRIEF_READY_EARLY] ──────────────────────
+        // Setelah ±3 slot inti terisi: BERHENTI bertanya, kirim sinyal momentum.
+        // Agent menerima brief PARSIAL sekarang dan menjatuhkan 1–3 opsi nyata
+        // dari WAG — inilah yang menahan customer, bukan inventory palsu.
+        {
+          const coreFilled = ConversationQualifier.buildPilotCoreSlots(profile, filters, userMessage, history);
+          const txKey = profile.transactionType === 'sale' ? 'sale' : 'rent';
+          if (hp.shouldFireValueCheckpoint(txKey, coreFilled, profile.valueCheckpointFired)) {
+            const early = ConversationQualifier.buildHousePilotBrief(profile, filters, history, userMessage);
+            console.log('[PrivateAgent/HousePilot] 🚀 VALUE CHECKPOINT → [BRIEF_READY_EARLY]',
+              { coreSlots: hp.countCoreSlots(txKey, coreFilled), score: early.score });
+            return this.#wrap(
+              builder.qualificationQuestion(hp.buildValueCheckpoint(isId)),
+              { skillInfo, filters, housePilot: true, valueCheckpoint: true,
+                briefReadyEarly: early.brief, briefScore: early.score,
+                briefPriority: early.priority, agentName }
+            );
+          }
+        }
+
+        // ── (C) QUESTION CAP — keluarkan brief apa adanya, jangan perpanjang ──
+        if (pilotQ && hp.reachedQuestionCap(profile.aiCount)) {
+          console.log(`[PrivateAgent/HousePilot] ⛔ Batas ${hp.MAX_PILOT_QUESTIONS} pertanyaan tercapai → brief apa adanya`);
+        } else if (pilotQ) {
           console.log(`[PrivateAgent/HousePilot] Asking Q (aiCount=${profile.aiCount})`);
           const qText = preNote ? `${preNote}\n\n${pilotQ}` : pilotQ;
           return this.#wrap(builder.qualificationQuestion(qText), {
@@ -4767,7 +4872,8 @@ class ChatbotPrivateService {
       // Email: hanya bila jadwal viewing sudah ada (untuk undangan kalender).
       // Masing-masing maksimal SEKALI — customer tidak menjawab → summary tetap lanjut.
       {
-        const idQ = ConversationQualifier.buildIdentityQuestion(history, userMessage, profile, lang);
+        const idQ = await ConversationQualifier.buildIdentityQuestion(history, userMessage, profile, lang,
+          { agentUserId: scopedUserId, phone: session?.phone, waName: session?.name });
         if (idQ) {
           const qText = preNote ? `${preNote}\n\n${idQ}` : idQ;
           return this.#wrap(builder.qualificationQuestion(qText), {
@@ -4821,7 +4927,8 @@ class ChatbotPrivateService {
 
     // ── Q_NAME/Q_EMAIL — identitas customer SEBELUM summary (tanya SEKALI) ──
     {
-      const idQ = ConversationQualifier.buildIdentityQuestion(history, userMessage, profile, lang);
+      const idQ = await ConversationQualifier.buildIdentityQuestion(history, userMessage, profile, lang,
+          { agentUserId: scopedUserId, phone: session?.phone, waName: session?.name });
       if (idQ) {
         const qText = preNote ? `${preNote}\n\n${idQ}` : idQ;
         return this.#wrap(builder.qualificationQuestion(qText), {

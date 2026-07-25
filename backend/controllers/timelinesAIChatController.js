@@ -566,8 +566,8 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
 
   // ── Registrasi customer otomatis saat SUMMARY terkirim ──────────────
   try {
-    const { maybeRegisterOnSummary } = require('../services/customerRegistrationService');
-    await maybeRegisterOnSummary({
+    const { syncCustomerFromChat } = require('../services/customerRegistrationService');
+    await syncCustomerFromChat({
       reply: aiResult.reply, sessionId: session.id, currentMessage: message,
       agentUserId: agent.user_id, phone: sender, waName: name,
     });

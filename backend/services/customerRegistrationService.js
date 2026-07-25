@@ -246,6 +246,54 @@ async function registerCustomerFromChat({ agentUserId, phone, chatName = null, w
 }
 
 /**
+ * Status identitas customer terhadap agent ini — dipakai untuk memutuskan apakah
+ * AI BOLEH menanyakan nama / email.
+ *
+ * Aturan bisnis: pertanyaan nama & email HANYA untuk customer BARU (belum pernah
+ * menyelesaikan percakapan dengan agent ini). Customer lama tidak ditanya lagi —
+ * datanya sudah ada, bertanya ulang terasa tidak personal & menambah panjang chat.
+ *
+ * Karena registrasi kini terjadi AWAL (setelah Q1+Q2, memakai nama default
+ * WhatsApp), keberadaan baris customer TIDAK bisa dipakai sebagai penanda "lama".
+ * Penanda yang dipakai: apakah kita PERNAH belajar identitas asli —
+ *   hasRealName : nama tersimpan bukan nama default WA / bukan placeholder
+ *   hasEmail    : email sudah terisi
+ *   isReturning : salah satu di atas true → customer lama → jangan tanya lagi
+ *
+ * @param {object} p
+ * @param {string} p.agentUserId
+ * @param {string} p.phone
+ * @param {string|null} p.waName - nama profil WhatsApp (pembanding placeholder)
+ * @returns {Promise<{exists:boolean,hasRealName:boolean,hasEmail:boolean,isReturning:boolean,name:string|null}>}
+ */
+async function getIdentityStatus({ agentUserId, phone, waName = null }) {
+  const EMPTY = { exists: false, hasRealName: false, hasEmail: false, isReturning: false, name: null };
+  if (!agentUserId || !phone) return EMPTY;
+  try {
+    const { Customer } = require('../models');
+    const normPhone = _normPhone(phone);
+    if (normPhone.length < 8) return EMPTY;
+    const row = await Customer.findOne({
+      where: { user_id: String(agentUserId).toUpperCase(), phone: normPhone },
+      attributes: ['name', 'email', 'status'],
+    });
+    if (!row || row.status === 3) return EMPTY;
+
+    const nm = String(row.name || '').trim();
+    const wa = String(waName || '').trim();
+    const isPlaceholder = !nm
+      || (wa && nm.toLowerCase() === wa.toLowerCase())   // masih nama default WhatsApp
+      || /^customer\s+\d{3,4}$/i.test(nm);               // fallback "Customer 1234"
+    const hasRealName = !isPlaceholder;
+    const hasEmail    = !!row.email;
+    return { exists: true, hasRealName, hasEmail, isReturning: hasRealName || hasEmail, name: nm || null };
+  } catch (err) {
+    console.warn('[CustomerReg] getIdentityStatus failed (fail-open):', err.message);
+    return EMPTY;
+  }
+}
+
+/**
  * Apakah AI di-NONAKTIFKAN untuk customer ini? (ai_response = 'OFF')
  * Dipakai chat controllers sebagai GATE sebelum memanggil AI: bila agent sudah
  * mengambil-alih percakapan manual (toggle ai_response=OFF di module Customer),
@@ -316,6 +364,75 @@ async function maybeRegisterOnSummary({ reply, sessionId, currentMessage, agentU
   }
 }
 
+/**
+ * Hook UTAMA untuk chat controllers — dipanggil SETIAP balasan AI terkirim.
+ * Menggantikan pendekatan lama "daftar hanya saat summary".
+ *
+ * Dua tugas:
+ *  1. REGISTRASI AWAL — begitu Q1 (tipe transaksi) & Q2 (lokasi) terjawab, customer
+ *     langsung didaftarkan memakai NAMA DEFAULT WHATSAPP. Lead tercatat sejak dini,
+ *     tidak hilang bila percakapan putus di tengah (dulu baru tercatat saat summary).
+ *  2. UPDATE IDENTITAS — begitu customer menyebut nama panggilan (mis. saat AI
+ *     bertanya) atau email, baris yang sudah ada di-update (nama default WA diganti
+ *     nama asli, email diisi). Idempoten via UNIQUE (user_id, phone).
+ *
+ * Selain itu: saat balasan berisi SUMMARY → bersihkan sticky anchor sesi.
+ * Non-fatal & fire-safe: error apa pun hanya di-log, alur chat tidak terganggu.
+ *
+ * @param {object} p
+ * @param {string} p.reply           - teks balasan AI (deteksi marker summary)
+ * @param {number} p.sessionId       - ChatSession.id
+ * @param {string} p.currentMessage  - pesan customer terakhir
+ * @param {string} p.agentUserId     - users.user_id agent
+ * @param {string} p.phone           - nomor WA customer
+ * @param {string|null} p.waName     - nama profil WhatsApp (nama default saat insert)
+ * @returns {Promise<{action:string, customer?:object}>}
+ */
+async function syncCustomerFromChat({ reply, sessionId, currentMessage, agentUserId, phone, waName = null }) {
+  try {
+    if (!agentUserId || !phone) return { action: 'skipped' };
+
+    // Summary terkirim → pencarian selesai, reset sticky anchor sesi.
+    if (replyContainsSummary(reply)) {
+      try { require('../utils/sessionAnchors').clearAnchors(sessionId); } catch (_) { /* non-fatal */ }
+    }
+
+    let history = [];
+    try {
+      const { getConversationHistory } = require('./sessionService');
+      history = await getConversationHistory(sessionId, 60);
+    } catch (_) { /* tanpa history pun tetap bisa daftar via pushname */ }
+
+    // Sudah terdaftar? (menentukan apakah boleh update identitas walau Q1/Q2 belum lengkap)
+    let alreadyExists = false;
+    try {
+      const { Customer } = require('../models');
+      const found = await Customer.findOne({
+        where: { user_id: String(agentUserId).toUpperCase(), phone: _normPhone(phone) },
+        attributes: ['customer_id'],
+      });
+      alreadyExists = !!found;
+    } catch (_) { /* fail-open */ }
+
+    // GATE Q1+Q2 — hanya daftarkan lead yang sudah menyebut TIPE TRANSAKSI & LOKASI.
+    // Mencegah nomor iseng/salah sambung ikut masuk daftar customer agent.
+    let qualified = false;
+    try {
+      const { extractPropertyFilters } = require('./propertyRecommendationService');
+      const f = extractPropertyFilters(currentMessage || '', history);
+      qualified = !!(f.transactionType && f.location);
+    } catch (_) { /* fail-closed: biarkan qualified=false */ }
+
+    if (!qualified && !alreadyExists) return { action: 'skipped' };
+
+    const { name: chatName, email } = extractIdentityFromChat(history, currentMessage);
+    return await registerCustomerFromChat({ agentUserId, phone, chatName, waName, email });
+  } catch (err) {
+    console.warn('[CustomerReg] syncCustomerFromChat failed (non-fatal):', err.message);
+    return { action: 'skipped' };
+  }
+}
+
 module.exports = {
   extractCustomerName,
   extractCustomerEmail,
@@ -324,6 +441,8 @@ module.exports = {
   aiAlreadyAskedEmail,
   registerCustomerFromChat,
   isAiDisabledForCustomer,
+  getIdentityStatus,
   replyContainsSummary,
   maybeRegisterOnSummary,
+  syncCustomerFromChat,
 };

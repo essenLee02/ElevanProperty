@@ -31,7 +31,11 @@ function getDeepSeekConfig() {
 
   return {
     apiKey,
-    model       : rawModel || 'deepseek-chat',
+    // ⚠️ Default HARUS model yang masih didukung. Sejak DeepSeek V4 (Juli 2026),
+    // nama lama `deepseek-chat` / `deepseek-reasoner` DITOLAK dengan HTTP 400:
+    //   "The supported API model names are deepseek-v4-pro or deepseek-v4-flash".
+    // Akibatnya seluruh panggilan gagal & sistem diam-diam jatuh ke Private Agent.
+    model       : rawModel || 'deepseek-v4-flash',
     maxTokens,
     temperature,
     topP,
@@ -58,6 +62,25 @@ function normalizeDeepSeekError(error) {
   if (status === 402 || status === 429) {
     const err = new Error(`DeepSeek quota/rate limit: ${apiMessage}`);
     err.provider = 'deepseek'; err.status = status; err.fallbackEligible = true;
+    return err;
+  }
+
+  // Model tidak didukung (mis. nama lama `deepseek-chat` setelah migrasi V4).
+  // Ini KESALAHAN KONFIGURASI, bukan gangguan sesaat — kalau tidak ditampilkan
+  // mencolok, sistem akan diam-diam memakai Private Agent terus-menerus.
+  if (status === 400 && /supported API model names|model/i.test(apiMessage)) {
+    console.error(
+      '\n╔════════════════════════════════════════════════════════════════════╗\n' +
+      '║  ⛔ DEEPSEEK: NAMA MODEL TIDAK DIDUKUNG — SEMUA CALL AKAN GAGAL   ║\n' +
+      '╚════════════════════════════════════════════════════════════════════╝\n' +
+      `   Pesan API : ${apiMessage}\n` +
+      `   Model kini: ${sanitizeEnvValue(process.env.DEEPSEEK_MODEL || '(kosong)')}\n` +
+      '   PERBAIKI  : set DEEPSEEK_MODEL=deepseek-v4-flash (atau deepseek-v4-pro)\n' +
+      '               di backend/.env lalu RESTART backend.\n'
+    );
+    const err = new Error(`DeepSeek model tidak didukung: ${apiMessage}`);
+    err.provider = 'deepseek'; err.status = status; err.fallbackEligible = true;
+    err.configError = true;
     return err;
   }
 
@@ -107,8 +130,24 @@ async function callDeepSeekChatAPI(userPrompt, options = {}) {
       timeout: 90000,
     });
 
-    const text = response.data?.choices?.[0]?.message?.content?.trim() || '';
-    if (!text) throw new Error('DeepSeek response is empty or cannot be parsed.');
+    const choice = response.data?.choices?.[0] || {};
+    const text   = choice.message?.content?.trim() || '';
+
+    if (!text) {
+      // DeepSeek V4 = model REASONING: token dipakai dulu untuk `reasoning_content`,
+      // baru menulis `content`. Bila max_tokens habis di tahap reasoning →
+      // finish_reason='length' dan content KOSONG. Beri pesan yang menjelaskan
+      // penyebabnya supaya tidak terbaca sebagai "API rusak".
+      const reasoningLen = String(choice.message?.reasoning_content || '').length;
+      const finish       = choice.finish_reason || 'unknown';
+      if (finish === 'length' && reasoningLen > 0) {
+        throw new Error(
+          `DeepSeek kehabisan token saat reasoning (finish_reason=length, reasoning=${reasoningLen} char, ` +
+          `max_tokens=${payload.max_tokens}). Naikkan DEEPSEEK_MAX_TOKENS di backend/.env.`
+        );
+      }
+      throw new Error(`DeepSeek response is empty or cannot be parsed (finish_reason=${finish}).`);
+    }
     return text;
   } catch (error) {
     throw normalizeDeepSeekError(error);

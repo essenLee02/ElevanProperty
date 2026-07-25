@@ -600,8 +600,8 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
   // (idempoten via UNIQUE user_id+phone; nama dari perkenalan chat / pushname,
   // email bila sudah diberikan). Non-fatal — tidak mengganggu pengiriman.
   try {
-    const { maybeRegisterOnSummary } = require('../services/customerRegistrationService');
-    await maybeRegisterOnSummary({
+    const { syncCustomerFromChat } = require('../services/customerRegistrationService');
+    await syncCustomerFromChat({
       reply: aiResult.reply, sessionId: session.id, currentMessage: message,
       agentUserId: agent.user_id, phone: sender, waName: name,
     });
