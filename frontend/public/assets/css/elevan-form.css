@@ -110,6 +110,54 @@
 .btn-pick-location:hover:not(:disabled) { background: #edf2f7; border-color: #667eea; }
 .btn-pick-location:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* ── Gambar Properti (upload multi-file + preview) ────────── */
+.image-box { border: 1px solid #cbd5e0; border-radius: 10px; padding: 14px; background: #fff; }
+.image-empty { color: #a0aec0; font-size: 13px; margin-bottom: 12px; }
+.image-grid {
+  display: grid; gap: 12px; margin-bottom: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+}
+.image-item {
+  position: relative; border: 1px solid #e2e8f0; border-radius: 10px;
+  overflow: hidden; background: #f7fafc; display: flex; flex-direction: column;
+}
+.image-item.is-staged { border-style: dashed; border-color: #f6ad55; }
+.image-item img { width: 100%; height: 104px; object-fit: cover; display: block; background: #edf2f7; }
+.image-caption {
+  font-size: 11px; color: #4a5568; padding: 6px 8px; line-height: 1.3;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.image-badge {
+  position: absolute; top: 6px; left: 6px; font-size: 10px; font-weight: 700;
+  padding: 2px 7px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.3px;
+}
+.badge-default { background: #e2e8f0; color: #4a5568; }
+.badge-saved   { background: #c6f6d5; color: #22543d; }
+.badge-staged  { background: #feebc8; color: #7b341e; }
+.image-remove {
+  position: absolute; top: 6px; right: 6px;
+  width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center;
+  border: none; border-radius: 50%; background: rgba(0, 0, 0, 0.55); color: #fff;
+  font-size: 11px; cursor: pointer; transition: background 0.15s;
+}
+.image-remove:hover:not(:disabled) { background: #c53030; }
+.image-remove:disabled { opacity: 0.5; cursor: not-allowed; }
+.image-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn-pick-image {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: #f7fafc; border: 1px dashed #cbd5e0; color: #667eea;
+  padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s;
+}
+.btn-pick-image:hover:not(:disabled) { background: #edf2f7; border-color: #667eea; }
+.btn-pick-image:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-upload-image {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: #2b6cb0; border: 1px solid #2b6cb0; color: #fff;
+  padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s;
+}
+.btn-upload-image:hover:not(:disabled) { background: #2c5282; border-color: #2c5282; }
+.btn-upload-image:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* ── Audit info ──────────────────────────────────────────── */
 .audit-info { margin-top: 8px; margin-bottom: 20px; }
 .audit-divider { position: relative; text-align: center; margin: 24px 0 18px; }
