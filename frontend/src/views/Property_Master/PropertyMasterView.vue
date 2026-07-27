@@ -262,76 +262,131 @@
 
               <div class="form-group">
                 <label class="col-form-label">Foto / Gambar</label>
-                <p class="field-hint">
+                <p class="form-text mt-0 mb-2">
                   Bisa unggah lebih dari satu gambar (maks. {{ IMAGE_MAX_FILES }} file, {{ IMAGE_MAX_MB }} MB per file).
                   Jika tidak mengunggah gambar, sistem otomatis memakai gambar default sesuai tipe bangunan.
                 </p>
 
-                <div class="image-box">
-                  <!-- Grid preview: gambar tersimpan + gambar yang menunggu diunggah -->
-                  <div v-if="savedImages.length || stagedImages.length" class="image-grid">
-                    <!-- Tersimpan di database -->
-                    <div v-for="img in savedImages" :key="'saved-' + (img.id ?? img.url)" class="image-item">
-                      <img :src="img.url" :alt="img.name || 'Gambar properti'" loading="lazy" @error="onImgError" />
-                      <span v-if="img.is_default" class="image-badge badge-default">Default</span>
-                      <span v-else class="image-badge badge-saved">Tersimpan</span>
-                      <button
-                        v-if="img.id"
-                        type="button"
-                        class="image-remove"
-                        :disabled="isSubmitting || deletingImageId === img.id"
-                        :title="img.is_default ? 'Lepas gambar default dari properti ini' : 'Hapus gambar'"
-                        @click="askDeleteImage(img)"
-                      >
-                        <span v-if="deletingImageId === img.id" class="spinner-sm"></span>
-                        <i v-else class="fa-solid fa-xmark"></i>
-                      </button>
-                      <span class="image-caption">{{ img.name || '—' }}</span>
-                    </div>
-
-                    <!-- Belum diunggah (staged) -->
-                    <div v-for="(st, i) in stagedImages" :key="'staged-' + st.uid" class="image-item is-staged">
-                      <img :src="st.preview" :alt="st.file.name" />
-                      <span class="image-badge badge-staged">Belum diunggah</span>
-                      <button type="button" class="image-remove" :disabled="isSubmitting" title="Batalkan gambar ini" @click="removeStaged(i)">
-                        <i class="fa-solid fa-xmark"></i>
-                      </button>
-                      <span class="image-caption">{{ st.file.name }}</span>
-                    </div>
-                  </div>
-
-                  <div v-else class="image-empty">Belum ada gambar</div>
-
-                  <!-- Aksi -->
-                  <div class="image-actions">
-                    <input
-                      ref="fileInputRef"
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
-                      multiple
-                      class="d-none"
-                      @change="onFilesPicked"
-                    />
-                    <button type="button" class="btn-pick-image" :disabled="isSubmitting || isUploadingImages" @click="fileInputRef?.click()">
-                      <i class="fa-solid fa-plus"></i> Pilih Gambar
-                    </button>
-
-                    <!-- Mode EDIT: unggah langsung. Mode TAMBAH: ikut saat properti disimpan. -->
-                    <button
-                      v-if="isEditMode && stagedImages.length"
-                      type="button"
-                      class="btn-upload-image"
-                      :disabled="isSubmitting || isUploadingImages"
-                      @click="uploadStagedImages()"
+                <div class="card">
+                  <div class="card-body">
+                    <!-- Grid preview: gambar tersimpan + gambar yang menunggu diunggah -->
+                    <div
+                      v-if="savedImages.length || stagedImages.length"
+                      class="row row-cols-2 row-cols-sm-3 row-cols-lg-4 row-cols-xxl-5 g-3 mb-3"
                     >
-                      <span v-if="isUploadingImages"><span class="spinner-sm"></span> Mengunggah...</span>
-                      <span v-else><i class="fa-solid fa-upload"></i> Unggah {{ stagedImages.length }} Gambar</span>
-                    </button>
-                  </div>
+                      <!-- Tersimpan di database -->
+                      <div v-for="img in savedImages" :key="'saved-' + (img.id ?? img.url)" class="col">
+                        <div class="card h-100 position-relative overflow-hidden">
+                          <div class="ratio ratio-4x3 bg-body-secondary">
+                            <img
+                              :src="img.url"
+                              :alt="img.name || 'Gambar properti'"
+                              loading="lazy"
+                              class="w-100 h-100 object-fit-cover"
+                              @error="onImgError"
+                            />
+                          </div>
 
-                  <p v-if="!isEditMode && stagedImages.length" class="field-hint">
-                    {{ stagedImages.length }} gambar akan diunggah otomatis setelah properti disimpan.
-                  </p>
+                          <span v-if="img.is_default" class="badge text-bg-secondary position-absolute top-0 start-0 m-2">Default</span>
+                          <span v-else class="badge text-bg-success position-absolute top-0 start-0 m-2">Tersimpan</span>
+
+                          <button
+                            v-if="img.id"
+                            type="button"
+                            class="btn btn-danger btn-sm rounded-circle position-absolute top-0 end-0 m-2 d-inline-flex align-items-center justify-content-center p-0"
+                            style="width: 1.75rem; height: 1.75rem;"
+                            :disabled="isSubmitting || deletingImageId === img.id"
+                            :title="img.is_default ? 'Lepas gambar default dari properti ini' : 'Hapus gambar'"
+                            @click="askDeleteImage(img)"
+                          >
+                            <span v-if="deletingImageId === img.id" class="spinner-border spinner-border-sm"></span>
+                            <i v-else class="fa-solid fa-xmark"></i>
+                          </button>
+
+                          <div class="card-body p-2">
+                            <p class="card-text small text-body-secondary text-truncate mb-0" :title="img.name || '—'">
+                              {{ img.name || '—' }}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- Belum diunggah (staged) -->
+                      <div v-for="(st, i) in stagedImages" :key="'staged-' + st.uid" class="col">
+                        <div class="card h-100 position-relative overflow-hidden border-warning" style="border-style: dashed;">
+                          <div class="ratio ratio-4x3 bg-body-secondary">
+                            <img :src="st.preview" :alt="st.file.name" class="w-100 h-100 object-fit-cover" />
+                          </div>
+
+                          <span class="badge text-bg-warning position-absolute top-0 start-0 m-2">Belum diunggah</span>
+
+                          <button
+                            type="button"
+                            class="btn btn-danger btn-sm rounded-circle position-absolute top-0 end-0 m-2 d-inline-flex align-items-center justify-content-center p-0"
+                            style="width: 1.75rem; height: 1.75rem;"
+                            :disabled="isSubmitting"
+                            title="Batalkan gambar ini"
+                            @click="removeStaged(i)"
+                          >
+                            <i class="fa-solid fa-xmark"></i>
+                          </button>
+
+                          <div class="card-body p-2">
+                            <p class="card-text small text-body-secondary text-truncate mb-0" :title="st.file.name">
+                              {{ st.file.name }}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div
+                      v-else
+                      class="text-center text-body-secondary py-4 mb-3 rounded-3 border border-2"
+                      style="border-style: dashed !important;"
+                    >
+                      <i class="fa-regular fa-images fs-3 d-block mb-2 opacity-50"></i>
+                      Belum ada gambar
+                    </div>
+
+                    <!-- Aksi -->
+                    <div class="d-flex flex-wrap gap-2">
+                      <input
+                        ref="fileInputRef"
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
+                        multiple
+                        class="d-none"
+                        @change="onFilesPicked"
+                      />
+                      <button
+                        type="button"
+                        class="btn btn-outline-primary btn-sm"
+                        :disabled="isSubmitting || isUploadingImages"
+                        @click="fileInputRef?.click()"
+                      >
+                        <i class="fa-solid fa-plus me-1"></i> Pilih Gambar
+                      </button>
+
+                      <!-- Mode EDIT: unggah langsung. Mode TAMBAH: ikut saat properti disimpan. -->
+                      <button
+                        v-if="isEditMode && stagedImages.length"
+                        type="button"
+                        class="btn btn-primary btn-sm"
+                        :disabled="isSubmitting || isUploadingImages"
+                        @click="uploadStagedImages()"
+                      >
+                        <span v-if="isUploadingImages">
+                          <span class="spinner-border spinner-border-sm me-1"></span> Mengunggah...
+                        </span>
+                        <span v-else><i class="fa-solid fa-upload me-1"></i> Unggah {{ stagedImages.length }} Gambar</span>
+                      </button>
+                    </div>
+
+                    <p v-if="!isEditMode && stagedImages.length" class="form-text mb-0 mt-2">
+                      {{ stagedImages.length }} gambar akan diunggah otomatis setelah properti disimpan.
+                    </p>
+                  </div>
                 </div>
               </div>
 

@@ -364,8 +364,23 @@ class PropertyMasterController extends GeneralController {
   ────────────────────────────────────────────────────────────────────────── */
 
   /**
-   * GET /api/property/list?page=1&search=&transaction_type=&building_type=&city_id=&province_id=
-   * Menampilkan properti status 1 dan 2 (exclude deleted/status=3)
+   * GET /api/property/list
+   *   ?page=1&search=&transaction_type=&building_type=&city_id=&province_id=
+   *   &country_id=&furnished_status=&max_price=
+   *
+   * Menampilkan properti status 1 dan 2 (exclude deleted/status=3).
+   *
+   * `search` sengaja mencakup TIGA kolom — title, address, description —
+   * meskipun di UI kolomnya hanya bertuliskan "Search properties...".
+   *
+   * Selain daftar properti, response juga membawa:
+   *   - meta.price_max → batas atas slider harga (harga tertinggi di katalog
+   *     user, TIDAK ikut terfilter harga supaya rentang slider tidak menyusut
+   *     setiap kali digeser).
+   *   - options.*      → nilai filter yang benar-benar ADA di katalog user
+   *     (kota/provinsi/negara/furnitur), supaya dropdown tidak penuh master
+   *     global yang tidak dipakai.
+   *
    * Auth: verifyToken
    */
   static async showDataProperty(req, res) {
@@ -379,27 +394,53 @@ class PropertyMasterController extends GeneralController {
       const filterBuildType  = req.query.building_type    ? String(req.query.building_type).trim()     : '';
       const filterCityId     = req.query.city_id          ? String(req.query.city_id).trim()           : '';
       const filterProvinceId = req.query.province_id      ? String(req.query.province_id).trim()       : '';
+      const filterCountryId  = req.query.country_id       ? String(req.query.country_id).trim()        : '';
+      const filterFurnished  = req.query.furnished_status ? String(req.query.furnished_status).trim()  : '';
 
-      const where = { status: { [Op.ne]: 3 } };
+      const rawMaxPrice    = req.query.max_price;
+      const filterMaxPrice = (rawMaxPrice !== undefined && String(rawMaxPrice).trim() !== '' && !isNaN(Number(rawMaxPrice)))
+        ? Number(rawMaxPrice)
+        : null;
+
       // Scope katalog ke user yang login: hanya properti milik agent tsb
       // (properties.user_id = users.user_id dari token auth). Halaman /property
       // & konteks AI hanya menampilkan listing milik user yang sedang login.
       const loginUserId = req.user?.userId || null;
-      if (loginUserId) where.user_id = loginUserId;
 
-      if (search)           where.title            = { [Op.like]: `%${search}%` };
+      // scopeWhere = batas katalog user TANPA filter UI. Dipakai untuk menghitung
+      // price_max dan daftar opsi filter.
+      const scopeWhere = { status: { [Op.ne]: 3 } };
+      if (loginUserId) scopeWhere.user_id = loginUserId;
+
+      const where = Object.assign({}, scopeWhere);
+
+      if (search) {
+        where[Op.or] = [
+          { title:       { [Op.like]: `%${search}%` } },
+          { address:     { [Op.like]: `%${search}%` } },
+          { description: { [Op.like]: `%${search}%` } }
+        ];
+      }
       if (filterTxType)     where.transaction_type = filterTxType;
       // Support multiple building types (comma-separated)
       if (filterBuildType)  where.building_type    = { [Op.in]: filterBuildType.split(',').map(t => t.trim()) };
       if (filterCityId)     where.city_id          = filterCityId;
       if (filterProvinceId) where.province_id      = filterProvinceId;
+      if (filterCountryId)  where.country_id       = filterCountryId;
+      if (filterFurnished)  where.furnished_status = filterFurnished;
+      if (filterMaxPrice !== null) where.price     = { [Op.lte]: filterMaxPrice };
+
+      const rawPriceMax = await Property.max('price', { where: scopeWhere });
+      const priceMax    = (rawPriceMax === null || rawPriceMax === undefined || isNaN(Number(rawPriceMax)))
+        ? 0
+        : Number(rawPriceMax);
 
       const { count, rows } = await Property.findAndCountAll({
         where,
         include: [
-          { model: City,     as: 'city',     attributes: ['name'], required: false },
-          { model: Province, as: 'province', attributes: ['name'], required: false },
-          { model: Country,  as: 'country',  attributes: ['name'], required: false }
+          { model: City,     as: 'city',     attributes: ['city_id', 'name'],     required: false },
+          { model: Province, as: 'province', attributes: ['province_id', 'name'], required: false },
+          { model: Country,  as: 'country',  attributes: ['country_id', 'name'],  required: false }
         ],
         order:  [['created_date', 'DESC'], ['title', 'ASC']],
         limit:  pageSize,
@@ -408,29 +449,120 @@ class PropertyMasterController extends GeneralController {
       });
 
       const totalPages = Math.ceil(count / pageSize);
+      const pageIds    = rows.map(p => p.property_id);
 
-      const properties = rows.map((p, index) => ({
-        no:               offset + index + 1,
-        property_id:      p.property_id,
-        title:            p.title,
-        price:            p.price,
-        price_display:    p.price != null
-          ? 'Rp ' + Number(p.price).toLocaleString('id-ID') + (['Cash', 'Negotiable'].includes(p.price_type) ? ' (' + p.price_type + ')' : '/' + p.price_type)
-          : '-',
-        price_type:       p.price_type,
-        building_type:    p.building_type,
-        transaction_type: p.transaction_type,
-        kpr_status:       p.kpr_status,
-        city:             p.city?.name     || '-',
-        province:         p.province?.name || '-',
-        country:          p.country?.name  || '-',
-        status:           p.status,
-        status_label:     p.status === 1 ? 'Aktif' : 'Disabled',
-        created_date:     p.created_date,
-        created_by:       p.created_by,
-        updated_date:     p.updated_date,
-        updated_by:       p.updated_by
-      }));
+      // Gambar & fasilitas diambil lewat query TERPISAH, bukan include hasMany
+      // pada query berpaginasi di atas — supaya limit/offset tetap menghitung
+      // properti, bukan baris hasil join yang berlipat per gambar/fasilitas.
+      let imageRows = [];
+      let facilityRows = [];
+      if (pageIds.length) {
+        [imageRows, facilityRows] = await Promise.all([
+          PropertyImage.findAll({
+            where: { property_id: { [Op.in]: pageIds } },
+            attributes: ['id', 'property_id', 'name', 'url']
+          }),
+          PropertyFacility.findAll({
+            where: { property_id: { [Op.in]: pageIds } },
+            attributes: ['property_id', 'facility_id', 'facility_qty'],
+            include: [{ model: Facility, as: 'facility', attributes: ['name', 'icon'], required: false }]
+          })
+        ]);
+      }
+
+      const imagesByProperty = {};
+      imageRows.forEach(img => {
+        if (!imagesByProperty[img.property_id]) imagesByProperty[img.property_id] = [];
+        imagesByProperty[img.property_id].push({
+          id:         img.id,
+          name:       img.name,
+          url:        img.url,
+          is_default: isDefaultImageUrl(img.url)
+        });
+      });
+
+      const facilitiesByProperty = {};
+      facilityRows.forEach(f => {
+        if (!facilitiesByProperty[f.property_id]) facilitiesByProperty[f.property_id] = [];
+        facilitiesByProperty[f.property_id].push({
+          facility_id:  f.facility_id,
+          facility_qty: f.facility_qty,
+          name:         f.facility?.name || null,
+          icon:         f.facility?.icon || null
+        });
+      });
+
+      const properties = rows.map((p, index) => {
+        const imgs = imagesByProperty[p.property_id] || [];
+        return {
+          no:               offset + index + 1,
+          property_id:      p.property_id,
+          title:            p.title,
+          description:      p.description,
+          price:            p.price,
+          price_display:    p.price != null
+            ? 'Rp ' + Number(p.price).toLocaleString('id-ID') + (['Cash', 'Negotiable'].includes(p.price_type) ? ' (' + p.price_type + ')' : '/' + p.price_type)
+            : '-',
+          price_type:       p.price_type,
+          address:          p.address,
+          area:             p.area,
+          district:         p.district,
+          postal_code:      p.postal_code,
+          furnished_status: p.furnished_status,
+          bed_rooms:        p.bed_rooms,
+          bath_rooms:       p.bath_rooms,
+          building_area:    p.building_area,
+          land_area:        p.land_area,
+          building_type:    p.building_type,
+          transaction_type: p.transaction_type,
+          kpr_status:       p.kpr_status,
+          city_id:          p.city_id,
+          province_id:      p.province_id,
+          country_id:       p.country_id,
+          city:             p.city?.name     || '-',
+          province:         p.province?.name || '-',
+          country:          p.country?.name  || '-',
+          // Properti tanpa gambar → pakai gambar default sesuai building_type,
+          // sama seperti endpoint detail/images.
+          images:           imgs.length
+            ? imgs
+            : [defaultImageRow(p.property_id, p.building_type)].filter(Boolean),
+          facilities:       facilitiesByProperty[p.property_id] || [],
+          status:           p.status,
+          status_label:     p.status === 1 ? 'Aktif' : 'Disabled',
+          created_date:     p.created_date,
+          created_by:       p.created_by,
+          updated_date:     p.updated_date,
+          updated_by:       p.updated_by
+        };
+      });
+
+      // Opsi filter: hanya nilai yang benar-benar ada di katalog user.
+      const facetRows = await Property.findAll({
+        where: scopeWhere,
+        attributes: ['city_id', 'province_id', 'country_id', 'furnished_status'],
+        include: [
+          { model: City,     as: 'city',     attributes: ['city_id', 'name'],     required: false },
+          { model: Province, as: 'province', attributes: ['province_id', 'name'], required: false },
+          { model: Country,  as: 'country',  attributes: ['country_id', 'name'],  required: false }
+        ]
+      });
+
+      const uniqueOptions = (list) => {
+        const seen = new Map();
+        list.forEach(o => {
+          if (o && o.id !== null && o.id !== undefined && !seen.has(o.id)) seen.set(o.id, o);
+        });
+        return Array.from(seen.values())
+          .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+      };
+
+      const options = {
+        cities:    uniqueOptions(facetRows.map(r => (r.city     ? { id: r.city.city_id,         name: r.city.name }     : null))),
+        provinces: uniqueOptions(facetRows.map(r => (r.province ? { id: r.province.province_id, name: r.province.name } : null))),
+        countries: uniqueOptions(facetRows.map(r => (r.country  ? { id: r.country.country_id,   name: r.country.name }  : null))),
+        furnished: Array.from(new Set(facetRows.map(r => r.furnished_status).filter(Boolean))).sort()
+      };
 
       return sendSuccess(res, HTTP.OK, {
         properties,
@@ -441,7 +573,9 @@ class PropertyMasterController extends GeneralController {
           totalPages,
           hasNextPage: page < totalPages,
           hasPrevPage: page > 1
-        }
+        },
+        meta: { price_max: priceMax },
+        options
       }, 'Data properti berhasil dimuat');
 
     } catch (error) {
