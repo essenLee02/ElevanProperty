@@ -1,6 +1,7 @@
 const { loadProjectSkillPrompt } = require('./skillPromptService');
-const { detectBudget, detectFacilities, stripCommercialUsePhrases, detectUseCase, isNonResidentialUse, detectLocation } = require('./propertyRecommendationService');
+const { detectBudget, detectFacilities, stripCommercialUsePhrases, detectUseCase, isNonResidentialUse, detectLocation, isKnownLocationName } = require('./propertyRecommendationService');
 const { parseCustomerDate, isDontKnowDateAnswer, WAITING_THE_UPDATE } = require('../utils/customerDateParser');
+const { detectCustomerFrustration } = require('../utils/propertyKeywordFilter');
 
 /* ─── Qualification State Extractor ────────────────────────────────────────── */
 /* Scans full conversation history to build a per-question answered/unanswered  */
@@ -118,6 +119,10 @@ function extractQualificationState(history = [], currentMessage = '') {
   // Build chronological message array (history is already oldest-first from DB reverse)
   const ALL = [...(history || []), { role: 'customer', message: currentMessage }];
 
+  // Customer JENGKEL karena pertanyaan berulang? Dipakai buildQualificationStateBlock
+  // untuk menyuntikkan protokol PEMULIHAN (minta maaf + rekap + JANGAN tanya ulang).
+  const _frustration = detectCustomerFrustration(currentMessage);
+
   const state = {
     transactionType : null,   // Q1
     buildingType    : null,   // from first message
@@ -127,6 +132,10 @@ function extractQualificationState(history = [], currentMessage = '') {
     budget          : null,   // Q3
     household       : null,   // Q4
     redFlags        : null,   // Q5
+    // Kekesalan customer pada giliran INI (bukan akumulasi) — memicu protokol
+    // pemulihan di state block. kind: 'repetition' | 'ignored' | 'general' | null.
+    customerFrustrated : _frustration.frustrated,
+    frustrationKind    : _frustration.kind,
     anchorPoint     : null,   // Q6
     alternativeAreas: null,   // Q7
     moveInDate      : null,   // Q8 MANDATORY
@@ -263,7 +272,16 @@ function extractQualificationState(history = [], currentMessage = '') {
         const loc = locOfP0(ALL[i].message);
         const typeFlipped = t   && runType && t   !== runType;
         const txFlipped   = tx  && runTx   && tx  !== runTx;
-        const locFlipped  = loc && runLoc  && loc !== runLoc;
+        // ⚠️ PERPINDAHAN KOTA me-RESET seluruh sesi (ACTIVE_ALL dipotong), jadi
+        // syaratnya HARUS ketat: kedua nilai wajib nama kota yang DIKENAL.
+        // Tanpa guard ini, teks bebas hasil fallback "di X" bisa menghapus semua
+        // jawaban customer. Kasus nyata (M51): "saya gak mau di gang sempit dan
+        // rumah tua" → loc="gang sempit" → dianggap pindah dari Surabaya →
+        // transaksi/budget/tanggal/penghuni HILANG → AI menanyakan Q1 lagi.
+        const locFlipped  = loc && runLoc && loc !== runLoc
+                            && isKnownLocationName(loc) && isKnownLocationName(runLoc)
+                            // "surabaya" → "surabaya barat" bukan pindah kota.
+                            && !loc.includes(runLoc) && !runLoc.includes(loc);
         if (typeFlipped || txFlipped || locFlipped) {
           switchStart = i;
           switchType  = runType;   // remember what they switched away from
@@ -1292,6 +1310,48 @@ function buildQualificationStateBlock(state) {
     '╚══════════════════════════════════════════════════════════╝',
     '',
   ];
+
+  // ══ PROTOKOL PEMULIHAN — CUSTOMER JENGKEL (prioritas TERTINGGI) ═════════════
+  // Ditempatkan PALING ATAS supaya dibaca sebelum instruksi "tanyakan Q berikutnya".
+  // Tanpa blok ini, AI membalas keluhan dengan template off-topic ("saya asisten
+  // khusus properti") atau tetap mengulang pertanyaan — keduanya memperburuk (M51).
+  if (state.customerFrustrated) {
+    const answered = [
+      ['Transaksi',      state.transactionType],
+      ['Tipe',           state.buildingType],
+      ['Lokasi',         state.location],
+      ['Budget',         state.budget],
+      ['Tanggal masuk',  state.moveInDate],
+      ['Penghuni',       state.household],
+      ['Hindari',        state.redFlags],
+      ['Patokan lokasi', state.anchorPoint],
+      ['Durasi',         state.leaseDuration],
+    ].filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`);
+
+    lines.push('🚨🚨🚨 CUSTOMER SEDANG JENGKEL / KESAL — TANGANI INI DULU 🚨🚨🚨');
+    lines.push(state.frustrationKind === 'repetition'
+      ? '   Sebab: customer merasa DITANYA HAL YANG SUDAH IA JAWAB.'
+      : state.frustrationKind === 'ignored'
+        ? '   Sebab: customer merasa pesannya TIDAK DIBACA / tidak didengarkan.'
+        : '   Sebab: customer kesal / kecewa pada alur percakapan.');
+    lines.push('');
+    lines.push('   WAJIB dilakukan pada balasan ini — URUTAN PERSIS:');
+    lines.push('   1. MINTA MAAF dengan tulus & singkat (1 kalimat). Jangan defensif,');
+    lines.push('      jangan menyalahkan customer, JANGAN memakai emoji tertawa (😄/😅/hehe).');
+    lines.push('   2. BUKTIKAN sudah menyimak — rekap ulang data yang SUDAH tercatat:');
+    if (answered.length) {
+      answered.forEach(a => lines.push(`        • ${a}`));
+    } else {
+      lines.push('        (belum ada data tercatat — cukup minta maaf & tanya ulang 1 hal saja)');
+    }
+    lines.push('   3. ⛔ DILARANG KERAS mengulang pertanyaan apa pun yang sudah ✅ di bawah.');
+    lines.push('   4. Lanjut HANYA ke field ❓ berikutnya, atau bila semua wajib sudah ✅ →');
+    lines.push('      langsung tampilkan SUMMARY (jangan menahan-nahan lagi).');
+    lines.push('   5. ⛔ DILARANG memakai template off-topic ("saya asisten khusus properti").');
+    lines.push('      Keluhan tentang alur kualifikasi adalah topik PROPERTI yang sah.');
+    lines.push('   6. Nada: tenang, hangat, dewasa, solutif. Akui kesalahan sistem, bukan customer.');
+    lines.push('');
+  }
 
   // Summary-already-shown banner — customer is starting a brand-new search
   if (state.summaryAlreadyShown) {

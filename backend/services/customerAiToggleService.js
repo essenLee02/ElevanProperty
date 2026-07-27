@@ -13,8 +13,13 @@
  *
  * Agent mengetik ke bot-nya, menyebut NOMOR:
  *   OFF : "matikan AI untuk 628123456789" · "matikan chat AI 0812-3456-789"
+ *         "matikan obrolan pada customer 082233556796"
  *         "nonaktifkan chat AI untuk 628111, 628222 dan 628333"
  *   ON  : "nyalakan AI untuk 0812345678" · "turn on chat AI untuk +62 812 3456 789"
+ *         "nyalakan obrolan untuk 082233556796"
+ *
+ * Objek perintah (AI_TOPIC) menerima kata "AI"/"chatbot"/"bot" MAUPUN kata
+ * percakapan sehari-hari ("obrolan", "percakapan", "chat", "balasan otomatis").
  *
  * BISA banyak nomor sekaligus (dipisah koma / "dan" / "&" / spasi).
  * Nomor dinormalisasi ke 62xxx lalu dicocokkan ke `customers.phone` DALAM scope
@@ -37,8 +42,31 @@ const { isSenderTheAgent } = require('./catalogModeService');
 const OFF_VERBS = '(?:matikan|dimatikan|mati|off(?:kan|in)?|nonaktifkan|non-aktifkan|dinonaktifkan|disable(?:d)?|turn(?:ed)?\\s+off|switch(?:ed)?\\s+off|hentikan|stop|tutup|pause|jeda)';
 const ON_VERBS  = '(?:nyalakan|dinyalakan|nyala|hidupkan|dihidupkan|aktifkan|diaktifkan|aktif|on(?:kan|in)?|enable(?:d)?|turn(?:ed)?\\s+on|switch(?:ed)?\\s+on|buka|lanjutkan|resume)';
 
-// Objek perintah = AI / chat AI / chat dengan AI / chatbot / bot.
-const AI_TOPIC = '(?:chat\\s*(?:dengan\\s+)?ai|ai\\s*chat|chatbot|\\bbot\\b|\\ba\\.?i\\.?\\b|kecerdasan\\s+buatan)';
+// Objek perintah = AI / chat AI / chatbot / bot, ATAU kata umum untuk percakapan
+// yang dipakai agent sehari-hari ("obrolan", "percakapan", "chat", "balasan
+// otomatis"). Agent jarang menyebut kata "AI" secara eksplisit — mereka menulis
+// "matikan obrolan pada customer 0822…" — dan dulu pesan seperti itu lolos ke
+// property gate lalu di-skip diam-diam. Aman dilonggarkan karena perintah ini
+// hanya dieksekusi bila PENGIRIM = nomor agent sendiri (isSenderTheAgent).
+const AI_TOPIC = '(?:' + [
+  'chat\\s*(?:dengan\\s+)?ai',
+  'ai\\s*chat',
+  'ai\\s*respon(?:s|se)?',
+  'respon(?:s|se)?\\s*ai',
+  'chatbot',
+  '\\bbot\\b',
+  '\\ba\\.?i\\.?\\b',
+  'kecerdasan\\s+buatan',
+  // Kata percakapan umum (ID + EN)
+  '\\bobrolan\\b',
+  '\\bngobrol\\b',
+  '\\bpercakapan\\b',
+  '\\bchat(?:ting|an)?\\b',
+  '\\bconversation\\b',
+  // Balasan/respon OTOMATIS (butuh kata "otomatis"/"auto" agar tidak terlalu luas)
+  '(?:balasan|jawaban|respon(?:s|se)?|pesan|reply|replies)\\s*(?:otomatis|automatis|auto)',
+  'auto[\\s-]*(?:reply|replies|respon(?:s|se)?|balas)',
+].join('|') + ')';
 
 // Verb sebelum objek ("matikan chat AI"), atau objek sebelum verb ("AI mati").
 const _OFF_RE = new RegExp(`\\b${OFF_VERBS}\\b[\\w\\s,'-]{0,20}?${AI_TOPIC}|${AI_TOPIC}[\\w\\s,:=-]{0,20}?\\b${OFF_VERBS}\\b`, 'i');

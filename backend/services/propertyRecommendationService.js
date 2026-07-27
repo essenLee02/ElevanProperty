@@ -578,7 +578,27 @@ const NON_LOCATION_AFTER_DI = new RegExp(
   // "villa di kawasan yang tidak banjir" salah terbaca lokasi "kawasan" dan
   // menimpa kota asli (mis. Surabaya) yang sudah tertangkap di pesan sebelumnya.
   'kawasan|daerah|wilayah|lingkungan|komplek|kompleks|perumahan|cluster|klaster|' +
-  'tempat|lokasi|kota|kotanya|pinggir|pinggiran|pusat|dekat|deket|situasi|suasana)\\b', 'i'
+  'tempat|lokasi|kota|kotanya|pinggir|pinggiran|pusat|dekat|deket|situasi|suasana|' +
+  // Kata RED-FLAG (jawaban Q5 "apa yang ingin dihindari?"). Tanpa guard ini,
+  // "saya gak mau di gang sempit dan rumah tua" salah terbaca lokasi "gang sempit"
+  // → dianggap PINDAH KOTA → seluruh state sesi (transaksi/budget/tanggal/penghuni)
+  // TERHAPUS karena location-flip me-reset sesi. Lihat M51.
+  'gang|gangnya|jalan|jln|tusuk|sate|tusuk[\\s-]*sate|hook|tikungan|' +
+  'rumah|ruko|bangunan|hunian|properti|apartemen|apartment|villa|vila|hotel|kos|kost)\\b', 'i'
+);
+
+/**
+ * Apakah frasa "di X" berada dalam konteks NEGASI / MENGHINDARI?
+ * Jawaban Q5 (red flags) hampir selalu berbentuk "gak mau di …", "hindari …",
+ * "jangan yang di …". Frasa setelah "di" di situ adalah hal yang DIHINDARI,
+ * BUKAN kota yang dicari — jadi fallback bebas "di X" tidak boleh dipakai.
+ */
+const AVOIDANCE_CONTEXT = new RegExp(
+  '\\b(?:' +
+  '(?:g(?:a|ak|k)?|nggak|ngga|enggak|engga|tidak|tak|bukan|jangan|no|not|don\'?t)\\s*' +
+  '(?:mau|ingin|pengen|suka|minat|cocok|usah|perlu|di|yang|kalau)?' +
+  '|hindari|dihindari|menghindari|avoid|kurang\\s+suka|anti|alergi|ogah|males|malas' +
+  ')\\b', 'i'
 );
 
 function detectLocation(message = '') {
@@ -608,6 +628,13 @@ function detectLocation(message = '') {
   if (found) return found;
 
   // ──── PATTERN MATCHING ("di X") ────
+  // ⚠️ Fallback bebas — HANYA dipakai bila tidak ada nama kota dikenal & tidak
+  // dalam konteks menghindari. Frasa "gak mau di gang sempit" / "hindari di
+  // pinggir jalan" adalah jawaban RED FLAG (Q5), bukan kota tujuan. Dulu tanpa
+  // guard ini "gang sempit" menjadi lokasi → dianggap ganti kota → seluruh state
+  // sesi ter-reset (M51).
+  if (AVOIDANCE_CONTEXT.test(textForLoc)) return '';
+
   const afterDi = textForLoc.match(/\bdi\s+([a-zA-Z\s]{3,35})/i);
   if (afterDi && afterDi[1]) {
     const candidate = afterDi[1].trim();
@@ -616,6 +643,27 @@ function detectLocation(message = '') {
   }
 
   return '';
+}
+
+/**
+ * Apakah string ini nama lokasi/kota yang DIKENAL (ada di katalog/alias)?
+ * Dipakai sebagai syarat sebelum sebuah "perpindahan kota" diizinkan me-reset
+ * state sesi — teks bebas hasil fallback TIDAK BOLEH pernah menghapus state.
+ *
+ * @param {string} name
+ * @returns {boolean}
+ */
+function isKnownLocationName(name = '') {
+  const n = String(name || '').trim().toLowerCase();
+  if (n.length < 3) return false;
+  if (Object.prototype.hasOwnProperty.call(LOCATION_ALIAS, n)) return true;
+  if (Object.values(LOCATION_ALIAS).some(v => String(v).toLowerCase() === n)) return true;
+  return getKnownLocations().some((loc) => {
+    const l = String(loc).toLowerCase();
+    // Cocok penuh, atau kota + arah mata angin ("surabaya barat" ≡ "surabaya").
+    return l === n || n === l
+      || new RegExp(`^${escapeRegExp(l)}(\\s+(selatan|utara|barat|timur|pusat))?$`, 'i').test(n);
+  });
 }
 
 // Facility keyword → customer-facing display label. Each entry: [label, [keywords...]].
@@ -2263,6 +2311,7 @@ module.exports = {
   getFacilityFallbackMap: () => _FACILITY_MAP,  // dipakai scripts/seed-facility-keywords.js
   initCityCache,
   getKnownLocations,
+  isKnownLocationName,
   initLandmarkCache,
   getKnownLandmarks,
   detectLandmark,

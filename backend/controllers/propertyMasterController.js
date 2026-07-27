@@ -18,6 +18,10 @@ const {
 const { HTTP }     = require('../utils/httpStatus');
 const { sendSuccess, sendError } = require('../utils/responseFormat');
 const GeneralController = require('./GeneralController');
+const {
+  saveImageBuffer, deleteImageFile, isDefaultImageUrl, defaultImageRow,
+  defaultImageUrl, removePropertyDirIfEmpty, MAX_FILES, MAX_NAME_LENGTH,
+} = require('../utils/propertyImageStorage');
 
 /* ════════════════════════════════════════════════════════════════════════════
    KONSTANTA
@@ -466,7 +470,7 @@ class PropertyMasterController extends GeneralController {
           { model: Country,  as: 'country',    attributes: ['country_id', 'name'],      required: false },
           {
             model: PropertyImage, as: 'images',
-            attributes: ['property_id', 'name', 'url'],
+            attributes: ['id', 'property_id', 'name', 'url'],
             required: false
           },
           {
@@ -486,6 +490,20 @@ class PropertyMasterController extends GeneralController {
 
       const creatorName = await GeneralController.resolveUserName(property.created_by);
       const updaterName = await GeneralController.resolveUserName(property.updated_by);
+
+      // ── Gambar: baris DB apa adanya + fallback default bila BELUM ada gambar ──
+      // Fallback bersifat VIRTUAL (id:null, is_default:true) — tidak ditulis ke DB,
+      // sehingga properti tanpa gambar tetap punya tampilan tanpa mengotori data.
+      const imageRows = (property.images || []).map(img => ({
+        id:          img.id,
+        property_id: img.property_id,
+        name:        img.name,
+        url:         img.url,
+        is_default:  isDefaultImageUrl(img.url),
+      }));
+      const effectiveImages = imageRows.length
+        ? imageRows
+        : [defaultImageRow(property.property_id, property.building_type)].filter(Boolean);
 
       return sendSuccess(res, HTTP.OK, {
         property: {
@@ -518,7 +536,8 @@ class PropertyMasterController extends GeneralController {
           transaction_type:     property.transaction_type,
           status:               property.status,
           status_label:         property.status === 1 ? 'Aktif' : 'Disabled',
-          images:               property.images || [],
+          images:               effectiveImages,
+          has_own_images:       imageRows.length > 0,
           facilities:           (property.facilities || []).map(f => ({
             facility_id:   f.facility_id,
             facility_qty:  f.facility_qty,
@@ -744,6 +763,216 @@ class PropertyMasterController extends GeneralController {
     } catch (err) {
       console.error('[PropertyMasterController] bulkAddLocations error:', err.message);
       return sendError(res, HTTP.INTERNAL_SERVER_ERROR, null, 'Gagal bulk tambah lokasi');
+    }
+  }
+
+  /* ──────────────────────────────────────────────────────────────────────────
+     PROPERTY IMAGES (upload / list / delete)
+
+     File fisik disimpan di <PROPERTY_IMAGE_DIR>/<PROPERTY_ID>/ dan URL-nya
+     dicatat di tabel property_images. Properti tanpa gambar memakai gambar
+     DEFAULT bersama di folder `properties/` — lihat utils/propertyImageStorage.js.
+  ────────────────────────────────────────────────────────────────────────── */
+
+  /**
+   * Ambil properti + pastikan pemiliknya adalah user yang login.
+   * Baris lama tanpa user_id (data seed) tetap diizinkan agar tidak memutus data.
+   * @returns {Promise<{property?:object, error?:{code:number,message:string}}>}
+   */
+  static async #findOwnedProperty(propertyId, loginUserId) {
+    const property = await Property.findOne({
+      where: { property_id: propertyId, status: { [Op.ne]: 3 } }
+    });
+    if (!property) {
+      return { error: { code: HTTP.NOT_FOUND, message: 'Properti tidak ditemukan' } };
+    }
+    if (property.user_id && loginUserId && property.user_id !== loginUserId) {
+      return { error: { code: HTTP.FORBIDDEN, message: 'Properti ini bukan milik Anda' } };
+    }
+    return { property };
+  }
+
+  /**
+   * GET /api/property/:property_id/images
+   * Daftar gambar properti. Bila belum ada → 1 baris DEFAULT virtual
+   * (id:null, is_default:true) sesuai building_type.
+   * Auth: verifyToken
+   */
+  static async getPropertyImages(req, res) {
+    const { property_id } = req.params;
+    try {
+      const { property, error } = await PropertyMasterController.#findOwnedProperty(
+        property_id, req.user?.userId || null
+      );
+      if (error) return sendError(res, error.code, null, error.message);
+
+      const rows = await PropertyImage.findAll({
+        where: { property_id },
+        attributes: ['id', 'property_id', 'name', 'url'],
+        order: [['id', 'ASC']],
+      });
+
+      const images = rows.map(r => ({
+        id:          r.id,
+        property_id: r.property_id,
+        name:        r.name,
+        url:         r.url,
+        is_default:  isDefaultImageUrl(r.url),
+      }));
+
+      const effective = images.length
+        ? images
+        : [defaultImageRow(property_id, property.building_type)].filter(Boolean);
+
+      return sendSuccess(res, HTTP.OK, {
+        images:         effective,
+        has_own_images: images.length > 0,
+        default_url:    defaultImageUrl(property.building_type),
+        max_files:      MAX_FILES,
+      }, 'Gambar properti berhasil dimuat');
+
+    } catch (error) {
+      console.error('[PROPERTY IMAGE LIST ERROR]', error.message);
+      return sendError(res, HTTP.INTERNAL_SERVER_ERROR, null, 'Gagal memuat gambar properti');
+    }
+  }
+
+  /**
+   * POST /api/property/:property_id/images   (multipart/form-data)
+   * Field: images[] (≤ MAX_FILES), optional names[] (label sejajar tiap file)
+   *
+   * Menulis file ke <root>/<PROPERTY_ID>/ lalu menyimpan URL-nya ke DB.
+   * Bila properti sebelumnya memakai gambar DEFAULT (baris DB menunjuk folder
+   * `properties/`), baris default itu DILEPAS dari properti ini — tetapi FILE
+   * default TIDAK PERNAH dihapus karena dipakai bersama properti lain.
+   * Auth: verifyToken
+   */
+  static async uploadPropertyImages(req, res) {
+    const { property_id } = req.params;
+    const createdBy = req.user?.userId || null;
+    const files     = Array.isArray(req.files) ? req.files : [];
+
+    if (!createdBy) {
+      return sendError(res, HTTP.UNAUTHORIZED, null, 'Sesi tidak valid, silakan login ulang');
+    }
+    if (files.length === 0) {
+      return sendError(res, HTTP.BAD_REQUEST, null, 'Tidak ada gambar yang diunggah');
+    }
+
+    try {
+      const { property, error } = await PropertyMasterController.#findOwnedProperty(property_id, createdBy);
+      if (error) return sendError(res, error.code, null, error.message);
+
+      // Label opsional per file (names[0], names[1], …) dari FormData.
+      const rawNames = req.body?.names;
+      const names    = Array.isArray(rawNames) ? rawNames : (rawNames ? [rawNames] : []);
+
+      // Tulis semua file dulu; kumpulkan yang berhasil agar bisa di-rollback.
+      const written = [];
+      try {
+        files.forEach((file, i) => {
+          const label = names[i] ? String(names[i]).trim().slice(0, MAX_NAME_LENGTH) : null;
+          const saved = saveImageBuffer({
+            propertyId:   property_id,
+            buffer:       file.buffer,
+            originalName: label || file.originalname,
+            mimeType:     file.mimetype,
+          });
+          written.push(saved);
+        });
+
+        await PropertyImage.bulkCreate(written.map(w => ({
+          property_id,
+          name: w.name,
+          url:  w.url,
+        })));
+      } catch (writeErr) {
+        // Rollback file yang sudah tertulis supaya tidak jadi sampah orphan.
+        written.forEach(w => deleteImageFile(w.url));
+        throw writeErr;
+      }
+
+      // Properti ini tidak lagi "tanpa gambar" → lepas baris default virtual lama
+      // (bila ada baris DB yang menunjuk folder default bersama).
+      const staleDefaults = await PropertyImage.findAll({ where: { property_id } });
+      const toDetach = staleDefaults.filter(r => isDefaultImageUrl(r.url));
+      if (toDetach.length) {
+        await PropertyImage.destroy({ where: { id: { [Op.in]: toDetach.map(r => r.id) } } });
+        // ⚠️ Sengaja TIDAK memanggil deleteImageFile — file default dipakai bersama.
+        console.log(`[PROPERTY IMAGE] 🔗 ${toDetach.length} baris default dilepas dari ${property_id} (file default tetap utuh)`);
+      }
+
+      const rows = await PropertyImage.findAll({
+        where: { property_id },
+        attributes: ['id', 'property_id', 'name', 'url'],
+        order: [['id', 'ASC']],
+      });
+
+      console.log(`[PROPERTY IMAGE] ✅ UPLOAD — ${property_id} | ${written.length} file | By: ${createdBy}`);
+
+      return sendSuccess(res, HTTP.CREATED, {
+        uploaded: written.length,
+        images:   rows.map(r => ({
+          id: r.id, property_id: r.property_id, name: r.name, url: r.url,
+          is_default: isDefaultImageUrl(r.url),
+        })),
+      }, `${written.length} gambar berhasil diunggah`);
+
+    } catch (error) {
+      console.error('[PROPERTY IMAGE UPLOAD ERROR]', error.message);
+      return sendError(res, HTTP.INTERNAL_SERVER_ERROR, null, 'Gagal mengunggah gambar: ' + (error.message || 'Unknown error'));
+    }
+  }
+
+  /**
+   * DELETE /api/property/:property_id/images/:image_id
+   *
+   * Perilaku hapus (SENGAJA berbeda tergantung lokasi file):
+   *   - URL di folder `properties/` (DEFAULT BERSAMA) → hanya baris DB dihapus,
+   *     FILE DIPERTAHANKAN (dipakai ribuan properti lain).
+   *   - URL di folder `<PROPERTY_ID>/` (milik properti ini) → baris DB DAN file
+   *     fisik dihapus; folder dibersihkan bila menjadi kosong.
+   * Auth: verifyToken
+   */
+  static async deletePropertyImage(req, res) {
+    const { property_id, image_id } = req.params;
+    const updatedBy = req.user?.userId || null;
+
+    try {
+      const { error } = await PropertyMasterController.#findOwnedProperty(property_id, updatedBy);
+      if (error) return sendError(res, error.code, null, error.message);
+
+      const image = await PropertyImage.findOne({ where: { id: image_id, property_id } });
+      if (!image) {
+        return sendError(res, HTTP.NOT_FOUND, null, 'Gambar tidak ditemukan pada properti ini');
+      }
+
+      const url       = image.url;
+      const isDefault = isDefaultImageUrl(url);
+
+      await image.destroy();
+
+      // File hanya dihapus untuk gambar milik properti ini.
+      const fileResult = deleteImageFile(url);
+      if (!isDefault) removePropertyDirIfEmpty(property_id);
+
+      console.log(
+        `[PROPERTY IMAGE] 🗑️  DELETE — ${property_id} | id=${image_id} | ` +
+        `${isDefault ? 'DEFAULT (file dipertahankan)' : `file=${fileResult.reason}`} | By: ${updatedBy}`
+      );
+
+      return sendSuccess(res, HTTP.OK, {
+        image_id:      Number(image_id),
+        url,
+        was_default:   isDefault,
+        file_deleted:  fileResult.deleted,
+      }, isDefault
+        ? 'Gambar default dilepas dari properti ini (file default tetap tersimpan)'
+        : 'Gambar berhasil dihapus');
+
+    } catch (error) {
+      console.error('[PROPERTY IMAGE DELETE ERROR]', error.message);
+      return sendError(res, HTTP.INTERNAL_SERVER_ERROR, null, 'Gagal menghapus gambar');
     }
   }
 

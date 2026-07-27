@@ -257,6 +257,84 @@
                 <p class="field-hint">Klik "Pilih Fasilitas" untuk memilih lebih dari satu fasilitas.</p>
               </div>
 
+              <!-- ── Gambar Properti ── -->
+              <div class="section-divider"><span>Gambar Properti</span></div>
+
+              <div class="form-group">
+                <label class="col-form-label">Foto / Gambar</label>
+                <p class="field-hint">
+                  Bisa unggah lebih dari satu gambar (maks. {{ IMAGE_MAX_FILES }} file, {{ IMAGE_MAX_MB }} MB per file).
+                  Jika tidak mengunggah gambar, sistem otomatis memakai gambar default sesuai tipe bangunan.
+                </p>
+
+                <div class="image-box">
+                  <!-- Grid preview: gambar tersimpan + gambar yang menunggu diunggah -->
+                  <div v-if="savedImages.length || stagedImages.length" class="image-grid">
+                    <!-- Tersimpan di database -->
+                    <div v-for="img in savedImages" :key="'saved-' + (img.id ?? img.url)" class="image-item">
+                      <img :src="img.url" :alt="img.name || 'Gambar properti'" loading="lazy" @error="onImgError" />
+                      <span v-if="img.is_default" class="image-badge badge-default">Default</span>
+                      <span v-else class="image-badge badge-saved">Tersimpan</span>
+                      <button
+                        v-if="img.id"
+                        type="button"
+                        class="image-remove"
+                        :disabled="isSubmitting || deletingImageId === img.id"
+                        :title="img.is_default ? 'Lepas gambar default dari properti ini' : 'Hapus gambar'"
+                        @click="askDeleteImage(img)"
+                      >
+                        <span v-if="deletingImageId === img.id" class="spinner-sm"></span>
+                        <i v-else class="fa-solid fa-xmark"></i>
+                      </button>
+                      <span class="image-caption">{{ img.name || '—' }}</span>
+                    </div>
+
+                    <!-- Belum diunggah (staged) -->
+                    <div v-for="(st, i) in stagedImages" :key="'staged-' + st.uid" class="image-item is-staged">
+                      <img :src="st.preview" :alt="st.file.name" />
+                      <span class="image-badge badge-staged">Belum diunggah</span>
+                      <button type="button" class="image-remove" :disabled="isSubmitting" title="Batalkan gambar ini" @click="removeStaged(i)">
+                        <i class="fa-solid fa-xmark"></i>
+                      </button>
+                      <span class="image-caption">{{ st.file.name }}</span>
+                    </div>
+                  </div>
+
+                  <div v-else class="image-empty">Belum ada gambar</div>
+
+                  <!-- Aksi -->
+                  <div class="image-actions">
+                    <input
+                      ref="fileInputRef"
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
+                      multiple
+                      class="d-none"
+                      @change="onFilesPicked"
+                    />
+                    <button type="button" class="btn-pick-image" :disabled="isSubmitting || isUploadingImages" @click="fileInputRef?.click()">
+                      <i class="fa-solid fa-plus"></i> Pilih Gambar
+                    </button>
+
+                    <!-- Mode EDIT: unggah langsung. Mode TAMBAH: ikut saat properti disimpan. -->
+                    <button
+                      v-if="isEditMode && stagedImages.length"
+                      type="button"
+                      class="btn-upload-image"
+                      :disabled="isSubmitting || isUploadingImages"
+                      @click="uploadStagedImages()"
+                    >
+                      <span v-if="isUploadingImages"><span class="spinner-sm"></span> Mengunggah...</span>
+                      <span v-else><i class="fa-solid fa-upload"></i> Unggah {{ stagedImages.length }} Gambar</span>
+                    </button>
+                  </div>
+
+                  <p v-if="!isEditMode && stagedImages.length" class="field-hint">
+                    {{ stagedImages.length }} gambar akan diunggah otomatis setelah properti disimpan.
+                  </p>
+                </div>
+              </div>
+
               <!-- ── Lokasi Patokan (Nearby Landmarks) ── -->
               <div class="section-divider"><span>Lokasi Patokan (Landmarks)</span></div>
 
@@ -362,7 +440,7 @@
 </template>
 
 <script setup>
-import { reactive, ref, computed, onMounted } from 'vue';
+import { reactive, ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { toast } from 'vue3-toastify';
 import ConfirmModal from '../../components/ConfirmModal.vue';
@@ -371,7 +449,10 @@ import {
   insertProperty,
   updateProperty,
   togglePropertyStatus,
-  deleteProperty
+  deleteProperty,
+  getPropertyImages,
+  uploadPropertyImages,
+  deletePropertyImage
 } from '../../services/propertyApi';
 import { getCountryList } from '../../services/countryApi';
 import { getProvinceList } from '../../services/provinceApi';
@@ -479,6 +560,143 @@ const form = reactive({
 
 const alert        = reactive({ type: '', message: '' });
 const priceDisplay = ref('');
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   GAMBAR PROPERTI
+   ────────────────────────────────────────────────────────────────────────────
+   Dua kelompok state:
+     savedImages  — sudah ada di tabel property_images (punya .id), file fisik
+                    di /assets/image_data/<PROPERTY_ID>/. Baris dengan
+                    is_default:true adalah gambar DEFAULT bersama; menghapusnya
+                    hanya melepas relasi, file default TIDAK dihapus backend.
+     stagedImages — File yang baru dipilih user, BELUM diunggah. Diperlukan
+                    karena mode TAMBAH belum punya property_id (folder tujuan
+                    memakai property_id) → diunggah setelah insert berhasil.
+══════════════════════════════════════════════════════════════════════════════ */
+
+const IMAGE_MAX_FILES = 10;    // selaras PROPERTY_IMAGE_MAX_FILES di backend
+const IMAGE_MAX_MB    = 5;     // selaras PROPERTY_IMAGE_MAX_MB di backend
+const ACCEPTED_TYPES  = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif', 'image/avif'];
+
+const fileInputRef     = ref(null);
+const savedImages      = ref([]);      // [{ id, name, url, is_default }]
+const stagedImages     = ref([]);      // [{ uid, file, preview }]
+const isUploadingImages = ref(false);
+const deletingImageId  = ref(null);
+
+let stagedUid = 0;
+
+/** Bebaskan object URL preview agar tidak bocor memori. */
+const revokeStaged = (item) => { try { URL.revokeObjectURL(item.preview); } catch (_) {} };
+
+/** Gambar rusak / hilang di disk → sembunyikan agar layout tidak pecah. */
+const onImgError = (e) => { e.target.style.visibility = 'hidden'; };
+
+/** Pilih file dari input → validasi tipe & ukuran → simpan sebagai staged. */
+const onFilesPicked = (e) => {
+  const picked = Array.from(e.target.files || []);
+  e.target.value = '';                        // izinkan memilih file yang sama lagi
+  if (!picked.length) return;
+
+  const alreadyCount = savedImages.value.filter(i => i.id && !i.is_default).length + stagedImages.value.length;
+  const rejected = [];
+
+  for (const file of picked) {
+    if (!ACCEPTED_TYPES.includes(file.type)) {
+      rejected.push(`${file.name} (format tidak didukung)`);
+      continue;
+    }
+    if (file.size > IMAGE_MAX_MB * 1024 * 1024) {
+      rejected.push(`${file.name} (lebih dari ${IMAGE_MAX_MB} MB)`);
+      continue;
+    }
+    if (alreadyCount + stagedImages.value.length >= IMAGE_MAX_FILES) {
+      rejected.push(`${file.name} (melewati batas ${IMAGE_MAX_FILES} gambar)`);
+      continue;
+    }
+    stagedImages.value.push({ uid: ++stagedUid, file, preview: URL.createObjectURL(file) });
+  }
+
+  if (rejected.length) toast.warning(`Gambar dilewati: ${rejected.join(', ')}`);
+};
+
+/** Batalkan satu gambar staged (belum diunggah — tidak menyentuh server). */
+const removeStaged = (index) => {
+  const [removed] = stagedImages.value.splice(index, 1);
+  if (removed) revokeStaged(removed);
+};
+
+/** Muat ulang daftar gambar dari server. */
+const loadImages = async (pid) => {
+  if (!pid) return;
+  try {
+    const result = await getPropertyImages(pid);
+    if (result?.isSuccess === 1) {
+      savedImages.value = result.data.response.images || [];
+    }
+  } catch (err) {
+    if (err?.response?.status === 401) return;
+    console.warn('Gagal memuat gambar properti:', err?.message);
+  }
+};
+
+/**
+ * Unggah semua gambar staged untuk sebuah property_id.
+ * Dipakai di dua tempat: tombol "Unggah" (mode edit) dan setelah insert sukses
+ * (mode tambah). Mengembalikan true bila semua berhasil.
+ */
+const uploadStagedImages = async (pid = null) => {
+  const propId = pid || form.property_id;
+  if (!propId || stagedImages.value.length === 0) return true;
+
+  isUploadingImages.value = true;
+  try {
+    const files = stagedImages.value.map(s => s.file);
+    const names = stagedImages.value.map(s => s.file.name);
+    const result = await uploadPropertyImages(propId, files, names);
+
+    if (result?.isSuccess === 1) {
+      savedImages.value = result.data.response.images || [];
+      stagedImages.value.forEach(revokeStaged);
+      stagedImages.value = [];
+      toast.success(result.data.message || 'Gambar berhasil diunggah');
+      return true;
+    }
+    toast.error(result?.data?.message || 'Gagal mengunggah gambar');
+    return false;
+  } catch (err) {
+    if (err?.response?.status === 401) return false;
+    toast.error(err?.response?.data?.data?.message || 'Gagal mengunggah gambar');
+    return false;
+  } finally {
+    isUploadingImages.value = false;
+  }
+};
+
+/**
+ * Hapus satu gambar tersimpan.
+ * Backend yang memutuskan apakah FILE ikut terhapus: gambar default (folder
+ * `properties/`) hanya dilepas relasinya, file-nya dipertahankan karena dipakai
+ * bersama properti lain.
+ */
+const askDeleteImage = async (img) => {
+  if (!img?.id || !form.property_id) return;
+  deletingImageId.value = img.id;
+  try {
+    const result = await deletePropertyImage(form.property_id, img.id);
+    if (result?.isSuccess === 1) {
+      toast.success(result.data.message || 'Gambar berhasil dihapus');
+      await loadImages(form.property_id);   // muat ulang → default muncul bila kosong
+    } else {
+      toast.error(result?.data?.message || 'Gagal menghapus gambar');
+    }
+  } catch (err) {
+    if (err?.response?.status === 401) return;
+    toast.error(err?.response?.data?.data?.message || 'Gagal menghapus gambar');
+  } finally {
+    deletingImageId.value = null;
+  }
+};
 
 /* ── Field "Lantai" dinamis sesuai tipe bangunan ────────────────── */
 const isFloorPosition  = computed(() => FLOOR_POSITION_TYPES.includes(form.building_type));
@@ -784,6 +1002,9 @@ const loadDetail = async () => {
       });
       priceDisplay.value = form.price ? window.formatPriceDisplay(form.price) : '';
 
+      // Gambar sudah disertakan endpoint detail (termasuk fallback default)
+      savedImages.value = Array.isArray(p.images) ? p.images : [];
+
       // Load linked locations for this property
       try {
         const locResult = await getPropertyLocations(propertyId.value);
@@ -891,9 +1112,18 @@ const submitForm = async () => {
           updated_by:      p.updated_by      || '',
           updated_by_name: p.updated_by_name || ''
         });
+        // Gambar yang masih staged (dipilih tapi belum diunggah) ikut tersimpan.
+        if (stagedImages.value.length) await uploadStagedImages(form.property_id);
         setAlert('success', msg);
         setTimeout(clearAlert, 3000);
       } else {
+        // Mode TAMBAH: property_id baru tersedia SETELAH insert — folder tujuan
+        // upload memakai property_id, jadi gambar diunggah sekarang.
+        const newId = result.data.response?.property?.property_id || null;
+        if (newId && stagedImages.value.length) {
+          form.property_id = newId;
+          await uploadStagedImages(newId);
+        }
         router.push('/property');
       }
     } else {
@@ -964,5 +1194,10 @@ onMounted(async () => {
   await waitForFunctions();
   fnReady.value = true;
   if (isEditMode.value) loadDetail();
+});
+
+// Bebaskan semua object URL preview saat komponen dilepas (cegah memory leak).
+onBeforeUnmount(() => {
+  stagedImages.value.forEach(revokeStaged);
 });
 </script>

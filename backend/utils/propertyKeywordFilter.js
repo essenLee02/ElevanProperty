@@ -591,6 +591,21 @@ function isPostSummaryDormant(history) {
   return true;
 }
 
+/**
+ * Topik yang JELAS bukan properti. Dipakai dua kali di isPropertyContextContinuation:
+ * (a) jalur normal, dan (b) jalur bypass ketika sinyalnya hanya "AI baru bertanya"
+ * (lemah) — supaya obrolan harian tidak lolos hanya karena timing pertanyaan.
+ * Sengaja di module scope agar kedua jalur memakai daftar yang SAMA (satu sumber).
+ */
+const CLEAR_NON_PROPERTY = [
+  /\b(makanan|minuman|kuliner|restoran|cafe|kafe|masak|resep|menu|makan|bakso|mie|nasi|ayam|sate|soto|jajan|ngopi|kopi|camilan|gorengan|warteg)\b/,
+  /\b(kendaraan|mobil|motor|sepeda|tiket|travel|wisata|hotel liburan|penginapan wisata)\b/,
+  /\b(elektronik|laptop|hp|handphone|gadget|komputer|printer)\b/,
+  /\b(pakaian|baju|sepatu|tas|fashion|belanja online)\b/,
+  /\b(obat|dokter|sakit|rumah sakit|klinik kesehatan|apotik)\b/,
+  /\b(film|movie|bioskop|drakor|drama korea|anime|kartun|lagu|musik|music|konser|game|gaming|netflix|youtube|tiktok|medsos|sosmed|artis|selebriti|seleb|gosip)\b/,
+];
+
 /** Apakah salah satu dari ≤2 pesan AI terakhir adalah pertanyaan properti? */
 function hasRecentPropertyQuestionIn(recentHistory) {
   const lastAI = (recentHistory || [])
@@ -599,6 +614,93 @@ function hasRecentPropertyQuestionIn(recentHistory) {
   return lastAI.some(item =>
     PROPERTY_QUESTION_PATTERNS.some(p => p.test((item.message || '').toLowerCase()))
   );
+}
+
+/**
+ * Apakah pesan AI TERAKHIR mengajukan PERTANYAAN (apa pun bentuknya)?
+ *
+ * Guard STRUKTURAL, bukan berbasis daftar frasa. PROPERTY_QUESTION_PATTERNS adalah
+ * daftar yang harus terus ditambah setiap kali AI memakai kalimat baru — dan setiap
+ * frasa yang belum terdaftar membuat JAWABAN customer dianggap off-topic. Kasus
+ * nyata (M51): AI bertanya "Untuk berapa orang yang akan menginap?" (tidak ada di
+ * daftar) → jawaban "Untuk 3 orang sih" dibalas "saya asisten khusus properti".
+ *
+ * Logikanya sederhana & benar secara percakapan: kalau AI baru saja BERTANYA, maka
+ * pesan pendek berikutnya dari customer adalah JAWABAN — titik. Tidak perlu tahu
+ * pertanyaannya tentang apa.
+ *
+ * @param {Array} history - [{role, message}]
+ * @returns {boolean}
+ */
+function lastAiMessageAsksQuestion(history) {
+  if (!Array.isArray(history)) return false;
+  const lastAi = [...history]
+    .reverse()
+    .find(item => item.role === 'ai' || item.role === 'assistant');
+  if (!lastAi) return false;
+
+  const msg = String(lastAi.message || '');
+  if (!msg.trim()) return false;
+
+  // Tanda tanya = sinyal terkuat. Footer "> Sent via …" & tanda tangan dibuang dulu.
+  const body = msg
+    .replace(/>\s*_?sent\s+via[^\n]*/gi, '')
+    .replace(/salam\s+hangat[\s\S]*$/i, '')
+    .trim();
+
+  if (/\?/.test(body)) return true;
+
+  // Pertanyaan tanpa "?" — bentuk imperatif yang tetap menuntut jawaban.
+  return /\b(boleh\s+(tahu|info|minta)|mohon\s+info|silakan\s+(sebut|pilih|info)|kira-kira|apakah|bagaimana|gimana)\b/i.test(body);
+}
+
+/**
+ * Deteksi customer JENGKEL / mengeluh karena pertanyaan berulang.
+ *
+ * WAJIB ditangani khusus: pesan seperti "kok ditanya-tanya terus? udah dijawab tadi"
+ * TIDAK mengandung kata properti, sehingga dulu jatuh ke balasan off-topic
+ * ("saya asisten khusus properti") — respons paling buruk yang mungkin, karena
+ * customer justru sedang mengeluh TIDAK didengarkan (M51 Case 1).
+ *
+ * @param {string} message
+ * @returns {{frustrated:boolean, kind:'repetition'|'ignored'|'general'|null}}
+ */
+function detectCustomerFrustration(message = '') {
+  const t = String(message || '').toLowerCase();
+  if (!t.trim()) return { frustrated: false, kind: null };
+
+  // (a) Mengeluh PERTANYAAN BERULANG — paling sering & paling penting.
+  const REPETITION = [
+    /\b(udah|sudah|kan\s+udah|kan\s+sudah)\b.{0,20}\b(jawab|bilang|kasih\s+tau|sebut|info)/i,
+    /\b(ditanya|nanya|tanya)\b.{0,15}\b(terus|lagi|ulang|melulu|mulu|berkali|berulang)/i,
+    /\b(kok|kenapa|ngapain|napa)\b.{0,25}\b(ditanya|nanya|tanya|ulang)/i,
+    /\b(berapa\s+kali|dari\s+tadi|tadi\s+udah|itu\s+udah)\b/i,
+    /\b(muter|muter-muter|bolak-balik|balik\s+lagi|ulang\s+terus|loop)\b/i,
+    /\bpertanyaan\b.{0,15}\b(sama|itu|ulang|berulang)/i,
+    /\b(same|already)\s+(question|answered|told|said)\b/i,
+    /\bagain\b.{0,15}\b(asking|question)|\basking\b.{0,15}\bagain\b/i,
+  ];
+  if (REPETITION.some(p => p.test(t))) return { frustrated: true, kind: 'repetition' };
+
+  // (b) Merasa TIDAK DIBACA / tidak didengarkan.
+  const IGNORED = [
+    /\b(dibaca|baca\s+dong|baca\s+lah|dibaca\s+lah|gak\s+dibaca|tidak\s+dibaca|ga\s+baca)\b/i,
+    /\b(nyimak|simak|didengar|didengerin|dengerin|merhatiin|perhatiin)\b.{0,10}\b(gak|ga|nggak|tidak|dong)?/i,
+    /\b(gak|ga|nggak|tidak)\s+(nyambung|paham|ngerti|connect)\b/i,
+    /\b(read|listen)\b.{0,12}\b(please|properly)\b/i,
+  ];
+  if (IGNORED.some(p => p.test(t))) return { frustrated: true, kind: 'ignored' };
+
+  // (c) Kesal umum / kecewa pada layanan (bukan sekadar kata kasar acak).
+  const GENERAL = [
+    /\b(capek|cape|bosen|bosan|jengkel|kesal|kesel|sebel|ribet|lama\s+banget|lelet|payah|parah)\b/i,
+    /\b(gak|ga|nggak|tidak)\s+(jelas|beres|bener|profesional|membantu|guna)\b/i,
+    /\b(bot|robot)\b.{0,20}\b(gak|ga|nggak|tidak|bego|bodoh|error)\b/i,
+    /\b(useless|annoying|frustrating|ridiculous)\b/i,
+  ];
+  if (GENERAL.some(p => p.test(t))) return { frustrated: true, kind: 'general' };
+
+  return { frustrated: false, kind: null };
 }
 
 /**
@@ -658,6 +760,15 @@ function isPropertyContextContinuation(message, history = []) {
   const recentHistory      = history.slice(-6);
   const inPropertyFlow     = isInPropertyFlow(history);
   const hasRecentPropertyQ = hasRecentPropertyQuestionIn(recentHistory);
+  // Guard struktural: AI baru saja BERTANYA (bentuk apa pun) → pesan pendek
+  // berikutnya adalah JAWABAN, walau frasa pertanyaannya belum terdaftar.
+  const aiJustAsked        = lastAiMessageAsksQuestion(recentHistory);
+
+  // ── Customer JENGKEL / mengeluh pertanyaan berulang ──────────────────────────
+  // SELALU lanjutan percakapan properti — keluhan tentang alur kualifikasi jelas
+  // masih dalam konteks properti. Membalasnya dengan "saya asisten khusus properti"
+  // (perilaku lama) memperburuk kekesalan customer secara drastis.
+  if (inPropertyFlow && detectCustomerFrustration(message).frustrated) return true;
 
   // ── Obrolan harian non-properti → tolak SEGERA (sebelum cek fasilitas/landmark) ──
   // Frasa seperti "mati listrik", "wifi mati", "macet", "rumahku banjir" adalah
@@ -759,7 +870,11 @@ function isPropertyContextContinuation(message, history = []) {
     //   "Ada kitchen set, jacuzzi, teras?"  → preferensi fasilitas (jacuzzi, teras baru ditambah)
     //   "Yang banyak cafe di sekitarnya"    → preferensi lokasi/lingkungan
     // Hanya blokir jika JELAS-JELAS bukan properti (order makanan, beli tiket, dll.)
-    if (inPropertyFlow && hasRecentPropertyQ && lower.length <= 150) {
+    // Widened: cukup AI TERAKHIR BERTANYA (struktural, lastAiMessageAsksQuestion)
+    // — tidak lagi menuntut frasa pertanyaannya terdaftar di PROPERTY_QUESTION_PATTERNS.
+    // Ini menutup seluruh kelas bug "AI bertanya, customer jawab, jawaban dianggap
+    // off-topic" untuk pertanyaan baru yang belum pernah didaftarkan (M51).
+    if (inPropertyFlow && (hasRecentPropertyQ || aiJustAsked) && lower.length <= 150) {
       const OBVIOUSLY_OFF_TOPIC = [
         /\b(pesan\s+makanan|order\s+makanan|gofood|grabfood|shopeefood|mau\s+makan\s+di|lagi\s+di\s+restoran)\b/i,
         /\b(tiket\s+(pesawat|kereta|bus|kapal)|booking\s+tiket|paket\s+wisata|tur\s+wisata)\b/i,
@@ -767,18 +882,19 @@ function isPropertyContextContinuation(message, history = []) {
         /\b(nonton\s+film|bioskop|tiket\s+konser|nonton\s+drakor)\b/i,
         /\b(resep\s+(masakan|kue)|cara\s+masak\s+|masak\s+(apa|gimana))\b/i,
       ];
-      if (!OBVIOUSLY_OFF_TOPIC.some(p => p.test(lower))) return true;
-      return false;
+      if (OBVIOUSLY_OFF_TOPIC.some(p => p.test(lower))) return false;
+
+      // ⚠️ GRADASI KEKUATAN SINYAL — penting.
+      // hasRecentPropertyQ = frasa pertanyaan properti DIKENALI (sinyal KUAT) →
+      //   jawaban boleh memakai kosakata yang biasanya non-properti
+      //   ("ada restoran & gym di dalam?" = pertanyaan fasilitas yang sah).
+      // aiJustAsked SAJA = hanya tahu "AI mengakhiri pesan dengan tanda tanya"
+      //   (sinyal LEMAH) → tetap saring CLEAR_NON_PROPERTY, supaya obrolan seperti
+      //   "kasi makan dulu ya" tidak lolos hanya karena kebetulan AI baru bertanya.
+      if (!hasRecentPropertyQ && CLEAR_NON_PROPERTY.some(p => p.test(lower))) return false;
+      return true;
     }
 
-    const CLEAR_NON_PROPERTY = [
-      /\b(makanan|minuman|kuliner|restoran|cafe|kafe|masak|resep|menu|makan|bakso|mie|nasi|ayam|sate|soto|jajan|ngopi|kopi|camilan|gorengan|warteg)\b/,
-      /\b(kendaraan|mobil|motor|sepeda|tiket|travel|wisata|hotel liburan|penginapan wisata)\b/,
-      /\b(elektronik|laptop|hp|handphone|gadget|komputer|printer)\b/,
-      /\b(pakaian|baju|sepatu|tas|fashion|belanja online)\b/,
-      /\b(obat|dokter|sakit|rumah sakit|klinik kesehatan|apotik)\b/,
-      /\b(film|movie|bioskop|drakor|drama korea|anime|kartun|lagu|musik|music|konser|game|gaming|netflix|youtube|tiktok|medsos|sosmed|artis|selebriti|seleb|gosip)\b/,
-    ];
     for (const pattern of CLEAR_NON_PROPERTY) {
       if (pattern.test(lower)) return false;
     }
@@ -1050,6 +1166,8 @@ module.exports = {
   hasPropertyKeyword,
   isPropertyContextContinuation,
   isInPropertyFlow,
+  lastAiMessageAsksQuestion,
+  detectCustomerFrustration,
   isPostSummaryDormant,
   extractLocationFromMessage,
   extractPropertyTypeFromMessage,

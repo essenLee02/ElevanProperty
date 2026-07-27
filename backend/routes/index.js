@@ -68,6 +68,7 @@ const locationMasterController   = require('../controllers/locationMasterControl
 // ⚠️ propertyLocationController merged into propertyMasterController
 
 const { verifyToken, requirePrivilege } = require('../middleware/verifyToken');
+const { uploadPropertyImages } = require('../middleware/uploadPropertyImage');
 
 /* ══════════════════════════════════════════════════════════════════════════════
    PUBLIC ROUTES — Tidak butuh autentikasi
@@ -256,6 +257,17 @@ router.get('/property/:property_id/locations',              verifyToken, propert
 router.post('/property/:property_id/locations',             verifyToken, propertyMasterController.addLocationToProperty);
 router.post('/property/:property_id/locations/bulk',        verifyToken, propertyMasterController.bulkAddLocations);
 router.delete('/property/:property_id/locations/:location_id', verifyToken, propertyMasterController.removeLocationFromProperty);
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   PROPERTY IMAGES (Butuh login)
+   File disimpan di <PROPERTY_IMAGE_DIR>/<PROPERTY_ID>/, URL dicatat di
+   property_images. Properti tanpa gambar → fallback default folder `properties/`.
+   ⚠️ Upload memakai multipart/form-data (field: images[]) — bukan JSON.
+══════════════════════════════════════════════════════════════════════════════ */
+
+router.get('/property/:property_id/images',            verifyToken, propertyMasterController.getPropertyImages);
+router.post('/property/:property_id/images',           verifyToken, uploadPropertyImages, propertyMasterController.uploadPropertyImages);
+router.delete('/property/:property_id/images/:image_id', verifyToken, propertyMasterController.deletePropertyImage);
 
 /* ══════════════════════════════════════════════════════════════════════════════
    MASTER DATA — LOCATION (Butuh login)

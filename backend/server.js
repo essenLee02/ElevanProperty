@@ -67,6 +67,15 @@ app.get('/', (req, res) => {
 // Frontend dan backend sama-sama menggunakan file ini via path /json_data/...
 app.use('/json_data', express.static(path.join(__dirname, 'asset/json_data')));
 
+// ─── Serve gambar properti dari direktori upload ─────────────────────────────
+// Path yang sama dengan yang dipakai frontend (`/assets/image_data/...`), supaya
+// URL di property_images.url valid BAIK dari origin frontend (Vite public/)
+// MAUPUN dari origin backend — dibutuhkan konteks AI/WhatsApp & build produksi.
+app.use(
+  process.env.PROPERTY_IMAGE_URL_BASE || '/assets/image_data',
+  express.static(path.resolve(__dirname, process.env.PROPERTY_IMAGE_DIR || '../frontend/public/assets/image_data'))
+);
+
 // ─── Root POST handler — untuk webhook platform yang tidak menyertakan path ──
 // Fonnte / TimelinesAI kadang dikonfigurasi hanya ke base URL (tanpa /api/...)
 // Handler ini meneruskan ke controller yang aktif sesuai MASSEGE_TERMINAL di .env
