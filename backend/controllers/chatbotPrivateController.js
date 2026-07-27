@@ -21,6 +21,9 @@ const { buildRecommendationContextForLLM,
         extractPropertyFilters,
         getVisibleMatchesFromAlternatives,
         stripCommercialUsePhrases,
+        stripNearPhrases,
+        stripAmbiguousRumah,
+        stripInvestmentIntentPhrases,
         detectCommercialUse,
         detectUseCase,
         isNonResidentialUse,
@@ -1371,9 +1374,16 @@ class ConversationQualifier {
 
     // Word-boundary type / tx detectors (used by both boundaries below).
     const _typeOfP0 = (txt) => {
-      // Strip commercial use-phrases ("dipakai kantor", "buat usaha") so a house
-      // used as an office isn't read as a type switch house→office.
-      const w = stripCommercialUsePhrases((txt || '').toLowerCase());
+      // Apply the SAME strip chain as detectBuildingType() in
+      // propertyRecommendationService — anything less produces a type detector that
+      // disagrees with the one that filled `filters`, and the disagreement is read
+      // as a type switch (→ full Q2–Q12 reset, location discarded).
+      //   stripNearPhrases        — "deket kantor dan mall" is a Q6 ANCHOR, not an office
+      //   stripAmbiguousRumah     — "rumah makan/sakit/…" is not a house
+      //   stripCommercialUsePhrases — "dipakai kantor"/"buat usaha" is a USE, not a type
+      const w = stripCommercialUsePhrases(
+        stripAmbiguousRumah(stripNearPhrases((txt || '').toLowerCase()))
+      );
       if (/\bvill?a\b/.test(w))                                              return 'villa';
       if (/\bapartemen\b|\bapartment\b/.test(w))                             return 'apartment';
       if (/\bmansion\b|\brumah mewah\b/.test(w))                            return 'mansion';
@@ -1389,7 +1399,10 @@ class ConversationQualifier {
       return null;
     };
     const _txOfP0 = (txt) => {
-      const w = (txt || '').toLowerCase();
+      // Strip investment-intent phrasing first: a BUYER saying "buat investasi, mau
+      // disewakan lagi" is describing the plan, not flipping sale→rent. Without this
+      // the flip fires switchBoundaryHit → full reset → location discarded.
+      const w = stripInvestmentIntentPhrases((txt || '').toLowerCase());
       if (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|rent|rental|lease)\b/.test(w)) return 'rent';
       if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase)\b/.test(w))                     return 'sale';
       return null;

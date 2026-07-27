@@ -327,6 +327,25 @@ async function sendViaKirimi(targetPhone, message, deviceId) {
         console.error('[KIRIMI SEND] ❌ 400 — cek device_id / nomor tujuan');
         break;
       }
+      // 403 with "subscription ... expired" body — a PERMANENT billing condition,
+      // not a code bug and not transient. Retrying wastes KIRIMI_RETRY_COUNT ×
+      // KIRIMI_RETRY_DELAY_MS on a call that cannot succeed until the account is
+      // renewed. Surface this loudly (M46-style banner) so it is never mistaken
+      // for a code defect — the fix here is renewing the Kirimi subscription,
+      // not editing this file.
+      if (httpStatus === 403 && /subscription|expired|perpanjang/i.test(httpBody)) {
+        console.error([
+          '',
+          '🚨🚨🚨 [KIRIMI] SUBSCRIPTION EXPIRED — PESAN TIDAK BISA TERKIRIM 🚨🚨🚨',
+          `   Kirimi menolak permintaan dengan 403: ${httpBody}`,
+          '   Ini BUKAN bug kode — akun/device Kirimi perlu diperpanjang dulu.',
+          '   Perbaikan: login ke dashboard Kirimi (kirimi.id) → perpanjang',
+          '   langganan device ini → pesan akan terkirim normal tanpa restart.',
+          '   Tidak di-retry (percuma retry selama subscription masih expired).',
+          '',
+        ].join('\n'));
+        break;
+      }
 
       const isRetryable = RETRYABLE.has(err.code) ||
         (err.code === 'ECONNABORTED' && /timeout/i.test(err.message));
@@ -338,10 +357,20 @@ async function sendViaKirimi(targetPhone, message, deviceId) {
     }
   }
 
-  if (lastError && maxRetries > 1) {
-    const code = lastError.code || '';
-    lastError.message = `${lastError.message} (after ${maxRetries} attempts — check KIRIMI_RETRY_COUNT / KIRIMI_TIMEOUT_MS in .env)`;
-    if (code) lastError.code = code;
+  if (lastError) {
+    // `attempt` from the for-loop above is out of scope here by design (block-scoped
+    // `let`), so re-derive how many attempts actually ran from the error itself:
+    // non-retryable failures (401/400/403-subscription) break on attempt 1 — only
+    // a truly exhausted retry loop ran `maxRetries` times. Reporting a fixed
+    // "(after 3 attempts)" on a single-attempt failure previously made a permanent,
+    // one-shot rejection look like a flaky retry exhaustion.
+    const ranMaxAttempts = RETRYABLE.has(lastError.code) ||
+      (lastError.code === 'ECONNABORTED' && /timeout/i.test(lastError.message));
+    if (ranMaxAttempts && maxRetries > 1) {
+      const code = lastError.code || '';
+      lastError.message = `${lastError.message} (after ${maxRetries} attempts — check KIRIMI_RETRY_COUNT / KIRIMI_TIMEOUT_MS in .env)`;
+      if (code) lastError.code = code;
+    }
   }
   throw lastError;
 }

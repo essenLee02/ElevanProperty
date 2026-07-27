@@ -8,7 +8,7 @@
  *     TIDAK menemukan data (perluas dengan fasilitas standar sesuai tipe).
  *
  * Basis: tabel "Fasilitas Standar per Tipe Properti" di skill docs
- * (16-facilities-reference.md). Untuk tipe hunian (house/apartment/villa/condo/
+ * (12-facilities-reference.md). Untuk tipe hunian (house/apartment/villa/condo/
  * boarding_house/mansion), furnishing full/semi menambah perabot/elektronik.
  * Tipe komersial (ruko/kantor/gudang/toko) tidak bergantung furnishing.
  */

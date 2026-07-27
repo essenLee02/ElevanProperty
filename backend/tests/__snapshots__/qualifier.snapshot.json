@@ -1,0 +1,334 @@
+{
+  "cold-start: type+tx only": {
+    "profile": {
+      "aiCount": 0,
+      "buildingType": "villa",
+      "transactionType": "rent"
+    },
+    "nextQuestion_summary": "Oke, mau *sewa Villa*. 📍\n\nDi kota atau area mana yang Anda pertimbangkan?",
+    "nextQuestion_catalog": "Oke, mau *sewa Villa*. 📍\n\nDi kota atau area mana yang Anda pertimbangkan?"
+  },
+  "location answered": {
+    "profile": {
+      "aiCount": 1,
+      "buildingType": "villa",
+      "location": "Malang",
+      "transactionType": "rent"
+    },
+    "nextQuestion_summary": "Sudah lihat berapa Villa di *Malang*? Apa yang membuat belum cocok dari yang sudah dilihat?",
+    "nextQuestion_catalog": "Sudah lihat berapa Villa di *Malang*? Apa yang membuat belum cocok dari yang sudah dilihat?"
+  },
+  "Q2b: belum pernah lihat (must not loop)": {
+    "profile": {
+      "aiAskedMotivation": true,
+      "aiAskedSearchHist": true,
+      "aiCount": 1,
+      "buildingType": "villa",
+      "customerStatedSearchHistory": true,
+      "hasKprDetails": true,
+      "hasSearchHistory": true,
+      "kprApprovalNotStarted": true,
+      "location": "Malang",
+      "transactionType": "rent"
+    },
+    "nextQuestion_summary": "Untuk *Villa* sewa di *Malang*, Kak lebih prefer yang *terjangkau*, *menengah*, atau *eksklusif*? 💰",
+    "nextQuestion_catalog": "Untuk *Villa* sewa di *Malang*, Kak lebih prefer yang *terjangkau*, *menengah*, atau *eksklusif*? 💰"
+  },
+  "Q2b: compound answer (count + facility wish)": {
+    "profile": {
+      "aiAskedMotivation": true,
+      "aiAskedSearchHist": true,
+      "aiCount": 1,
+      "buildingType": "apartment",
+      "location": "Surabaya",
+      "transactionType": "rent"
+    },
+    "nextQuestion_summary": "Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?",
+    "nextQuestion_catalog": "Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?"
+  },
+  "budget: tier category": {
+    "profile": {
+      "aiAskedBudget": true,
+      "aiCount": 1,
+      "budget": {
+        "text": "menengah",
+        "min": 3000000,
+        "max": 8000000,
+        "period": "night",
+        "preference": "menengah"
+      },
+      "buildingType": "villa",
+      "location": "Malang",
+      "transactionType": "rent"
+    },
+    "nextQuestion_summary": "Sudah lihat berapa Villa di *Malang*? Apa yang membuat belum cocok dari yang sudah dilihat?",
+    "nextQuestion_catalog": "Sudah lihat berapa Villa di *Malang*? Apa yang membuat belum cocok dari yang sudah dilihat?"
+  },
+  "budget: numeric range (must not re-ask tier)": {
+    "profile": {
+      "aiAskedBudget": true,
+      "aiCount": 1,
+      "budget": {
+        "text": "Rp 2.000.000 - Rp 4.000.000",
+        "min": 2000000,
+        "max": 4000000,
+        "period": "month"
+      },
+      "buildingType": "house",
+      "customerStatedBudget": true,
+      "hasPaymentPeriod": true,
+      "hasPaymentTerms": true,
+      "hasRentalPeriod": true,
+      "location": "Surabaya",
+      "transactionType": "rent"
+    },
+    "nextQuestion_summary": "Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?",
+    "nextQuestion_catalog": "Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?"
+  },
+  "household: sendiri (infers 1 bedroom + Mandiri)": {
+    "profile": {
+      "aiAskedHousehold": true,
+      "aiCount": 1,
+      "buildingType": "house",
+      "location": "Surabaya",
+      "transactionType": "rent"
+    },
+    "nextQuestion_summary": "Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?",
+    "nextQuestion_catalog": "Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?"
+  },
+  "move-in date: explicit": {
+    "profile": {
+      "aiAskedMoveIn": true,
+      "aiCount": 1,
+      "buildingType": "house",
+      "hasCheckInDate": true,
+      "hasMoveInDate": true,
+      "hasViewingDate": true,
+      "location": "Surabaya",
+      "transactionType": "rent"
+    },
+    "nextQuestion_summary": "Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?",
+    "nextQuestion_catalog": "Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?"
+  },
+  "red flags: informal negation batch": {
+    "profile": {
+      "aiAskedRedFlags": true,
+      "aiCount": 1,
+      "buildingType": "house",
+      "hasRedFlags": true,
+      "location": "Surabaya",
+      "transactionType": "rent"
+    },
+    "nextQuestion_summary": "Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?",
+    "nextQuestion_catalog": "Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?"
+  },
+  "red flags: positive-framed wishes (avoid/prefer pairing)": {
+    "profile": {
+      "aiAskedRedFlags": true,
+      "aiCount": 1,
+      "buildingType": "house",
+      "hasRedFlags": true,
+      "location": "Surabaya",
+      "transactionType": "rent"
+    },
+    "nextQuestion_summary": "Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?",
+    "nextQuestion_catalog": "Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?"
+  },
+  "anchor: \"deket kantor\" must NOT flip type to office": {
+    "profile": {
+      "aiAskedAnchorPoint": true,
+      "aiCount": 1,
+      "buildingType": "house",
+      "hasAnchorPoint": true,
+      "hasBusinessType": true,
+      "location": "Surabaya",
+      "transactionType": "rent"
+    },
+    "nextQuestion_summary": "Sudah lihat berapa Rumah di *Surabaya*? Apa yang membuat belum cocok dari yang sudah dilihat?",
+    "nextQuestion_catalog": "Sudah lihat berapa Rumah di *Surabaya*? Apa yang membuat belum cocok dari yang sudah dilihat?"
+  },
+  "anchor: comma list must be captured whole": {
+    "profile": {
+      "aiAskedAnchorPoint": true,
+      "aiCount": 1,
+      "buildingType": "house",
+      "hasAnchorPoint": true,
+      "hasBusinessType": true,
+      "location": "Surabaya",
+      "transactionType": "rent"
+    },
+    "nextQuestion_summary": "Sudah lihat berapa Rumah di *Surabaya*? Apa yang membuat belum cocok dari yang sudah dilihat?",
+    "nextQuestion_catalog": "Sudah lihat berapa Rumah di *Surabaya*? Apa yang membuat belum cocok dari yang sudah dilihat?"
+  },
+  "furnishing: \"kosongan\" must NOT flip type to kos": {
+    "profile": {
+      "aiAskedFurnish": true,
+      "aiCount": 1,
+      "buildingType": "house",
+      "hasFurnishing": true,
+      "hasTenantStatus": true,
+      "location": "Surabaya",
+      "transactionType": "rent"
+    },
+    "nextQuestion_summary": "Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?",
+    "nextQuestion_catalog": "Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?"
+  },
+  "furnishing: plain \"furnished\" resolves to Full": {
+    "profile": {
+      "aiAskedFurnish": true,
+      "aiCount": 1,
+      "buildingType": "house",
+      "hasFurnishing": true,
+      "location": "Surabaya",
+      "transactionType": "rent"
+    },
+    "nextQuestion_summary": "Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?",
+    "nextQuestion_catalog": "Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?"
+  },
+  "Q12 floor range must NOT be read as budget": {
+    "profile": {
+      "aiAskedApartmentPrefs": true,
+      "aiCount": 1,
+      "buildingType": "apartment",
+      "hasApartmentPrefs": true,
+      "location": "Surabaya",
+      "transactionType": "rent"
+    },
+    "nextQuestion_summary": "Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?",
+    "nextQuestion_catalog": "Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?"
+  },
+  "lease duration: short stay in weeks": {
+    "profile": {
+      "aiAskedLeaseDuration": true,
+      "aiCount": 1,
+      "buildingType": "house",
+      "hasLeaseDuration": true,
+      "hasViewingDate": true,
+      "location": "Surabaya",
+      "transactionType": "rent"
+    },
+    "nextQuestion_summary": "Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?",
+    "nextQuestion_catalog": "Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?"
+  },
+  "BELI: financing not yet given → Q_KPR expected": {
+    "profile": {
+      "aiAskedMoveIn": true,
+      "aiCount": 1,
+      "buildingType": "house",
+      "hasViewingDate": true,
+      "location": "Surabaya",
+      "transactionType": "sale"
+    },
+    "nextQuestion_summary": "Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?",
+    "nextQuestion_catalog": "Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?"
+  },
+  "BELI: KPR stated → Q_KPR-a expected": {
+    "profile": {
+      "aiAskedFinancing": true,
+      "aiCount": 1,
+      "buildingType": "house",
+      "financingIsKPR": true,
+      "hasFinancing": true,
+      "location": "Surabaya",
+      "transactionType": "sale"
+    },
+    "nextQuestion_summary": "Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?",
+    "nextQuestion_catalog": "Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?"
+  },
+  "BOUNDARY B: abandoned switch villa → hotel": {
+    "profile": {
+      "aiCount": 0,
+      "buildingType": "hotel",
+      "buildingTypeChanged": true,
+      "transactionType": "rent"
+    },
+    "nextQuestion_summary": "Oke, mau *sewa Hotel*. 📍\n\nDi kota atau area mana yang Anda pertimbangkan?",
+    "nextQuestion_catalog": "Oke, mau *sewa Hotel*. 📍\n\nDi kota atau area mana yang Anda pertimbangkan?"
+  },
+  "BOUNDARY C: greeting restart with same type": {
+    "profile": {
+      "aiCount": 0,
+      "buildingType": "apartment",
+      "buildingTypeChanged": true,
+      "location": "Malang",
+      "transactionType": "rent"
+    },
+    "nextQuestion_summary": "Di area atau kawasan mana di *Malang* yang Anda pertimbangkan? 📍\nMisalnya Soekarno Hatta, Ijen, Dinoyo, Lowokwaru, atau area lainnya?",
+    "nextQuestion_catalog": "Di area atau kawasan mana di *Malang* yang Anda pertimbangkan? 📍\nMisalnya Soekarno Hatta, Ijen, Dinoyo, Lowokwaru, atau area lainnya?"
+  },
+  "BOUNDARY A: new search after summary sent": {
+    "profile": {
+      "aiCount": 0,
+      "buildingType": "house",
+      "location": "Malang",
+      "summaryAlreadyShown": true,
+      "transactionType": "rent"
+    },
+    "nextQuestion_summary": "Baik! 😊 Untuk pencarian *sewa Rumah* yang baru — di kota atau area mana yang Anda pertimbangkan? 📍",
+    "nextQuestion_catalog": "Baik! 😊 Untuk pencarian *sewa Rumah* yang baru — di kota atau area mana yang Anda pertimbangkan? 📍"
+  },
+  "lazy multi-slot single line": {
+    "profile": {
+      "aiCount": 0,
+      "buildingType": "villa",
+      "hasLeaseDuration": true,
+      "hasViewingDate": true,
+      "location": "Kediri",
+      "transactionType": "rent"
+    },
+    "nextQuestion_summary": "Sudah lihat berapa Villa di *Kediri*? Apa yang membuat belum cocok dari yang sudah dilihat?",
+    "nextQuestion_catalog": "Sudah lihat berapa Villa di *Kediri*? Apa yang membuat belum cocok dari yang sudah dilihat?"
+  },
+  "hotel booking frame": {
+    "profile": {
+      "aiAskedCheckIn": true,
+      "aiCount": 1,
+      "buildingType": "hotel",
+      "customerStatedHousehold": true,
+      "hasCheckInDate": true,
+      "hasCheckOutDate": true,
+      "hasHouseholdInfo": true,
+      "hasMoveInDate": true,
+      "hasViewingDate": true,
+      "location": "Surabaya",
+      "transactionType": "rent",
+      "viewingIsNight": true,
+      "viewingTimeOfDay": "malam"
+    },
+    "nextQuestion_summary": "Sudah lihat berapa Hotel di *Surabaya*? Apa yang membuat belum cocok dari yang sudah dilihat?",
+    "nextQuestion_catalog": "Sudah lihat berapa Hotel di *Surabaya*? Apa yang membuat belum cocok dari yang sudah dilihat?"
+  },
+  "viewing schedule: day + hour": {
+    "profile": {
+      "aiAskedDecisionMaker": true,
+      "aiAskedViewingHour": true,
+      "aiCount": 2,
+      "buildingType": "house",
+      "hasMoveInDate": true,
+      "hasViewingDate": true,
+      "hasViewingHour": true,
+      "location": "Surabaya",
+      "transactionType": "rent",
+      "viewingDayRef": "28 Juli 2026",
+      "viewingTimeOfDay": "siang"
+    },
+    "nextQuestion_summary": "Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?",
+    "nextQuestion_catalog": "Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?"
+  },
+  "non-residential use-case: investasi (Q4 must be gated)": {
+    "profile": {
+      "aiAskedMotivation": true,
+      "aiCount": 1,
+      "buildingType": "house",
+      "hasHouseholdInfo": true,
+      "hasMotivation": true,
+      "hasRoiExpectation": true,
+      "isNonResidential": true,
+      "location": "Surabaya",
+      "transactionType": "sale",
+      "useCase": "investasi"
+    },
+    "nextQuestion_summary": "Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?",
+    "nextQuestion_catalog": "Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?"
+  }
+}

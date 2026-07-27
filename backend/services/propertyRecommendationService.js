@@ -449,6 +449,27 @@ function stripCommercialUsePhrases(text) {
 }
 
 /**
+ * Remove INVESTMENT-INTENT phrases where a BUYER explains they will rent the property
+ * out — "buat investasi, mau disewakan lagi", "untuk disewakan ke karyawan".
+ *
+ * Indonesian marks this with the causative form: `sewa` = "I rent", but
+ * `disewakan`/`menyewakan`/`sewakan` = "rent it out". Without this strip, a buyer's
+ * investment plan is read as a transaction flip sale→rent, which fires the
+ * switch-boundary reset and discards their location mid-search.
+ *
+ * Deliberately narrow: only strips when preceded by a plan/intent lead word, so a
+ * genuine renter saying "cari rumah yang disewakan" ("yang" is not a lead) is
+ * untouched and still detected as rent.
+ */
+const _INVEST_LEAD = '(?:mau|ingin|untuk|buat|rencana(?:nya)?|akan|bakal|nanti|sekalian|terus|lalu|kemudian)';
+function stripInvestmentIntentPhrases(text) {
+  return text.replace(
+    new RegExp(`\\b${_INVEST_LEAD}\\s+(?:\\w+\\s+){0,2}?(?:di)?sewa(?:kan)\\w*\\b`, 'gi'),
+    ''
+  );
+}
+
+/**
  * Detect that the customer intends to USE the property commercially (as an office /
  * business). Returns 'kantor' | 'usaha' | '' . Kept for backward compatibility.
  */
@@ -2317,6 +2338,13 @@ module.exports = {
   detectLandmark,
   getPropertyIdsForLandmark,
   stripCommercialUsePhrases,
+  // Exported so the Phase-0 type detectors in chatbotPrivateController.js and
+  // aiPromptBuilderService.js can apply the SAME strip chain used by
+  // detectBuildingType() below — otherwise a Q6 anchor answer such as
+  // "deket kantor" is read as a type switch and resets the whole search.
+  stripNearPhrases,
+  stripAmbiguousRumah,
+  stripInvestmentIntentPhrases,
   detectCommercialUse,
   detectUseCase,
   isNonResidentialUse,

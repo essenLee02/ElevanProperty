@@ -1,5 +1,5 @@
 const { loadProjectSkillPrompt } = require('./skillPromptService');
-const { detectBudget, detectFacilities, stripCommercialUsePhrases, detectUseCase, isNonResidentialUse, detectLocation, isKnownLocationName } = require('./propertyRecommendationService');
+const { detectBudget, detectFacilities, stripCommercialUsePhrases, stripNearPhrases, stripAmbiguousRumah, stripInvestmentIntentPhrases, detectUseCase, isNonResidentialUse, detectLocation, isKnownLocationName } = require('./propertyRecommendationService');
 const { parseCustomerDate, isDontKnowDateAnswer, WAITING_THE_UPDATE } = require('../utils/customerDateParser');
 const { detectCustomerFrustration } = require('../utils/propertyKeywordFilter');
 
@@ -204,9 +204,14 @@ function extractQualificationState(history = [], currentMessage = '') {
     // Word-boundary aware detectors — all 12 building types, priority order matters:
     // kondotel before hotel/apartment, mansion/rumah mewah before rumah, store after shophouse.
     const typeOfP0 = (txt) => {
-      // Strip commercial use-phrases ("dipakai kantor"/"buat usaha") so a residential
-      // property used commercially isn't read as a type switch (→ reset).
-      const w = stripCommercialUsePhrases((txt || '').toLowerCase());
+      // Apply the SAME strip chain as detectBuildingType() in
+      // propertyRecommendationService (see the twin in chatbotPrivateController.js).
+      //   stripNearPhrases        — "deket kantor dan mall" is a Q6 ANCHOR, not an office
+      //   stripAmbiguousRumah     — "rumah makan/sakit/…" is not a house
+      //   stripCommercialUsePhrases — "dipakai kantor"/"buat usaha" is a USE, not a type
+      const w = stripCommercialUsePhrases(
+        stripAmbiguousRumah(stripNearPhrases((txt || '').toLowerCase()))
+      );
       if (/\bkondotel\b|\bcondotel\b/.test(w))                             return 'kondotel';
       if (/\bmansion\b|\brumah\s+mewah\b/.test(w))                        return 'mansion';
       if (/\bvill?a\b/.test(w))                                            return 'villa';
@@ -222,7 +227,9 @@ function extractQualificationState(history = [], currentMessage = '') {
       return null;
     };
     const txOfP0 = (txt) => {
-      const w = (txt || '').toLowerCase();
+      // See the twin in chatbotPrivateController.js: a BUYER saying "buat investasi,
+      // mau disewakan lagi" is describing the plan, not flipping sale→rent.
+      const w = stripInvestmentIntentPhrases((txt || '').toLowerCase());
       if (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|rent|rental|lease|booking|book|pesan|reservasi)\b/.test(w)) return 'rent';
       if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase|invest|investasi)\b/.test(w))                                   return 'sale';
       return null;
@@ -694,7 +701,17 @@ function extractQualificationState(history = [], currentMessage = '') {
       state.alternativeAreas = custResp;
     }
     // Q9 — decision maker (normalized server-side so AI just copies the value)
-    if (!state.decisionMaker && /jadwalkan viewing|koordinasi dulu|keluarga lain/.test(aiText)) {
+    //
+    // The PRIMARY provider (DeepSeek/ChatGPT/etc.) rarely uses the exact canonical
+    // Q9 wording verbatim — it paraphrases ("langsung bisa Bapak putuskan sendiri
+    // atau perlu diskusi dulu sama istri?" instead of "...jadwalkan viewing atau
+    // perlu koordinasi dulu sama keluarga lain?"). Matching only the canonical
+    // phrase left every paraphrased Q9 undetected: decisionMaker stayed null even
+    // after the customer answered clearly, so the state block still showed Q9 ❓
+    // on the next turn and the LLM asked something again instead of progressing.
+    // This pattern covers the semantic core of Q9 (act alone/immediately vs.
+    // coordinate/discuss with someone) rather than one fixed sentence.
+    if (!state.decisionMaker && /jadwalkan\s*viewing|koordinasi\s*dulu|keluarga\s*lain|putuskan\s*sendiri|diskusi\s*dulu|(langsung\s*(bisa|dapat|aja)?\s*(jadwalkan|putuskan|memutuskan))|(perlu\s*(koordinasi|diskusi|tanya|izin)\b.{0,25}(dulu|dengan|sama))|bisa\s*langsung\s*diputuskan|siapa\s*yang\s*(memutuskan|mengambil\s*keputusan)/i.test(aiText)) {
       const resp = custResp;
       const lo   = resp.toLowerCase();
 
@@ -720,12 +737,17 @@ function extractQualificationState(history = [], currentMessage = '') {
           /\b(ambil keputusan|yang memutuskan|saya sendiri)\b/i.test(lo) ||
           /\btidak perlu koordinasi\b|\b(nggak|ngga|gak|ga|tdk|tidak)\s+perlu koordinasi\b|\btanpa koordinasi\b|\blangsung\s+(bisa|aja|saja|jadwal\w*|viewing|survei|survey|book\w*)\b|\bbisa langsung\b/i.test(lo)) {
         state.decisionMaker = 'Mandiri';
-      } else if (/\b(koordinasi|konfirmasi|tanya|izin).{0,40}(istri|suami|pasangan)\b/i.test(lo) ||
+      } else if (/\b(koordinasi|konfirmasi|diskusi|tanya|izin).{0,40}(istri|suami|pasangan)\b/i.test(lo) ||
                  /\b(istri|suami|pasangan).{0,20}(harus|perlu|dulu)\b/i.test(lo)) {
+        // "diskusi" added alongside "koordinasi" — customers phrase this as often
+        // ("saya akan diskusi dengan istri untuk deal pembeliannya") as "koordinasi",
+        // and both mean the same joint-decision signal. Without it this fell through
+        // to the raw-response fallback below (still ✅/truthy, so it didn't cause the
+        // Q9-never-answered loop by itself, but produced an unnormalized summary line).
         state.decisionMaker = 'Koordinasi dengan pasangan';
-      } else if (/\b(koordinasi|tanya|izin).{0,40}(orang tua|orangtua|ayah|ibu|parents)\b/i.test(lo)) {
+      } else if (/\b(koordinasi|diskusi|tanya|izin).{0,40}(orang tua|orangtua|ayah|ibu|parents)\b/i.test(lo)) {
         state.decisionMaker = 'Koordinasi dengan orang tua';
-      } else if (/\b(koordinasi|tanya|izin).{0,40}keluarga\b/i.test(lo)) {
+      } else if (/\b(koordinasi|diskusi|tanya|izin).{0,40}keluarga\b/i.test(lo)) {
         state.decisionMaker = 'Koordinasi dengan keluarga';
       } else if (/\b(sendiri|sendirian|seorang diri|solo)\b/i.test(lo)) {
         // Customer explicitly said "sendiri" in response to Q9 — normalize to "Sendirian"
@@ -1396,7 +1418,14 @@ function buildQualificationStateBlock(state) {
     row('Red flags         [Q5]', state.redFlags),
     row('Patokan lokasi    [Q6]', state.anchorPoint),
     row('Area alternatif   [Q7]', state.alternativeAreas),
-    row('Tanggal masuk  ⚠️WAJIB [Q8]', state.moveInDate),
+    state.moveInDate === WAITING_THE_UPDATE
+      // Extra-loud variant: a plain "✅ ... Waiting the update" row was observed to
+      // still get re-asked by the primary provider on a later turn — it read the raw
+      // customer message ("belum pasti") again and treated the topic as unresolved
+      // despite the ✅ marker. Spell out explicitly that this IS the answered state
+      // and that the customer will follow up on their own; nothing to ask here.
+      ? `✅ Tanggal masuk  ⚠️WAJIB [Q8]: ${WAITING_THE_UPDATE} — SUDAH DIJAWAB (customer belum tahu tanggal pastinya & akan mengabari sendiri nanti). ⛔ JANGAN tanya ulang soal tanggal/target — lanjut ke Q berikutnya.`
+      : row('Tanggal masuk  ⚠️WAJIB [Q8]', state.moveInDate),
     row('Keputusan         [Q9]', state.decisionMaker),
     row('Durasi sewa      [Q10]', state.leaseDuration),
     row('Furnitur         [Q11]', state.furnishing),

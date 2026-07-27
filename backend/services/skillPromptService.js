@@ -102,23 +102,29 @@ function getMarkdownFiles(directoryPath) {
 }
 
 // ─── Conditional Reference Files ──────────────────────────────────────────────
-// Files 16-19 are pure reference/lookup tables (facilities, location-anchor rules,
-// landmark data) — large, and only useful when the conversation actually touches
-// that topic. Concatenating everything in fixed filename order (01, 02, ... 19)
-// means these ALWAYS lose to files 01-15 once the character budget is hit — they
+// Docs 11-13 are segment- or topic-scoped: the house/apartment pilot playbooks, the
+// facility vocabulary, and the location-anchor/landmark tables. All are large and
+// only useful when the conversation actually touches that topic or property segment.
+// Concatenating everything in fixed filename order (01, 02, ...)
+// means these ALWAYS lose to the core docs once the character budget is hit — they
 // never reach the LLM regardless of relevance. Instead, only include them when the
 // recent conversation text matches their trigger, freeing budget for the always-on
 // core docs while still surfacing facility/landmark reference tables exactly when
 // they matter.
 //
+// NOTE: keyed by exact filename. The v7.0 consolidation merged the former
+// 16+18 (facilities) into 12-facilities-reference.md and 17+19 (location/landmark)
+// into 13-locations-and-landmarks.md; each regex below is the union of the pair it
+// replaced. Renaming either doc REQUIRES updating this map, or the doc silently
+// becomes always-on and eats the budget the core docs need.
+//
 // `context` is optional (recent user message + a few history turns, lowercased).
 // When NOT provided (e.g. skill-status checks that don't have a live conversation),
 // every conditional file is included — preserves prior behavior for those callers.
 const CONDITIONAL_FILE_TRIGGERS = {
-  '16-facilities-reference.md': /\b(fasilitas|facility|facilities|gym|kolam|pool|wifi|ac\b|parkir|parking|dapur|kitchen|furnish|kasur|bed|lemari|wardrobe|balkon|balcony|jacuzzi|sauna|yoga|mushola|laundry|elevator|lift\b)\b/i,
-  '17-location-anchor-recognition.md': /\b(dekat|deket|near|patokan|anchor|landmark|di\s+jalan|di\s+sekitar|kawasan|wisata|mall|mal\b)\b/i,
-  '18-facilities-recognition.md': /\b(fasilitas|facility|facilities|gym|kolam|pool|wifi|ac\b|parkir|parking|dapur|kitchen|furnish)\b/i,
-  '19-landmark-reference.md': /\b(dekat|deket|near|patokan|landmark|kawasan|wisata|mall|mal\b|pakuwon|tunjungan|grand\s*city)\b/i,
+  '11-house-pilots.md': /\b(rumah|rmh|house|apartemen|apartment|apart|kontrakan|perumahan|kpr|cicilan|dp\b|rumah123|listing|masih\s*ada)\b/i,
+  '12-facilities-reference.md': /\b(fasilitas|facility|facilities|gym|kolam|pool|wifi|ac\b|parkir|parking|dapur|kitchen|furnish|kasur|bed|lemari|wardrobe|balkon|balcony|jacuzzi|sauna|yoga|mushola|laundry|elevator|lift\b)\b/i,
+  '13-locations-and-landmarks.md': /\b(dekat|deket|near|patokan|anchor|landmark|di\s+jalan|di\s+sekitar|kawasan|wisata|mall|mal\b|pakuwon|tunjungan|grand\s*city)\b/i,
 };
 
 function isConditionalFile(filePath) {
