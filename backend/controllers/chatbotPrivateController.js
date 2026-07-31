@@ -23,14 +23,12 @@ const { buildRecommendationContextForLLM,
         stripCommercialUsePhrases,
         stripNearPhrases,
         stripAmbiguousRumah,
+        stripMovingFromPhrases,
         stripInvestmentIntentPhrases,
         detectCommercialUse,
         detectUseCase,
         isNonResidentialUse,
         useCaseLabel,
-        getBudgetTiers: svcGetBudgetTiers,
-        detectBuildingType,
-        detectBudget,
         searchProperties }                    = require('../services/propertyRecommendationService');
 const { getRumah123Listings,
         mapBuildingTypeToApify,
@@ -39,14 +37,13 @@ const { loadResponseSkillPrompt,
         getSkillRegistryStatus }              = require('../services/skillPromptService');
 const { hasPropertyKeyword,
         isPropertyContextContinuation }       = require('../utils/propertyKeywordFilter');
-const { extractQualificationState, isConditionalFallbackMessage, isCorrectionMessage } = require('../services/aiPromptBuilderService');
+const { extractQualificationState }           = require('../services/aiPromptBuilderService');
+const { parseCustomerDate }                   = require('../utils/customerDateParser');
 
 // Per-city landmark reference (Q2c sub-area & Q6 anchor point examples) — moved to its
 // own module so this controller file isn't dominated by static data. See file for docs.
 const { getCityLandmarks } = require('../utils/locationLandmarks');
 const _languageKeywords = require('../utils/languageKeywords');
-const { getStandardFacilitiesByType } = require('../utils/standardFacilities');
-const { splitCatalogReply } = require('../utils/replySplitter');
 
 // Google Places enrichment — supplies live landmark data for cities NOT in the curated
 // LOCATION_LANDMARKS map. Claude/ChatGPT (third-party LLM providers) already have broad,
@@ -262,19 +259,6 @@ class PropertyFormatter {
   }
 
   /**
-   * Format a nearby-locations/landmarks value (from property_locations → locations
-   * FK join) — normalises both array and string inputs. Empty/unset → '' (caller
-   * decides whether to omit the line entirely, unlike facilities which always shows).
-   *
-   * @param {string|string[]} value
-   * @returns {string}
-   */
-  static formatNearbyLocations(value = '') {
-    if (Array.isArray(value)) return value.filter(Boolean).join(', ');
-    return String(value || '');
-  }
-
-  /**
    * Build a wa.me deep-link from a raw phone number string.
    * Strips all non-digit characters before constructing the URL.
    *
@@ -410,29 +394,13 @@ class PropertyFormatter {
       ? `\n   ![${item.title || 'Properti'}](${item.imageUrl})`
       : '';
 
-    // 📍 Lokasi: utamakan landmark terdekat (property_locations → locations FK);
-    // fallback ke kota/kecamatan bila properti tak punya tag lokasi.
-    const landmarks = this.formatNearbyLocations(item.nearbyLocations);
-    const lokasi    = landmarks || this.formatLocation(item);
-
-    // 🏠 Tipe: booking (hotel/kondotel/villa sewa) → "booking"; selain itu label transaksi biasa.
-    const isBooking = this.isBookingType(item.buildingType) && item.transactionType === 'rent';
-    const txLabel   = isBooking
-      ? 'booking'
-      : this.humanTransactionType(item.transactionType, lang).toLowerCase();
-
-    // 📐 Luas: booking → "kamar X"; selain itu "bangunan X, tanah Y".
-    const luas = isBooking
-      ? `${isId ? 'kamar' : 'room'} ${item.buildingArea || '-'}`
-      : `${isId ? 'bangunan' : 'building'} ${item.buildingArea || '-'}, ${isId ? 'tanah' : 'land'} ${item.landArea || '-'}`;
-
     return [
       `${index + 1}. **${item.title || (isId ? 'Properti' : 'Property')}**${imgTag}`,
-      `   📍 ${isId ? 'Lokasi'    : 'Location'}: ${lokasi}`,
+      `   📍 ${isId ? 'Lokasi'    : 'Location'}: ${this.formatLocation(item)}`,
       `   💰 ${isId ? 'Harga'     : 'Price'}: **${item.price || '-'}**`,
-      `   🏠 ${isId ? 'Tipe'      : 'Type'}: ${this.humanBuildingType(item.buildingType, lang)} — ${txLabel}`,
-      `   📐 ${isId ? 'Luas'      : 'Area'}: ${luas}`,
-      `   ✨ ${isId ? 'Fasilitas' : 'Facilities'}: ${this.formatFacilities(item.facilities)}`,
+      `   🏠 ${isId ? 'Tipe'      : 'Type'}: ${this.humanBuildingType(item.buildingType, lang)} — ${this.humanTransactionType(item.transactionType, lang)}`,
+      `   📐 ${isId ? 'Luas'      : 'Area'}: ${isId ? 'bangunan' : 'building'} ${item.buildingArea || '-'}, ${isId ? 'tanah' : 'land'} ${item.landArea || '-'}`,
+      `   🏷️ ${isId ? 'Fasilitas' : 'Facilities'}: ${this.formatFacilities(item.facilities)}`,
     ].join('\n');
   }
 
@@ -624,7 +592,7 @@ class ResponseBuilder {
    * @param {{ alternatives, rumah123Listings, filters }} params
    * @returns {string}
    */
-  alternative({ alternatives = [], rumah123Listings = [], filters = {}, standardFallback = null }) {
+  alternative({ alternatives = [], rumah123Listings = [], filters = {} }) {
     const summary    = this.#summarizeRequest(filters);
     const location   = filters.location || '';
     const hasR123    = rumah123Listings.length > 0;
@@ -641,31 +609,9 @@ class ResponseBuilder {
       const locationNote = location
         ? (isId ? ` di **${location}**` : ` in **${location}**`)
         : '';
-
-      // FALLBACK "fasilitas standar per tipe" — sebutkan fasilitas standar tipe ini
-      // + rentang harga wajar sebagai acuan saat katalog tidak menemukan data.
-      let fallbackNote = '';
-      if (standardFallback) {
-        const parts = [];
-        if (standardFallback.standardFacilities) {
-          parts.push(isId
-            ? ` Sebagai gambaran, **${PropertyFormatter.humanBuildingType(standardFallback.buildingType, 'id')}** umumnya punya fasilitas standar: ${standardFallback.standardFacilities}.`
-            : ` For reference, a **${PropertyFormatter.humanBuildingType(standardFallback.buildingType, 'en')}** typically includes standard facilities: ${standardFallback.standardFacilities}.`);
-        }
-        const rr = standardFallback.reasonableRange;
-        if (rr && (rr.min || rr.max)) {
-          const fmtRp = (n) => (n ? 'Rp ' + Number(n).toLocaleString('id-ID') : '');
-          const rangeStr = `${fmtRp(rr.min)} – ${fmtRp(rr.max)}${rr.period ? '/' + rr.period : ''}`;
-          parts.push(isId
-            ? ` Kisaran harga wajar untuk tipe ini sekitar ${rangeStr}.`
-            : ` A reasonable price range for this type is around ${rangeStr}.`);
-        }
-        fallbackNote = parts.join('');
-      }
-
       return isId
-        ? `Maaf, saat ini belum ada properti yang sesuai dengan **${summary}**${locationNote} di katalog maupun Rumah123.${fallbackNote} Apakah Anda ingin menyesuaikan lokasi, tipe properti, atau range harga?`
-        : `Sorry, there is currently no property matching **${summary}**${locationNote} in my catalog or Rumah123.${fallbackNote} Would you like to adjust the location, property type, or price range?`;
+        ? `Maaf, saat ini belum ada properti yang sesuai dengan **${summary}**${locationNote} di katalog maupun Rumah123. Apakah Anda ingin mencoba lokasi, tipe properti, atau range harga lain?`
+        : `Sorry, there is currently no property matching **${summary}**${locationNote} in my catalog or Rumah123. Would you like to try another location, property type, or price range?`;
     }
 
     const lines = [];
@@ -862,30 +808,13 @@ class ResponseBuilderWhatsApp {
       ? `\n   ![${item.title || 'Properti'}](${item.imageUrl})`
       : '';
 
-    // 📍 Lokasi: utamakan landmark terdekat (property_locations → locations FK),
-    // sesuai patokan lokasi customer; fallback ke kota/kecamatan bila tak ada tag.
-    const landmarks = PropertyFormatter.formatNearbyLocations(item.nearbyLocations);
-    const lokasi    = landmarks || PropertyFormatter.formatLocation(item);
-
-    // 🏠 Tipe: untuk booking (hotel/kondotel/villa sewa) → "booking"; selain itu
-    // pakai label transaksi biasa (sewa/dijual/beli).
-    const isBooking = PropertyFormatter.isBookingType(item.buildingType) && item.transactionType === 'rent';
-    const txLabel   = isBooking
-      ? (isId ? 'booking' : 'booking')
-      : PropertyFormatter.humanTransactionType(item.transactionType, lang).toLowerCase();
-
-    // 📐 Luas: booking (hotel/kondotel/villa) → "kamar X"; selain itu "bangunan X, tanah Y".
-    const luas = isBooking
-      ? `${isId ? 'kamar' : 'room'} ${item.buildingArea || '-'}`
-      : `${isId ? 'bangunan' : 'building'} ${item.buildingArea || '-'}, ${isId ? 'tanah' : 'land'} ${item.landArea || '-'}`;
-
     return [
       `${index + 1}. *${item.title || (isId ? 'Properti' : 'Property')}*${imgTag}`,
-      `   📍 Lokasi: ${lokasi}`,
+      `   📍 Lokasi: ${PropertyFormatter.formatLocation(item)}`,
       `   💰 Harga: *${item.price || '-'}*`,
-      `   🏠 Tipe: ${PropertyFormatter.humanBuildingType(item.buildingType, lang)} — ${txLabel}`,
-      `   📐 Luas: ${luas}`,
-      `   ✨ Fasilitas: ${PropertyFormatter.formatFacilities(item.facilities)}`,
+      `   🏠 Tipe: ${PropertyFormatter.humanBuildingType(item.buildingType, lang)} — ${PropertyFormatter.humanTransactionType(item.transactionType, lang)}`,
+      `   📐 Luas: bangunan ${item.buildingArea || '-'}, tanah ${item.landArea || '-'}`,
+      `   🏷️ Fasilitas: ${PropertyFormatter.formatFacilities(item.facilities)}`,
     ].join('\n');
   }
 
@@ -981,7 +910,7 @@ class ResponseBuilderWhatsApp {
    *   'city'     → properti di kota yang sama (district berbeda)
    *   'national' → properti tipe yang sama dari kota lain
    */
-  alternative({ alternatives = [], rumah123Listings = [], filters = {}, budgetExpanded = null, standardFallback = null }) {
+  alternative({ alternatives = [], rumah123Listings = [], filters = {}, budgetExpanded = null }) {
     const summary  = this.#summarizeRequest(filters);
     const location = filters.location || '';
     const hasR123  = rumah123Listings.length > 0;
@@ -1000,31 +929,9 @@ class ResponseBuilderWhatsApp {
         : '';
       const locNote  = location ? (isId ? ` di *${location}*` : ` in *${location}*`) : '';
 
-      // FALLBACK "fasilitas standar per tipe" (rumusan saat katalog tidak menemukan
-      // data): sebutkan fasilitas standar tipe ini + rentang harga wajar sebagai
-      // acuan, lalu tawarkan penyesuaian kriteria — bukan sekadar "tidak ada".
-      let fallbackNote = '';
-      if (standardFallback) {
-        const parts = [];
-        if (standardFallback.standardFacilities) {
-          parts.push(isId
-            ? `\n\nSebagai gambaran, *${PropertyFormatter.humanBuildingType(standardFallback.buildingType, 'id')}* umumnya memiliki fasilitas standar: ${standardFallback.standardFacilities}.`
-            : `\n\nFor reference, a *${PropertyFormatter.humanBuildingType(standardFallback.buildingType, 'en')}* typically includes standard facilities: ${standardFallback.standardFacilities}.`);
-        }
-        const rr = standardFallback.reasonableRange;
-        if (rr && (rr.min || rr.max)) {
-          const fmtRp = (n) => (n ? 'Rp ' + Number(n).toLocaleString('id-ID') : '');
-          const rangeStr = `${fmtRp(rr.min)} – ${fmtRp(rr.max)}${rr.period ? '/' + rr.period : ''}`;
-          parts.push(isId
-            ? `\nKisaran harga yang wajar untuk tipe ini sekitar ${rangeStr}.`
-            : `\nA reasonable price range for this type is around ${rangeStr}.`);
-        }
-        fallbackNote = parts.join('');
-      }
-
       return (isId
-        ? `Maaf, saat ini belum ada${typeNote} yang tersedia${locNote} di katalog maupun Rumah123.${fallbackNote}\n\nApakah Anda ingin saya sesuaikan budget, lokasi, atau fasilitasnya?`
-        : `Sorry, there is currently no${typeNote} available${locNote} in my catalog or Rumah123.${fallbackNote}\n\nWould you like me to adjust the budget, location, or facilities?`
+        ? `Maaf, saat ini belum ada${typeNote} yang tersedia${locNote} di katalog maupun Rumah123.\n\nApakah Anda ingin mencoba lokasi atau range harga yang berbeda?`
+        : `Sorry, there is currently no${typeNote} available${locNote} in my catalog or Rumah123.\n\nWould you like to try a different location or price range?`
       ) + this.#addFooter();
     }
 
@@ -1062,13 +969,9 @@ class ResponseBuilderWhatsApp {
         } else if (locationScope === 'national' && location) {
           // Customer specifically asked for a city, but we have no properties there.
           // Be explicit about why we're showing alternatives from other cities.
-          // filters.budget adalah OBJEK {text,min,max,period} — interpolasi langsung
-          // menghasilkan "budget [object Object]". Pakai .text (string terformat).
-          const budgetText = filters.budget?.text
-            || (typeof filters.budget === 'string' ? filters.budget : '');
           contextMsg = isId
-            ? `⚠️ Maaf, saat ini belum ada *${PropertyFormatter.humanBuildingType(filters.buildingType, 'id')}* tersedia di *${location}* dengan kriteria yang Anda minta (${filters.transactionType === 'rent' ? 'sewa' : 'jual'}, budget ${budgetText || 'fleksibel'}).\n\n📍 Berikut pilihan *${PropertyFormatter.humanBuildingType(filters.buildingType, 'id')}* terdekat dari kota lain yang mungkin sesuai:\n`
-            : `⚠️ Unfortunately, there are currently no *${PropertyFormatter.humanBuildingType(filters.buildingType, 'en')}* available in *${location}* matching your criteria (${filters.transactionType === 'rent' ? 'for rent' : 'for sale'}, budget ${budgetText || 'flexible'}).\n\n📍 Here are the closest *${PropertyFormatter.humanBuildingType(filters.buildingType, 'en')}* options from nearby cities:\n`;
+            ? `⚠️ Maaf, saat ini belum ada *${PropertyFormatter.humanBuildingType(filters.buildingType, 'id')}* tersedia di *${location}* dengan kriteria yang Anda minta (${filters.transactionType === 'rent' ? 'sewa' : 'jual'}, budget ${filters.budget || 'fleksibel'}).\n\n📍 Berikut pilihan *${PropertyFormatter.humanBuildingType(filters.buildingType, 'id')}* terdekat dari kota lain yang mungkin sesuai:\n`
+            : `⚠️ Unfortunately, there are currently no *${PropertyFormatter.humanBuildingType(filters.buildingType, 'en')}* available in *${location}* matching your criteria (${filters.transactionType === 'rent' ? 'for rent' : 'for sale'}, budget ${filters.budget || 'flexible'}).\n\n📍 Here are the closest *${PropertyFormatter.humanBuildingType(filters.buildingType, 'en')}* options from nearby cities:\n`;
 
         } else {
           contextMsg = isId
@@ -1142,19 +1045,10 @@ class ResponseBuilderWhatsApp {
                                     : (isId ? 'Durasi sewa'    : 'Lease duration');
     const durL = fmt(durLabel, brief.leaseDuration);
     if (durL) lines.push(durL);
-    // Penghuni (Q4) — sebelumnya TIDAK ada di template ini sama sekali, sehingga
-    // jawaban "bersama keluarga" hanya bisa bocor lewat jalur salah (Q9 decision
-    // maker). Baris ini yang benar untuk komposisi penghuni.
-    const hhL = fmt(isId ? 'Penghuni' : 'Occupants', brief.household);
-    if (hhL) lines.push(hhL);
     const dmL  = fmt(isId ? 'Keputusan bersama' : 'Decision maker', brief.decisionMaker);
     if (dmL) lines.push(dmL);
     const furL = fmt(isId ? 'Furnitur' : 'Furnishing', brief.furnishing);
     if (furL) lines.push(furL);
-    // Kondisi (Q_COND, beli) — jawaban customer atas baru/ready | second | inden,
-    // termasuk gabungan ("baru atau second"). Tersembunyi bila tidak dijawab.
-    const condL = fmt(isId ? 'Kondisi' : 'Condition', brief.propertyCondition);
-    if (condL) lines.push(condL);
     const facL = fmt(isId ? 'Fasilitas' : 'Facilities', brief.facilities);
     if (facL) lines.push(facL);
     const altL = fmt(isId ? 'Area alternatif' : 'Alt. areas', brief.alternativeAreas);
@@ -1247,6 +1141,9 @@ class ResponseBuilderWhatsApp {
       }
     } else {
       lines.push(row(isId ? 'Fasilitas' : 'Facilities', brief.facilities));
+    }
+    if (brief.facilities && brief.facilities.wantsPremium) {
+      lines.push(isId ? '🌟 Minat properti premium/eksklusif' : '🌟 Interested in a premium/exclusive property');
     }
     lines.push(row(isId ? 'Budget' : 'Budget',              brief.budget));
     lines.push(row(isId ? 'Patokan lokasi' : 'Anchor',      brief.anchorPoint));
@@ -1373,16 +1270,19 @@ class ConversationQualifier {
     const SUMMARY_RE_P0 = /[✓✔]\s*Rencana\s*:/i;
 
     // Word-boundary type / tx detectors (used by both boundaries below).
+    //
+    // Canonical strip chain — SAME as the twin in aiPromptBuilderService.js's
+    // typeOfP0/txOfP0. Never re-implement this regex separately: a Phase-0
+    // detector that disagrees with the filters that already exist silently
+    // resets the whole search (M35 boundary), so any gap here is a live bug,
+    // not a cosmetic one. See project_false_positive_session_resets memory.
+    //   stripNearPhrases          — "deket kantor dan mall" is a Q6 ANCHOR, not an office
+    //   stripAmbiguousRumah       — "rumah makan/sakit/…" is not a house
+    //   stripMovingFromPhrases    — "pindah dari apartemen" is the home being LEFT
+    //   stripCommercialUsePhrases — "dipakai kantor"/"buat usaha" is a USE, not a type
     const _typeOfP0 = (txt) => {
-      // Apply the SAME strip chain as detectBuildingType() in
-      // propertyRecommendationService — anything less produces a type detector that
-      // disagrees with the one that filled `filters`, and the disagreement is read
-      // as a type switch (→ full Q2–Q12 reset, location discarded).
-      //   stripNearPhrases        — "deket kantor dan mall" is a Q6 ANCHOR, not an office
-      //   stripAmbiguousRumah     — "rumah makan/sakit/…" is not a house
-      //   stripCommercialUsePhrases — "dipakai kantor"/"buat usaha" is a USE, not a type
       const w = stripCommercialUsePhrases(
-        stripAmbiguousRumah(stripNearPhrases((txt || '').toLowerCase()))
+        stripMovingFromPhrases(stripAmbiguousRumah(stripNearPhrases((txt || '').toLowerCase())))
       );
       if (/\bvill?a\b/.test(w))                                              return 'villa';
       if (/\bapartemen\b|\bapartment\b/.test(w))                             return 'apartment';
@@ -1392,16 +1292,17 @@ class ConversationQualifier {
       if (/\bkondotel\b|\bcondo\b/.test(w))                                 return 'kondotel';
       if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(w))                return 'boarding_house';
       if (/\bruko\b|\brukan\b/.test(w))                                     return 'shophouse';
-      if (/\bkantor\b|\boffice\b/.test(w))                                             return 'office';
-      if (/\bgudang\b|\bwarehouse\b/.test(w))                                             return 'warehouse';
+      if (/\bkantor\b/.test(w))                                             return 'office';
+      if (/\bgudang\b/.test(w))                                             return 'warehouse';
       if (/\btoko\b|\bretail\b/.test(w))                                  return 'store';
       if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(w))  return 'others';
       return null;
     };
+    // stripInvestmentIntentPhrases — a BUYER's plan ("buat investasi, mau
+    // disewakan lagi") is describing what they'll do with it after buying, not
+    // flipping sale→rent. Indonesian causative "disewakan"/"sewakan" ("rent it
+    // out") is intent, not "sewa" ("I rent").
     const _txOfP0 = (txt) => {
-      // Strip investment-intent phrasing first: a BUYER saying "buat investasi, mau
-      // disewakan lagi" is describing the plan, not flipping sale→rent. Without this
-      // the flip fires switchBoundaryHit → full reset → location discarded.
       const w = stripInvestmentIntentPhrases((txt || '').toLowerCase());
       if (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|rent|rental|lease)\b/.test(w)) return 'rent';
       if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase)\b/.test(w))                     return 'sale';
@@ -1440,9 +1341,7 @@ class ConversationQualifier {
       let runTx   = null;
       for (const m of seq) {
         if (!(m.role === 'user' || m.role === 'customer')) continue;
-        // A hedge message ("kalau gak ada apartemen, villa juga boleh") names a
-        // fallback type without confirming a switch — don't let it flip runType.
-        const t  = isConditionalFallbackMessage(m.message) ? null : _typeOfP0(m.message);
+        const t  = _typeOfP0(m.message);
         const tx = _txOfP0(m.message);
         if ((t && runType && t !== runType) || (tx && runTx && tx !== runTx)) {
           switchStart = m.i;
@@ -1490,65 +1389,6 @@ class ConversationQualifier {
     const aiText   = this.#aiText(activeHistory);
     const aiCount  = activeHistory.filter(h => h.role === 'assistant' || h.role === 'ai').length;
 
-    // ── RALAT JADWAL VIEWING ─────────────────────────────────────────────────
-    // Bila ada pesan customer berisi kata ralat + topik viewing/jam/jadwal
-    // ("ralat, viewingnya jam 2 siang aja"), semua field viewing di bawah dibaca
-    // HANYA dari pesan ralat terakhir ke belakang — nilai lama ("jam 11") yang
-    // muncul lebih dulu di custText tidak boleh menang lagi di summary.
-    const viewingText = (() => {
-      const msgs = [
-        ...activeHistory.filter(m => m.role === 'user' || m.role === 'customer').map(m => m.message || ''),
-        userMessage || '',
-      ];
-      const VIEW_TOPIC_RE = /\b(viewing\w*|survei\w*|survey\w*|jadwal\w*|jam|pukul)\b/i;
-      for (let i = msgs.length - 1; i >= 0; i--) {
-        if (isCorrectionMessage(msgs[i]) && VIEW_TOPIC_RE.test(msgs[i])) {
-          return msgs.slice(i).join('\n').toLowerCase();
-        }
-      }
-      return null;   // tidak ada ralat viewing → pakai custText penuh
-    })();
-    const vText = viewingText || custText;
-
-    // Field viewing dihitung dari vText DULU (nilai pasca-ralat menang); bagian
-    // yang TIDAK ikut diralat (mis. customer ralat jam saja, harinya tetap "rabu
-    // minggu depan") di-fallback ke custText penuh supaya tidak hilang dari summary.
-    // Sufiks -an kolokial ikut dikenali: "sorean"/"siangan"/"pagian"/"malaman"
-    // ("Saya bisa sorean" = preferensi sore) — \bsore\b polos gagal match "sorean".
-    const _todOf = (s) =>
-      /\bmalam(?:an)?\b|\bmalem(?:an)?\b/i.test(s) ? 'malam'
-      : /\bpagi(?:an)?\b/i.test(s) ? 'pagi'
-      : /\bsiang(?:an)?\b/i.test(s) ? 'siang'
-      : /\bsore(?:an)?\b/i.test(s) ? 'sore' : null;
-    const _viewingTod = _todOf(vText) || (viewingText ? _todOf(custText) : null);
-    const _dayRefOf = (s) => {
-      const M = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
-      const dateNDaysFromNow = (n) => {
-        const d = new Date(); d.setDate(d.getDate() + n);
-        return `${d.getDate()} ${M[d.getMonth()]} ${d.getFullYear()}`;
-      };
-      const nDays = s.match(/\b(\d{1,2})\s*hari\s*(?:lagi|kedepan|ke\s+depan|mendatang|besok(?:\s+ini)?|dari\s+sekarang)\b/i);
-      if (nDays) return dateNDaysFromNow(parseInt(nDays[1], 10));
-      if (/\bnanti\b|\bhari\s+ini\b|\bsekarang\b|(?:pagi|siang|sore|malam)\s+ini\b|\bini\s+(?:pagi|siang|sore|malam)\b/i.test(s)) return dateNDaysFromNow(0);
-      if (/\bbesok\s+lusa\b|\blusa\b/i.test(s)) return dateNDaysFromNow(2);
-      if (/\bbesok\b/i.test(s)) return dateNDaysFromNow(1);
-      // Nama hari + depan/minggu depan → resolve ke HARI ITU yang benar, bukan
-      // flat +7. Bug nyata: "rabu minggu depan" diucap Kamis 16 Juli → dulu
-      // dijawab "23 Juli" (Kamis lagi!), harusnya Rabu 22 Juli.
-      const DOW = { minggu: 0, ahad: 0, senin: 1, selasa: 2, rabu: 3, kamis: 4, jumat: 5, sabtu: 6 };
-      const wd = s.match(/\b(senin|selasa|rabu|kamis|jumat|sabtu|ahad)\s+(?:minggu\s+)?depan\b/i)
-              || s.match(/\bminggu\s+depan\s+(?:hari\s+)?(senin|selasa|rabu|kamis|jumat|sabtu|ahad)\b/i);
-      if (wd) {
-        const target = DOW[wd[1].toLowerCase()];
-        const todayDow = new Date().getDay();
-        const ahead = ((target - todayDow + 7) % 7) || 7;   // hari sama → +7
-        return dateNDaysFromNow(ahead);
-      }
-      if (/\bminggu\s+depan\b/i.test(s)) return dateNDaysFromNow(7);
-      return null;
-    };
-    const _viewingDayRef = _dayRefOf(vText) || (viewingText ? _dayRefOf(custText) : null);
-
     // ── Pre-compute: summary-already-shown detection ─────────────────────────
     // Same logic as aiPromptBuilderService.js Phase 3A.
     // Uses FULL history (not activeHistory) to find the last summary — we need
@@ -1579,9 +1419,7 @@ class ConversationQualifier {
     const histCustJoined = histCustMsgs.map(m => (m.message || '').toLowerCase()).join(' ');
     const histBuildingType = _typeOfP0(histCustJoined);
     const curMsgLower = (userMessage || '').toLowerCase();
-    // A hedge message ("kalau gak ada apartemen, villa juga boleh") names a fallback
-    // type without confirming a switch — don't let it force a Q2-Q12 reset.
-    const curBuildingType = isConditionalFallbackMessage(userMessage) ? null : _typeOfP0(curMsgLower);
+    const curBuildingType = _typeOfP0(curMsgLower);
     const histTx = _txOfP0(histCustJoined);
     const curTx = _txOfP0(curMsgLower);
 
@@ -1613,7 +1451,7 @@ class ConversationQualifier {
       else if (/\bkondotel\b|\bcondo\b/i.test(custText))                            recoveredType = 'kondotel';
       else if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/i.test(custText))           recoveredType = 'boarding_house';
       else if (/\bruko\b|\brukan\b/i.test(custText))                                recoveredType = 'shophouse';
-      else if (/\bkantor\b|\boffice\b/i.test(custText))                                         recoveredType = 'office';
+      else if (/\bkantor\b/i.test(custText))                                         recoveredType = 'office';
       else if (/\bgudang\b/i.test(custText))                                         recoveredType = 'warehouse';
       else if (/\btoko\b|\bretail\b/i.test(custText))                               recoveredType = 'store';
     }
@@ -1707,13 +1545,6 @@ class ConversationQualifier {
         'kuliah', 'study', 'liburan', 'berlibur', 'vacation', 'holiday', 'staycation',
         'wisata', 'honeymoon', 'bulan madu', 'business trip', 'work trip', 'kerja di',
       ]) || !!detectUseCase(custText),   // menyebut PENGGUNAAN (investasi/usaha/ibadah/liburan/dinas) = motivasi terjawab
-      /* ── Pilot: VALUE CHECKPOINT sudah pernah dikirim? (sekali per pencarian) ── */
-      valueCheckpointFired: this.#has(aiText, [
-        'udah kebayang kebutuhan', 'sudah kebayang kebutuhan',
-        'lagi cek beberapa opsi', 'saya cek beberapa opsi',
-        'have a clear picture of what you need',
-      ]),
-
       aiAskedMotivation: this.#has(aiText, [
         'apa yang membuat', 'apa yang bikin cari', 'kenapa cari', 'mulai cari rumah sekarang',
         'why now', 'what made you', 'apa yang bikin kak cari',
@@ -1870,31 +1701,36 @@ class ConversationQualifier {
         'lokasi tertentu yang jadi patokan',
       ]),
 
-      /* ── Q7: Area alternatif ── */
+      /* ── Q7: Area alternatif ──
+       * A REFUSAL ("tidak ada", "cuma di X saja", "tetap di X") is just as much
+       * an answer as naming another area — a customer declining to widen the
+       * search has answered the question, not left it open. Only checked when
+       * the AI actually asked (aiAskedAltArea) so a spontaneous "gak ada" early
+       * in the chat (about something else entirely) doesn't get misread as
+       * having answered a question that was never asked.
+       */
       hasAlternativeArea: this.#has(custText, [
         'atau di', 'bisa juga di', 'juga oke', 'juga boleh', 'sekitarnya',
         'alternatif', 'wilayah lain', 'area lain', 'other area', 'nearby area',
         'bisa juga', 'selain itu', 'manapun', 'fleksibel', 'flexible',
         'or also', 'alternatively',
-      ]),
+      ]) || (
+        this.#has(aiText, ['selain', 'area sekitar', 'besides', 'other neighborhoods', 'area lain', 'wilayah sekitar', 'area yang masih oke'])
+        && /\b(tidak|tdk|enggak|engga|gak|nggak|ga|no)\s*(ada|there)?\b|(?:tetap|hanya|cuma|fokus)\s+di\b|saja\b|only\b/i.test(custText)
+      ),
       aiAskedAltArea: this.#has(aiText, [
         'selain', 'area sekitar', 'besides', 'other neighborhoods', 'area lain',
         'wilayah sekitar', 'area yang masih oke',
       ]),
 
       /* ── Q9: Decision maker / viewing logistics ── */
-      // Frasa kekerabatan POLOS ('sama keluarga', 'sama istri', dst.) sengaja
-      // TIDAK ada di daftar: itu kosakata jawaban Q4 penghuni ("Saya bersama
-      // keluarga saja" match substring 'sama keluarga') dan dulu memicu false
-      // hasDecisionMaker → Q9 di-skip + summary menampilkan "Keputusan bersama"
-      // fiktif. Kin words hanya dihitung lewat frasa berkata-kerja keputusan.
       hasDecisionMaker: this.#has(custText, [
         'langsung bisa', 'bisa langsung', 'perlu koordinasi', 'perlu diskusi',
-        'koordinasikan', 'koordinasiin', 'koordinasi sama', 'koordinasi dengan',
+        'sama suami', 'sama istri', 'sama pasangan', 'sama keluarga', 'sendiri saja',
+        'sama teman', 'bersama teman', 'teman-teman', 'koordinasikan', 'koordinasiin',
         'solo decision', 'joint decision', 'discuss with', 'check with',
         'suami dulu', 'istri dulu', 'koordinasi dulu', 'minta persetujuan',
-        'izin dulu', 'keputusan bersama', 'decide together', 'putuskan sendiri',
-        'keputusan sendiri',
+        'izin dulu', 'keputusan bersama', 'decide together',
       ]),
       aiAskedDecisionMaker: this.#has(aiText, [
         'jadwalkan viewing', 'bisa jadwalkan', 'koordinasi dulu', 'keluarga lain',
@@ -1926,9 +1762,6 @@ class ConversationQualifier {
                /\b(senin|selasa|rabu|kamis|jumat|sabtu|ahad|minggu)\s*(ini|depan)?\b/i.test(custText) ||
                /\b\d{1,2}\s*(januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)\b/i.test(custText) ||
                /\btanggal\s*\d{1,2}\b/i.test(custText) ||
-               // Offset relatif "N hari/minggu/bulan lagi" juga = tanggal survei diberikan
-               // (mis. "survei 3 minggu lagi") — tanpa ini flow bisa terus menanyakan tanggal.
-               /\b\d{1,3}\s*(hari|minggu|bulan|tahun)\s+(lagi|kedepan|ke\s+depan|mendatang|dari\s+sekarang)\b/i.test(custText) ||
                /\bjam\s*\d{1,2}(?:[.:]\d{2})?\b/i.test(custText);
       })(),
       aiAskedViewingDate: this.#has(aiText, [
@@ -1946,29 +1779,46 @@ class ConversationQualifier {
        *  - hanya time-of-day (mis. "boleh siang") tanpa hari → default BESOK
        *  - "malam" → di luar jam survey (pagi–sore), AI tolak halus + minta jam pagi–sore
        */
-      // Dihitung di atas (helper _todOf/_dayRefOf): vText (pasca-ralat) menang,
-      // fallback ke custText penuh untuk bagian yang tidak ikut diralat.
-      viewingTimeOfDay: _viewingTod,
-      viewingIsNight: _viewingTod === 'malam',
-      viewingDayRef: _viewingDayRef,
-      hasViewingHour: /\b(jam|pukul)\s*\d{1,2}(?:[.:]\d{2})?\b/i.test(vText)
-                   || /\b(jam|pukul)\s*(satu|dua|tiga|empat|lima|enam|tujuh|delapan|sembilan|sepuluh|sebelas|dua\s*belas)\b/i.test(vText),
+      viewingTimeOfDay: (() => {
+        if (/\bmalam\b/i.test(custText))  return 'malam';
+        if (/\bpagi\b/i.test(custText))   return 'pagi';
+        if (/\bsiang\b/i.test(custText))  return 'siang';
+        if (/\bsore\b/i.test(custText))   return 'sore';
+        return null;
+      })(),
+      viewingIsNight: /\bmalam\b/i.test(custText),
+      viewingDayRef: (() => {
+        const M = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+        const fmt = (d) => `${d.getDate()} ${M[d.getMonth()]} ${d.getFullYear()}`;
+        if (/\bnanti\b|\bhari\s+ini\b|\bsekarang\b|(?:pagi|siang|sore|malam)\s+ini\b|\bini\s+(?:pagi|siang|sore|malam)\b/i.test(custText)) return fmt(new Date());
+        if (/\blusa\b/i.test(custText)) { const d = new Date(); d.setDate(d.getDate() + 2); return fmt(d); }
+        if (/\bbesok\b/i.test(custText)) { const d = new Date(); d.setDate(d.getDate() + 1); return fmt(d); }
+        // "minggu depan" (next week) = +7 hari dari hari ini → resolve ke tanggal konkret
+        if (/\bminggu\s+depan\b/i.test(custText)) {
+          const d = new Date(); d.setDate(d.getDate() + 7);
+          return fmt(d);
+        }
+        // "selasa depan", "rabu depan", dll (hari + depan tanpa "minggu")
+        if (/\b(senin|selasa|rabu|kamis|jumat|sabtu|ahad)\s+depan\b/i.test(custText)) {
+          const d = new Date(); d.setDate(d.getDate() + 7);
+          return fmt(d);
+        }
+        return null;
+      })(),
+      hasViewingHour: /\b(jam|pukul)\s*\d{1,2}(?:[.:]\d{2})?\b/i.test(custText)
+                   || /\b(jam|pukul)\s*(satu|dua|tiga|empat|lima|enam|tujuh|delapan|sembilan|sepuluh|sebelas|dua\s*belas)\b/i.test(custText),
       aiAskedViewingHour: this.#has(aiText, [
         'mau viewing jam berapa', 'survey jam berapa', 'survei jam berapa',
         'viewing jam berapa', 'jam berapa', 'pukul berapa', 'what time',
       ]),
 
       /* ── Q10: Lease duration (sewa only) ── */
-      // Lookahead negatif: "3 hari LAGI" / "3 minggu KEDEPAN" adalah offset
-      // tanggal (jawaban Q8/viewing), BUKAN durasi — tanpa guard ini flag
-      // hasLeaseDuration aktif palsu → Q10 (durasi sewa/booking) tidak pernah
-      // ditanya padahal customer belum menyebut durasi sama sekali.
       hasLeaseDuration: this.#has(custText, [
         '1 tahun', '2 tahun', '3 tahun', '6 bulan', 'setahun', 'dua tahun',
         'tiga tahun', 'per tahun', '/tahun', 'satu tahun', 'yearly',
         '1 year', '2 years', '3 years', '6 months',
         'seminggu', 'sebulan', 'semalam',
-      ]) || /\b\d+\s*(hari|minggu|bulan|tahun|day|week|month|year)s?\b(?!\s*(?:lagi|kedepan|ke\s+depan|mendatang|besok|dari\s+sekarang))/i.test(custText),
+      ]) || /\b\d+\s*(hari|minggu|bulan|tahun|day|week|month|year)s?\b/i.test(custText),
       aiAskedLeaseDuration: this.#has(aiText, [
         'sewa untuk berapa lama', 'berapa tahun', 'durasi sewa', 'lease duration',
         'how long', 'berapa lama',
@@ -2174,7 +2024,7 @@ class ConversationQualifier {
         'aiAskedKprDetails', 'hasPropertyCondition', 'aiAskedPropertyCondition',
         'hasTenantStatus', 'aiAskedTenantStatus', 'hasZonasi', 'aiAskedZonasi',
         // House v2 pilot (motivation + financing contingency)
-        'hasMotivation', 'aiAskedMotivation', 'valueCheckpointFired', 'financingCash', 'financingFromSale',
+        'hasMotivation', 'aiAskedMotivation', 'financingCash', 'financingFromSale',
         'hasContingencyStatus', 'aiAskedContingency',
         'hasFacilities', 'aiAskedFacilities',
       ];
@@ -2219,22 +2069,6 @@ class ConversationQualifier {
     // Store active-session custText on profile so buildAgentBrief can reuse it
     // without re-reading FULL history (which would leak stale data from old sessions).
     profile._custText = custText;
-    // Teks scope viewing (dari ralat viewing terakhir bila ada) — dipakai
-    // #extractViewingPreference agar jam/hari hasil RALAT yang tampil di summary.
-    profile._viewingText = vText;
-    // Pesan customer SAAT INI — dipakai #buildViewingHourQuestion untuk mendeteksi
-    // pertanyaan balik soal ketersediaan agen ("Kakak bisa kapan?") di giliran ini.
-    profile._currentMsg = userMessage || '';
-    // Pesan AI TERAKHIR (yang sedang dijawab customer) — dipakai untuk memastikan
-    // sub-dialog viewing memang topik BERJALAN, bukan flag "pernah ditanya" yang
-    // bocor dari pencarian lama di sesi yang sama (mis. "sorean" & pertanyaan jam
-    // viewing dari flow sebelumnya yang ditinggalkan lalu customer memulai pencarian
-    // baru). Tanpa ini, AI tiba-tiba tanya "Sore jam berapa?" padahal sedang tanya
-    // fasilitas/furnitur.
-    {
-      const _lastAi = [...activeHistory].reverse().find(m => m.role === 'ai' || m.role === 'assistant');
-      profile._lastAiText = (_lastAi?.message || '').toLowerCase();
-    }
 
     // ── Re-scope budget to the ACTIVE session (anti-leak) ─────────────────────
     // `filters` di atas diisi extractPropertyFilters() yang membaca FULL history,
@@ -2347,11 +2181,112 @@ class ConversationQualifier {
    * @returns {{terjangkau:number[], menengah:number[], eksklusif:number[], period:string}|null}
    */
   static getBudgetTiers(buildingType = '', transactionType = '', periodHint = '') {
-    // Tabel HARGA WAJAR (single source of truth) kini di propertyRecommendationService
-    // agar extractPropertyFilters bisa memakainya untuk MEMBATASI katalog, bukan
-    // sekadar tampil di summary. Metode ini mendelegasikan supaya tidak ada dua
-    // salinan tabel yang bisa menyimpang.
-    return svcGetBudgetTiers(buildingType, transactionType, periodHint);
+    const type = (buildingType || '').toLowerCase();
+    const tx   = (transactionType || '').toLowerCase();
+    const txKey = (tx === 'rent') ? 'rent' : (tx === 'sale' || tx === 'purchase') ? 'sale' : null;
+    if (!txKey) return null;
+
+    const M = 1e6, B = 1e9, K = 1e3;
+    // Tabel referensi HARGA WAJAR Indonesia 2025–2026, dipisah per transaksi:
+    //   Beli   → 'sale'  (period '')
+    //   Kontrak tahunan → House, Ruko, Gudang   (period 'year')
+    //   Sewa bulanan    → Apartment, Condo, Office, Store, Mansion (period 'month')
+    //   Sewa kamar      → Kost (period 'month') + kontrak bangunan (period 'year')
+    //   Booking         → Hotel (per malam) & Villa (per malam) + opsi long-stay
+    // period: 'month'=/bln, 'night'=/malam, 'year'=/thn, ''=harga jual.
+    // Tier eksklusif bersifat open-ended (ditampilkan "+").
+    const TIERS = {
+      house: {
+        // Sewa rumah = KONTRAK TAHUNAN
+        rent: { terjangkau: [20*M, 60*M],   menengah: [60*M, 180*M],  eksklusif: [180*M, 600*M], period: 'year' },
+        sale: { terjangkau: [350*M, 900*M], menengah: [900*M, 3*B],   eksklusif: [3*B, 15*B],    period: '' },
+      },
+      apartment: {
+        rent: { terjangkau: [2*M, 5*M],     menengah: [5*M, 15*M],    eksklusif: [15*M, 50*M],   period: 'month' },
+        sale: { terjangkau: [350*M, 800*M], menengah: [800*M, 2.5*B], eksklusif: [2.5*B, 10*B],  period: '' },
+      },
+      condo: {
+        rent: { terjangkau: [4*M, 10*M],    menengah: [10*M, 30*M],   eksklusif: [30*M, 100*M],  period: 'month' },
+        sale: { terjangkau: [700*M, 1.5*B], menengah: [1.5*B, 5*B],   eksklusif: [5*B, 20*B],    period: '' },
+      },
+      hotel: {
+        // Booking kamar PER MALAM (default). Long-stay = sewa/kontrak hotel penuh per TAHUN.
+        rent: { byPeriod: {
+          night: { terjangkau: [200*K, 800*K], menengah: [800*K, 2*M],  eksklusif: [2*M, 10*M],  period: 'night' },
+          year:  { terjangkau: [100*M, 500*M], menengah: [500*M, 3*B],  eksklusif: [3*B, 50*B],  period: 'year' },
+        } },
+        sale: { terjangkau: [5*B, 20*B],    menengah: [20*B, 100*B],  eksklusif: [100*B, 500*B], period: '' },
+      },
+      villa: {
+        // Booking HARIAN (default, vacation) + sewa BULANAN (long-stay).
+        rent: { byPeriod: {
+          night: { terjangkau: [1*M, 3*M],   menengah: [3*M, 8*M],     eksklusif: [8*M, 30*M],   period: 'night' },
+          month: { terjangkau: [10*M, 30*M], menengah: [30*M, 100*M],  eksklusif: [100*M, 500*M], period: 'month' },
+        } },
+        sale: { terjangkau: [800*M, 3*B],   menengah: [3*B, 10*B],    eksklusif: [10*B, 100*B],  period: '' },
+      },
+      boarding_house: {
+        // Sewa KAMAR per bulan (default) + KONTRAK bangunan penuh per tahun.
+        rent: { byPeriod: {
+          month: { terjangkau: [600*K, 1.8*M], menengah: [1.8*M, 3.5*M], eksklusif: [3.5*M, 10*M], period: 'month' },
+          year:  { terjangkau: [30*M, 80*M],   menengah: [80*M, 300*M],  eksklusif: [300*M, 2*B],  period: 'year' },
+        } },
+        sale: { terjangkau: [500*M, 2*B],   menengah: [2*B, 8*B],     eksklusif: [8*B, 50*B],    period: '' },
+      },
+      shophouse: {
+        // Sewa ruko = KONTRAK TAHUNAN
+        rent: { terjangkau: [30*M, 100*M],  menengah: [100*M, 300*M], eksklusif: [300*M, 1.5*B], period: 'year' },
+        sale: { terjangkau: [1*B, 2.5*B],   menengah: [2.5*B, 7*B],   eksklusif: [7*B, 25*B],    period: '' },
+      },
+      office: {
+        rent: { terjangkau: [4*M, 15*M],    menengah: [15*M, 60*M],   eksklusif: [60*M, 500*M],  period: 'month' },
+        sale: { terjangkau: [1*B, 5*B],     menengah: [5*B, 20*B],    eksklusif: [20*B, 200*B],  period: '' },
+      },
+      warehouse: {
+        // Sewa gudang = KONTRAK TAHUNAN
+        rent: { terjangkau: [30*M, 100*M],  menengah: [100*M, 500*M], eksklusif: [500*M, 5*B],   period: 'year' },
+        sale: { terjangkau: [1*B, 4*B],     menengah: [4*B, 15*B],    eksklusif: [15*B, 100*B],  period: '' },
+      },
+      store: {
+        rent: { terjangkau: [1*M, 8*M],     menengah: [8*M, 30*M],    eksklusif: [30*M, 200*M],  period: 'month' },
+        sale: { terjangkau: [500*M, 2*B],   menengah: [2*B, 6*B],     eksklusif: [6*B, 25*B],    period: '' },
+      },
+      mansion: {
+        rent: { terjangkau: [30*M, 100*M],  menengah: [100*M, 300*M], eksklusif: [300*M, 2*B],   period: 'month' },
+        sale: { terjangkau: [5*B, 20*B],    menengah: [20*B, 100*B],  eksklusif: [100*B, 500*B], period: '' },
+      },
+      land: {
+        rent: { terjangkau: [50*M, 150*M],  menengah: [150*M, 500*M], eksklusif: [500*M, 2*B],   period: 'year' },
+        sale: { terjangkau: [300*M, 1*B],   menengah: [1*B, 4*B],     eksklusif: [4*B, 20*B],    period: '' },
+      },
+      kondotel: {
+        rent: { terjangkau: [500*K, 1.5*M], menengah: [1.5*M, 3*M],   eksklusif: [3*M, 8*M],     period: 'night' },
+        sale: { terjangkau: [500*M, 900*M], menengah: [900*M, 1.5*B], eksklusif: [1.5*B, 4*B],   period: '' },
+      },
+      others: {
+        rent: { terjangkau: [5*M, 20*M],    menengah: [20*M, 60*M],   eksklusif: [60*M, 200*M],  period: 'month' },
+        sale: { terjangkau: [500*M, 2*B],   menengah: [2*B, 7*B],     eksklusif: [7*B, 25*B],    period: '' },
+      },
+    };
+
+    const row = TIERS[type] || TIERS.others;
+    let entry = row[txKey] || TIERS.others[txKey] || null;
+    if (!entry) return null;
+
+    // Mode periode ganda. byPeriod bisa punya kombinasi { night, month, year }:
+    //   hotel   : night (booking, default) + year  (sewa hotel penuh)
+    //   villa   : night (booking, default) + month (sewa bulanan)
+    //   kost    : month (sewa kamar, default) + year (kontrak bangunan)
+    // Pilih long-stay HANYA jika customer eksplisit menyebut bulan/tahun/kontrak;
+    // "seminggu"/booking singkat tetap pakai night. Default = night bila ada, else month, else year.
+    if (entry.byPeriod) {
+      const bp = entry.byPeriod;
+      const hint = String(periodHint || '');
+      if (/year|tahun|thn|kontrak|tahunan/i.test(hint) && bp.year)        entry = bp.year;
+      else if (/month|bulan|bulanan/i.test(hint) && bp.month)             entry = bp.month;
+      else                                                                entry = bp.night || bp.month || bp.year;
+    }
+    return entry;
   }
 
   /** Format angka IDR penuh: 5000000 → "Rp 5.000.000". */
@@ -2378,246 +2313,6 @@ class ConversationQualifier {
       : tiers.period === 'year'  ? (lang === 'id' ? ' /thn'   : ' /year') : '';
     const plus = tierName === 'eksklusif' ? '+' : '';   // luxury = open-ended
     return `${this.#rpFull(min)} - ${this.#rpFull(max)}${plus}${suffix}`;
-  }
-
-  /* ─── Public: skill "harga wajar" — jawab pertanyaan terbuka kapan saja ──────
-   * Sebelumnya tabel _BUDGET_TIERS hanya dipakai di 2 momen sempit: (a) render
-   * ringkasan setelah Q3 dijawab kategori, (b) fallback saat katalog 0 hasil.
-   * Pertanyaan TERBUKA di luar dua momen itu ("berapa harga wajar sewa rumah di
-   * surabaya?", "booking villa di bali biasanya berapa?") tidak terjawab. Skill
-   * ini mendeteksi pertanyaan semacam itu KAPAN SAJA (termasuk di tengah Q1-Q12)
-   * dan menjawab dari tabel yang SAMA dipakai filter katalog — tanpa mereset
-   * progress qualifikasi (jawaban di-PREPEND ke pertanyaan Q berikutnya, bukan
-   * menggantikannya). Berlaku utk 3 mode: sewa (bulanan/tahunan), booking
-   * (per malam), beli (harga jual absolut).
-   */
-
-  static #PRICE_QUESTION_RE = /\b(harga\s+wajar|kisaran\s+harga|range\s+harga|harga\s+pasaran|harga\s+umum|harga\s+normal|estimasi\s+harga|berapa(?:an)?\s+(?:kira-?kira\s+)?(?:harga|budget|biaya)|harga(?:nya)?\s+(?:sekitar\s+)?berapa|biasanya\s+berapa|price\s+range|reasonable\s+price|typical\s+price|how\s+much\s+(?:is|does)|around\s+how\s+much)\b/i;
-
-  /**
-   * True bila pesan customer adalah pertanyaan TERBUKA soal harga wajar
-   * (bukan jawaban Q3 numerik/kategori — dijaga dengan syarat detectBudget()
-   * TIDAK menemukan angka konkret dalam pesan yang sama).
-   * @returns {boolean}
-   */
-  static isReasonablePriceQuestion(text = '') {
-    if (!this.#PRICE_QUESTION_RE.test(text)) return false;
-    const b = detectBudget(text);
-    // Kalau customer sekaligus menyebut angka pasti ("berapa ya kalau budget 5 juta")
-    // itu jawaban Q3, bukan pertanyaan terbuka — jangan tangani di sini.
-    return !(b && (b.min != null || b.max != null));
-  }
-
-  /**
-   * Deteksi mode transaksi dari framing pertanyaan itu sendiri:
-   *   sewa/kontrak/kontrakan   → 'rent' + periodHint bulanan/tahunan
-   *   booking/nginap/per malam → 'rent' + periodHint malam (night)
-   *   beli/jual/beli putus     → 'sale'
-   * Return null bila tidak disebutkan (→ caller tampilkan ketiganya).
-   */
-  static #detectPriceQuestionMode(text = '') {
-    const t = text.toLowerCase();
-    if (/\b(beli|jual|dijual|membeli|pembelian|beli\s*putus)\b/.test(t)) return { tx: 'sale', periodHint: '' };
-    if (/\b(booking|nginap|menginap|per\s*malam|semalam|check-?in)\b/.test(t)) return { tx: 'rent', periodHint: '' };
-    if (/\b(sewa|kontrak|kontrakan|menyewa|disewa|nyewa)\b/.test(t)) {
-      return { tx: 'rent', periodHint: /\btahun|kontrak\s*tahunan\b/.test(t) ? 'year' : 'month' };
-    }
-    return null;
-  }
-
-  /** Format satu blok tier (Terjangkau/Menengah/Eksklusif) untuk satu period tertentu. */
-  static #formatTierBlock(buildingType, tx, periodHint, lang, modeLabel) {
-    const tiers = this.getBudgetTiers(buildingType, tx, periodHint);
-    if (!tiers) return null;
-    const isId = lang === 'id';
-    const rt = (name) => this.getBudgetRangeForTier(buildingType, tx, name, lang, periodHint);
-    return `${modeLabel}${modeLabel ? ' — ' : ''}${isId ? 'Terjangkau' : 'Affordable'}: ${rt('terjangkau')}\n`
-         + `   ${isId ? 'Menengah' : 'Mid-range'}: ${rt('menengah')}\n`
-         + `   ${isId ? 'Eksklusif' : 'Premium'}: ${rt('eksklusif')}`;
-  }
-
-  /**
-   * Bangun jawaban "harga wajar" lengkap untuk satu tipe properti, mencakup
-   * SEWA (bulanan/tahunan), BOOKING (per malam, bila tipe mendukung), dan BELI —
-   * atau hanya mode yang diminta bila mode terdeteksi dari pertanyaan.
-   *
-   * @param {string}      buildingType
-   * @param {object|null} modeHint - { tx, periodHint } dari #detectPriceQuestionMode(), atau null (semua mode)
-   * @param {'id'|'en'}   lang
-   * @returns {string}
-   */
-  static buildReasonablePriceAnswer(buildingType, modeHint, lang = 'id') {
-    const isId = lang === 'id';
-    const typeLabel = PropertyFormatter.humanBuildingType(buildingType, lang);
-    const BOOKING_TYPES = new Set(['hotel', 'villa', 'kondotel', 'boarding_house']);
-    const blocks = [];
-
-    const wantRent = !modeHint || modeHint.tx === 'rent';
-    const wantSale = !modeHint || modeHint.tx === 'sale';
-
-    if (wantRent) {
-      // PENTING: cek `modeHint` (objeknya), BUKAN `modeHint.periodHint` — periodHint
-      // booking/malam bernilai '' (falsy) yang tadinya salah dianggap "tak ada mode
-      // spesifik" dan jatuh ke cabang dual-block, menampilkan blok booking DUA KALI
-      // (identik) saat customer eksplisit minta mode booking saja.
-      if (modeHint && modeHint.tx === 'rent') {
-        // Mode spesifik diminta (mis. "booking" → periodHint '', "sewa tahunan" → 'year').
-        const b = this.#formatTierBlock(buildingType, 'rent', modeHint.periodHint, lang, '');
-        if (b) blocks.push(b);
-      } else if (BOOKING_TYPES.has(buildingType)) {
-        // Tipe booking-capable & mode tak spesifik → tampilkan BOOKING (malam) + SEWA PANJANG.
-        const booking = this.#formatTierBlock(buildingType, 'rent', '', lang, isId ? '📅 Booking (per malam)' : '📅 Booking (per night)');
-        const longStay = this.#formatTierBlock(buildingType, 'rent', buildingType === 'boarding_house' ? 'year' : 'month', lang, isId ? '📆 Sewa jangka panjang' : '📆 Long-stay rent');
-        if (booking) blocks.push(booking);
-        if (longStay && longStay !== booking) blocks.push(longStay);
-      } else {
-        const b = this.#formatTierBlock(buildingType, 'rent', '', lang, isId ? '🏠 Sewa' : '🏠 Rent');
-        if (b) blocks.push(b);
-      }
-    }
-    if (wantSale) {
-      const b = this.#formatTierBlock(buildingType, 'sale', '', lang, isId ? '💵 Beli' : '💵 Buy');
-      if (b) blocks.push(b);
-    }
-
-    if (!blocks.length) {
-      return isId
-        ? `Maaf, saya belum punya acuan harga wajar untuk tipe ${typeLabel}.`
-        : `Sorry, I don't have a reasonable-price reference for ${typeLabel} yet.`;
-    }
-
-    const header = isId
-      ? `💰 Kisaran harga wajar *${typeLabel}* di Indonesia:`
-      : `💰 Reasonable price range for *${typeLabel}* in Indonesia:`;
-    return `${header}\n\n${blocks.join('\n\n')}`;
-  }
-
-  /**
-   * Q_NAME / Q_EMAIL — pertanyaan identitas customer TEPAT sebelum summary.
-   * - NAMA: dibutuhkan registrasi customer (tabel customers). TIDAK ditanya bila
-   *   customer sudah memperkenalkan diri ("Hi saya Rina, ...", "Perkenalkan, saya
-   *   Rizal", "Nama saya Kezia") — atau sudah pernah ditanya (tanya SEKALI saja;
-   *   tidak dijawab pun summary tetap lanjut, fallback nama profil WhatsApp).
-   * - EMAIL: hanya bila jadwal viewing sudah disepakati (undangan kalender) dan
-   *   belum ada email di chat — juga maksimal SEKALI.
-   * Return teks pertanyaan, atau null bila tidak perlu bertanya (lanjut summary).
-   */
-  static async buildIdentityQuestion(history, userMessage, profile, lang = 'id', identityCtx = {}) {
-    const isId = lang === 'id';
-    try {
-      const {
-        extractIdentityFromChat, aiAlreadyAskedName, aiAlreadyAskedEmail, getIdentityStatus,
-      } = require('../services/customerRegistrationService');
-      const identity = extractIdentityFromChat(history, userMessage);
-
-      // ── GATE CUSTOMER BARU ────────────────────────────────────────────────
-      // Nama & email HANYA ditanyakan ke customer BARU (belum pernah menyelesaikan
-      // percakapan dengan agent ini). Customer lama: datanya sudah tersimpan —
-      // bertanya ulang bikin chat panjang & terasa tidak mengenal. Sumber status:
-      // customers.name (bukan nama default WA) / customers.email sudah terisi.
-      const { agentUserId, phone, waName } = identityCtx || {};
-      let status = { isReturning: false, hasRealName: false, hasEmail: false };
-      if (agentUserId && phone) {
-        status = await getIdentityStatus({ agentUserId, phone, waName });
-        if (status.isReturning) {
-          console.log(`[PrivateAgent/Q_IDENTITY] Customer lama (${status.name || 'known'}) → lewati tanya nama & email`);
-          return null;
-        }
-      }
-
-      // Q_NAME — belum kenal nama & belum pernah tanya (customer BARU saja)
-      if (!identity.name && !status.hasRealName && !aiAlreadyAskedName(history)) {
-        return isId
-          ? 'Sebelum saya buatkan ringkasannya — boleh saya tahu nama Kakak? 😊'
-          : 'Before I prepare your summary — may I know your name? 😊';
-      }
-
-      // Q_EMAIL — viewing sudah dijadwalkan, email belum ada & belum pernah tanya
-      const viewingPlanned = !!(profile?.hasViewingHour || profile?.hasViewingDate
-                               || profile?.wantsViewingScheduled);
-      if (viewingPlanned && !identity.email && !status.hasEmail && !aiAlreadyAskedEmail(history)) {
-        return isId
-          ? 'Untuk undangan jadwal viewing-nya, boleh minta alamat email Kakak? 📧\n(Kalau tidak berkenan, balas "lewati" saja — tidak wajib 😊)'
-          : 'For the viewing invitation, may I have your email address? 📧\n(Reply "skip" if you prefer not to — it\'s optional 😊)';
-      }
-    } catch (err) {
-      console.warn('[PrivateAgent/Q_NAME] identity check failed (non-fatal):', err.message);
-    }
-    return null;
-  }
-
-  /**
-   * Balasan pengakuan RALAT — supaya AI terasa responsif & adaptif saat customer
-   * memperbaiki jawaban ("ralat, budget 1-2 miliar", "ganti viewingnya jam 2").
-   * Return teks singkat berisi nilai yang diperbarui (di-prepend ke balasan
-   * berikutnya), atau null bila pesan bukan ralat / tidak ada nilai baru dikenali.
-   * Nilai state-nya sendiri sudah di-overwrite oleh extractQualificationState
-   * (budget/moveInDate) dan scope _viewingText (jam/hari viewing) — helper ini
-   * hanya membuat pengakuannya eksplisit ke customer.
-   */
-  static buildCorrectionAck(userMessage = '', lang = 'id') {
-    if (!isCorrectionMessage(userMessage)) return null;
-    const isId = lang === 'id';
-    const updated = [];
-
-    const isViewingTopic = /\b(viewing\w*|survei\w*|survey\w*|jadwal\w*)\b/i.test(userMessage);
-
-    // Budget baru di pesan ralat?
-    const b = detectBudget(userMessage);
-    if (b && !b.ambiguous) {
-      updated.push(isId ? `Budget → *${b.preference === 'affordable' ? 'terjangkau' : b.text}*`
-                        : `Budget → *${b.preference === 'affordable' ? 'affordable' : b.text}*`);
-    }
-
-    // Jam/hari viewing baru?
-    const hourM = userMessage.match(/\b(?:jam|pukul)\s*(\d{1,2}(?:[.:]\d{2})?)\b/i);
-    if (isViewingTopic && hourM) {
-      const tod = (userMessage.match(/\b(pagi|siang|sore)\b/i) || [])[1] || '';
-      updated.push(isId ? `Jadwal viewing → *jam ${hourM[1]}${tod ? ' ' + tod : ''}*`
-                        : `Viewing time → *${hourM[1]}${tod ? ' ' + tod : ''}*`);
-    }
-
-    // Tanggal target/masuk baru? (bukan konteks viewing)
-    if (!isViewingTopic) {
-      try {
-        const { parseCustomerDate } = require('../utils/customerDateParser');
-        const parsed = parseCustomerDate(userMessage, new Date());
-        if (parsed && parsed.status === 'ok') {
-          updated.push(isId ? `Tanggal target → *${parsed.formatted}*` : `Target date → *${parsed.formatted}*`);
-        }
-      } catch (_e) { /* non-fatal */ }
-    }
-
-    if (!updated.length) return null;
-    return isId
-      ? `✏️ Siap, sudah saya perbarui ya:\n${updated.map(u => `• ${u}`).join('\n')}\nTerima kasih koreksinya! 🙏`
-      : `✏️ Got it, I have updated:\n${updated.map(u => `• ${u}`).join('\n')}\nThanks for the correction! 🙏`;
-  }
-
-  /**
-   * Entry point dipanggil dari alur utama: kalau pesan customer adalah
-   * pertanyaan harga wajar terbuka, kembalikan teks jawabannya (untuk di-PREPEND
-   * ke pertanyaan Q berikutnya); else null (tidak relevan, lanjutkan seperti biasa).
-   *
-   * @param {string} userMessage
-   * @param {object} profile - Dari buildProfile() — dipakai sbg fallback tipe/tx
-   *                            bila tidak disebut eksplisit di pesan ini.
-   * @param {'id'|'en'} lang
-   * @returns {string|null}
-   */
-  static maybeAnswerReasonablePriceQuestion(userMessage, profile, lang = 'id') {
-    if (!this.isReasonablePriceQuestion(userMessage)) return null;
-
-    const mentionedType = detectBuildingType(userMessage);
-    const buildingType = mentionedType || profile?.buildingType || '';
-    if (!buildingType) {
-      return lang === 'id'
-        ? '💰 Tentu! Tipe properti apa yang ingin Anda ketahui kisaran harganya? (rumah, apartemen, villa, hotel, dll.)'
-        : "💰 Sure! Which property type would you like the price range for? (house, apartment, villa, hotel, etc.)";
-    }
-
-    const modeHint = this.#detectPriceQuestionMode(userMessage);
-    return this.buildReasonablePriceAnswer(buildingType, modeHint, lang);
   }
 
   /* ─── Public: readiness score ───────────────────────────────────────────── */
@@ -2720,7 +2415,7 @@ class ConversationQualifier {
     // the same LOCATION_LANDMARKS map — see top of file — so adding a new city there
     // automatically wires up both questions).
     const isCommercialType  = ['shophouse', 'office', 'warehouse', 'store'].includes(type);
-    const cityLandmarks     = getCityLandmarksEnriched(loc);
+    const cityLandmarks     = getCityLandmarks(loc);
     // Booking (hotel/kondotel/villa) & customer yang sudah menyebut patokan lokasi
     // (anchorPoint, mis. "dekat PTC") TIDAK ditanya area lagi — redundant dengan Q6.
     if (loc && !profile.hasDistrict && !profile.aiAskedDistrict
@@ -2911,7 +2606,7 @@ class ConversationQualifier {
       if (!profile.hasAnchorPoint && !profile.aiAskedAnchorPoint && loc) {
         // Sebut landmark LOKAL kota customer (mal, kawasan, wisata) bila tersedia di
         // LOCATION_LANDMARKS — jauh lebih relevan daripada contoh generik untuk semua kota.
-        const marks = getCityLandmarksEnriched(loc);
+        const marks = getCityLandmarks(loc);
         if (marks && marks.length) {
           const sample = marks.slice(0, 3).join(', ');
           return isId
@@ -3110,43 +2805,8 @@ class ConversationQualifier {
    * Returns the next question text, or null when ready to hand off.
    * ═══════════════════════════════════════════════════════════════════════════ */
   static housePilotEnabled(profile) {
-    if (String(process.env.HOUSE_PILOT_V2 || 'ON').toUpperCase() === 'OFF') return false;
-    // Cakupan tipe pilot. SKILL_HOUSE_v1_pilot menyebut scope "Rumah / Apartemen",
-    // tetapi apartemen punya slot khusus (Q12 tower/lantai/view) di alur standar.
-    // Default tetap `house` saja agar perilaku apartemen tidak berubah diam-diam;
-    // aktifkan lewat env bila memang ingin: HOUSE_PILOT_TYPES=house,apartment
-    const types = String(process.env.HOUSE_PILOT_TYPES || 'house')
-      .toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
-    return types.includes(String(profile.buildingType || '').toLowerCase());
-  }
-
-  /**
-   * Peta slot INTI pilot (SKILL_HOUSE_v1_pilot) → dipakai VALUE CHECKPOINT.
-   * BELI: listing_reference · motivation · location · price_band
-   * SEWA: listing_reference · move_in_urgency · location · price_band
-   *
-   * `listing_reference` = customer membuka chat merujuk sebuah listing yang ia
-   * lihat (portal/broadcast) — pesan itu SEKALIGUS mengisi lokasi & price band,
-   * jadi tidak boleh ditanyakan ulang.
-   *
-   * @returns {object} map slot→boolean
-   */
-  static buildPilotCoreSlots(profile = {}, filters = {}, userMessage = '', history = []) {
-    const hp = require('../utils/houseListingPilot');
-    // Cari referensi listing di SELURUH pesan customer (biasanya pesan pertama).
-    const custMsgs = [
-      ...(history || []).filter(h => h.role === 'user' || h.role === 'customer').map(h => h.message || ''),
-      userMessage || '',
-    ];
-    const listingRef = custMsgs.some(m => hp.extractListingReference(m).isListingReferral);
-
-    return {
-      listing_reference: listingRef,
-      motivation       : !!profile.hasMotivation,
-      move_in_urgency  : !!profile.hasMoveInDate,
-      location         : !!(filters.location || profile.location),
-      price_band       : !!(filters.budget || profile.budget),
-    };
+    return String(process.env.HOUSE_PILOT_V2 || 'ON').toUpperCase() !== 'OFF'
+      && profile.buildingType === 'house';
   }
 
   static getNextQuestionHousePilot(profile, lang = 'id', priceAnchors = null, agentName = '', appName = '') {
@@ -3416,6 +3076,76 @@ class ConversationQualifier {
     return { score, priority, brief, agentNote };
   }
 
+  /* ─── Public: Google Calendar auto-scheduling trigger ──────────────────────
+   * Consumed by services/viewingScheduleTrigger.js (wired into all 3 WhatsApp
+   * controllers). Only returns a bookable {dateString, timeString} pair on a
+   * GENUINE, unambiguous slot — never on a vague relative day ("besok" alone)
+   * or a missing hour. Auto-booking a calendar event should only fire once the
+   * customer has given something unambiguous enough that a human agent reading
+   * the invite wouldn't need to double-check it.
+   */
+  static #VIEWING_MONTH_RE = /\b(januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember|jan|feb|mar|apr|jun|jul|agt|ags|sep|okt|nov|des)\b/i;
+
+  static #resolveViewingTime(profile) {
+    const text = String(profile._viewingText || profile._custText || '').toLowerCase();
+    if (!text) return null;
+
+    // Explicit HH:MM wins outright ("jam 14:30").
+    const hhmm = text.match(/\bjam\s+(\d{1,2})[:.](\d{2})\b/);
+    if (hhmm) {
+      const hh = parseInt(hhmm[1], 10), mm = parseInt(hhmm[2], 10);
+      if (hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59) {
+        return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+      }
+    }
+
+    // Take the LAST "jam N" mention — handles a correction like
+    // "jam 11, ralat jam 2 aja" (the customer's final word wins).
+    const matches = [...text.matchAll(/\bjam\s+(\d{1,2})\b/g)];
+    if (!matches.length) return null;
+    let hour = parseInt(matches[matches.length - 1][1], 10);
+    if (hour < 0 || hour > 23) return null;
+
+    const tod = String(profile.viewingTimeOfDay || '').toLowerCase();
+    const isPM = /siang|sore|malam/.test(tod);
+    // Ambiguous-hour guard: "jam 11 siang"/"jam 12 siang" already read as
+    // late-morning/noon — never shift those into evening hours.
+    if (isPM && hour >= 1 && hour < 11) hour += 12;
+
+    return `${String(hour).padStart(2, '0')}:00`;
+  }
+
+  /**
+   * @param {object} profile - From buildProfile()
+   * @returns {{dateString: string, timeString: string}|null}
+   */
+  static extractConcreteViewingDateTime(profile) {
+    if (!profile || !profile.hasViewingHour) return null;
+    const dayRef = String(profile.viewingDayRef || '').trim();
+    if (!dayRef) return null;
+
+    // Require an EXPLICIT calendar date (a month name, or DD/MM[/YYYY]) — a
+    // bare relative word ("besok", "minggu depan") is excluded even though
+    // customerDateParser CAN resolve it. Auto-booking should only fire on an
+    // already-unambiguous date, not a fuzzy relative guess re-resolved against
+    // "now" at read time (which could drift from what the customer actually
+    // meant if this runs on a later turn).
+    const looksExplicit = ConversationQualifier.#VIEWING_MONTH_RE.test(dayRef)
+      || /^\d{1,2}[\/\-]\d{1,2}([\/\-]\d{2,4})?$/.test(dayRef);
+    if (!looksExplicit) return null;
+
+    const parsed = parseCustomerDate(dayRef, new Date());
+    if (!parsed || (parsed.status !== 'ok' && parsed.status !== 'reject_past')) return null;
+
+    const d = parsed.date;
+    const dateString = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+    const timeString = ConversationQualifier.#resolveViewingTime(profile);
+    if (!timeString) return null;
+
+    return { dateString, timeString };
+  }
+
   /* ─── Public: build agent brief from profile ────────────────────────────── */
 
   /**
@@ -3457,11 +3187,7 @@ class ConversationQualifier {
           ? 'stated' : 'inferred',
       },
       location: {
-        // Title-case per kata: customer sering ketik lowercase ("di jakarta")
-        // dan summary menampilkannya mentah ("✓ Lokasi: jakarta").
-        value : filters.location
-          ? String(filters.location).replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-          : 'UNKNOWN',
+        value : filters.location || 'UNKNOWN',
         source: 'stated', // location always stated
       },
       budget: (() => {
@@ -3508,32 +3234,13 @@ class ConversationQualifier {
           return { value: qb, source: 'stated' };
         }
         // (c) Angka / range konkret dari filters. Skip yang AMBIGU ("15-20" dari "lantai 15-20").
-        if (b?.text && !b?.ambiguous) {
-          return {
-            value : b.text + ConversationQualifier.#budgetPeriodSuffix(custText),
-            source: 'stated',
-          };
-        }
-        // (d) FALLBACK anti-hilang: budget disebut customer di AWAL percakapan
-        //     ("rumah 600-800 juta cash" di pesan pertama) bisa lolos dari
-        //     filters/qualState bila upstream (recommendationContext / active-session
-        //     scoping) menghapusnya. Pindai ULANG SELURUH history sebagai jaring
-        //     pengaman — budget yang pernah dinyatakan HARUS muncul di summary.
-        try {
-          const histText = (Array.isArray(history) ? history : [])
-            .filter(m => m && (m.role === 'user' || m.role === 'customer'))
-            .map(m => m.message || '')
-            .concat(userMessage || '')
-            .join(' ');
-          const scanned = extractPropertyFilters(histText, []).budget;
-          if (scanned && scanned.text && !scanned.ambiguous) {
-            return {
-              value : scanned.text + ConversationQualifier.#budgetPeriodSuffix(histText),
-              source: 'stated',
-            };
-          }
-        } catch (_) { /* jaring pengaman non-fatal */ }
-        return { value: 'UNKNOWN', source: 'inferred' };
+        return {
+          value : (b?.text && !b?.ambiguous)
+            ? b.text + ConversationQualifier.#budgetPeriodSuffix(custText)
+            : 'UNKNOWN',
+          source: wasStated(custText, ['juta', 'ribu', 'miliar', 'jt', 'm ', 'rb', 'budget', 'harga'])
+            ? 'stated' : 'inferred',
+        };
       })(),
 
       // ─ Extended fields ─
@@ -3547,42 +3254,26 @@ class ConversationQualifier {
       },
       decisionMaker: {
         // Prefer qualState.decisionMaker (Phase 2 normalized: "Mandiri", "Koordinasi
-        // dengan pasangan", etc.) over extraction from full custText. Fallback is
-        // gated ONLY by hasDecisionMaker (a real Q9 decision-signal keyword hit) —
-        // household composition (Q4) has no bearing on who decides and must NOT
-        // gate this field (previously caused "Disebutkan di Q4" to appear even when
-        // Q9 was never asked/answered).
+        // dengan pasangan", etc.) over extraction from full custText.
+        // Gate fallback by profile flags — hasHouseholdInfo → "Disebutkan di Q4".
         value : qualState.decisionMaker
           ? qualState.decisionMaker
-          : (profile.hasDecisionMaker
+          : ((profile.hasDecisionMaker || profile.hasHouseholdInfo)
               ? this.#extractDecisionMaker(custText, profile)
               : 'UNKNOWN'),
-        source: (qualState.decisionMaker || profile.hasDecisionMaker) ? 'stated' : 'UNKNOWN',
+        source: (qualState.decisionMaker || profile.hasDecisionMaker || profile.hasHouseholdInfo) ? 'stated' : 'UNKNOWN',
       },
       household: {
-        // Prefer qualState.household (Phase-2 per-message extraction, anchored ke
-        // jawaban Q4 asli: "Saya tinggal sendirian" → "1 orang (sendiri)"). Fallback
-        // #extractHouseholdSummary memindai SELURUH custText — kata nyasar dari
-        // jawaban lain ("dekat wisata BNS" di patokan lokasi Q6) pernah membajak
-        // baris ini jadi "Untuk liburan/menginap sementara" pada transaksi BELI,
-        // menimpa jawaban penghuni yang sebenarnya.
-        value : qualState.household
-          ? qualState.household
-          : (profile.hasHouseholdInfo ? this.#extractHouseholdSummary(custText) : 'UNKNOWN'),
-        source: (qualState.household || profile.hasHouseholdInfo) ? 'stated' : 'UNKNOWN',
+        value : profile.hasHouseholdInfo
+          ? this.#extractHouseholdSummary(custText)
+          : 'UNKNOWN',
+        source: profile.hasHouseholdInfo ? 'stated' : 'UNKNOWN',
       },
       furnishing: {
         value : profile.hasFurnishing
           ? this.#extractFurnishing(custText)
           : 'UNKNOWN',
         source: profile.hasFurnishing ? 'stated' : 'inferred',
-      },
-      // Q_COND (beli): kondisi unit — baru/ready | second | inden | gabungan
-      // ("baru atau second"). Diambil dari qualState (extractor multi-pilih);
-      // null bila tidak pernah dijawab → baris disembunyikan oleh renderer.
-      propertyCondition: {
-        value : qualState.propertyCondition || null,
-        source: qualState.propertyCondition ? 'stated' : 'UNKNOWN',
       },
       leaseDuration: {
         // Prefer qualState.leaseDuration (exact customer response to Q10). Jika customer
@@ -3613,14 +3304,7 @@ class ConversationQualifier {
       // bukan larangan) dengan interpretasi Hindari↔Prefer yang benar. Lihat
       // #buildAvoidPreferPairs untuk detail logika pemasangan.
       ...(() => {
-        // Gabungkan jawaban Q5 eksplisit DENGAN seluruh teks customer sesi aktif:
-        // preferensi sering di-volunteer di luar pertanyaan Q5 (mis. "Saya cari yang
-        // sepi / akses jalan lancar / tempat yang rindang" sebagai lanjutan jawaban
-        // Q2b) — dulu hilang total dari summary karena sumber pairs hanya
-        // qualState.redFlags (yang bisa berisi jawaban lain, mis. landmark).
-        // #buildAvoidPreferPairs berbasis regex kata-kunci sehingga aman menerima
-        // teks yang lebih luas.
-        const redFlagsSource   = [qualState.redFlags || '', custText].filter(Boolean).join(' ');
+        const redFlagsSource   = qualState.redFlags || (profile.hasRedFlags ? custText : '');
         const apartmentPrefRaw = qualState.apartmentPref || '';
         const { avoid, prefer } = ConversationQualifier.#buildAvoidPreferPairs(redFlagsSource, apartmentPrefRaw);
         return {
@@ -3645,12 +3329,8 @@ class ConversationQualifier {
         // plus insight (hindari matahari terbit+terbenam = ingin unit sejuk).
         const isVerticalType = ['apartment', 'condo', 'kondotel'].includes(filters.buildingType);
         if (!isVerticalType) return { value: null, source: 'UNKNOWN' };
-        // ⚠️ custText fallback is gated on aiAskedApartmentPrefs (Q12 actually asked) —
-        // without this, ANY earlier mention of "hadap"/"matahari terbenam" answered to
-        // a DIFFERENT question (e.g. Q5 red flags) gets misattributed here as if it
-        // were a Q12 tower/floor answer. Mirrors the anchorPoint gating pattern below.
         const raw = qualState.apartmentPref
-          || ((profile.hasApartmentPrefs && profile.aiAskedApartmentPrefs) ? custText : '');
+          || (profile.hasApartmentPrefs ? custText : '');
         const norm = this.#normalizeApartmentPref(raw);
         return {
           value : norm || 'UNKNOWN',
@@ -3709,15 +3389,30 @@ class ConversationQualifier {
           if (!merged.some(x => x.toLowerCase() === s.toLowerCase())) merged.push(s);
         });
 
+        // Premium/eksklusif signal (mewah/eksklusif/premium/luxury/fully furnished, or
+        // an already-picked "eksklusif" Q3 budget tier). Deliberately just a FLAG, not
+        // the full ~28-item premium list — dumping that list produced a bloated,
+        // irrelevant-heavy summary line (e.g. "Basketball Court" on a villa) when
+        // tested. Item *selection* is left to the LLM providers, which have the
+        // contextual judgment this deterministic path doesn't. See
+        // utils/standardFacilities.js's wantsPremiumFacilities()/getPremiumFacilities().
+        const wantsPremium = (() => {
+          try {
+            const { wantsPremiumFacilities } = require('../utils/standardFacilities');
+            return wantsPremiumFacilities(custText, profile.budget && profile.budget.preference);
+          } catch (_e) { return false; }
+        })();
+
         if (merged.length) {
           // isStandard = true HANYA bila murni standar (customer tak sebut item spesifik).
           return {
             value     : merged.join(', '),
             isStandard: wantsStandard && specific.length === 0,
             source    : 'stated',
+            wantsPremium,
           };
         }
-        return { value: 'UNKNOWN', isStandard: false, source: 'UNKNOWN' };
+        return { value: 'UNKNOWN', isStandard: false, source: 'UNKNOWN', wantsPremium };
       })(),
 
       // ─ Meta ─
@@ -3793,10 +3488,12 @@ class ConversationQualifier {
    * @param {string} furnishing   - 'full'/'semi'/'' (opsional)
    * @returns {string|null} daftar fasilitas dipisah koma, atau null bila tak dikenali
    */
+  // Delegates to utils/standardFacilities.js — the single source of truth for
+  // the comprehensive 11-type table (28 Jul 2026 update). Do not re-inline the
+  // per-type lists here; that duplication is exactly what let this method drift
+  // out of sync with the canonical table before.
   static #getStandardFacilitiesByType(buildingType, furnishing) {
-    // Delegasi ke util bersama (utils/standardFacilities.js) — satu sumber
-    // kebenaran, juga dipakai propertyRecommendationService untuk fallback
-    // rekomendasi saat katalog agent tidak menemukan data.
+    const { getStandardFacilitiesByType } = require('../utils/standardFacilities');
     return getStandardFacilitiesByType(buildingType, furnishing);
   }
 
@@ -3819,33 +3516,24 @@ class ConversationQualifier {
   }
 
   static #extractDecisionMaker(custText, profile) {
-    // Urutan: sinyal keputusan SPESIFIK dulu. Frasa kekerabatan polos ("bersama
-    // keluarga", "sama istri") TIDAK boleh match sendirian — itu kosakata jawaban
-    // Q4 (penghuni: "tinggal bersama siapa?"), bukan jawaban Q9 (siapa yang
-    // memutuskan). Substring /sama keluarga/ dulu match di dalam "berSAMA KELUARGA"
-    // → summary salah menampilkan "Keputusan bersama: Bersama keluarga" padahal Q9
-    // tidak pernah ditanya. Kin words kini hanya dihitung saat menempel pada kata
-    // kerja keputusan (koordinasi/diskusi/tanya/izin/persetujuan/putuskan).
+    if (/sendiri|alone|solo/.test(custText))              return 'Sendirian';
+    if (/sama suami|bersama suami|with husband/.test(custText)) return 'Bersama suami';
+    if (/sama istri|bersama istri|with wife/.test(custText))    return 'Bersama istri';
+    if (/sama pasangan|with partner/.test(custText))      return 'Bersama pasangan';
+    if (/sama keluarga|with family/.test(custText))       return 'Bersama keluarga';
+    if (/sama teman(-teman)?|bersama teman|teman-teman|with friends?/.test(custText)) return 'Teman';
     if (/langsung bisa|bisa langsung/.test(custText))     return 'Solo (bisa langsung jadwalkan)';
     if (/koordinasikan?|koordinasi dulu|perlu diskusi/.test(custText)) return 'Perlu koordinasi (joint decision)';
-    const kin = custText.match(/\b(?:koordinasi(?:kan|in)?|diskusi(?:kan)?|tanya|izin|persetujuan|putus(?:kan)?|keputusan)\b[^.!?\n]{0,40}?\b(suami|istri|pasangan|keluarga|orang\s*tua|teman)\b/i);
-    if (kin) return `Koordinasi dengan ${kin[1].toLowerCase()}`;
-    if (/\b(?:putus(?:kan)?|keputusan|decide)\b[^.!?\n]{0,20}\bsendiri\b|\bsendiri\b[^.!?\n]{0,20}\byang\s+(?:putus|memutuskan)\b/i.test(custText)) return 'Sendirian';
-    // NOTE: previously had `if (profile.hasHouseholdInfo) return 'Disebutkan di Q4';`
-    // here — REMOVED. Household composition (Q4: "siapa saja yang tinggal") has no
-    // bearing on WHO decides (Q9) — that fallback fabricated a decision-maker value
-    // any time Q4 was answered, even when Q9 was never asked or answered with a pure
-    // scheduling reply ("Boleh kak, kapan ya?"). Q9 must stay UNKNOWN until a real
-    // decision-maker signal is found.
+    if (profile.hasHouseholdInfo) return 'Disebutkan di Q4';
     return 'UNKNOWN';
   }
 
   static #extractHouseholdSummary(custText) {
-    // URUTAN PENTING: jawaban penghuni EKSPLISIT ("tinggal sendirian", "berdua",
-    // "2 anak") diperiksa DULUAN — itu jawaban langsung atas Q4 dan harus menang.
-    // Label use-case (liburan/investasi/dll) hanya fallback bila customer tidak
-    // pernah menjawab komposisi penghuni — dulu use-case dicek duluan sehingga
-    // kata nyasar dari jawaban lain menimpa jawaban Q4 yang sebenarnya.
+    // Non-residential / temporary use (worship, investment, office/business, or a
+    // vacation/temporary stay) — not a residential occupancy, so show the USE instead
+    // of a bedroom-oriented label. We never asked "tinggal bersama siapa" here.
+    const use = detectUseCase(custText);
+    if (use) return useCaseLabel(use);
     const childM = custText.match(/(\d+)\s*anak/);
     if (childM) return `Keluarga dengan ${childM[1]} anak`;
     // Explicit headcount of any size (e.g. "15 orang") — a group (≥6) is flagged.
@@ -3861,11 +3549,6 @@ class ConversationQualifier {
     if (/rombongan|grup|group|reuni|arisan|gathering/.test(custText)) return 'Rombongan/grup';
     if (/keluarga besar/.test(custText))         return 'Keluarga besar';
     if (/keluarga/.test(custText))               return 'Keluarga';
-    // Fallback: non-residential / temporary use (ibadah, investasi, kantor/usaha,
-    // liburan) — bukan komposisi penghuni, tampilkan PENGGUNAANNYA. Hanya sampai
-    // sini bila tidak ada satu pun jawaban komposisi penghuni di atas.
-    const use = detectUseCase(custText);
-    if (use) return useCaseLabel(use);
     return 'Disebutkan';
   }
 
@@ -3882,11 +3565,7 @@ class ConversationQualifier {
     // Tangkap durasi sewa untuk SEMUA satuan: hari/malam/minggu/bulan/tahun (+ Inggris).
     // Sebelumnya hanya 'tahun' yang ditangkap → "2 minggu", "10 hari", "6 bulan" hilang
     // dari summary. Cari angka+satuan eksplisit (mis. "butuh sewa 2 minggu").
-    //
-    // Lookahead negatif: "N unit lagi/kedepan/besok/mendatang/dari sekarang" adalah
-    // OFFSET TANGGAL ("checkin 3 minggu lagi" = tanggal check-in +3 minggu), BUKAN
-    // durasi menginap — jangan tangkap sebagai durasi.
-    const m = custText.match(/(\d+)\s*(hari|malam|minggu|bulan|tahun|day|night|week|month|year)s?\b(?!\s*(?:lagi|kedepan|ke\s+depan|mendatang|besok|dari\s+sekarang))/i);
+    const m = custText.match(/(\d+)\s*(hari|malam|minggu|bulan|tahun|day|night|week|month|year)s?\b/i);
     if (m) {
       const unitMap = {
         hari: 'hari', day: 'hari', malam: 'malam', night: 'malam',
@@ -3929,57 +3608,9 @@ class ConversationQualifier {
     // Hanya dalam konteks viewing (AI sudah tanya decision-maker / tanggal survey)
     const inViewingCtx = profile.aiAskedDecisionMaker || profile.aiAskedViewingDate;
     if (!inViewingCtx) return null;
-
-    // ⚠️ Viewing harus jadi topik BERJALAN, bukan sekadar "pernah ditanya". Flag
-    // aiAskedDecisionMaker/aiAskedViewingDate bernilai true bila AI PERNAH menanyakannya
-    // di mana pun sepanjang sesi — sehingga bisa bocor dari pencarian LAMA yang
-    // ditinggalkan (customer lalu mulai pencarian baru tanpa greeting/ganti tipe →
-    // boundary tak reset). Gejala nyata: setelah AI tanya "Untuk furnitur…?", AI malah
-    // nyeletuk "Sore jam berapa?" (sore & jam bocor dari flow sebelumnya). Guard:
-    // topik viewing dianggap berjalan HANYA bila pesan AI terakhir memang soal
-    // viewing/survei/jadwal/koordinasi/jam, ATAU pesan customer saat ini menyinggung
-    // viewing/survei/jadwal.
-    const _lastAi = profile._lastAiText || '';
-    const _curMsgLo = (profile._currentMsg || '').toLowerCase();
-    const viewingIsCurrentTopic =
-      /\b(viewing|survei|survey|jadwalkan|jadwal|koordinasi|check.?in)\b/i.test(_lastAi)
-      || /\bjam\s+berapa\b/i.test(_lastAi)
-      || /\b(viewing|survei|survey|jadwal|ketemu|janjian|ketemuan)\b/i.test(_curMsgLo);
-    if (!viewingIsCurrentTopic) return null;
-
-    // ── Customer BALIK BERTANYA ketersediaan agen ─────────────────────────────
-    // "Kakak bisa survei dengan saya, kapan bisa ya?" / "Tanggal berapa bisa?" /
-    // "Sebaiknya enak kapan ya kita survei bareng?" — customer sedang bertanya ke
-    // KITA, bukan menjawab. Dulu dijawab robotik "Itu jam berapa, Kak? 📅" (pertanyaan
-    // diabaikan). Kini: jawab adaptif — tawarkan 2 tanggal konkret + kisaran jam
-    // yang mengikuti preferensi waktu yang sudah disebut ("Saya bisa sorean" → sore).
-    const curMsg = profile._currentMsg || '';
-    const asksAvailability =
-      /\b(?:kapan|tanggal\s+berapa|hari\s+apa)\b[^.!?\n]{0,30}\b(?:bisa|kosong|luang|available|free)\b/i.test(curMsg) ||
-      /\b(?:bisa|kosong|luang)\b[^.!?\n]{0,30}\b(?:kapan|tanggal\s+berapa|hari\s+apa)\b/i.test(curMsg) ||
-      /\benak(?:nya)?\s+kapan\b/i.test(curMsg) ||
-      /\bkapan\s+(?:bisa|enak(?:nya)?|ya)\b/i.test(curMsg);
-    if (asksAvailability && !profile.hasViewingHour) {
-      const M = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
-      const dLabel = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return `${d.getDate()} ${M[d.getMonth()]}`; };
-      const todPref = profile.viewingTimeOfDay;
-      const hourHint = todPref === 'sore'  ? (isId ? 'sore — sekitar jam 3 atau jam 4' : 'in the afternoon — around 3 or 4 PM')
-        : todPref === 'siang' ? (isId ? 'siang — sekitar jam 12 atau jam 1' : 'midday — around 12 or 1 PM')
-        : todPref === 'pagi'  ? (isId ? 'pagi — sekitar jam 9 atau jam 10' : 'in the morning — around 9 or 10 AM')
-        : (isId ? '— jam 10 pagi atau jam 3 sore' : '— 10 AM or 3 PM');
-      return isId
-        ? `Saya fleksibel kok, Kak — tinggal menyesuaikan jadwal Kakak 😊\nBagaimana kalau *besok (${dLabel(1)})* atau *lusa (${dLabel(2)})* ${hourHint}?\nKalau kurang pas, sebut saja tanggal & jam yang paling nyaman ya 📅`
-        : `I'm flexible, Kak — happy to follow your schedule 😊\nHow about *tomorrow (${dLabel(1)})* or *the day after (${dLabel(2)})* ${hourHint}?\nIf that doesn't suit, just tell me any date & time 📅`;
-    }
-
-    // Customer sudah usulkan hari ATAU time-of-day, tapi belum sebut jam
+    // Customer sudah usulkan hari ATAU time-of-day, tapi belum sebut jam, & AI belum tanya
     const proposedTiming = profile.viewingTimeOfDay || profile.hasViewingDate;
-    // ⚠️ WAJIB: jangan return null hanya karena aiAskedViewingHour sudah true — itu
-    // dulu menyebabkan AI "menyerah" dan lompat ke pertanyaan lain begitu customer
-    // menjawab vague ("besok sore?" tanpa jam spesifik). Jam viewing WAJIB dikonfirmasi
-    // sebelum lanjut — kalau masih belum ada jam spesifik, tanya ULANG dengan follow-up
-    // singkat, bukan diam-diam melanjutkan ke pertanyaan berikutnya.
-    if (!proposedTiming || profile.hasViewingHour) return null;
+    if (!proposedTiming || profile.hasViewingHour || profile.aiAskedViewingHour) return null;
 
     // Malam → di luar jam survey (pagi–sore)
     if (profile.viewingIsNight) {
@@ -3988,17 +3619,8 @@ class ConversationQualifier {
         : `Apologies, Kak — viewings are usually only available from morning to evening. What time (morning–evening) works for you? ⏰`;
     }
 
-    const tod = profile.viewingTimeOfDay; // pagi/siang/sore/null
-
-    // Sudah pernah tanya jam sebelumnya TAPI customer masih jawab vague (mis. "besok
-    // sore?" tanpa jam) → follow-up singkat menegaskan waktu yang sudah disebut,
-    // JANGAN ulang pertanyaan penuh (terasa robotic) dan JANGAN pindah topik.
-    if (profile.aiAskedViewingHour) {
-      const todLabel = tod ? this.#capitalizeFirst(tod) : (isId ? 'Itu' : 'That');
-      return isId ? `${todLabel} jam berapa, Kak? 📅` : `What time exactly, Kak? 📅`;
-    }
-
     // Susun frasa hari + waktu. Default hari = besok bila hanya time-of-day disebut.
+    const tod    = profile.viewingTimeOfDay;                   // pagi/siang/sore/null
     const dayRef = profile.viewingDayRef || (tod ? 'besok' : '');
     const phraseId = [dayRef, tod].filter(Boolean).join(' ');  // "besok siang"
     const forId    = phraseId ? ` untuk ${phraseId}` : '';
@@ -4032,11 +3654,7 @@ class ConversationQualifier {
       const tod    = profile.viewingTimeOfDay;
       const dayRef = profile.viewingDayRef || (tod ? 'besok' : '');
       const dayRefCap = dayRef ? dayRef.charAt(0).toUpperCase() + dayRef.slice(1) : '';
-      // Scope ke teks pasca-ralat bila ada, dan ambil match jam TERAKHIR — customer
-      // yang meralat ("ralat, jam 2 aja") harus menang atas jam pertama ("jam 11").
-      const hourSrc = profile._viewingText || custText;
-      const hourMs  = [...hourSrc.matchAll(/\b(?:jam|pukul)\s*(\d{1,2}(?:[.:]\d{2})?)\b/gi)];
-      const hourM   = hourMs.length ? hourMs[hourMs.length - 1] : null;
+      const hourM  = custText.match(/\bjam\s*(\d{1,2}(?:[.:]\d{2})?)\b/i);
       const hourStr = hourM ? `jam ${hourM[1]}` : '';
       // Resolved date (contains month name, e.g. "9 Juli 2026") → "Jam 7 pagi, 9 Juli 2026"
       const MONTHS_LO = ['januari','februari','maret','april','mei','juni','juli','agustus','september','oktober','november','desember'];
@@ -4048,29 +3666,6 @@ class ConversationQualifier {
       }
       const parts  = [dayRefCap, tod, hourStr].filter(Boolean);
       return parts.length ? parts.join(' ') : 'Sudah dikonfirmasi';
-    }
-
-    // Waktu survei RELATIF menempel konteks survei → resolve ke tanggal konkret.
-    // "Saya mau survei 3 minggu lagi" = hari ini + 21 hari → "Survey dijadwalkan:
-    // 7 Agustus 2026". Ambil offset HANYA dari klausa yang menyebut survei/viewing
-    // (dipisah per kalimat) supaya tidak salah pakai tanggal MASUK (Q8, "20-30 Mei").
-    {
-      const viewSrc = [profile._currentMsg, profile._viewingText, custText].filter(Boolean).join('  ');
-      const relRe = /\b(\d{1,3})\s*(hari|minggu|bulan|tahun)\s+(?:lagi|kedepan|ke\s+depan|mendatang|dari\s+sekarang)\b/i;
-      const survClause = viewSrc.split(/[.!?\n]+/)
-        .find(s => /\b(survei|survey|viewing|lihat\s+(?:unit|rumah|properti|lokasi))\b/i.test(s) && relRe.test(s));
-      if (survClause) {
-        const rm = survClause.match(relRe);
-        const n = parseInt(rm[1], 10);
-        const unit = rm[2].toLowerCase();
-        const d = new Date();
-        if (unit === 'hari')        d.setDate(d.getDate() + n);
-        else if (unit === 'minggu') d.setDate(d.getDate() + n * 7);
-        else if (unit === 'bulan')  d.setMonth(d.getMonth() + n);
-        else                        d.setFullYear(d.getFullYear() + n);
-        const M = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
-        return `Survey dijadwalkan: ${d.getDate()} ${M[d.getMonth()]} ${d.getFullYear()}`;
-      }
     }
 
     // AI already asked for viewing date — check if customer confirmed a date
@@ -4190,34 +3785,18 @@ class ConversationQualifier {
     const lower = String(redFlagsRawText || '').toLowerCase();
 
     // ── Preferensi POSITIF dengan lawan (avoid) alami ─────────────────────────
-    // Baris Hindari memakai lawan NEGATIF sebagai label ("Suasana ramai"), BUKAN
-    // menggandakan label Prefer ("Suasana tenang : Hindari tempat bising/ramai" —
-    // format lama yang membingungkan karena label Hindari = hal yang justru
-    // diinginkan). Anotasi reason opsional memakai frasa "Tidak [keinginan]".
     const PAIRS = [
-      { test: /\b(sejuk|adem|dingin|rindang|teduh|asri)\b/,               preferLabel: 'Tempat yang sejuk',   avoidLabel: 'Tempat panas',        avoidReason: 'Tidak sejuk' },
-      { test: /\bakses\s+(jalan\s+)?(lancar|mudah|gampang)\b/,            preferLabel: 'Akses jalan lancar',  avoidLabel: 'Akses jalan lancar',  avoidReason: null },
-      { test: /\b(tenang|sepi)\b/,                                       preferLabel: 'Suasana tenang',      avoidLabel: 'Suasana ramai',       avoidReason: 'Tidak sepi' },
-      { test: /\baman\b/,                                                preferLabel: 'Lingkungan aman',     avoidLabel: 'Lingkungan rawan',    avoidReason: 'Tidak aman' },
-      { test: /\bjalan\s+(raya\s+)?(lebar|besar|luas)\b/,                 preferLabel: 'Jalan lebar',         avoidLabel: 'Gang sempit',         avoidReason: 'Jalan tidak lebar' },
-      { test: /\b(?:per)?air(?:an)?\s+(lancar|bersih|bagus|jernih)\b/,   preferLabel: 'Perairan lancar',     avoidLabel: 'Perairan bermasalah', avoidReason: 'Air tidak lancar' },
-      { test: /\bstrategis\b/,                                           preferLabel: 'Lokasi strategis',    avoidLabel: null,                   avoidReason: null },
+      { test: /\b(sejuk|adem|dingin|rindang|teduh|asri)\b/,               label: 'Tempat yang sejuk',   avoidReason: 'Hindari tempat yang panas' },
+      { test: /\bakses\s+(jalan\s+)?(lancar|mudah|gampang)\b/,            label: 'Akses jalan lancar',  avoidReason: 'Hindari tempat macet' },
+      { test: /\b(tenang|sepi)\b/,                                       label: 'Suasana tenang',      avoidReason: 'Hindari tempat bising/ramai' },
+      { test: /\baman\b/,                                                label: 'Lingkungan aman',     avoidReason: 'Hindari lingkungan rawan' },
+      { test: /\bjalan\s+(raya\s+)?(lebar|besar|luas)\b/,                 label: 'Jalan lebar',         avoidReason: 'Hindari gang sempit' },
+      { test: /\bstrategis\b/,                                           label: 'Lokasi strategis',    avoidReason: null },
     ];
-    // "Mau/suka/cari yang RAMAI" — customer justru INGIN suasana ramai/hidup
-    // (kebalikan dari pair tenang/sepi). Prefer = tempat ramai; Hindari = tempat sepi.
-    const wantsRamai = /\b(mau|suka|cari|pengen|pgn|ingin|prefer)\b[^.!?\n]{0,40}?\b(ramai|rame)\b/.test(lower)
-                    || /\btempat\s+(?:yang\s+)?ramai\b/.test(lower);
-    if (wantsRamai) {
-      prefer.push({ label: 'Tempat yang ramai' });
-      avoid.push({ label: 'Tidak mau tempat yang sepi', reason: null });
-    }
-
     PAIRS.forEach(p => {
       if (p.test.test(lower)) {
-        // Pair tenang/sepi tidak berlaku bila customer justru minta ramai.
-        if (wantsRamai && p.preferLabel === 'Suasana tenang') return;
-        prefer.push({ label: p.preferLabel });
-        if (p.avoidLabel) avoid.push({ label: p.avoidLabel, reason: p.avoidReason });
+        prefer.push({ label: p.label });
+        avoid.push({ label: p.label, reason: p.avoidReason });
       }
     });
 
@@ -4226,37 +3805,25 @@ class ConversationQualifier {
       { test: /\bbanjir\b|flood/,                                        label: 'Tidak mau banjir' },
       { test: /hadap\s+barat|west\s+facing/,                             label: 'Tidak mau hadap barat' },
       { test: /gang\s+sempit|narrow/,                                    label: 'Tidak mau gang sempit' },
-      // "bising/ramai" hanya avoid bila TIDAK diminta positif ("mau yang ramai").
-      { test: /\bbising\b|noisy|\bramai\b/,                              label: 'Tidak mau bising/ramai', skipIfWantsRamai: true },
+      { test: /\bbising\b|noisy|\bramai\b/,                              label: 'Tidak mau bising/ramai' },
       { test: /\btua\b|old\s+building/,                                  label: 'Tidak mau bangunan tua' },
       { test: /dekat\s+rel\b|rel\s+kereta|train\s+track/,                label: 'Tidak mau dekat rel kereta' },
-      { test: /(?:tidak|tdk|gak|gk|ga|ngga|nggak|enggak|ndak|jangan|anti|hindari|bukan)\s+(?:yang\s+)?panas|\bgerah\b|\bpengap\b|too hot|not hot/, label: 'Tidak mau panas' },
-      { test: /(?:tidak|tdk|gak|gk|ga|ngga|nggak|enggak|ndak|bebas|anti|hindari)\s+macet|sering\s+macet|macet\s+(?:banget|parah)|kemacetan/, label: 'Tidak mau macet' },
+      { test: /(?:tidak|gak|ga|ngga|enggak|jangan|anti|hindari|bukan)\s+(?:yang\s+)?panas|\bgerah\b|\bpengap\b|too hot|not hot/, label: 'Tidak mau panas' },
+      { test: /(?:tidak\s+macet|bebas\s+macet|anti\s+macet|hindari\s+macet|sering\s+macet|macet\s+(?:banget|parah)|kemacetan)/, label: 'Tidak mau macet' },
     ];
     AVOID_ONLY.forEach(p => {
-      if (p.skipIfWantsRamai && wantsRamai) return;
       if (p.test.test(lower) && !avoid.some(a => a.label === p.label)) {
         avoid.push({ label: p.label, reason: null });
       }
     });
 
-    // ── Orientasi matahari — avoid + prefer reframe ──────────────────────────
-    // Checked across BOTH sources: the customer may state this as a Q5 red-flag
-    // answer ("tidak mau hadap matahari terbenam") — no Q12 ever needed — OR as a
-    // genuine Q12 apartment tower/floor answer. Either way it belongs in Hindari.
-    // Typo-tolerant: "terbena[mr]" catches the common "terbenam"/"terbenar" slip.
+    // ── Orientasi matahari (Q12) — avoid + prefer reframe ────────────────────
     const aptLower = String(apartmentPrefRawText || '').toLowerCase();
-    const sunText = `${lower} ${aptLower}`;
-    const AVOID_VERB = '(?:hindari|menghindari|tidak\\s+mau|gak?\\s+mau|nggak\\s+mau|enggak\\s+mau|jangan)';
-    const avoidTerbit    = new RegExp(`${AVOID_VERB}\\b.{0,40}?(?:sinar\\s+)?(?:matahari\\s+)?terbit\\b`, 'i').test(sunText);
-    const avoidTerbenam  = new RegExp(`${AVOID_VERB}\\b.{0,40}?(?:sinar\\s+)?(?:matahari\\s+)?terbena[mr]\\b`, 'i').test(sunText);
-    if (avoidTerbit && avoidTerbenam) {
+    const avoidBothSun = /(?:hindari|menghindari)\b.{0,60}?(?:terbit\s+(?:dan|&|,)?\s*terbenam|terbenam\s+(?:dan|&|,)?\s*terbit)/i.test(aptLower)
+      || (/(?:hindari|menghindari)/.test(aptLower) && /terbit/.test(aptLower) && /terbenam/.test(aptLower));
+    if (avoidBothSun) {
       avoid.push({ label: 'Lokasi kamar yang hadap sinar matahari terbenam dan terbit', reason: null });
       prefer.push({ label: 'Tempat yang nyaman dari sinar matahari yang membuat mata terasa silau' });
-    } else if (avoidTerbenam) {
-      avoid.push({ label: 'Hindari sinar matahari terbenam (hadap non-barat)', reason: null });
-    } else if (avoidTerbit) {
-      avoid.push({ label: 'Hindari sinar matahari terbit (hadap non-timur)', reason: null });
     }
 
     return { avoid, prefer };
@@ -4618,7 +4185,7 @@ class ChatbotPrivateService {
     if (rumah123Listings.length > 0 || catalogMatches.length > 0) {
       reply = builder.exactMatch({ rumah123Listings, catalogMatches, filters: context.filters });
     } else {
-      reply = builder.alternative({ alternatives: context.alternatives, rumah123Listings, filters: context.filters, standardFallback: context.standardFallback || null });
+      reply = builder.alternative({ alternatives: context.alternatives, rumah123Listings, filters: context.filters });
     }
 
     return this.#wrap(reply, {
@@ -4666,15 +4233,12 @@ class ChatbotPrivateService {
    * @param {Error}    params.externalError
    */
   static async generateResponseForTerminalMassege({
-    session, history = [], userMessage = '', agentName = '', agentUserId = null,
+    session, history = [], userMessage = '', agentName = '',
     recommendationContext = null, externalError = null
   }) {
     const skillInfo = this.loadSkillInfo();
     const lang      = LanguageDetector.detect(userMessage, history);
     const builder   = new ResponseBuilderWhatsApp(lang, agentName);
-    // Scoping katalog per-agent (Mode B). Fallback ke session.agentUserId bila
-    // dipanggil tanpa argumen eksplisit (mis. dari whatsappAIService via session).
-    const scopedUserId = agentUserId || session?.agentUserId || null;
 
     console.warn('[WHATSAPP PRIVATE AGENT ACTIVE]', {
       reason   : externalError?.message || 'External AI provider unavailable.',
@@ -4718,36 +4282,7 @@ class ChatbotPrivateService {
       profile.moveInDateValue = _qs.moveInDate   || null;   // normalized date | 'Waiting the update' | null
       // A resolved value (real date or "Waiting the update") satisfies Q8.
       if (profile.moveInDateValue) profile.hasMoveInDate = true;
-
-      // Q8 (move-in/pindah) and Q14's check-in date are the SAME real-world date —
-      // just asked with different wording (hotel/kondotel/villa booking phrases it
-      // "check-in", generic sewa phrases it "masuk/pindah"). Q8 fires unconditionally
-      // ("MANDATORY — never skipped"), so once the customer gives a concrete date
-      // there ("2 minggu lagi" → resolved), Q14 must not ask check-in again for the
-      // same info. Skip when the value is just the "Waiting the update" placeholder
-      // (customer didn't actually give a date yet).
-      if (profile.moveInDateValue && profile.moveInDateValue !== 'Waiting the update'
-          && !profile.hasCheckInDate) {
-        profile.hasCheckInDate   = true;
-        profile.checkInDateValue = profile.moveInDateValue;
-      }
     } catch (_e) { /* non-fatal — fall back to regex hasMoveInDate */ }
-
-    // ── Skill "harga wajar" — pertanyaan terbuka kapan saja (sewa/booking/beli) ──
-    // Tidak mereset atau melompati Q-flow: jawabannya di-PREPEND ke pertanyaan Q
-    // berikutnya (atau ke summary/brief bila Q-flow sudah selesai) di titik-titik
-    // return di bawah. null bila pesan ini bukan pertanyaan harga terbuka.
-    const priceAnswerNote = ConversationQualifier.maybeAnswerReasonablePriceQuestion(userMessage, profile, lang);
-    if (priceAnswerNote) console.log('[PrivateAgent/HargaWajar] Pertanyaan harga wajar terdeteksi — jawaban di-prepend.');
-
-    // ── RALAT (koreksi budget / tanggal / jadwal viewing) — akui secara eksplisit ──
-    // Nilai barunya sudah otomatis menang di state (overwrite di extractor); catatan
-    // ini membuat AI terasa responsif: customer tahu ralatnya diterima.
-    const correctionNote = ConversationQualifier.buildCorrectionAck(userMessage, lang);
-    if (correctionNote) console.log('[PrivateAgent/Ralat] Koreksi terdeteksi — pengakuan di-prepend.');
-
-    // Catatan yang di-prepend ke balasan berikutnya (ralat dulu, lalu harga wajar).
-    const preNote = [correctionNote, priceAnswerNote].filter(Boolean).join('\n\n') || null;
 
     console.log('[PrivateAgent/Qualifier]', {
       tx       : profile.transactionType || '(unknown)',
@@ -4757,14 +4292,10 @@ class ChatbotPrivateService {
       aiCount  : profile.aiCount,
     });
 
-    // ── CHECK MODE: users.catalog_summary (per-agent) ────────────────────────
+    // ── CHECK MODE: RESPOND_CATALOG_RUN ─────────────────────────────────────
     // OFF (default) → Full Q1–Q12 flow → show structured brief only
     // ON            → Full Q1–Q12 flow → show summary brief + catalog listing
-    // Sumber kebenaran kini kolom users.catalog_summary milik agent (diubah agent
-    // via chat "matikan/nyalakan summary"); env RESPOND_CATALOG_RUN tinggal fallback
-    // saat kolom NULL / agent tidak dikenal.
-    const { resolveCatalogMode } = require('../services/catalogModeService');
-    const showCatalogDirect = (await resolveCatalogMode(scopedUserId)) === 'ON';
+    const showCatalogDirect = String(process.env.RESPOND_CATALOG_RUN || 'OFF').toUpperCase() === 'ON';
 
     // ── Shared: fetch price anchors for Q3 (needed in both modes) ────────────
     // Only fetch when BOTH location AND type are known — avoids a heavy DB query
@@ -4773,9 +4304,7 @@ class ChatbotPrivateService {
     let priceAnchors = null;
     if (filters.location && filters.buildingType) {
       try {
-        // Scope ke listing agent ini agar anchor harga Q3 mencerminkan inventori
-        // agent yang bersangkutan (bukan katalog global).
-        const catalogProps = await searchProperties({ ...filters, userId: scopedUserId });
+        const catalogProps = await searchProperties(filters);
         const withPrice    = catalogProps.filter(p => p.price && p.price !== '-');
         if (withPrice.length >= 2) {
           const sorted = [...withPrice].sort((a, b) =>
@@ -4797,61 +4326,12 @@ class ChatbotPrivateService {
       //    financing readiness, handoff + INTERNAL [BRIEF_READY] (no customer summary).
       if (ConversationQualifier.housePilotEnabled(profile)) {
         const resolvedAppName = process.env.APP_NAME || 'Elevan Property';
-        const hp   = require('../utils/houseListingPilot');
-        const isId = lang === 'id';
         const pilotQ = ConversationQualifier.getNextQuestionHousePilot(
           profile, lang, priceAnchors, agentName, resolvedAppName
         );
-
-        // ── (A) AVAILABILITY DEFLECTION / HOLDING SCRIPT ────────────────────
-        // "Masih ada?" JANGAN dijawab "saya cek dulu" polos — itu menandakan
-        // tidak mengenal stok sendiri. Konfirmasi ke tim + langsung sambung slot
-        // berikutnya. Dorongan KEDUA → berhenti mengelak, eskalasi ke agent.
-        if (hp.isAvailabilityQuestion(userMessage)) {
-          const pushes = hp.countAvailabilityPushes(history, userMessage);
-          if (pushes >= 2) {
-            console.log(`[PrivateAgent/HousePilot] ⚠️ Desakan ketersediaan ke-${pushes} → eskalasi ke agent`);
-            return this.#wrap(
-              builder.qualificationQuestion(hp.buildAvailabilityEscalation(agentName, isId)),
-              { skillInfo, filters, housePilot: true, escalateToAgent: true }
-            );
-          }
-          if (pilotQ) {
-            console.log('[PrivateAgent/HousePilot] Holding script + slot berikutnya');
-            return this.#wrap(
-              builder.qualificationQuestion(hp.buildHoldingScript(pilotQ, isId)),
-              { skillInfo, filters, qualificationMode: true, housePilot: true, holdingScript: true }
-            );
-          }
-        }
-
-        // ── (B) VALUE CHECKPOINT → [BRIEF_READY_EARLY] ──────────────────────
-        // Setelah ±3 slot inti terisi: BERHENTI bertanya, kirim sinyal momentum.
-        // Agent menerima brief PARSIAL sekarang dan menjatuhkan 1–3 opsi nyata
-        // dari WAG — inilah yang menahan customer, bukan inventory palsu.
-        {
-          const coreFilled = ConversationQualifier.buildPilotCoreSlots(profile, filters, userMessage, history);
-          const txKey = profile.transactionType === 'sale' ? 'sale' : 'rent';
-          if (hp.shouldFireValueCheckpoint(txKey, coreFilled, profile.valueCheckpointFired)) {
-            const early = ConversationQualifier.buildHousePilotBrief(profile, filters, history, userMessage);
-            console.log('[PrivateAgent/HousePilot] 🚀 VALUE CHECKPOINT → [BRIEF_READY_EARLY]',
-              { coreSlots: hp.countCoreSlots(txKey, coreFilled), score: early.score });
-            return this.#wrap(
-              builder.qualificationQuestion(hp.buildValueCheckpoint(isId)),
-              { skillInfo, filters, housePilot: true, valueCheckpoint: true,
-                briefReadyEarly: early.brief, briefScore: early.score,
-                briefPriority: early.priority, agentName }
-            );
-          }
-        }
-
-        // ── (C) QUESTION CAP — keluarkan brief apa adanya, jangan perpanjang ──
-        if (pilotQ && hp.reachedQuestionCap(profile.aiCount)) {
-          console.log(`[PrivateAgent/HousePilot] ⛔ Batas ${hp.MAX_PILOT_QUESTIONS} pertanyaan tercapai → brief apa adanya`);
-        } else if (pilotQ) {
+        if (pilotQ) {
           console.log(`[PrivateAgent/HousePilot] Asking Q (aiCount=${profile.aiCount})`);
-          const qText = preNote ? `${preNote}\n\n${pilotQ}` : pilotQ;
-          return this.#wrap(builder.qualificationQuestion(qText), {
+          return this.#wrap(builder.qualificationQuestion(pilotQ), {
             skillInfo, filters, qualificationMode: true, housePilot: true,
           });
         }
@@ -4873,33 +4353,15 @@ class ChatbotPrivateService {
 
       if (nextQuestion) {
         console.log(`[PrivateAgent/SummaryMode] Asking Q (aiCount=${profile.aiCount})`);
-        const qText = preNote ? `${preNote}\n\n${nextQuestion}` : nextQuestion;
-        return this.#wrap(builder.qualificationQuestion(qText), {
+        return this.#wrap(builder.qualificationQuestion(nextQuestion), {
           skillInfo, filters, qualificationMode: true, summaryMode: true,
         });
-      }
-
-      // ── Q_NAME/Q_EMAIL — identitas customer SEBELUM summary (tanya SEKALI) ──
-      // Nama: wajib utk registrasi customer. Tidak ditanya bila customer sudah
-      // memperkenalkan diri ("Hi saya Rina...") — extractIdentityFromChat mendeteksinya.
-      // Email: hanya bila jadwal viewing sudah ada (untuk undangan kalender).
-      // Masing-masing maksimal SEKALI — customer tidak menjawab → summary tetap lanjut.
-      {
-        const idQ = await ConversationQualifier.buildIdentityQuestion(history, userMessage, profile, lang,
-          { agentUserId: scopedUserId, phone: session?.phone, waName: session?.name });
-        if (idQ) {
-          const qText = preNote ? `${preNote}\n\n${idQ}` : idQ;
-          return this.#wrap(builder.qualificationQuestion(qText), {
-            skillInfo, filters, qualificationMode: true, summaryMode: true,
-          });
-        }
       }
 
       // All Q1–Q12 answered → generate structured brief
       console.log('[PrivateAgent/SummaryMode] ✅ All Q answered → generating agent brief');
       const brief = ConversationQualifier.buildAgentBrief(profile, filters, history, userMessage);
-      const briefText = builder.agentBrief(brief);
-      const reply = preNote ? `${preNote}\n\n${briefText}` : briefText;
+      const reply = builder.agentBrief(brief);
 
       console.log('[PrivateAgent/SummaryMode] Brief generated:', {
         score   : brief.score,
@@ -4932,35 +4394,20 @@ class ChatbotPrivateService {
     );
     if (nextQuestion) {
       console.log(`[PrivateAgent/CatalogMode] Asking Q (aiCount=${profile.aiCount})`);
-      const qText = preNote ? `${preNote}\n\n${nextQuestion}` : nextQuestion;
-      return this.#wrap(builder.qualificationQuestion(qText), {
+      return this.#wrap(builder.qualificationQuestion(nextQuestion), {
         skillInfo, filters, qualificationMode: true,
       });
-    }
-
-    // ── Q_NAME/Q_EMAIL — identitas customer SEBELUM summary (tanya SEKALI) ──
-    {
-      const idQ = await ConversationQualifier.buildIdentityQuestion(history, userMessage, profile, lang,
-          { agentUserId: scopedUserId, phone: session?.phone, waName: session?.name });
-      if (idQ) {
-        const qText = preNote ? `${preNote}\n\n${idQ}` : idQ;
-        return this.#wrap(builder.qualificationQuestion(qText), {
-          skillInfo, filters, qualificationMode: true,
-        });
-      }
     }
 
     // All Q answered → build summary brief + fetch listings in parallel
     const brief = ConversationQualifier.buildAgentBrief(profile, filters, history, userMessage);
 
     // ── Fetch listings (Rumah123 + catalog) ──────────────────────────────────
-    // Katalog DB di-scope ke listing milik agent ini (scopedUserId) supaya
-    // rekomendasi RESPOND_CATALOG_RUN=ON konsisten dengan query per-agent.
     const [rumah123Listings, context] = await Promise.all([
       this.fetchRumah123Listings(filters, session?.location),
       recommendationContext
         ? Promise.resolve(recommendationContext)
-        : buildRecommendationContextForLLM(userMessage, history, { userId: scopedUserId }),
+        : buildRecommendationContextForLLM(userMessage, history),
     ]);
 
     const catalogMatches = this.resolveCatalogMatches(context);
@@ -4974,7 +4421,6 @@ class ChatbotPrivateService {
         rumah123Listings,
         filters      : context.filters,
         budgetExpanded: context.budgetExpanded || null,
-        standardFallback: context.standardFallback || null,
       });
     }
 
@@ -4984,7 +4430,7 @@ class ChatbotPrivateService {
     const briefBody   = summaryFull.includes(sigMarker)
       ? summaryFull.substring(0, summaryFull.lastIndexOf(sigMarker))
       : summaryFull;
-    const reply = (preNote ? `${preNote}\n\n` : '') + briefBody + '\n\n---\n\n' + catalogReply;
+    const reply = briefBody + '\n\n---\n\n' + catalogReply;
 
     return this.#wrap(reply, {
       skillInfo,
@@ -5028,11 +4474,6 @@ class ChatbotPrivateService {
   static #wrap(reply, meta = {}) {
     return {
       reply,
-      // One WhatsApp message per numbered catalog card (summary/lead-in as the
-      // first part). Falls back to [reply] unsplit when no card is present —
-      // e.g. the "no catalog match" apology, which stays combined with the
-      // summary as a single message.
-      replyParts:   meta.replyParts || splitCatalogReply(reply),
       source:       'private_agent',
       controller:   'chatbotPrivateController',
       fallbackUsed: true,

@@ -267,7 +267,7 @@ async function registerCustomerFromChat({ agentUserId, phone, chatName = null, w
  * @returns {Promise<{exists:boolean,hasRealName:boolean,hasEmail:boolean,isReturning:boolean,name:string|null}>}
  */
 async function getIdentityStatus({ agentUserId, phone, waName = null }) {
-  const EMPTY = { exists: false, hasRealName: false, hasEmail: false, isReturning: false, name: null };
+  const EMPTY = { exists: false, hasRealName: false, hasEmail: false, isReturning: false, name: null, email: null };
   if (!agentUserId || !phone) return EMPTY;
   try {
     const { Customer } = require('../models');
@@ -286,7 +286,13 @@ async function getIdentityStatus({ agentUserId, phone, waName = null }) {
       || /^customer\s+\d{3,4}$/i.test(nm);               // fallback "Customer 1234"
     const hasRealName = !isPlaceholder;
     const hasEmail    = !!row.email;
-    return { exists: true, hasRealName, hasEmail, isReturning: hasRealName || hasEmail, name: nm || null };
+    return {
+      exists: true, hasRealName, hasEmail, isReturning: hasRealName || hasEmail,
+      name: nm || null,
+      // Actual email string (not just the hasEmail flag) — needed by the calendar
+      // trigger to send a viewing invite without re-asking a returning customer.
+      email: row.email || null,
+    };
   } catch (err) {
     console.warn('[CustomerReg] getIdentityStatus failed (fail-open):', err.message);
     return EMPTY;

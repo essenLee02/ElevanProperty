@@ -211,6 +211,18 @@ const SCENARIOS = [
     message: 'buat investasi, mau disewakan lagi',
     filters: { buildingType: 'house', transactionType: 'sale', location: 'Surabaya' },
   },
+  {
+    // 31 Jul 2026 live-transcript bug: a customer DECLINING to widen the search
+    // ("tidak ada", "tetap di Pakuwon") is just as much an answer as naming
+    // another area — must not leave Q7 looking unanswered.
+    name: 'alt-area: refusal counts as answered, not just naming another area',
+    history: [
+      u('mau sewa villa di surabaya area pakuwon'),
+      a('Selain area Pakuwon di Surabaya, apakah masih ada area lain yang ingin dipertimbangkan?'),
+    ],
+    message: 'Tidak ada, Kak',
+    filters: { buildingType: 'villa', transactionType: 'rent', location: 'Surabaya' },
+  },
 ];
 
 /* ─── Snapshot capture ────────────────────────────────────────────────────── */

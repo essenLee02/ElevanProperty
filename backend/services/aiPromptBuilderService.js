@@ -1,5 +1,5 @@
 const { loadProjectSkillPrompt } = require('./skillPromptService');
-const { detectBudget, detectFacilities, stripCommercialUsePhrases, stripNearPhrases, stripAmbiguousRumah, stripInvestmentIntentPhrases, detectUseCase, isNonResidentialUse, detectLocation, isKnownLocationName } = require('./propertyRecommendationService');
+const { detectBudget, detectFacilities, stripCommercialUsePhrases, stripNearPhrases, stripAmbiguousRumah, stripInvestmentIntentPhrases, stripMovingFromPhrases, detectUseCase, isNonResidentialUse, detectLocation, isKnownLocationName } = require('./propertyRecommendationService');
 const { parseCustomerDate, isDontKnowDateAnswer, WAITING_THE_UPDATE } = require('../utils/customerDateParser');
 const { detectCustomerFrustration } = require('../utils/propertyKeywordFilter');
 
@@ -208,9 +208,10 @@ function extractQualificationState(history = [], currentMessage = '') {
       // propertyRecommendationService (see the twin in chatbotPrivateController.js).
       //   stripNearPhrases        — "deket kantor dan mall" is a Q6 ANCHOR, not an office
       //   stripAmbiguousRumah     — "rumah makan/sakit/…" is not a house
+      //   stripMovingFromPhrases  — "pindah dari apartemen" is the home being LEFT
       //   stripCommercialUsePhrases — "dipakai kantor"/"buat usaha" is a USE, not a type
       const w = stripCommercialUsePhrases(
-        stripAmbiguousRumah(stripNearPhrases((txt || '').toLowerCase()))
+        stripMovingFromPhrases(stripAmbiguousRumah(stripNearPhrases((txt || '').toLowerCase())))
       );
       if (/\bkondotel\b|\bcondotel\b/.test(w))                             return 'kondotel';
       if (/\bmansion\b|\brumah\s+mewah\b/.test(w))                        return 'mansion';

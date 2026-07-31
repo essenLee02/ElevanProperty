@@ -7,90 +7,91 @@
  * PENTING — Kenapa bukan API Key:
  * Google Calendar API MENOLAK API Key untuk operasi tulis (create/update event) —
  * "API keys are not supported by this API. Expected OAuth2 access token..." (401).
- * API Key hanya untuk data publik/read-only (mis. Places/Maps). Untuk membuat event
- * di calendar SESEORANG, Google wajib tahu identitas penulisnya → dipakai Service
- * Account (JWT), pola yang SAMA seperti googleSheetsService.js.
+ * API Key hanya untuk data publik/read-only (mis. Places/Maps).
  *
- * MULTI-AGENT: Service Account tidak otomatis punya akses ke calendar pribadi tiap
- * agent. Setiap agent WAJIB share Google Calendar mereka ke email Service Account
- * (lihat GOOGLE_SERVICE_ACCOUNT_JSON_PATH → client_email) dengan permission
- * "Make changes to events". Tanpa share ini, request akan gagal 403/404 meskipun
- * kredensial valid — event tetap ditulis ke `calendars/{agentEmail}/events`, BUKAN
- * `calendars/primary/events` (primary hanya berlaku untuk pemilik token OAuth aktif;
- * untuk service account, "primary" berarti calendar milik SERVICE ACCOUNT itu
- * sendiri, bukan calendar agent manapun).
+ * AUTH MODEL — OAuth 2.0 (bukan Service Account):
+ * Semua event viewing dibuat di SATU calendar (`calendars/primary`, milik akun Google
+ * yang menyelesaikan consent OAuth sekali di awal — biasanya akun bisnis/owner) — BUKAN
+ * calendar pribadi tiap agent. Alasan: Service Account butuh SETIAP agent membagikan
+ * Google Calendar mereka secara manual ke email Service Account (friksi operasional per
+ * agent); OAuth atas SATU akun tidak butuh apa pun dari agent — customer & agent cukup
+ * ditambahkan sebagai attendee (`sendUpdates=all`) dan Google mengirim email undangan ke
+ * keduanya secara otomatis, terlepas dari calendar siapa event-nya berada.
  *
- * ENV: GOOGLE_SERVICE_ACCOUNT_JSON_PATH (sudah dipakai googleSheetsService.js — di-reuse)
+ * SETUP SEKALI (manual, wajib dilakukan manusia — lihat komentar di getOAuthClient()):
+ * 1. Client ID/secret dari file GOOGLE_OAUTH_CLIENT_JSON_PATH (didownload dari
+ *    Google Cloud Console → Credentials → OAuth 2.0 Client — tipe "Web application").
+ * 2. Selesaikan consent SEKALI (mis. via Postman "Get New Access Token", redirect_uri
+ *    di file harus PERSIS sama dengan yang terdaftar di Cloud Console) untuk
+ *    mendapatkan REFRESH TOKEN.
+ * 3. Simpan refresh token itu di .env sebagai GOOGLE_OAUTH_REFRESH_TOKEN.
+ * Setelah itu, google-auth-library otomatis menukar refresh token → access token setiap
+ * request, tanpa consent ulang, selamanya (kecuali token di-revoke dari akun Google).
+ *
+ * ENV: GOOGLE_OAUTH_CLIENT_JSON_PATH (default: ./asset/client_secret_*.json)
+ *      GOOGLE_OAUTH_REFRESH_TOKEN (wajib — lihat SETUP SEKALI di atas)
  *      GOOGLE_CALENDAR_TIMEZONE (default: 'Asia/Jakarta')
  */
 
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
-const { JWT } = require('google-auth-library');
+const { OAuth2Client } = require('google-auth-library');
 
 const GOOGLE_CALENDAR_API_URL = 'https://www.googleapis.com/calendar/v3';
 const TIMEZONE = process.env.GOOGLE_CALENDAR_TIMEZONE || 'Asia/Jakarta';
 const CALENDAR_SCOPES = ['https://www.googleapis.com/auth/calendar.events'];
 
-// JWT client di-cache di module scope — google-auth-library menangani refresh token
-// otomatis, jadi tidak perlu re-read file JSON di setiap request.
+// OAuth2 client di-cache di module scope — google-auth-library menangani refresh
+// access-token otomatis dari refresh_token, jadi tidak perlu re-read file JSON
+// di setiap request.
 let _cachedAuthClient = null;
-let _cachedServiceAccountEmail = null;
 
 /**
- * Baca Service Account JSON dan siapkan JWT client (lazy + cached).
- * @returns {{ authClient: JWT, serviceAccountEmail: string }}
- * @throws {Error} jika file tidak ada / format invalid
+ * Baca OAuth Client JSON + GOOGLE_OAUTH_REFRESH_TOKEN dan siapkan OAuth2Client
+ * (lazy + cached).
+ * @returns {OAuth2Client}
+ * @throws {Error} jika file/refresh token tidak ada atau format invalid
  */
-function getServiceAccountAuth() {
-  if (_cachedAuthClient) {
-    return { authClient: _cachedAuthClient, serviceAccountEmail: _cachedServiceAccountEmail };
-  }
+function getOAuthClient() {
+  if (_cachedAuthClient) return _cachedAuthClient;
 
-  const jsonPathFromEnv = process.env.GOOGLE_SERVICE_ACCOUNT_JSON_PATH || './google-service-account.json';
+  const jsonPathFromEnv = process.env.GOOGLE_OAUTH_CLIENT_JSON_PATH
+    || './asset/client_secret_282144058761-f40g1he7u5es1kjdpkug8neq01d7rqke.apps.googleusercontent.com.json';
   const jsonPath = path.resolve(process.cwd(), jsonPathFromEnv);
 
   if (!fs.existsSync(jsonPath)) {
     throw new Error(
-      `Service Account JSON tidak ditemukan di: ${jsonPath}. ` +
-      'Buat Service Account di Google Cloud Console → Credentials → Create Credentials → ' +
-      'Service Account → buat key JSON → simpan sebagai google-service-account.json di folder backend.'
+      `OAuth Client JSON tidak ditemukan di: ${jsonPath}. ` +
+      'Set GOOGLE_OAUTH_CLIENT_JSON_PATH di .env, atau letakkan file client_secret_*.json ' +
+      'dari Google Cloud Console → Credentials di folder asset/.'
     );
   }
 
   const raw = fs.readFileSync(jsonPath, 'utf8');
-  const serviceAccount = JSON.parse(raw);
+  const parsed = JSON.parse(raw);
+  const cfg = parsed.web || parsed.installed;
 
-  if (!serviceAccount.client_email || !serviceAccount.private_key) {
-    throw new Error('Service Account JSON tidak valid — missing client_email atau private_key.');
+  if (!cfg || !cfg.client_id || !cfg.client_secret) {
+    throw new Error('OAuth Client JSON tidak valid — missing client_id atau client_secret (field "web"/"installed").');
   }
 
-  const authClient = new JWT({
-    email : serviceAccount.client_email,
-    key   : serviceAccount.private_key,
-    scopes: CALENDAR_SCOPES,
-  });
+  const refreshToken = process.env.GOOGLE_OAUTH_REFRESH_TOKEN;
+  if (!refreshToken) {
+    throw new Error(
+      'GOOGLE_OAUTH_REFRESH_TOKEN belum di-set di .env. ' +
+      'Lengkapi consent OAuth SEKALI (mis. via Postman "Get New Access Token" dengan client_id/' +
+      'client_secret dari file ini, scope https://www.googleapis.com/auth/calendar.events, ' +
+      'access_type=offline agar dapat refresh_token), lalu simpan refresh_token-nya di .env.'
+    );
+  }
+
+  const redirectUri = Array.isArray(cfg.redirect_uris) ? cfg.redirect_uris[0] : undefined;
+  const authClient = new OAuth2Client(cfg.client_id, cfg.client_secret, redirectUri);
+  authClient.setCredentials({ refresh_token: refreshToken });
 
   _cachedAuthClient = authClient;
-  _cachedServiceAccountEmail = serviceAccount.client_email;
-
-  return { authClient, serviceAccountEmail: serviceAccount.client_email };
-}
-
-/**
- * Pesan panduan ketika Service Account belum punya akses ke calendar agent.
- * @param {string} serviceAccountEmail
- * @param {string} agentEmail
- * @returns {string}
- */
-function buildCalendarPermissionErrorMessage(serviceAccountEmail, agentEmail) {
-  return (
-    `Service Account belum punya akses ke Google Calendar milik ${agentEmail}. ` +
-    `Minta agen tersebut buka Google Calendar → Settings → Share with specific people, ` +
-    `tambahkan email ini: ${serviceAccountEmail}, dengan permission "Make changes to events". ` +
-    'Setelah share, tunggu beberapa detik lalu coba lagi.'
-  );
+  return authClient;
 }
 
 // ─── Tipe Transaksi → Judul Event di Calendar
@@ -204,16 +205,16 @@ async function scheduleViewing(options = {}) {
     };
   }
 
-  // ── Siapkan Service Account auth (JWT) — API Key TIDAK didukung untuk create event
-  let authClient, serviceAccountEmail;
+  // ── Siapkan OAuth auth — API Key TIDAK didukung untuk create event
+  let authClient;
   try {
-    ({ authClient, serviceAccountEmail } = getServiceAccountAuth());
+    authClient = getOAuthClient();
   } catch (authErr) {
-    console.warn('[GoogleCalendar] Service Account setup error:', authErr.message);
+    console.warn('[GoogleCalendar] OAuth client setup error:', authErr.message);
     return {
       success: false,
       message: authErr.message,
-      error: 'SERVICE_ACCOUNT_MISSING',
+      error: 'OAUTH_CLIENT_MISSING',
     };
   }
 
@@ -256,21 +257,23 @@ async function scheduleViewing(options = {}) {
       },
     };
 
-    // ── Ambil access token dari Service Account (auto-refresh via google-auth-library)
+    // ── Ambil access token via refresh token (auto-refresh, google-auth-library)
     const { token: accessToken } = await authClient.getAccessToken();
     if (!accessToken) {
       return {
         success: false,
-        message: 'Gagal mendapatkan access token dari Service Account.',
+        message: 'Gagal mendapatkan access token OAuth (refresh token mungkin di-revoke).',
         error: 'AUTH_FAILED',
       };
     }
 
-    // ── POST ke calendar milik AGENT (bukan 'primary' — itu calendar Service Account sendiri).
-    //    sendUpdates=all → Google otomatis kirim email invite ke attendees (agen + customer).
-    console.log('[GoogleCalendar] Creating event on', agentEmail, "'s calendar for", dateString, 'at', timeString);
+    // ── POST ke 'primary' — calendar milik akun Google yang menyelesaikan OAuth consent.
+    //    sendUpdates=all → Google otomatis kirim email undangan ke SEMUA attendees
+    //    (agen via users.email + customer via customers.email, bila ada).
+    console.log('[GoogleCalendar] Creating event on primary calendar for', dateString, 'at', timeString,
+      '| attendees:', attendees.map(a => a.email).join(', '));
     const response = await axios.post(
-      `${GOOGLE_CALENDAR_API_URL}/calendars/${encodeURIComponent(agentEmail)}/events?sendUpdates=all`,
+      `${GOOGLE_CALENDAR_API_URL}/calendars/primary/events?sendUpdates=all`,
       eventBody,
       {
         headers: {
@@ -300,17 +303,15 @@ async function scheduleViewing(options = {}) {
     let errorMsg = 'Gagal membuat jadwal viewing di Google Calendar.';
     let errorCode = 'API_ERROR';
 
-    if (status === 401 || /invalid_grant|invalid jwt signature/i.test(err.message)) {
-      errorMsg = 'Autentikasi Service Account gagal. Cek google-service-account.json, private_key, ' +
-        'status Service Account, Calendar API enablement, dan jam sistem server.';
+    if (status === 401 || /invalid_grant/i.test(err.message)) {
+      errorMsg = 'Autentikasi OAuth gagal — GOOGLE_OAUTH_REFRESH_TOKEN tidak valid atau sudah di-revoke. ' +
+        'Ulangi consent OAuth sekali lagi (lihat komentar getOAuthClient() di googleCalendarService.js) ' +
+        'dan perbarui GOOGLE_OAUTH_REFRESH_TOKEN di .env.';
       errorCode = 'AUTH_FAILED';
-    } else if (status === 403 || /caller does not have permission/i.test(googleMsg)) {
-      errorMsg = buildCalendarPermissionErrorMessage(serviceAccountEmail, agentEmail);
+    } else if (status === 403 || /caller does not have permission|insufficient.*scope/i.test(googleMsg)) {
+      errorMsg = `Akun Google (pemilik refresh token) tidak punya izin menulis event, atau scope OAuth ` +
+        `kurang. Pastikan consent dilakukan dengan scope https://www.googleapis.com/auth/calendar.events.`;
       errorCode = 'PERMISSION_DENIED';
-    } else if (status === 404) {
-      errorMsg = `Calendar milik ${agentEmail} tidak ditemukan. Pastikan email agen di database benar ` +
-        `dan Service Account (${serviceAccountEmail}) sudah di-share ke calendar tersebut.`;
-      errorCode = 'CALENDAR_NOT_FOUND';
     } else if (googleMsg) {
       errorMsg = `Google Calendar: ${googleMsg}`;
       errorCode = 'GOOGLE_ERROR';

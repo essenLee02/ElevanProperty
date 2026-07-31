@@ -74,33 +74,32 @@ time it appears as `✗ Fasilitas: (Belum ditanyakan)` — a visible gap for the
 
 When the customer answers **"standar" / "biasa" / "terserah" / "tidak tahu" / "apa saja" /
 "gak ada"**, they have no specific preference. **Never leave the field empty** — auto-fill from
-the table below. (Server mirror: `utils/standardFacilities.js`.)
+the table below. (Server mirror: `utils/standardFacilities.js`, `getStandardFacilitiesByType()`.)
 
-| Tipe Properti | Fasilitas Standar |
+| Property | Fasilitas Standar (Default) |
 |---|---|
-| **House / Rumah** | Kamar tidur, kamar mandi, listrik, air, dapur, ruang tamu, carport/garasi, halaman kecil, internet opsional |
-| **Apartment / Apartemen** | Kamar tidur, kamar mandi, AC, dapur kecil/pantry, listrik, air, lift, keamanan 24 jam, parkir |
-| **Hotel** | Tempat tidur, kamar mandi, AC, TV, Wi-Fi, handuk, perlengkapan mandi, housekeeping, resepsionis |
-| **Villa** | Kamar tidur, kamar mandi, dapur, AC, Wi-Fi, ruang keluarga, parkir, taman, CCTV, one gate system, kolam renang |
-| **Boarding House / Kost** | Tempat tidur, lemari, meja, listrik, air, Wi-Fi, kamar mandi (dalam/luar), akses dapur opsional |
-| **Shophouse / Ruko** | Bangunan utama, listrik, air, area parkir, toilet, area usaha |
-| **Office / Kantor** | Ruang kerja, listrik, AC, internet dasar, toilet, parkir, keamanan |
-| **Warehouse / Gudang** | Area gudang, listrik, air, akses kendaraan, area bongkar muat, keamanan dasar |
-| **Store / Toko** | Area toko, listrik, lampu, air, toilet, area display |
-| **Condo / Kondominium** | Kamar tidur, kamar mandi, AC, dapur, Wi-Fi, parkir, keamanan, gym/kolam renang |
-| **Mansion** | Banyak kamar, beberapa kamar mandi, garasi, taman, ruang keluarga besar, keamanan, smart home opsional |
+| **House (Rumah)** | Kamar tidur, kamar mandi, ruang tamu, ruang keluarga, dapur, ruang makan, listrik, air PDAM/sumur, carport/garasi, halaman depan, halaman belakang, pagar, tempat jemuran, instalasi TV, internet/Wi-Fi (opsional), AC (opsional), water heater (opsional), kitchen set (opsional), CCTV (opsional), keamanan lingkungan, akses kendaraan roda empat |
+| **Apartment** | Kamar tidur, kamar mandi, ruang tamu, pantry/kitchen set, balkon (opsional), AC, water heater, listrik, air, Wi-Fi, TV, lemari pakaian, tempat tidur, sofa, meja makan, kulkas, kompor, microwave (opsional), mesin cuci (opsional), lift, parkir, lobby, keamanan 24 jam, CCTV, akses kartu (access card), gym, kolam renang, taman, minimarket, laundry (opsional) |
+| **Hotel (Booking)** | Tempat tidur, kamar mandi dalam, shower, water heater, AC, TV, Wi-Fi gratis, meja kerja, lemari pakaian, telepon, ketel listrik, air mineral, kopi & teh, perlengkapan mandi, handuk, sandal hotel, hair dryer (opsional), housekeeping, resepsionis 24 jam, room service (opsional), restoran, area parkir, lift, keamanan 24 jam, CCTV, kolam renang (opsional), gym (opsional), ruang meeting (opsional), sarapan (opsional) |
+| **Villa (Booking/Sewa)** | Kamar tidur, kamar mandi, ruang keluarga, ruang makan, dapur lengkap, kitchen set, AC, Wi-Fi, TV, kulkas, kompor, microwave, dispenser, mesin cuci (opsional), taman, gazebo (opsional), kolam renang pribadi (opsional), BBQ area (opsional), balkon, teras, parkir mobil, garasi (opsional), keamanan, CCTV (opsional), pemandangan alam (opsional), housekeeping (opsional) |
+| **Boarding House / Kost (Sewa Kamar)** | Tempat tidur, kasur, lemari pakaian, meja belajar, kursi, kamar mandi dalam/luar, listrik, air, Wi-Fi, AC atau kipas angin, jendela, jemuran, akses dapur bersama (opsional), dispenser bersama (opsional), kulkas bersama (opsional), parkir motor, parkir mobil (opsional), CCTV, keamanan, akses 24 jam (opsional), laundry (opsional), ruang tamu bersama |
+| **Shophouse / Ruko (Sewa/Kontrak)** | Bangunan utama, area usaha, toilet, listrik, air, area parkir, rolling door, gudang kecil, lantai usaha, tangga (2 lantai+), jaringan internet, telepon, CCTV (opsional), keamanan, akses kendaraan besar, area loading, papan nama usaha |
+| **Office (Kantor)** | Ruang kerja, ruang meeting, ruang resepsionis, pantry, toilet, AC, listrik, air, internet, Wi-Fi, telepon, lift (gedung), parkir mobil, parkir motor, keamanan 24 jam, CCTV, akses kartu, genset, ruang server (opsional), cleaning service, lobby |
+| **Warehouse (Gudang)** | Area gudang, kantor administrasi (opsional), toilet, listrik, air, akses truk, loading dock, area bongkar muat, parkir truk, parkir mobil, parkir motor, plafon tinggi, ventilasi, CCTV, keamanan 24 jam, pagar, jalan beton, akses kontainer, hydrant (opsional) |
+| **Store (Toko)** | Area display, gudang kecil, toilet, listrik, air, lampu, etalase (opsional), rolling door, internet, parkir pelanggan, papan nama toko, CCTV (opsional), akses kendaraan |
+| **Condo** | Kamar tidur, kamar mandi, ruang tamu, dapur, kitchen set, AC, water heater, Wi-Fi, TV, kulkas, kompor, microwave, oven (opsional), mesin cuci, balkon, sofa, meja makan, tempat tidur, lemari pakaian, lift, parkir, keamanan 24 jam, CCTV, access card, gym, kolam renang, jogging track, taman, coworking space (opsional), playground |
+| **Mansion House** | Banyak kamar tidur, beberapa kamar mandi, master bedroom, walk-in closet, ruang tamu besar, ruang keluarga, ruang makan, dapur utama, dapur bersih, dapur kotor, ruang kerja, ruang hiburan, home theater (opsional), perpustakaan (opsional), AC sentral, water heater, smart home, Wi-Fi, CCTV, alarm, garasi beberapa mobil, carport, taman depan, taman belakang, kolam renang pribadi, gazebo, balkon, rooftop (opsional), gudang, kamar ART, kamar sopir, keamanan 24 jam |
+| **Kondotel** *(not in the customer's original table — kept from the prior version)* | Tempat tidur, kamar mandi dalam, shower, water heater, AC, TV, Wi-Fi, kitchenette, lemari pakaian, housekeeping, resepsionis, lift, parkir, keamanan 24 jam, CCTV, kolam renang, gym |
 
-**Furnishing adds furniture** for hunian types (house/apartment/villa/condo/kost/mansion):
-- **Full furnished** → + TV, Kulkas, Lemari, Tempat Tidur, Kitchen set
-- **Semi furnished** → + sebagian (Kitchen set, Lemari, Kulkas)
-- **Kosongan** → fasilitas dasar bangunan saja
+**Furnishing adds furniture** for hunian types (house/apartment/villa/condo/kost/mansion) — the
+`(opsional)` items above are exactly what furnishing tier fills in:
+- **Full furnished** → adds nearly all the `(opsional)` items (AC, kitchen set, kulkas, lemari,
+  tempat tidur, TV, water heater, mesin cuci, …)
+- **Semi furnished** → adds a subset (typically AC, kitchen set, lemari, kulkas)
+- **Kosongan / unfurnished** → base list only, `(opsional)` items dropped
 
-Per-type × furnishing shortlists:
-`Rumah semi` = AC, Kitchen set, CCTV, Lemari, Kamar mandi, Kulkas, One gate system ·
-`Rumah full` = + Tempat tidur, TV · `Rumah unfurnished` = Kamar mandi, One gate system ·
-`Apartemen semi` = AC, Kitchen set, Lemari, Kamar mandi · `Apartemen full` = + Tempat tidur, TV,
-Kulkas, Microwave · `Kos full` = AC, Kasur, Lemari, Kamar mandi dalam, WiFi, Meja belajar ·
-`Kos semi` = AC, Kamar mandi dalam · `Villa` = AC, Kitchen set, Kolam renang, Kamar mandi.
+Commercial types (shophouse/office/warehouse/store) **ignore furnishing** — the list is the
+same regardless of what the customer says about furnishing.
 
 ### The two display markers
 
@@ -124,6 +123,35 @@ Customer asks: Gym, AC, Smart Door, Dinner   (apartemen)
 
 Same rule for a mixed answer — *"pokok standar, tambahin kulkas dan spring bed"* → specific
 items (kulkas, spring bed) first, then the uncovered standards.
+
+---
+
+## 4a. Premium Facilities (only when the customer signals "exclusive")
+
+When the customer signals they want something **mewah / eksklusif / premium / luxury / fully
+furnished** (e.g. "villa premium", "condo luxury", "yang eksklusif aja"), you may draw from
+this additional pool **on top of** the type's standard list — never in place of it. (Server
+mirror: `utils/standardFacilities.js`, `getPremiumFacilities()` / `wantsPremiumFacilities()`.)
+
+```
+Smart Home System · Smart Door Lock · Fingerprint Access · Lift Pribadi · Private Pool ·
+Jacuzzi · Sauna · Gym · Rooftop Garden · BBQ Area · Playground · Jogging Track ·
+Tennis Court · Basketball Court · Function Hall · Ballroom · Concierge · Shuttle Service ·
+EV Charging Station · Solar Panel · Backup Generator (Genset) · Water Treatment System ·
+Pet Friendly · Ocean View · Mountain View · City View · Lake View · River View ·
+Private Beach Access
+```
+
+**Use judgment — never dump the whole list.** This pool is generic across property types; most
+items are not relevant to every type/location (a "Private Beach Access" makes sense for a
+Bali villa, not a city apartment). Pick the handful that plausibly fit the type + location +
+what the customer actually described, the same way you'd naturally describe a premium listing
+— don't mechanically append all 28 items to a summary line.
+
+The **deterministic Private Agent** (non-LLM fallback) only sets a `wantsPremium` flag and adds
+a short note (*"🌟 Minat properti premium/eksklusif"*) to the brief — it deliberately does not
+attempt item selection, since that requires the judgment described above. When you (the LLM)
+are handling the conversation, you're expected to do the actual selection.
 
 ### Catalog ranking, not filtering
 

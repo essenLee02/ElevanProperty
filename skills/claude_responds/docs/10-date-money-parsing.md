@@ -7,67 +7,111 @@ as canonical strings in the QUALIFICATION STATE block.
 
 ---
 
-## 1. Date Parsing (Q8 — move-in / check-in / target)
+## 1. Date Parsing (Q8 move-in/check-in/target date, AND jadwal survei/viewing)
 
-### 35 cases *(base date for all examples: 12 Juni 2026)*
+Same parser, same rules, for **both** "kapan mau masuk/pindah?" (Q8) and "kapan bisa survei?"
+(viewing schedule) — the only difference is which slot the resolved date is written into.
+
+### 1.1 Relative expressions (hari / minggu / bulan / tahun)
+
+**Reference table** *(base date for all examples: 29 Juli 2026, Rabu)*
 
 | # | Customer input | Canonical output | Rule |
 |---|---|---|---|
-| 1 | Minggu depan | 24 Juni 2026 | Next week → +12 days |
-| 2 | Besok | 13 Juni 2026 | Today + 1 |
-| 3 | Bulan depan | 12 Juli 2026 | Next month, same day |
-| 4 | 19 Agustus | 19 Agustus 2026 | Day in a future month → this year |
-| 5 | 12 Mei | 12 Mei 2027 | Past month + day → next year |
-| 6 | Tahun depan | 12 Juni 2027 | Next year, same date |
-| 7 | 11 September 2026 | 11 September 2026 | Full date, 4-digit year |
-| 8 | 11 September 26 | 11 September 2026 | 2-digit year → 20YY |
-| 9 | 11 Sep 2026 | 11 September 2026 | Abbreviated month |
-| 10 | 9 Feb 2027 | 9 Februari 2027 | Explicit future year |
-| 11 | Maret, 12 | 12 Maret 2027 | Month, Day (past month) → next year |
-| 12 | Desember, 28 | 28 Desember 2026 | Month, Day (future month) → this year |
-| 13 | Dec, 28 2026 | 28 Desember 2026 | English abbreviated month + year |
-| 14 | Dec, 28 2027 | 28 Desember 2027 | English month + explicit future year |
-| 15 | 13/06/2026 | 13 Juni 2026 | First > 12 → unambiguous DD/MM |
-| 16 | 02/07/2026 | 2 Juli 2026 | Ambiguous → default DD/MM |
-| 17 | 06/15/2026 | 15 Juni 2026 | Second > 12 → MM/DD |
-| 18 | 09/13/2026 | 13 September 2026 | Second > 12 |
-| 19 | 01/15/2027 | 15 Januari 2027 | Second > 12 |
-| 20 | 02/13/2027 | 13 Februari 2027 | Second > 12 |
-| 21 | 01/05/2027 | 1 Mei 2027 | Both ≤ 12 → default DD/MM |
-| 22 | 11/12/2026 | 11 Desember 2026 | Both ≤ 12 → default DD/MM |
-| 23 | 2026 Agustus | 1 Agustus 2026 | YYYY Month → 1st |
-| 24 | Mei | 1 Mei 2027 | Bare past month → 1st, next year |
-| 25 | Juni | **⚠️ ASK FIRST** | Current month — exact date required |
-| 26 | Juli | 1 Juli 2026 | Bare future month → 1st, this year |
-| 27 | Agustus | 1 Agustus 2026 | Bare future month → 1st |
-| 28 | Feb | 1 Februari 2027 | Bare past month (abbrev) → next year |
-| 29 | Jan | 1 Januari 2027 | Bare past month → next year |
-| 30 | 18 Jan | 18 Januari 2027 | Day + past month → next year |
-| 31 | Aug 2 | 2 Agustus 2026 | English month + day (future) |
-| 32 | Hari ini / Sekarang | 12 Juni 2026 | Today |
-| 33 | June 12 2026 | 12 Juni 2026 | English full date |
-| 34 | Lusa | 14 Juni 2026 | Today + 2 |
-| 35 | Segera / ASAP / Cepat | **⚠️ ASK FIRST** | Urgency without a date |
+| 1 | 1 hari | 30 Juli 2026 | +1 day |
+| 2 | 4 hari | 02 Agustus 2026 | +N days |
+| 3 | 1 bulan | 29 Agustus 2026 | +1 month, same day-of-month |
+| 4 | 3 bulan | 29 Oktober 2026 | +N months |
+| 5 | 1 tahun | 29 Juli 2027 | +1 year, same date |
+| 6 | 2 bulan | 29 September 2026 | +N months |
+| 7 | 7 bulan | **28 Februari 2027** | +N months, **clamped** (2027 is not a leap year — see §1.2) |
+| 8 | 2 minggu | 12 Agustus 2026 | +14 days |
+| 9 | 4 minggu | 26 Agustus 2026 | +28 days |
+| 10 | seminggu / 1 minggu | 05 Agustus 2026 | +7 days |
+| 11 | 1-2 minggu | 12 Agustus 2026 | **Range → take the MAX** (2 minggu, not 1) |
+| 12 | 2-4 bulan | 29 November 2026 | Range → take the MAX (4 bulan) |
 
-### DD/MM vs MM/DD
+**Bare form is valid on its own** — the customer does not need to say "lagi"/"kedepan"/
+"mendatang" for a plain "7 bulan" or "2 minggu" to resolve. A qualifier suffix ("3 bulan lagi",
+"2 minggu kedepan") also works and resolves identically.
 
-| Situation | Format | Example |
-|---|---|---|
-| First number > 12 | DD/MM | `13/06` → 13 Juni |
-| Second number > 12 | MM/DD | `06/15` → 15 Juni |
-| Both ≤ 12 | **DD/MM (Indonesian default)** | `02/07` → 2 Juli |
+⚠️ **Collision guard — a relative-date phrase inside a BUDGET/rental-period expression is NOT a
+date.** "Budget 2-4 juta/**seminggu**" is a price-per-week, not "4 minggu lagi"; "sama istri dan
+**2** anak" is a household count, not "2 hari". The server only reads a bare (qualifier-less)
+relative expression as a date when no currency/price signal (jt, juta, rb, ribu, miliar, milyar,
+budget, harga, anggaran, dana) is present in the message, or an explicit qualifier
+(lagi/kedepan/ke depan/mendatang) removes the ambiguity. If in doubt, ask rather than guess.
 
-### The two ASK-FIRST rules
+### 1.2 Clamping & leap years (why "7 bulan" → 28 Februari, not 1 Maret)
 
-**Rule 25 — bare current month** ("Juni" when today is June):
+Adding months/years never overflows into the next month — the result is **clamped to the last
+valid day of the target month**:
+- 31 Jan + 1 bulan → 28 Feb (or 29 Feb in a leap year) — **never** 3 Maret.
+- 29 Juli + 7 bulan → 29 Feb would be Feb's 29th, but 2027 is not a leap year, so it clamps to
+  **28 Februari 2027**.
+
+Leap year rule: divisible by 4, **except** century years (÷100) — **except-except** if also
+divisible by 400. So 2024 is leap, 2027 is not, 2100 is not, 2000 is.
+
+### 1.3 Explicit dates (day + month [+ year])
+
+| # | Customer input | Canonical output | Rule |
+|---|---|---|---|
+| 1 | Tanggal 8 Agustus | 08 Agustus 2026 | Day in a future month, no year → this year |
+| 2 | Tanggal 17 Mei | 17 Mei 2027 | Day in a past month, no year → next year |
+| 3 | Tanggal 8 Juni | 08 Juni 2027 | Same — past month → next year |
+| 4 | Tanggal 8 Juni 2027 | 08 Juni 2027 | Explicit year given → use it as-is |
+| 5 | Tanggal 12 November 2026 | 12 November 2026 | Explicit year, still upcoming → use it as-is |
+| 6 | 11 September 2026 | 11 September 2026 | Full date, 4-digit year |
+| 7 | 11 September 26 | 11 September 2026 | 2-digit year → 20YY |
+| 8 | 11 Sep 2026 | 11 September 2026 | Abbreviated month |
+| 9 | Maret, 12 | 12 Maret 2027 | Month, Day (past month) → next year |
+| 10 | Dec, 28 2026 | 28 Desember 2026 | English abbreviated month + year |
+| 11 | 13/06/2026 | 13 Juni 2026 | First > 12 → unambiguous DD/MM |
+| 12 | 06/15/2026 | 15 Juni 2026 | Second > 12 → MM/DD |
+| 13 | 02/07/2026 | 2 Juli 2026 | Both ≤ 12 → default DD/MM (Indonesian convention) |
+| 14 | Aug 2 | 2 Agustus 2026 | English month + day (future) |
+| 15 | June 12 2026 | 12 Juni 2026 | English full date |
+
+### 1.4 Bare month, no day
+
+| # | Customer input | Canonical output | Rule |
+|---|---|---|---|
+| 1 | November *(today = 29 Jul 2026)* | 01 November 2026 | Bare future month → the 1st, this year |
+| 2 | Januari | 01 Januari 2027 | Bare past month → the 1st, next year |
+| 3 | Februari | 01 Februari 2027 | Same |
+| 4 | November 2026 | 01 November 2026 | Explicit year given → 1st of that month/year |
+| 5 | 30 November 2026 | 30 November 2026 | Day given → use it, don't collapse to the 1st |
+| 6 | Juni *(today's own month)* | **⚠️ ASK FIRST** | Current month, no day — see §1.6 rule A |
+
+### 1.5 Past-date rejection — **explicit year only**
+
+If the customer states an **explicit year that has already passed relative to today**, do not
+silently accept it and do not silently auto-correct it — ask, and offer next year's same date
+as the likely fix:
+
+> Customer: "Tanggal 23 Juni 2026" *(today is 29 Juli 2026 — 23 Juni 2026 already passed)*
+> AI: "Kak, tanggal 23 Juni 2026 sudah lewat — hari ini sudah 29 Juli 2026. Mungkin maksudnya
+> 23 Juni **2027**?"
+
+> Customer: "Februari 2023"
+> AI: same pattern — reject, state today's date, suggest the corrected year.
+
+**This rejection ONLY fires when the customer states the year explicitly.** A bare day+month
+with **no year** (e.g. "17 Mei") is **never** rejected — it silently auto-advances to next year
+per §1.4/§1.3's ordinary already-passed-this-year handling. Do not apply §1.5's ask-first
+behavior to a yearless date.
+
+### 1.6 The two ASK-FIRST rules (mandatory before the summary brief)
+
+**Rule A — bare current month, no day** ("Juni" when today is in June):
 > "Kak, untuk bulan Juni rencananya tanggal berapa masuknya?"
 
-**Rule 35 — urgency without a date** ("segera", "ASAP"):
+**Rule B — urgency without a date** ("segera", "ASAP", "cepat"):
 > 1. "Kak, boleh tau kira-kira tanggalnya?"
 > 2. "Baik, Kak. Mohon segera info tanggalnya ya."
 
 For both: an answer → use it. Can't decide / silent / "belum tahu" → **"Waiting the update"**.
-**Both are MANDATORY before the summary brief.**
 
 ### "Don't know" patterns → `Waiting the update`
 
@@ -77,7 +121,7 @@ tidak tahu · gak tau · kapan aja · terserah · whenever · flexible
 ```
 Summary line reads: `✓ Masuk: *Waiting the update*`
 
-### Relative & corrected dates
+### 1.7 Notes shared with jadwal survei (viewing)
 
 - Relative expressions resolve to a **concrete date** — "survei 3 minggu lagi" → today + 21,
   scoped to its own clause so it never overwrites the move-in date.

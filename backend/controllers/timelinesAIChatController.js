@@ -188,7 +188,7 @@ function extractMessage(body = {}) {
 async function getAllAgents() {
   const agents = await User.findAll({
     where      : { privilege: 'agent', status: 1 },
-    attributes : ['id', 'user_id', 'name', 'phone', 'username'],
+    attributes : ['id', 'user_id', 'name', 'phone', 'email', 'username'],
     order      : [['created_date', 'ASC']]
   });
   return agents;
@@ -570,6 +570,19 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
     await syncCustomerFromChat({
       reply: aiResult.reply, sessionId: session.id, currentMessage: message,
       agentUserId: agent.user_id, phone: sender, waName: name,
+    });
+  } catch (_) { /* non-fatal */ }
+
+  // ── Google Calendar: buat event viewing otomatis bila AI baru saja menangkap
+  //    tanggal+jam survei yang KONKRET (bukan sekadar "mau viewing"). Silent —
+  //    tidak mengubah balasan yang sudah dikirim; customer & agent tahu dari
+  //    email undangan Google sendiri (sendUpdates=all). Non-fatal.
+  try {
+    const { maybeScheduleViewingFromChat } = require('../services/viewingScheduleTrigger');
+    await maybeScheduleViewingFromChat({
+      sessionId: session.id, currentMessage: message,
+      agentUserId: agent.user_id, agentEmail: agent.email, agentName: agent.name,
+      phone: sender, waName: name,
     });
   } catch (_) { /* non-fatal */ }
 

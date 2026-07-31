@@ -206,7 +206,7 @@ function normalizePhoneFromJid(value) {
 async function getAllAgentsWithKirimi() {
   const agents = await User.findAll({
     where      : { privilege: 'agent', status: 1 },
-    attributes : ['id', 'user_id', 'name', 'phone', 'username', 'kirimi_device_id'],
+    attributes : ['id', 'user_id', 'name', 'phone', 'email', 'username', 'kirimi_device_id'],
     order      : [['created_date', 'ASC']]
   });
   return agents.filter(a => a.kirimi_device_id && String(a.kirimi_device_id).trim().length > 2);
@@ -633,6 +633,19 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
     await syncCustomerFromChat({
       reply: aiResult.reply, sessionId: session.id, currentMessage: message,
       agentUserId: agent.user_id, phone: sender, waName: name,
+    });
+  } catch (_) { /* non-fatal */ }
+
+  // ── Google Calendar: buat event viewing otomatis bila AI baru saja menangkap
+  //    tanggal+jam survei yang KONKRET (bukan sekadar "mau viewing"). Silent —
+  //    tidak mengubah balasan yang sudah dikirim; customer & agent tahu dari
+  //    email undangan Google sendiri (sendUpdates=all). Non-fatal.
+  try {
+    const { maybeScheduleViewingFromChat } = require('../services/viewingScheduleTrigger');
+    await maybeScheduleViewingFromChat({
+      sessionId: session.id, currentMessage: message,
+      agentUserId: agent.user_id, agentEmail: agent.email, agentName: agent.name,
+      phone: sender, waName: name,
     });
   } catch (_) { /* non-fatal */ }
 

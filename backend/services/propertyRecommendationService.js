@@ -425,6 +425,21 @@ function stripNearPhrases(text) {
 }
 
 /**
+ * Strip "pindah/keluar/hijrah dari X" fragments so the ORIGIN property a
+ * customer is leaving doesn't get read as the DESIRED type — e.g. "mau
+ * pindah dari apartemen" (customer's current home, moving away) must not
+ * detect building type = apartment. Same shape as stripNearPhrases: strip
+ * the trigger word + whatever follows, generically — no type-word list to
+ * keep in sync with PROPERTY_TYPES.
+ */
+function stripMovingFromPhrases(text) {
+  // Consume up to 2 words after "dari" — some type names are two words
+  // ("rumah kontrakan"), and a single-token strip left the second word
+  // ("kontrakan") behind, still matching PROPERTY_TYPES.
+  return text.replace(/\b(pindah|keluar|hijrah|migrasi|cabut)\s+dari\s+(?:\S+\s+){0,1}\S+/gi, '');
+}
+
+/**
  * Remove ambiguous "rumah X" phrases that are NOT a house ("rumah makan",
  * "rumah sakit", "rumah tangga", …). Without this, a customer saying they want to
  * be near a "rumah makan" (restaurant) gets mis-detected as building type house,
@@ -569,10 +584,12 @@ function includesAnyWordBounded(text, words = []) {
 
 function detectBuildingType(message = '') {
   const text = normalizeText(message);
-  // Strip "dekat X" anchors, ambiguous "rumah makan/…", AND commercial use-phrases
-  // ("dipakai kantor", "buat usaha") so none pollutes building-type detection
-  // (a restaurant anchor must not become house; a house used as office stays house).
-  const textForType = stripCommercialUsePhrases(stripAmbiguousRumah(stripNearPhrases(text)));
+  // Strip "dekat X" anchors, ambiguous "rumah makan/…", commercial use-phrases
+  // ("dipakai kantor", "buat usaha"), AND "pindah dari X" origin phrases so none
+  // pollutes building-type detection (a restaurant anchor must not become house;
+  // a house used as office stays house; "pindah dari apartemen" — the home being
+  // LEFT — must not become the desired type).
+  const textForType = stripCommercialUsePhrases(stripMovingFromPhrases(stripAmbiguousRumah(stripNearPhrases(text))));
   return Object.entries(PROPERTY_TYPES).find(([, keywords]) => includesAnyWordBounded(textForType, keywords))?.[0] || '';
 }
 
@@ -2345,6 +2362,7 @@ module.exports = {
   stripNearPhrases,
   stripAmbiguousRumah,
   stripInvestmentIntentPhrases,
+  stripMovingFromPhrases,
   detectCommercialUse,
   detectUseCase,
   isNonResidentialUse,

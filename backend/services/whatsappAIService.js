@@ -32,6 +32,7 @@ const { loadAIContextBlocks }                       = require('./aiContextServic
 const { splitCatalogReply }                         = require('../utils/replySplitter');
 const { resolveCatalogMode, envFallbackMode }       = require('./catalogModeService');
 const sessionAnchors                                = require('../utils/sessionAnchors');
+const { expandAbbreviations }                       = require('../utils/lazyChatNormalizer');
 
 // Jendela history untuk ekstraksi filter & state kualifikasi. Cukup besar agar
 // pesan pembuka (tipe/transaksi/lokasi) tidak keluar scope di alur panjang, tapi
@@ -277,7 +278,18 @@ function buildQualifyReply(filters, message, agentName, contextSource, history =
  * @returns {Promise<{ reply, provider, contextSource }>}
  */
 async function generateWhatsAppAIReply(params) {
-  const { session, message, agentName, agentUserId = null, options = {} } = params;
+  const { session, agentName, agentUserId = null, options = {} } = params;
+
+  // id-realestate-lazy-chat-normalizer skill (28 Jul 2026): expand SMS-speak/
+  // abbreviations ONCE, here, before any detector (filter extraction, Q-flow
+  // extractors, AI prompt builders) sees the text. The RAW message was already
+  // saved to ChatMessage by the calling controller before this function runs —
+  // normalizing only the in-memory copy used for detection this turn keeps the
+  // stored transcript authentic for an agent takeover/log read, while every
+  // live detector benefits from the expansion. Past turns already in `history`
+  // are read as originally typed (not retroactively re-expanded) — see
+  // lazyChatNormalizer.js docstring.
+  const message = expandAbbreviations(params.message);
 
   // Pastikan nama agent (dari database) ikut ke prompt builder lewat session.
   // buildWhatsappReplyPrompt() membaca session.agentName untuk tanda tangan dinamis.
