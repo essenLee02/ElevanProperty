@@ -326,29 +326,119 @@ select Catalog Summary Status ON/OFF).
 
 ---
 
-## 12. Reconstruction Checklist — Ringkas
+## 13. Update Sesi 20 Jul → 31 Jul 2026 (V5)
+
+### 13.1 Modul Customer — end-to-end (lihat doc 03 & 07)
+Tabel `customers` (UNIQUE `user_id`+`phone`) + model + `customerMasterController.js`
++ routes `/api/customer/*` + `customerApi.js` + frontend `Customer_Master/`
+(7 modul master data sekarang, bukan 6). Registrasi OTOMATIS begitu Q1
+(tipe transaksi) + Q2 (lokasi) terjawab — TIDAK menunggu summary, mencegah
+lead yang putus di tengah percakapan hilang tak tercatat. `ai_response`
+ON/OFF per-customer: toggle di frontend ATAU via chat agent
+(`"matikan AI untuk 628xxx"` — **HANYA nomor WhatsApp**, nama ditolak karena
+ambigu/rawan salah target). Gate fail-open di 3 controller WhatsApp.
+
+### 13.2 SKILL DOCS DIROMBAK: 21 → 13 doc (claude_responds & chat_gpt_responds)
+Dokumen AI-facing (bukan doc website_env_concept ini) dikonsolidasi dari
+01–21 menjadi 01–13 — isi tumpang tindih digabung (mis. anchor recognition +
+landmark reference → satu doc lokasi). `CONDITIONAL_FILE_TRIGGERS` di
+`skillPromptService.js` dikunci ke nama file persis; hanya 3 dari 13 doc
+bersyarat (house-pilots, facilities-reference, locations-and-landmarks) —
+10 sisanya selalu aktif. **Nomor doc versi lama TIDAK BERLAKU LAGI.**
+
+### 13.3 Temuan kritis: plafon TPM OpenAI (lihat detail penuh di doc 06)
+Skill docs SAJA memakan 39–51K dari plafon 60K TPM gpt-4o-mini org — inilah
+penyebab RIIL error 429 "Request too large", bukan panjang history. Solusi
+definitif: naikkan limit TPM via billing OpenAI (sisi user, bukan kode).
+Mitigasi kode: truncate history ke 12 pesan sebelum kirim ke ChatGPT
+(`openaiService.js`) — defense-in-depth, bukan akar masalah.
+
+### 13.4 Google Places — akhirnya wired ke jalur LLM (lihat detail di doc 06)
+`googlePlacesService.js` (sudah ada sebelumnya) hanya menjangkau Private
+Agent (fallback); jalur LLM produksi tidak pernah menerima landmark live.
+Fix: `buildLiveLandmarkBlock()` di `aiPromptBuilderService.js`, sync-cache +
+async-warm, 0 token tambahan saat kosong. ⚠️ Saat ini DORMAN — Google Places
+API menolak dengan `REQUEST_DENIED` karena billing project Google Cloud
+belum di-enable (key sendiri sehat).
+
+### 13.5 Google Calendar viewing auto-schedule (BARU)
+`services/viewingScheduleTrigger.js` (baru) + `googleCalendarService.js`
+(OAuth 2.0, BUKAN Service Account) — begitu AI menangkap tanggal+jam viewing
+KONKRET, event kalender dibuat otomatis. Cek `customers.email` dulu (pakai
+langsung bila ada); kosong → Q_EMAIL yang sudah ada yang bertanya (opsional,
+opt-out "lewati"), modul ini tidak memaksa. Agent (`users.email`) selalu jadi
+attendee. ⚠️ `GOOGLE_OAUTH_REFRESH_TOKEN` masih kosong di `.env` — satu
+langkah manual tersisa sebelum live.
+
+### 13.6 Bug loop re-ask "area alternatif" (Q7) — pelajaran diagnosis penting
+Customer menolak berkali-kali ("Tidak ada, Kak") tetap ditanya ulang dengan
+kalimat parafrase berbeda, sampai customer marah. **Root cause awalnya SALAH
+DIDIAGNOSIS** karena diuji terhadap `chatbotPrivateController.js` (Private
+Agent/fallback), padahal `AI_PRIMARY_PROVIDER` sudah berganti dari `deepseek`
+ke `chatgpt` — jalur produksi AKTUAL adalah `aiPromptBuilderService.js` (LLM),
+kode base yang MIRIP tapi terpisah dari Private Agent. Regex deteksi
+"sudah ditanya" terpatok kalimat persis; LLM memparafrase tiap giliran →
+loop swa-lestari. Fix: deteksi berbasis makna, aturan keras "penolakan =
+jawaban" di prompt, `normalizeAltAreaAnswer()` (penolakan → pernyataan
+positif, bukan disimpan mentah yang terbaca seperti slot kosong), katalog
+langsung diberi saat customer marah. **Pelajaran untuk developer manapun:**
+SELALU `grep AI_PRIMARY_PROVIDER .env` + cek log runtime sebelum mereproduksi
+bug perilaku AI — jalur produksi mungkin bukan yang diasumsikan.
+
+### 13.7 Rewrite besar: tanggal, fasilitas, normalizer SMS-speak
+- `customerDateParser.js` ditulis ulang total: clamping bulan/tahun benar,
+  leap year lengkap, `reject_past` untuk tahun eksplisit lampau,
+  `hasCurrencySignal` guard cegah tabrakan dgn harga per-periode.
+- `standardFacilities.js` ditulis ulang: 11 tipe properti + tier premium
+  (28 item, flag-only di summary — item dipilih penilaian LLM, bukan
+  keyword-match, untuk hindari daftar bengkak tidak relevan).
+- `lazyChatNormalizer.js` (baru): ekspansi ~100 singkatan SMS-speak
+  Indonesia, token-based (bukan substring), di-wire di SATU choke point
+  (`whatsappAIService.js`), hanya memengaruhi giliran ini (riwayat tersimpan
+  asli di DB).
+
+### 13.8 Listing-Referral Pilot (lanjutan dari sesi sebelumnya)
+1 false-positive session-reset tambahan ditemukan & diperbaiki:
+"pindah dari apartemen" salah dibaca sebagai ganti tipe/transaksi.
+
+### 13.9 AI_PRIMARY_PROVIDER berganti: deepseek → chatgpt
+`.env` produksi sekarang `AI_PRIMARY_PROVIDER=chatgpt`,
+`OPENAI_MODEL=gpt-4o-mini`. Lihat §13.3 untuk implikasi TPM.
+
+---
+
+## 14. Reconstruction Checklist — Ringkas
 
 Bila membangun ulang sistem ini dari nol, pastikan urutan berikut tercakup:
 
 - [ ] Backend Express + Sequelize v6 + MySQL, struktur folder per doc 01
-- [ ] 15 model (lihat doc 03), termasuk `users.email`/`catalog_summary` dan
-      `PropertyLocation` join enrichment (`nearbyLocations`/`userId`/
-      `priceValue`/`priceType`/`area`)
+- [ ] 17 model (lihat doc 03), termasuk `Customer` (BARU), `users.email`/
+      `catalog_summary`, `facilities.keywords` (JSON), dan `PropertyLocation`
+      join enrichment (`nearbyLocations`/`userId`/`priceValue`/`priceType`/`area`)
 - [ ] `GeneralController` base class dengan `generateRandomId`,
       `findDuplicateName`, `lookupName` — SEMUA master controller extends ini
-- [ ] 6 modul CRUD master data (Country/Province/City/Location/Facility/
-      Property), pola route seragam, semua `verifyToken`
+- [ ] 7 modul CRUD master data (Country/Province/City/Location/Facility/
+      Property/**Customer**), pola route seragam, semua `verifyToken`
 - [ ] JWT auth + silent refresh (401→refresh→retry, single-flight)
 - [ ] 3 controller WhatsApp (Fonnte/Kirimi/TimelinesAI) — SINKRON: fromMe
-      guard, filter grup, dedup 2-layer (in-memory+DB), cookie response timer
-- [ ] 5 AI provider (ChatGPT/Claude/QWEN/DeepSeek/Private), satu PRIMARY →
-      Private Agent, nama model dari `.env` (tidak boleh hardcode)
-- [ ] Q1–Q12 qualification flow — IDENTIK di kedua mode `RESPOND_CATALOG_RUN`
+      guard, filter grup, dedup 2-layer (in-memory+DB), cookie response timer,
+      registrasi customer otomatis (Q1+Q2), gate `ai_response=OFF`
+- [ ] 5 AI provider (ChatGPT/Claude/QWEN/DeepSeek/Private), satu PRIMARY
+      (**cek `.env` aktual** — jangan asumsikan) → Private Agent, nama model
+      dari `.env` (tidak boleh hardcode)
+- [ ] Q1–Q14 qualification flow — IDENTIK di kedua mode `RESPOND_CATALOG_RUN`,
+      termasuk penolakan customer dihitung sebagai jawaban (anti-loop)
 - [ ] Katalog per-agent (Property.user_id scoping) + budget expansion batas
-      wajar + fallback fasilitas standar
-- [ ] Frontend Vue 3: 6 modul CRUD (List+Master view pair), `ConfirmModal.vue`
-      reusable, `FloatingChatbot.vue`, router guards (`requiresAuth`/`requiresGuest`)
+      wajar + fallback fasilitas standar (11 tipe + tier premium)
+- [ ] Landmark: peta kurasi 45 kota + Google Places live (opsional, perlu
+      billing Google Cloud project di-enable) + Google Calendar viewing
+      auto-schedule (opsional, perlu OAuth refresh token)
+- [ ] Frontend Vue 3: 7 modul CRUD (List+Master view pair, `*_Master/`),
+      `ConfirmModal.vue` reusable, `FloatingChatbot.vue`, router guards
+      (`requiresAuth`/`requiresGuest`)
 - [ ] Secret redaction hook di `ChatMessage` model (`beforeSave`/`beforeBulkCreate`)
 - [ ] ngrok auto-start (opsional, `ENABLE_NGROK`)
 - [ ] Skill docs sync: `claude_responds/docs/*.md` ≡ `chat_gpt_responds/docs/*.md`
-      (byte-identical kecuali `SKILL.md`)
+      (byte-identical kecuali `SKILL.md`, 13 file per sisi)
+- [ ] Disiplin token TPM: ukur dampak setiap penambahan ke prompt LLM
+      terhadap plafon provider sebelum ship

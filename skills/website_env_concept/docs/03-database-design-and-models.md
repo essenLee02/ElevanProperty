@@ -180,6 +180,53 @@ Master data for property facilities (AC, pool, CCTV, parking, etc.).
 nama duplikat *dan* sinonim (mis. gym/gym club, cctv/kamera pengawas, kolam
 renang/swimming pool) via normalisasi nama + `FACILITY_SYNONYM_GROUPS`.
 
+> **`keywords` (JSON, BARU — Juli 2026):** array string sinonim/keyword tambahan
+> per fasilitas, dibaca oleh `detectFacilities()` di server. Sebelumnya deteksi
+> fasilitas dari teks customer hardcode di kode; sekarang DB-driven — menambah
+> fasilitas baru cukup isi `keywords`, tidak perlu deploy kode. Peta kata di
+> kode (`utils/standardFacilities.js`) tetap dipakai sebagai fallback/label
+> kurasi bila `keywords` kosong.
+
+---
+
+### customers (BARU — Juli 2026)
+Customer per-agent — lead WhatsApp yang tercatat otomatis begitu Q1 (tipe
+transaksi) dan Q2 (lokasi) terjawab dalam qualification flow. TIDAK menunggu
+sampai percakapan selesai/summary — mencegah lead yang putus di tengah hilang
+tak tercatat.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | INT AI PK | |
+| user_id | VARCHAR(50) | FK → users.user_id (agent PEMILIK customer ini) |
+| customer_id | VARCHAR(50) | Generated: prefix + random + counter, UNIQUE |
+| name | VARCHAR(100) | Default = nama profil WhatsApp customer; di-update saat customer sebutkan nama panggilan |
+| phone | VARCHAR(30) | Normalisasi 62xxx — kunci identifikasi utama |
+| email | VARCHAR(200) | nullable; diisi saat penjadwalan viewing (opsional, ada opt-out "lewati") |
+| ai_response | VARCHAR(5) | `'ON'` (default) atau `'OFF'` — OFF = agent takeover manual, AI diam total untuk customer ini |
+| status | INTEGER(1) | 1=aktif, 2=disabled, 3=deleted |
+| created_date/by, updated_date/by | | |
+
+**Index UNIQUE:** `(user_id, phone)` — satu nomor WhatsApp bisa terdaftar sebagai
+customer di BANYAK agent berbeda (masing-masing baris terpisah), boleh dengan
+nama berbeda per agent. Registrasi idempoten: `syncCustomerFromChat()` di
+`customerRegistrationService.js` melakukan UPSERT berbasis kunci ini, aman
+dipanggil berulang setiap balasan AI.
+
+**Kontrol AI ON/OFF:**
+- Manual di frontend module Customer Master (toggle switch)
+- Via chat oleh agent: `"matikan AI untuk 628xxx"` / `"nyalakan AI untuk
+  628xxx, 628yyy"` — **HANYA menerima NOMOR WHATSAPP**, bukan nama (nama
+  ambigu/rawan salah target; ditolak dengan balasan panduan minta nomor).
+  Hanya berlaku bila pengirim = nomor agent sendiri.
+- Gate di 3 controller WhatsApp (Fonnte/Kirimi/TimelinesAI): `ai_response=OFF`
+  → AI diam total sampai dinyalakan kembali (fail-open: error pengecekan
+  tidak boleh memblokir chat).
+
+**Identitas customer baru vs lama** (`getIdentityStatus()`): customer dianggap
+"returning" bila `name` sudah bukan nama default WhatsApp ATAU `email` sudah
+terisi — hanya customer BARU yang ditanya nama/email sebelum summary.
+
 ---
 
 ### countries / provinces / cities — region hierarchy

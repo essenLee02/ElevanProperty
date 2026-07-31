@@ -9,10 +9,19 @@ gagal, sistem **TIDAK** melompat ke AI eksternal lain — langsung jatuh ke
 ```
 AI_PRIMARY_PROVIDER=qwen      → QWEN     → Private Agent
 AI_PRIMARY_PROVIDER=claude    → Claude   → Private Agent
-AI_PRIMARY_PROVIDER=chatgpt   → ChatGPT  → Private Agent
-AI_PRIMARY_PROVIDER=deepseek  → DeepSeek → Private Agent   (baru)
+AI_PRIMARY_PROVIDER=chatgpt   → ChatGPT  → Private Agent   ← DEFAULT SAAT INI (31 Jul 2026)
+AI_PRIMARY_PROVIDER=deepseek  → DeepSeek → Private Agent
 AI_PRIMARY_PROVIDER=private   → Private Agent (langsung, tanpa AI eksternal)
 ```
+
+> ⚠️ **Diagnosis wajib cek jalur AKTUAL, bukan asumsi.** `AI_PRIMARY_PROVIDER`
+> pernah berganti dari `deepseek` ke `chatgpt` tanpa dokumentasi ini
+> diperbarui. Bug re-ask-loop pernah salah didiagnosis karena diuji terhadap
+> `chatbotPrivateController.js` (Private Agent) padahal produksi sedang
+> memakai jalur LLM (`aiPromptBuilderService.js`) — dua kode base yang MIRIP
+> tapi TERPISAH. Selalu `grep AI_PRIMARY_PROVIDER .env` dan cek log runtime
+> (`[WhatsAppAI] Calling AI provider: { primaryProvider: … }`) sebelum
+> mereproduksi bug perilaku AI.
 
 Pengecualian: bila primary = `private` dan Private Agent gagal, ada rantai
 darurat eksternal (`executeExternalAIFallbackChain`): DeepSeek → Claude → ChatGPT → QWEN.
@@ -32,11 +41,79 @@ Ajukan pertanyaan berikutnya (brief interview, belum tampilkan katalog)
 
 Toggle via `backend/.env`:
 ```env
-AI_PRIMARY_PROVIDER=deepseek         # qwen | claude | chatgpt | deepseek | private
+AI_PRIMARY_PROVIDER=chatgpt          # qwen | claude | chatgpt | deepseek | private
 ENABLE_CLAUDE_FALLBACK=true          # efektif = toggle global Claude (on/off)
 ENABLE_CHATBOT_PRIVATE_CONTROLLER=true
 RESPOND_CATALOG_RUN=OFF              # OFF = brief saja ; ON = brief + katalog
 ```
+
+## ⚠️ Plafon TPM (Tokens Per Minute) — gpt-4o-mini (BARU, 31 Jul 2026)
+
+Akun OpenAI org saat ini punya limit **60.000 TPM/menit** untuk `gpt-4o-mini`.
+Diukur langsung (31 Jul 2026):
+
+| Komponen prompt | Karakter | ≈ Token | % dari plafon 60K |
+|---|---|---|---|
+| 10 skill doc yang SELALU aktif | 156.413 | 39.100 | 65% |
+| + 3 skill doc kondisional (11/12/13) | 204.128 | 51.000 | 85% |
+
+Skill docs SAJA — sebelum history, qualification state, atau katalog properti
+ditambahkan — sudah memakan 65–85% dari seluruh jatah per menit. Ini adalah
+penyebab RIIL error `429 Request too large` ("Limit 60000, Requested 71610"),
+**bukan** panjang riwayat percakapan seperti diagnosis awal yang keliru.
+
+**Solusi definitif:** tambahkan metode pembayaran ke akun OpenAI — TPM naik
+dari 60K ke 200K seketika, tanpa perlu memangkas skill docs (docs sengaja
+diperbesar — lihat doc 17 §Skill Doc Cleanup — agar konten sampai ke LLM;
+memangkasnya untuk mengatasi rate limit berarti membatalkan pekerjaan itu).
+
+**Mitigasi sementara (defense-in-depth, bukan fix utama):**
+`generateChatGPTWhatsappReply()` (`services/openaiService.js`) memangkas
+history ke **12 pesan terakhir** sebelum dikirim ke ChatGPT — full history
+tetap dipakai untuk state calculation server-side (qualification state,
+deteksi "sudah dijawab", dst), hanya request API yang dipersingkat.
+
+**Disiplin untuk fitur baru:** setiap penambahan ke prompt LLM (blok state
+baru, skill doc kondisional baru, konteks tambahan apa pun) WAJIB diukur
+dampak tokennya. Pola aman: cache-then-async-refresh + emit STRING KOSONG
+saat data tidak tersedia (0 token tambahan) — lihat `buildLiveLandmarkBlock()`
+di bawah sebagai contoh implementasi.
+
+## Landmark Live (Google Places) — Wired ke Jalur LLM (BARU, 31 Jul 2026)
+
+`services/googlePlacesService.js` sudah ada sejak sebelum sesi ini, TAPI
+sebelumnya **hanya** di-`require()` oleh `chatbotPrivateController.js`
+(Private Agent / fallback) — jalur LLM produksi (`aiPromptBuilderService.js`)
+tidak pernah menerima data landmark live sama sekali, hanya mengandalkan
+ingatan training model yang punya knowledge cutoff.
+
+Fix: `buildLiveLandmarkBlock(city)` (baru, di `aiPromptBuilderService.js`):
+- **Sync cache read** (`getCachedCityLandmarks`) — tidak pernah menyentuh
+  jaringan dari builder prompt yang sinkron.
+- **Fire-and-forget async warm** (`warmCityLandmarksCache`) bila cache
+  kosong — menghangatkan untuk giliran BERIKUTNYA, tidak memblokir balasan
+  giliran ini.
+- Dibatasi **6 landmark, satu baris** — hemat token (lihat plafon TPM di atas).
+- Emit **string kosong** (0 token tambahan) saat data tidak tersedia.
+
+Diinjeksikan ke prompt tepat setelah blok qualification state:
+```
+${qualStateBlock ? `\n${qualStateBlock}\n` : ''}${liveLandmarkBlock}
+```
+
+⚠️ **Status saat ini: DORMAN.** Google Places API menolak semua panggilan
+dengan `REQUEST_DENIED — You must enable Billing on the Google Cloud
+Project`. `GOOGLE_API_KEY` sendiri valid (dipakai fitur Google lain yang
+sudah jalan) — billing PROJECT Google Cloud-nya yang belum di-enable.
+Sistem turun anggun ke peta kurasi `utils/locationLandmarks.js` (45 kota)
+sampai billing dinyalakan di `console.cloud.google.com`.
+
+Skill doc terkait (`claude_responds/docs/13-locations-and-landmarks.md`,
+mirror di `chat_gpt_responds/`) diperbarui dengan §2a (tangga prioritas:
+live > kurasi > generik; blok kosong itu NORMAL, jangan pernah dilaporkan ke
+customer sebagai kegagalan) dan §2b (larangan keras mengarang nama
+landmark/status buka/jam operasional — landmark karangan menghancurkan
+kepercayaan lebih cepat daripada landmark basi).
 
 > **PENTING — arti RESPOND_CATALOG_RUN (baru):** Q1–Q12 **SELALU** dijalankan
 > apa pun nilainya. Flag ini hanya menentukan isi SETELAH brief:

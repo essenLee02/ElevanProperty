@@ -210,7 +210,15 @@ async function generateChatGPTChatbotReply(session, history, userMessage, proper
 }
 
 async function generateChatGPTWhatsappReply(session, history, userMessage, propertyContext = '', extraContext = {}) {
-  return callChatGPTResponseAPI(buildWhatsappReplyPrompt(session, history, userMessage, propertyContext, 'chatgpt', extraContext), {
+  // ChatGPT gpt-4o-mini has org-level TPM limit (typically 60K).
+  // Full multi-message history can exceed this. Truncate to last 10-15 messages
+  // to stay within limits while preserving conversation context. Full history
+  // is used server-side (state calculation, filtering) before this point.
+  const MAX_HIST_FOR_CHATGPT = 12;
+  const truncatedHistory = history.length > MAX_HIST_FOR_CHATGPT
+    ? history.slice(-MAX_HIST_FOR_CHATGPT)
+    : history;
+  return callChatGPTResponseAPI(buildWhatsappReplyPrompt(session, truncatedHistory, userMessage, propertyContext, 'chatgpt', extraContext), {
     store: true,
     metadata: {
       source: _waSource(),

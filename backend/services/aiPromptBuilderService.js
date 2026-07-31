@@ -12,6 +12,82 @@ const QS_CUST_ROLES = new Set(['user', 'customer']);
 const QS_AI_ROLES   = new Set(['assistant', 'ai', 'bot']);
 
 /**
+ * Blok LIVE LANDMARK untuk prompt LLM (Claude & ChatGPT).
+ *
+ * WHY: `googlePlacesService.js` sebelumnya HANYA di-require oleh
+ * chatbotPrivateController.js — yaitu Private Agent, jalur FALLBACK. Padahal
+ * produksi berjalan di jalur LLM (AI_PRIMARY_PROVIDER=chatgpt), sehingga
+ * Claude/ChatGPT tidak pernah menerima data landmark live sama sekali dan hanya
+ * mengandalkan ingatan training yang punya knowledge cutoff (landmark bisa sudah
+ * tutup / ganti nama / baru dibuka). Kelas bug yang sama dengan loop Q7: fitur
+ * dibangun di Private Agent, tapi produksi memakai jalur lain.
+ *
+ * DESIGN — cache-then-async-refresh, TIDAK PERNAH memblokir balasan:
+ *   builder prompt ini SINKRON, jadi kita hanya membaca cache (sync) dan
+ *   menghangatkan cache secara fire-and-forget untuk giliran BERIKUTNYA. Turn
+ *   pertama sebuah kota baru tidak dapat data live — itu disengaja, lebih baik
+ *   daripada menahan balasan WhatsApp demi satu panggilan jaringan.
+ *
+ * Sengaja DIPANGKAS (maks 6 landmark, satu baris): prompt WhatsApp sudah pernah
+ * menembus limit TPM 60K milik gpt-4o-mini, jadi setiap blok tambahan harus hemat token.
+ *
+ * @param {string} city kota/area hasil ekstraksi qualification state
+ * @returns {string} blok siap-tempel, atau '' bila tidak ada data live
+ */
+function buildLiveLandmarkBlock(city) {
+  const name = String(city || '').trim();
+  if (!name) return '';
+
+  let live = null;
+  try {
+    const { getCachedCityLandmarks, warmCityLandmarksCache } = require('./googlePlacesService');
+    live = getCachedCityLandmarks(name);
+    // Fire-and-forget: hangatkan cache untuk giliran berikutnya. JANGAN di-await.
+    if (!live) Promise.resolve(warmCityLandmarksCache(name)).catch(() => {});
+  } catch { return ''; }
+
+  if (!live || !live.length) return '';
+
+  return `\n📍 LIVE LANDMARK DATA — ${name} (Google Places, terbaru):
+${live.slice(0, 6).join(' · ')}
+Gunakan daftar ini saat memberi contoh patokan lokasi untuk ${name}. Data ini LEBIH BARU
+daripada ingatan training kamu — kalau berbeda, PERCAYA daftar ini.\n`;
+}
+
+/**
+ * Normalisasi jawaban Q7 (area alternatif).
+ *
+ * Menolak = SUDAH MENJAWAB. Tapi menyimpan teks mentah ("Tidak ada, Kak")
+ * membuat baris summary berbunyi "✓ Area alternatif: Tidak ada, Kak" — janggal
+ * dan terbaca seperti data kosong, sehingga LLM tergoda menanyakannya lagi.
+ * Ubah penolakan jadi pernyataan niat yang POSITIF ("Fokus di Pakuwon saja")
+ * supaya ✅-nya tidak ambigu.
+ *
+ * @param {string} text  jawaban customer
+ * @param {string} loc   area/kota yang sudah dipilih (untuk kalimat fokus)
+ * @returns {string} nilai siap-tampil untuk baris Q7
+ */
+function normalizeAltAreaAnswer(text = '', loc = '') {
+  const raw = String(text || '').trim();
+  if (!raw) return raw;
+
+  // Penolakan: "tidak ada", "enggak ada", "nggak ada", "gak ada", "no",
+  // "tetap di X", "cukup di X", "di X saja/aja", "fokus di X".
+  const isRefusal =
+    /^(tidak|tdk|enggak|engga|nggak|ngga|gak|ga|no|non)\b[\s,.!]*(ada|aja|saja)?\b/i.test(raw)
+    // "tetap di X", dan bentuk dengan sisipan: "tetap MAU di X", "tetap INGIN di X".
+    || /\b(tetap|cukup|fokus|hanya|cuma)\s+(?:\w+\s+){0,2}(di|pada)\b/i.test(raw)
+    || /\bdi\s+.{1,30}\s*(saja|aja)\b/i.test(raw)
+    || /\bonly\b|\bjust\b.{0,15}\b(here|there)\b/i.test(raw);
+
+  if (!isRefusal) return raw;   // benar-benar menyebut area lain → simpan apa adanya
+
+  const where = String(loc || '').trim();
+  return where ? `Fokus di ${where} saja (tidak ada area alternatif)`
+               : 'Tidak ada area alternatif (fokus 1 area)';
+}
+
+/**
  * Normalisasi jawaban durasi sewa/booking menjadi "N unit" yang rapi.
  * Menangani:
  *   - angka + unit  : "10 hari", "2 minggu"          → "10 hari", "2 minggu"
@@ -696,10 +772,26 @@ function extractQualificationState(history = [], currentMessage = '') {
       }
     }
     // Q7 — alternative areas
-    // Q7 detection: matches both old ("area sekitar yang masih oke") and
-    // new ("pilihan lokasi lainnya") Q7 wording variations.
-    if (!state.alternativeAreas && /selain\s+(lokasi\s+)?.{2,40}(area\s+sekitar|pilihan\s+lokasi)|area.{0,20}lain.{0,20}oke|besides.{2,40}(area|location)/i.test(aiText)) {
-      state.alternativeAreas = custResp;
+    // The LLM PARAPHRASES this question every time it asks ("area sekitar yang
+    // masih oke", "pilihan lokasi lainnya", "area lain yang ingin
+    // dipertimbangkan", "area lain di Surabaya yang ingin Kakak
+    // pertimbangkan"). A regex pinned to specific wording misses the paraphrase,
+    // leaves alternativeAreas null, and the loop self-reinforces: unmatched →
+    // re-asked → paraphrased differently → still unmatched. Match on the stable
+    // SEMANTIC core instead — "selain/besides" + an area/location noun — not on
+    // any one phrasing. Same failure mode as the Q9 paraphrase loop.
+    if (!state.alternativeAreas && (
+      /\bselain\b[\s\S]{0,60}\b(area|lokasi|kawasan|wilayah|daerah|tempat)\b/i.test(aiText)
+      || /\b(area|lokasi|kawasan|wilayah|daerah)\b[\s\S]{0,30}\blain\b/i.test(aiText)
+      || /\bbesides\b[\s\S]{0,60}\b(area|location|neighou?rhood)\b/i.test(aiText)
+      || /\bother\b[\s\S]{0,20}\b(area|location|neighou?rhood)s?\b/i.test(aiText)
+    )) {
+      // A REFUSAL is an answer. "Tidak ada", "enggak ada, tetap di Pakuwon",
+      // "di pakuwon saja" all mean the customer HAS decided — record it as
+      // answered so Q7 goes ✅ and is never asked again. Normalize the refusal
+      // into a positive statement of intent so the summary reads
+      // "Fokus di Pakuwon saja" instead of the bare "Tidak ada, Kak".
+      state.alternativeAreas = normalizeAltAreaAnswer(custResp, state.district || state.location);
     }
     // Q9 — decision maker (normalized server-side so AI just copies the value)
     //
@@ -762,7 +854,13 @@ function extractQualificationState(history = [], currentMessage = '') {
     }
     // Q10 — lease duration
     // Skip if customer answers with a date instead of a duration (e.g. "26 Juni 2026" → misunderstood question)
-    if (!state.leaseDuration && /sewa\s+(?:untuk\s+)?berapa lama|berapa lama.*sewa|durasi\s+sewa/.test(aiText)) {
+    // Like Q7, the LLM paraphrases freely and often drops the word "sewa"
+    // entirely ("rencananya liburan di villa tersebut untuk berapa lama?",
+    // "menginap berapa lama?", "booking untuk berapa lama?"). Anchor on
+    // "berapa lama" / "how long" — the part that actually survives paraphrasing.
+    if (!state.leaseDuration && (
+      /berapa lama|durasi\s+(sewa|menginap|booking|nginap)|how long/i.test(aiText)
+    )) {
       const looksLikeDate = new RegExp(`\\b\\d{1,2}\\s+(?:${MONTH_ID}|${MONTH_EN})\\b`, 'i').test(custResp);
       if (!looksLikeDate) {
         state.leaseDuration = normalizeDuration(custResp) || custResp;
@@ -1368,8 +1466,14 @@ function buildQualificationStateBlock(state) {
       lines.push('        (belum ada data tercatat — cukup minta maaf & tanya ulang 1 hal saja)');
     }
     lines.push('   3. ⛔ DILARANG KERAS mengulang pertanyaan apa pun yang sudah ✅ di bawah.');
+    lines.push('      Termasuk pertanyaan yang jawabannya PENOLAKAN ("tidak ada", "cukup di X saja").');
+    lines.push('      Menolak = SUDAH MENJAWAB. Mengulang dengan kalimat lain = tetap mengulang.');
     lines.push('   4. Lanjut HANYA ke field ❓ berikutnya, atau bila semua wajib sudah ✅ →');
     lines.push('      langsung tampilkan SUMMARY (jangan menahan-nahan lagi).');
+    lines.push('   4b. ⛔ Jika customer MINTA KATALOG/LISTING ("mana katalognya", "kasih');
+    lines.push('      listingnya", "langsung lihat unit saja") → BERIKAN. Jangan tanya apa pun');
+    lines.push('      dulu. Data yang ada sudah cukup untuk menampilkan pilihan awal;');
+    lines.push('      kekurangan detail bisa digali SETELAH customer melihat opsi.');
     lines.push('   5. ⛔ DILARANG memakai template off-topic ("saya asisten khusus properti").');
     lines.push('      Keluhan tentang alur kualifikasi adalah topik PROPERTI yang sah.');
     lines.push('   6. Nada: tenang, hangat, dewasa, solutif. Akui kesalahan sistem, bukan customer.');
@@ -1750,6 +1854,10 @@ function buildWhatsappReplyPrompt(session, history, userMessage, propertyContext
   const qualState      = extractQualificationState(history, userMessage);
   const qualStateBlock = qualState ? buildQualificationStateBlock(qualState) : '';
 
+  // Landmark live dari Google Places untuk kota yang dipilih customer. Kosong
+  // (dan tidak berbiaya token) bila cache belum hangat atau API tidak tersedia.
+  const liveLandmarkBlock = buildLiveLandmarkBlock(qualState?.district || qualState?.location);
+
   // ── Q1-Q12 qualification instructions — selalu diinjeksi ─────────────────
   const summaryModeInstructions = `
 
@@ -1767,11 +1875,34 @@ You are conducting a property qualification interview. This means:
 Short customer answers are CONTINUATIONS of the previous question — not new topics.
 NEVER re-ask a question that was already answered. Read the full history before deciding which question to ask next.
 
+**⛔ A REFUSAL IS AN ANSWER — THIS IS THE #1 CAUSE OF ANGRY CUSTOMERS.**
+
+When you offer an option and the customer DECLINES it, that question is ANSWERED. "Tidak ada",
+"enggak ada", "nggak perlu", "tetap di X saja", "cukup X saja", "di X aja" are COMPLETE, VALID
+answers — not silence, not evasion, not an invitation to ask again in different words.
+
+- ❌ NEVER re-ask a question just because the answer was negative.
+- ❌ NEVER rephrase a declined question and ask it again ("area lain?" → "masih ada area lain?"
+  → "selain X, ada area lain?"). Rewording a question the customer already declined is the SAME
+  question. The customer WILL notice, and they WILL get angry.
+- ✅ A decline → acknowledge it briefly, then move to the NEXT question that is still ❓.
+- ✅ Only ask a question that is marked ❓ (never asked). If it is ✅, it is DONE — forever.
+
+Example — Q7 alternative areas:
+- AI: "Selain Pakuwon, ada area lain?" → Customer: "Tidak ada, Kak"
+  → Q7 is now ✅ **ANSWERED = "Fokus di Pakuwon saja"**. Acknowledge once, then ask the next ❓.
+  Asking about other areas again — in ANY wording — is FORBIDDEN for the rest of the conversation.
+
+If the customer expresses frustration ("kok nanya lagi", "sudah saya jawab", "dari tadi") →
+STOP asking that question immediately, apologize briefly, and move on. If they ask for the
+catalog/listings, give it to them — do not keep interrogating.
+
 Examples of continuation answers and what to do next:
 - Q4 was asked ("Nanti tinggal bersama siapa saja?") → customer says "saya tinggal sendiran aja", "sama istri aja", "berdua sama anak" → **acknowledge + ask next unanswered question**
 - Q8 was asked ("Rencananya masuk bulan apa?") → customer says "Juni 2026", "bulan depan", "24 juni" → **acknowledge + ask next unanswered question**
 - Q1 was asked ("Sewa atau beli?") → customer says "sewa", "beli aja" → **acknowledge + ask next unanswered question**
 - Q3: customer says "yang terjangkau aja" / "murah aja" → **budget = affordable, proceed to next question**
+- Q7 was asked ("Selain Pakuwon, ada area lain?") → customer says "tidak ada", "tetap di Pakuwon", "di Pakuwon saja" → **Q7 ANSWERED (fokus 1 area) — acknowledge + ask next unanswered question. NEVER ask about areas again.**
 
 Rule: After receiving a short answer, always ACKNOWLEDGE first, then ask ONE next question.
 Example acknowledgment for Q4: "Oke, berarti 1 kamar cukup ya 😊" or "Siap, nanti saya carikan yang cocok untuk 1 orang." Then ask the next unanswered Q.
@@ -1816,8 +1947,11 @@ Most customers don't know exactly what they want. Guide discovery through OPTION
 **Q6 — Anchor point** (only if not captured in Q2)
 "Ada lokasi tertentu yang jadi patokan? Misalnya dekat sekolah anak, kantor, atau mall tertentu?"
 
-**Q7 — Alternative areas** (always ask unless customer already volunteered)
+**Q7 — Alternative areas** (ask AT MOST ONCE — see "A REFUSAL IS AN ANSWER" above)
 "Selain [area], area sekitar yang masih oke?"
+→ ASK ONLY IF Q7 is ❓. If Q7 shows ✅ — including when the value is a refusal like
+  "Tidak ada" / "tetap di Pakuwon" — it is ANSWERED. Do NOT ask again, in any wording.
+→ Declining other areas = "Fokus di [area] saja". That is a complete answer. Move on.
 
 **Q8 — Move-in date** (MANDATORY — never skip, no exceptions)
 "Rencananya masuk bulan apa?"
@@ -1944,7 +2078,7 @@ ${resolvedAppName}
   return `${getProjectSkillInstruction(provider, _skillContext(history, userMessage))}
 ${forcedLangInstruction}
 ${summaryModeInstructions}
-${qualStateBlock ? `\n${qualStateBlock}\n` : ''}
+${qualStateBlock ? `\n${qualStateBlock}\n` : ''}${liveLandmarkBlock}
 Customer profile:
 Name: ${session.name}
 Phone: ${session.normalizedPhone}

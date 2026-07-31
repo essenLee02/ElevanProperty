@@ -377,15 +377,15 @@ kosong), `confirmText`, `cancelText`, `confirmClass` (default
 
 ---
 
-## Master Data Modules — pola seragam (6 modul, SEMUA requires auth)
+## Master Data Modules — pola seragam (7 modul, SEMUA requires auth)
 
-Facility, Country, Province, City, Location, dan Property memakai **pola CRUD
-identik**: satu `*ListView.vue` (daftar + status) + satu `*MasterView.vue`
-(form tambah/edit dipakai bersama, dibedakan lewat parameter route `:id`).
-Tabel + pagination dibangun lewat `window.tableModal()` / `loadModalPagination()`
-(Function_Path, di-load global lewat `App.vue` — lihat "Global Vendor Assets"
-di bawah). Tombol standar: Edit → halaman update; Disable → toggle status 1↔2;
-Delete → soft-delete (status 3).
+Facility, Country, Province, City, Location, Property, dan Customer memakai
+**pola CRUD identik**: satu `*ListView.vue` (daftar + status) + satu
+`*MasterView.vue` (form tambah/edit dipakai bersama, dibedakan lewat parameter
+route `:id`). Tabel + pagination dibangun lewat `window.tableModal()` /
+`loadModalPagination()` (Function_Path, di-load global lewat `App.vue` —
+lihat "Global Vendor Assets" di bawah). Tombol standar: Edit → halaman update;
+Disable → toggle status 1↔2; Delete → soft-delete (status 3).
 
 | Modul | List View | Master View (form) | Controller | Base route |
 |---|---|---|---|---|
@@ -395,6 +395,12 @@ Delete → soft-delete (status 3).
 | Kota | `City/CityListView.vue` | `City/CityMasterView.vue` | `cityMasterController.js` | `/api/city` |
 | Lokasi | `Location/LocationListView.vue` | `Location/LocationMasterView.vue` | `locationMasterController.js` | `/api/location` |
 | Properti | `Property/PropertyListView.vue` | `Property/PropertyMasterView.vue` | `propertyMasterController.js` | `/api/property` |
+| Customer (BARU) | `Customer_Master/CustomerListView.vue` | `Customer_Master/CustomerMasterView.vue` | `customerMasterController.js` | `/api/customer` |
+
+> ⚠️ Direktori view: `City_Master/`, `Country_Master/`, `Province_Master/`,
+> `Facility_Master/`, `Location_Master/`, `Property_Master/`,
+> `Customer_Master/` — semua di-rename ke akhiran `*_Master` (Juli 2026) demi
+> konsistensi penamaan; router (`router/index.js`) memakai path baru ini.
 
 **API pattern (identik tiap modul, semua `verifyToken`):**
 ```
@@ -439,6 +445,26 @@ transaction_type, bed/bath rooms, building/land area, dst.) plus relasi
 gambar (`PropertyImage`) dan fasilitas (`PropertyFacility`). Data yang
 ditampilkan di sini adalah **sumber utama** yang dipakai
 `propertyRecommendationService.js` (lihat doc 12) untuk katalog AI chatbot/WA.
+
+### Detail: Customer (BARU — Juli 2026)
+
+Berbeda dari 6 modul master data lain — baris di sini TIDAK diisi manual oleh
+admin, melainkan **terdaftar otomatis** oleh backend (`syncCustomerFromChat`)
+begitu customer WhatsApp menjawab Q1 (tipe transaksi) + Q2 (lokasi) dalam
+qualification flow. Frontend hanya untuk MELIHAT/MENGELOLA data yang sudah ada:
+
+| Field form | Catatan |
+|---|---|
+| name | Default = nama profil WhatsApp; agent boleh koreksi manual |
+| phone | 62xxx, kunci identifikasi — read-only setelah insert (mencegah salah target toggle AI) |
+| email | Opsional |
+| ai_response | Toggle ON/OFF — switch di baris tabel (bukan perlu buka form) untuk kecepatan takeover |
+| status | 1 aktif / 2 disabled / 3 deleted (soft delete, sama seperti modul lain) |
+
+Toggle `ai_response` di list view adalah jalur CEPAT untuk agent mengambil
+alih percakapan tanpa membuka form penuh — setara dengan mengetik
+`"matikan AI untuk 628xxx"` langsung di chat WhatsApp (lihat doc 06/10),
+keduanya menulis ke kolom yang sama.
 
 ---
 
