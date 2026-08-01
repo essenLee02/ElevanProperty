@@ -1519,6 +1519,10 @@ function detectPriceSort(message = '') {
 // Harga yang bisa dibandingkan lintas periode: nilai sewa dinormalisasi ke
 // per-hari (2.7jt/bulan → 90rb/hari) supaya "3.9 juta/HARI" tidak terurut
 // sebagai "lebih murah" daripada "8.4 juta/TAHUN". Harga absolut (jual) tetap apa adanya.
+// Hari per periode sewa — dideklarasikan SEBELUM pemakaian pertama (_sortablePrice)
+// agar tidak berada di Temporal Dead Zone. Lihat catatan kelas bug M62/M63.
+const _PERIOD_DAYS = { night: 1, week: 7, month: 30, year: 360 };
+
 function _sortablePrice(property) {
   const parsed = parsePropertyPrice(property);
   if (!parsed || parsed.value == null) return null;
@@ -1768,7 +1772,7 @@ function parsePropertyPrice(property = {}) {
 // Konversi periode sewa → hari, untuk menyamakan satuan sebelum membandingkan
 // harga. year=360 & month=30 dipilih supaya rasio year/month tepat 12 (konsisten
 // dengan konversi tahunan↔bulanan yang lama).
-const _PERIOD_DAYS = { night: 1, week: 7, month: 30, year: 360 };
+// (_PERIOD_DAYS dipindahkan ke atas _sortablePrice — hindari TDZ)
 
 function budgetMatches(property = {}, budget = null) {
   if (!budget || (!budget.min && !budget.max)) return true;
@@ -1896,11 +1900,17 @@ function findWithExpandedBudget(source, filters) {
   const min = budget.min || 0;
   const max = budget.max || 0;
 
+  // Tangga pelebaran budget — SENGAJA halus (±15% lalu ±30%), bukan lompat ±35%/±70%.
+  // Lompatan besar membuat AI menawarkan properti yang jauh di luar anggaran sehingga
+  // rekomendasi terasa tidak relevan. Pola: turun 15% & naik 15%; bila masih kosong,
+  // ulangi sekali lagi (jadi ±30%); baru kemudian batas wajar sebagai upaya terakhir.
+  // ⚠️ location & buildingType SELALU dipertahankan di setiap langkah — pelebaran
+  // hanya menyentuh HARGA, tidak pernah memindahkan pencarian ke kota lain.
   const expansions = [
-    // Step 1: ±35%
-    { min: min ? Math.round(min * 0.65) : null, max: max ? Math.round(max * 1.35) : null, step: 1 },
-    // Step 2: ±70%
-    { min: min ? Math.round(min * 0.30) : null, max: max ? Math.round(max * 1.70) : null, step: 2 },
+    // Step 1: ±15%
+    { min: min ? Math.round(min * 0.85) : null, max: max ? Math.round(max * 1.15) : null, step: 1 },
+    // Step 2: ±30% (mengulang langkah 1 sekali lagi)
+    { min: min ? Math.round(min * 0.70) : null, max: max ? Math.round(max * 1.30) : null, step: 2 },
     // Step 3: batas WAJAR (bukan tanpa-limit) — min ×0.20, max ×2.5
     {
       min: min ? Math.round(min * REASONABLE_MIN_FACTOR) : null,
@@ -1984,23 +1994,45 @@ async function getAlternatives(filters = {}) {
       add(fp({ buildingType: bt, location: loc }));
     }
 
-    // A2: Type + transaction (relaksasi lokasi — kota / area lain, LAST RESORT lokasi)
-    if (result.length < 4) {
-      add(fp({ buildingType: bt, transactionType: tt }));
+    // ⚠️ RELAKSASI LOKASI = BENAR-BENAR LANGKAH TERAKHIR.
+    // Dulu syaratnya `result.length < 4`, sehingga ketika kota customer hanya punya
+    // 1–3 listing, sistem menambahkan listing dari KOTA LAIN ke daftar yang sama —
+    // customer minta hotel di Surabaya, ikut muncul hotel di Jambi (M64).
+    // Aturan doc 03 tegas: "Always keep type + location intact". Jadi kota lain hanya
+    // boleh dipakai bila kota yang diminta benar-benar KOSONG (0 hasil), bukan sekadar
+    // sedikit. Lebih baik menampilkan 2 pilihan yang RELEVAN daripada 4 yang salah kota.
+    // A1c: masih di KOTA yang sama, longgarkan tipe transaksi & sisanya.
+    // Semua relaksasi di bawah TETAP mengunci `location: loc`.
+    if (result.length < 4 && loc) {
+      add(fp({ location: loc, transactionType: tt }));
     }
 
-    // A3: Type only (relaksasi transaction juga — last resort)
-    if (result.length < 4) {
-      add(fp({ buildingType: bt }));
+    // A2 & A3: relaksasi LOKASI — HANYA bila customer TIDAK menyebut kota.
+    // ⛔ Bila customer menyebut kota, kota lain TIDAK PERNAH ditawarkan.
+    // Dulu blok ini berjalan setiap kali hasil < 4 (bahkan tanpa syarat kota),
+    // sehingga "sewa hotel di Madiun" menghasilkan daftar hotel di KOTA JAMBI,
+    // Rokan Hilir, Medan, Banda Aceh — lintas pulau dan sama sekali tidak berguna
+    // bagi customer (M64). Katalog JSON fallback berisi 9.120 properti se-Indonesia,
+    // jadi tanpa kunci lokasi hasilnya selalu "ada", tapi selalu salah kota.
+    // Perilaku benar saat kota diminta tidak punya stok: kembalikan KOSONG, biar AI
+    // menjawab jujur memakai template "No Match Response" (doc 03) — bukan mengarang
+    // relevansi dengan menawarkan kota acak.
+    if (!loc) {
+      if (result.length < 4) add(fp({ buildingType: bt, transactionType: tt }));
+      if (result.length < 4) add(fp({ buildingType: bt }));
     }
 
     // A4: Fallback types eksplisit dari customer ("kalau tidak ada rumah, apartemen juga boleh")
     if (result.length < 4 && fallbackTypes.length > 0) {
       for (const fbt of fallbackTypes) {
+        // Tipe fallback pun WAJIB di kota yang sama.
         add(fp({ buildingType: fbt, transactionType: tt, location: loc }));
         if (result.length >= 8) break;
-        add(fp({ buildingType: fbt, transactionType: tt }));
-        if (result.length >= 8) break;
+        // Lintas kota hanya bila customer memang tidak menyebut kota.
+        if (!loc) {
+          add(fp({ buildingType: fbt, transactionType: tt }));
+          if (result.length >= 8) break;
+        }
       }
     }
 

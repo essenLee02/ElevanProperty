@@ -261,11 +261,14 @@ function parseCustomerDate(text, now = new Date()) {
     const d = new Date(curY, curM - 1, curD + 7);
     return { status: 'ok', date: d, formatted: fmt(d) };
   }
-  if (/\b(bulan depan|next month)\b/.test(t)) {
+  if (/\b(bulan depan|bln depan|next month)\b/.test(t)) {
     const d = addMonthsClamped(now, 1);
     return { status: 'ok', date: d, formatted: fmt(d) };
   }
-  if (/\b(tahun depan|next year)\b/.test(t)) {
+  // "taun" = ejaan informal "tahun" yang SANGAT umum di WhatsApp ("taun depan").
+  // Tanpa varian ini jawaban Q8 yang sah tidak ter-parse → tanggal masuk hilang dan
+  // AI menanyakan ulang / menganggapnya off-topic (M65).
+  if (/\b(tahun depan|taun depan|thn depan|next year)\b/.test(t)) {
     // "tanggal 28 mei TAHUN DEPAN" — frasa relatif TIDAK boleh menang atas tanggal
     // eksplisit di kalimat yang sama. Dulu rule ini return duluan (hari-ini +1 thn)
     // → "28 mei tahun depan" jadi "16 Juli 2027". Bila ada pola hari+bulan eksplisit,

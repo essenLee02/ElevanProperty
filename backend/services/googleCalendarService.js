@@ -377,7 +377,7 @@ function detectViewingDateTime(text = '') {
 
     // Map bulan
     const monthMap = {
-      'januari': '01', 'januari': '01',
+      'januari': '01', 'jan': '01',
       'februari': '02', 'peb': '02',
       'maret': '03', 'mar': '03',
       'april': '04', 'apr': '04',

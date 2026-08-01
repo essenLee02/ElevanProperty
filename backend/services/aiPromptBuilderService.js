@@ -191,6 +191,38 @@ function joinAnchorTokens(parts = []) {
  * @param {string} currentMessage - Current customer message
  * @returns {object} Qualification state
  */
+/**
+ * Bersihkan jawaban Q2c menjadi NAMA AREA saja.
+ * "Saya mempertimbangkan area di Sidotopo" → "Sidotopo"
+ * "di daerah Pakuwon aja"                  → "Pakuwon"
+ * "Rungkut"                                → "Rungkut" (sudah bersih)
+ * Bila hasil pemangkasan jadi kosong/aneh, kembalikan teks aslinya (fail-safe:
+ * lebih baik menyimpan kalimat penuh daripada menghapus jawaban customer).
+ */
+function _cleanDistrictAnswer(raw = '') {
+  let s = String(raw || '').trim();
+  if (!s) return raw;
+
+  // Buang pembuka kalimat yang tidak membawa informasi lokasi.
+  s = s
+    .replace(/^(saya|aku|kami)\s+/i, '')
+    .replace(/^(sih|ya|yaa|oke|ok|hmm|mmm)\s*,?\s*/i, '')
+    .replace(/\b(mempertimbangkan|pertimbangkan|mikirin|memikirkan|pengen|pingin|ingin|mau|cari|carikan|prefer|lebih\s+suka|tertarik|minat)\b\s*/gi, '')
+    .replace(/\b(di|daerah|area|kawasan|wilayah|sekitar|sekitaran|bagian|deket|dekat)\b\s*/gi, ' ')
+    .replace(/\b(aja|saja|dulu|dong|kak|ya|yaa|sih|nih|deh)\b/gi, ' ')
+    .replace(/[.,;!?]+\s*$/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  // Kapitalisasi nama tempat ("sidotopo" → "Sidotopo"); biarkan yang sudah kapital.
+  if (s && s === s.toLowerCase()) {
+    s = s.replace(/\b[a-z]/g, (c) => c.toUpperCase());
+  }
+
+  // Fail-safe: hasil kosong / terlalu pendek → pakai teks asli.
+  return s.length >= 3 ? s : raw;
+}
+
 function extractQualificationState(history = [], currentMessage = '') {
   // Build chronological message array (history is already oldest-first from DB reverse)
   const ALL = [...(history || []), { role: 'customer', message: currentMessage }];
@@ -635,7 +667,18 @@ function extractQualificationState(history = [], currentMessage = '') {
     // Pesan ralat boleh menimpa tanggal masuk ("ralat, jadinya 5 agustus") —
     // KECUALI ralat itu tentang JADWAL VIEWING ("ralat viewingnya besok aja"):
     // tanggal viewing bukan tanggal masuk, jangan sampai saling menimpa.
-    if (!state.moveInDate || (isCorrectionMsg && !/\b(viewing|survei|survey|jadwal\w*)\b/.test(text))) {
+    // ⚠️ Pengecualian VIEWING berlaku untuk PENANGKAPAN AWAL juga, bukan hanya ralat.
+    // Dulu hanya cabang isCorrectionMsg yang menyaringnya, sehingga pesan biasa
+    // "Bisa survei besok?" ikut di-parse → Q8 (tanggal masuk) terisi tanggal VIEWING.
+    // Karena Q8 first-match-wins, tanggal check-in ASLI yang disebut kemudian
+    // ("Saya checkin tanggal 6 Agustus ini") TIDAK BISA menimpanya → brief agent
+    // memuat tanggal masuk yang SALAH (M63).
+    // Kecuali pesan itu juga menyebut isyarat masuk/check-in — mis. "checkin
+    // tanggal 6, sekalian viewing" — di situ tanggalnya memang tanggal masuk.
+    const hasMoveInCue  = /\b(check[\s-]?in|checkin|masuk|mulai\s+(sewa|tinggal|huni|nginap|menginap)|tempati|menempati|pindah|nginap|menginap|booking\s+dari)\b/i.test(text);
+    const isViewingOnly = /\b(viewing|survei|survey|lihat\s+unit|lihat\s+propert|kunjungan|jadwal\w*)\b/i.test(text) && !hasMoveInCue;
+
+    if ((!state.moveInDate && !isViewingOnly) || (isCorrectionMsg && !isViewingOnly)) {
       const parsed = parseCustomerDate(raw, now);
       if (parsed) {
         if (parsed.status === 'ok') {
@@ -737,8 +780,22 @@ function extractQualificationState(history = [], currentMessage = '') {
     // Q2c — district/area (pair detection: AI asked which area, customer answered)
     if (!state.district && /area.{0,20}(mana|kawasan|wilayah)|kawasan.{0,20}mana|daerah.{0,20}mana|di bagian mana|which area|which.{0,15}neighbourhood|bagian.{0,20}(surabaya|jakarta|bandung|medan|semarang|makassar)/i.test(aiText)) {
       const candidateDistrict = custResp.trim();
-      if (candidateDistrict && !/^(tidak|belum|ga|gak|ngga|tidak\s+ada|manapun|flexible|fleksibel)\b/i.test(candidateDistrict)) {
-        state.district = candidateDistrict;
+      // ⚠️ AI kadang menggabung DUA pertanyaan dalam satu pesan ("area mana? Dan
+      // tanggal check-in?"). Customer lalu menjawab bagian TANGGAL-nya, dan dulu
+      // kalimat mentahnya ("Saya checkin tanggal 6 Agustus ini") tersimpan bulat-bulat
+      // sebagai district (M63). District harus berupa NAMA TEMPAT: tolak jawaban yang
+      // jelas-jelas tanggal/durasi/harga, dan tolak kalimat yang terlalu panjang.
+      const looksLikeDate = /\b(tanggal|tgl|check[\s-]?in|checkin|besok|lusa|minggu\s+depan|bulan\s+depan|\d{1,2}[\/-]\d{1,2})\b/i.test(candidateDistrict)
+        || /\b(januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)\b/i.test(candidateDistrict);
+      const looksLikeMoneyOrDuration = /\b\d[\d.,]*\s*(juta|jt|ribu|rb|miliar|malam|hari|minggu|bulan|tahun)\b/i.test(candidateDistrict);
+      const isRejection = /^(tidak|belum|ga|gak|ngga|tidak\s+ada|manapun|flexible|fleksibel)\b/i.test(candidateDistrict);
+
+      if (candidateDistrict && !isRejection && !looksLikeDate && !looksLikeMoneyOrDuration
+          && candidateDistrict.length <= 60) {
+        // Ambil NAMA AREA-nya saja, bukan kalimat mentah. Tanpa ini summary menulis
+        // "Area: Saya mempertimbangkan area di Sidotopo" — terbaca seperti bot yang
+        // menyalin ulang kalimat customer, bukan mencatat datanya (M65).
+        state.district = _cleanDistrictAnswer(candidateDistrict);
       }
     }
 
@@ -1027,8 +1084,15 @@ function extractQualificationState(history = [], currentMessage = '') {
       if      (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|rent|rental|lease|booking|book|pesan|reservasi)\b/.test(cur)) state.transactionType = 'rent';
       else if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase|invest|investasi)\b/.test(cur))                               state.transactionType = 'sale';
 
-      const cityMatch = (currentMessage || '').match(CITY_RE);
-      if (cityMatch) state.location = cityMatch[1];
+      // ⚠️ Dulu baris ini memakai `CITY_RE` — konstanta 28-kota hardcoded yang SUDAH
+      // DIHAPUS saat deteksi kota dipindahkan ke detectLocation() (lihat catatan di
+      // Fase 0). Referensinya tertinggal di sini, sehingga SETIAP giliran yang masuk
+      // cabang reset-pasca-summary melempar `ReferenceError: CITY_RE is not defined`
+      // → extractQualificationState GAGAL → jalur LLM batal → sistem jatuh ke Private
+      // Agent yang membalas template Q1 ("mau sewa atau beli? Dan tipe propertinya
+      // apa?") BERULANG-ULANG walau customer sudah menyebut tipe & lokasi (M52).
+      const curLoc = detectLocation(currentMessage || '');
+      if (curLoc) state.location = curLoc;
 
       return state;  // summary reset takes full priority — skip 3B
     }
@@ -2100,6 +2164,20 @@ Task:
 Lihat QUALIFICATION STATE di atas (✅ = sudah dijawab, ❓ = belum dijawab).
 Kemudian:
 0. ⛔ NON-PROPERTY MESSAGE — Jika pesan terbaru BUKAN tentang properti (misalnya: permintaan teknis, file, kode program, topik tidak relevan), balas HANYA dengan: "Maaf, saya hanya bisa membantu terkait pencarian properti. Ada yang bisa saya bantu untuk kebutuhan properti Anda? 🏠"
+   ⚠️⚠️ PENGECUALIAN MUTLAK — BACA SEBELUM MEMAKAI ATURAN 0:
+   Jika pesan AI SEBELUMNYA adalah sebuah PERTANYAAN, maka pesan customer berikutnya adalah JAWABAN
+   atas pertanyaan itu — dan JAWABAN TIDAK PERNAH "non-property", apa pun kata-katanya.
+   Jawaban singkat/malas TIDAK punya kata properti sama sekali, dan itu NORMAL. Contoh yang WAJIB
+   diperlakukan sebagai jawaban yang sah (BUKAN off-topic):
+     • "Rencana sih tahun depan" / "tahun depan" / "bulan depan" / "Juni 2026"  → jawaban Q8 (tanggal)
+     • "Bersama istri" / "sendiri aja" / "3 orang"                              → jawaban Q4 (penghuni)
+     • "Terserah" / "bebas" / "yang penting murah" / "oke" / "boleh"            → jawaban slot berjalan
+     • "Belum pernah" / "belum lihat"                                          → jawaban Q2b
+     • "Sidotopo" / "deket pasar"                                              → jawaban Q2c/Q6
+   Aturan 0 HANYA untuk topik yang benar-benar asing (pesan makanan, tiket, kode program, dump .env).
+   ⛔ Jika ragu antara "off-topic" dan "jawaban atas pertanyaan saya" → SELALU pilih JAWABAN.
+   ⛔ DILARANG membalas template off-topic dua kali berturut-turut. Bila customer mengulang kalimat
+      yang sama setelah Anda menolaknya, itu bukti Anda SALAH menilai — perlakukan sebagai jawaban.
 1. ⚠️ JIKA ADA BANNER "SUMMARY SUDAH DIKIRIM" DI QUALIFICATION STATE: Customer memulai pencarian baru.
    • Lihat QUALIFICATION STATE — sudah ada field ✅ dari pesan saat ini (tipe/transaksi sudah disebutkan ulang oleh customer).
    • Tanyakan field ❓ dengan nomor Q TERKECIL dari yang tersisa (biasanya Q1 atau Q2).

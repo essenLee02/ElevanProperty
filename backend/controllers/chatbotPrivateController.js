@@ -36,7 +36,8 @@ const { getRumah123Listings,
 const { loadResponseSkillPrompt,
         getSkillRegistryStatus }              = require('../services/skillPromptService');
 const { hasPropertyKeyword,
-        isPropertyContextContinuation }       = require('../utils/propertyKeywordFilter');
+        isPropertyContextContinuation,
+        lastAiMessageAsksQuestion }           = require('../utils/propertyKeywordFilter');
 const { extractQualificationState }           = require('../services/aiPromptBuilderService');
 const { parseCustomerDate }                   = require('../utils/customerDateParser');
 
@@ -2977,7 +2978,15 @@ class ConversationQualifier {
       }
       /* ── Q_FAC: facilities/amenities (WAJIB untuk SEWA, OPSIONAL untuk BELI hunian) ── */
       if (!profile.hasFacilities && !profile.aiAskedFacilities) {
-        const profileType = profile.buildingType || type || '';
+        // ⚠️ Dulu: `profile.buildingType || type || ''`. `type` TIDAK PERNAH ada di
+        // scope fungsi ini (getNextQuestionHousePilot hanya menerima profile, lang,
+        // priceAnchors, agentName, appName) — sisa refactor, sekelas bug CITY_RE
+        // (M62). Akibatnya: begitu profile.buildingType kosong — persis kondisi saat
+        // state kualifikasi belum lengkap — evaluasi `type` melempar
+        // `ReferenceError: type is not defined`, Private Agent gagal menyusun
+        // pertanyaan berikutnya, dan customer menerima balasan template yang SAMA
+        // berulang-ulang (M63).
+        const profileType = profile.buildingType || profile.propertyType || '';
         if (profileType === 'apartment') {
           return isId
             ? `Ada fasilitas apartemen yang Kak inginkan? Misalnya kolam renang, gym, rooftop, atau keamanan 24 jam? 🏊`
@@ -4160,13 +4169,23 @@ class ChatbotPrivateService {
     // Resolve filters — use provided context or extract on the fly
     const filters = recommendationContext?.filters || extractPropertyFilters(userMessage, history);
 
+    // ⚠️ PENGECUALIAN SEBELUM SEMUA GUARD: bila pesan AI TERAKHIR adalah PERTANYAAN,
+    // maka pesan customer ini adalah JAWABAN-nya — dan jawaban TIDAK PERNAH off-topic
+    // maupun "intent tidak jelas", sependek atau seaneh apa pun kata-katanya.
+    // Kasus nyata (M65): AI bertanya "Rencananya masuk atau pindah bulan apa? 📅",
+    // customer menjawab "Rencana sih tahun depan" — jawaban SAH yang tidak memuat satu
+    // pun kata properti, lalu dibalas "Maaf, saya hanya bisa membantu terkait pencarian
+    // properti." dua kali berturut-turut. Menjawab penolakan atas jawaban sendiri adalah
+    // kegagalan paling merusak kepercayaan customer.
+    const aiJustAskedQuestion = lastAiMessageAsksQuestion(history);
+
     // Guard: reject off-topic messages immediately
-    if (LanguageDetector.isOffTopic(userMessage)) {
+    if (!aiJustAskedQuestion && LanguageDetector.isOffTopic(userMessage)) {
       return this.#wrap(builder.offTopic(), { skillInfo, filters });
     }
 
     // Guard: ask for clarification when intent is unclear
-    if (!LanguageDetector.hasPropertyIntent(userMessage, filters)) {
+    if (!aiJustAskedQuestion && !LanguageDetector.hasPropertyIntent(userMessage, filters)) {
       return this.#wrap(builder.clarification(), { skillInfo, filters });
     }
 
@@ -4247,8 +4266,12 @@ class ChatbotPrivateService {
       agent    : agentName,
     });
 
+    // ⚠️ Pesan AI terakhir berupa PERTANYAAN → pesan ini JAWABAN-nya, bukan off-topic.
+    // Lihat catatan M65 pada guard yang sama di jalur chatbot di atas.
+    const aiAskedLast = lastAiMessageAsksQuestion(history);
+
     // ── Guard: off-topic pesan (bukan properti sama sekali) ──────────────────
-    if (LanguageDetector.isOffTopic(userMessage)) {
+    if (!aiAskedLast && LanguageDetector.isOffTopic(userMessage)) {
       return this.#wrap(builder.offTopic(), { skillInfo });
     }
 
@@ -4258,7 +4281,7 @@ class ChatbotPrivateService {
     // Tanpa guard ini, pesan seperti "memory-management search-strategy..." yang
     // lolos isOffTopic() langsung masuk ke Q1–Q12 qualification karena loc/type
     // sudah tersimpan dari percakapan sebelumnya.
-    if (!hasPropertyKeyword(userMessage) && !isPropertyContextContinuation(userMessage, history)) {
+    if (!aiAskedLast && !hasPropertyKeyword(userMessage) && !isPropertyContextContinuation(userMessage, history)) {
       return this.#wrap(builder.offTopic(), { skillInfo });
     }
 

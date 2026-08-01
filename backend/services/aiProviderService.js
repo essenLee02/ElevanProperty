@@ -43,6 +43,18 @@ function getPrimaryAIProvider() {
   return 'chatgpt'; // default
 }
 
+// ⚠️ PROVIDER_ORDER dideklarasikan di ATAS pemakaian pertamanya (dulu di ~baris 113,
+// dipakai di sini). `const` berada di Temporal Dead Zone sampai baris deklarasinya
+// dieksekusi, jadi susunan lama akan melempar ReferenceError bila fungsi ini pernah
+// dipanggil saat modul masih dimuat. Aman hari ini, tapi persis kelas bug yang
+// membuat M62/M63 senyap — jadi dirapikan, bukan dibiarkan.
+const PROVIDER_ORDER = {
+  qwen     : ['qwen'],
+  claude   : ['claude'],
+  chatgpt  : ['chatgpt'],
+  deepseek : ['deepseek'],
+};
+
 function getAIProviderOrder() {
   const primary = getPrimaryAIProvider();
   if (primary === 'private') return ['private'];
@@ -110,12 +122,7 @@ function logProviderFallback(taskName, fromProvider, toProvider, reason) {
 // Fallback otomatis jika primary provider error (token, billing, API, timeout).
 // Private Agent selalu tersedia sebagai fallback terakhir.
 // ═════════════════════════════════════════════════════════════════════════════
-const PROVIDER_ORDER = {
-  qwen     : ['qwen'],
-  claude   : ['claude'],
-  chatgpt  : ['chatgpt'],
-  deepseek : ['deepseek'],
-};
+// (PROVIDER_ORDER dipindahkan ke atas — lihat catatan di getAIProviderOrder)
 
 async function executeAIProviderWithFallback(taskName, chatGPTFn, claudeFn, qwenFn = null, deepseekFn = null) {
   const primary = getPrimaryAIProvider();

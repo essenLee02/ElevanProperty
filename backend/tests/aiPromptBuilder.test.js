@@ -234,6 +234,91 @@ assert('villa (new type) → villa', _typeKeyFromWord('villa'), 'villa');
 const switchMsg1 = 'Eh maaf, bukan villa, saya mau cari toko di Bandung';
 assert('typeOfP0 returns first-match (villa before toko)', typeOfP0(switchMsg1), 'villa');
 
+// ─── Group 6: REAL module — jalur pasca-summary tidak boleh crash (M52) ───────
+// ⚠️ Grup ini sengaja memakai MODUL ASLI (bukan helper inline di atas). Bug M52
+// (`ReferenceError: CITY_RE is not defined` di cabang reset-pasca-summary) lolos
+// dari seluruh test suite justru KARENA test lain menyalin helper-nya secara
+// inline — kode produksi yang sebenarnya tidak pernah dieksekusi. Setiap kali
+// menambah test untuk extractQualificationState, panggil modul aslinya.
+console.log('\n── Group 6: REAL extractQualificationState — post-summary path ──');
+{
+  const { extractQualificationState, findNextQuestion } = require('../services/aiPromptBuilderService');
+  const C = (m) => ({ role: 'customer', message: m });
+  const A = (m) => ({ role: 'ai', message: m });
+
+  const OLD_SUMMARY = [
+    'Baik, permintaan utama Anda sudah saya catat 📝',
+    '✓ Rencana: Sewa',
+    '✓ Tipe: Hotel',
+    '✓ Lokasi: Surabaya',
+    '✓ Budget: Rp 2.000.000 - Rp 3.000.000/minggu',
+    'Terima kasih sudah menghubungi saya. 🙏',
+  ].join('\n');
+
+  // History: sesi lama SUDAH diakhiri summary, lalu customer memulai pencarian baru.
+  const afterSummary = [
+    C('Saya mau booking hotel di Surabaya'), A('Kisaran harga berapa?'),
+    C('2-3 juta/minggu'), A(OLD_SUMMARY),
+  ];
+
+  let state = null;
+  let threw = null;
+  try {
+    state = extractQualificationState(afterSummary, 'Saya mau booking hotel di Surabaya');
+  } catch (err) {
+    threw = err;
+  }
+  assert('post-summary tidak melempar exception', threw === null ? 'ok' : threw.message, 'ok');
+
+  if (state) {
+    assert('"booking" → transaksi rent', state.transactionType, 'rent');
+    assert('tipe terdeteksi hotel',      state.buildingType,    'hotel');
+    assert('lokasi terdeteksi Surabaya', state.location,        'Surabaya');
+    const next = findNextQuestion(state);
+    // Tipe+transaksi+lokasi sudah ✅ → JANGAN mundur ke Q1 ("mau sewa atau beli?").
+    assert('NEXT bukan Q1 (tidak reset)', next ? next.q !== 'Q1' : true, true);
+  }
+}
+
+// ─── Group 7: REAL module — false-capture antar slot (M63) ───────────────────
+// Dua slot pernah tercemar jawaban milik pertanyaan LAIN. Keduanya menghasilkan
+// brief agent yang SALAH secara diam-diam (bukan crash), jadi wajib dikunci test.
+console.log('\n── Group 7: REAL module — slot cross-contamination (M63) ──');
+{
+  const { extractQualificationState } = require('../services/aiPromptBuilderService');
+  const C = (m) => ({ role: 'customer', message: m });
+  const A = (m) => ({ role: 'ai', message: m });
+
+  // (A) Tanggal VIEWING/SURVEI tidak boleh mengisi Q8 (tanggal masuk).
+  //     Q8 first-match-wins → sekali tercemar, tanggal check-in ASLI tidak bisa masuk.
+  const hViewing = [
+    C('Saya mau booking hotel di Surabaya'),
+    A('jadwalkan viewing atau perlu koordinasi dulu?'),
+    C('Saya mau survei sendiri'), A('oke'),
+  ];
+  const sSurvey = extractQualificationState(hViewing, 'Bisa survei besok?');
+  assert('"Bisa survei besok?" TIDAK mengisi Q8', sSurvey.moveInDate, null);
+
+  const hAfter = hViewing.concat([C('Bisa survei besok?'), A('oke, kapan check-in?')]);
+  const sCheckin = extractQualificationState(hAfter, 'Saya checkin tanggal 6 Agustus ini');
+  assert('check-in ASLI tetap tertangkap', sCheckin.moveInDate, '06 Agustus 2026');
+
+  // Kalimat yang menyebut check-in DAN viewing sekaligus → tetap tanggal masuk.
+  const sBoth = extractQualificationState(hViewing, 'Saya checkin tanggal 6 Agustus, sekalian viewing');
+  assert('check-in + viewing satu kalimat → tetap Q8', sBoth.moveInDate, '06 Agustus 2026');
+
+  // (B) District tidak boleh menyerap jawaban TANGGAL saat AI menggabung 2 pertanyaan.
+  const hTwoQ = [
+    C('Saya mau booking hotel di Surabaya'),
+    A('bisa saya tahu lokasi atau area mana yang Anda pertimbangkan? Dan sudah ada gambaran tanggal check-in?'),
+  ];
+  const sDate = extractQualificationState(hTwoQ, 'Saya checkin tanggal 6 Agustus ini');
+  assert('jawaban tanggal TIDAK jadi district', sDate.district, null);
+
+  const sArea = extractQualificationState(hTwoQ, 'Saya mau di Area Pakuwon');
+  assert('area asli TETAP tertangkap sbg district', /pakuwon/i.test(sArea.district || ''), true);
+}
+
 // ─── Summary ──────────────────────────────────────────────────────────────────
 const total = pass + fail;
 console.log(`\n═══════════════════════════════════`);

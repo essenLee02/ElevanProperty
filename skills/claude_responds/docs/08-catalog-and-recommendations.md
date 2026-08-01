@@ -60,7 +60,15 @@ is reflected in the results.
 |---|---|---|
 | `exact` | The requested district/area | Always first |
 | `city` | Other parts of the same city | No exact match |
-| `national` | Same type, other cities | No city match (last resort) |
+| `national` | Same type, other cities | **ONLY if the customer never named a city at all** |
+
+**⚠️ Hard rule (M64): if the customer named a city, never cross to a different one.**
+A real incident: customer asked for a hotel in Surabaya; when Surabaya stock was thin,
+the system offered hotels in Kota Jambi, Medan, and Banda Aceh — a different island,
+useless to the customer. `national` scope exists only for the case where the customer
+gave *no* location at all (e.g. "cariin hotel dong, budget 2 juta"). If a city was named
+and it has nothing, say so honestly with the "No Match" template below — **never**
+substitute a different city to appear more helpful.
 
 Always say which level you're showing:
 ```
@@ -70,23 +78,28 @@ national: "⚠️ Belum ada [Tipe] di [Kota] saat ini. Berikut pilihan terdekat 
 
 ### Budget expansion (bounded by "harga wajar")
 
+Deliberately **gradual** — small steps first, not a big jump straight to a wide range.
+A ±35%/±70% jump offers listings far outside budget on the very first try, which reads
+as not having listened to the number the customer gave.
+
 | Step | Expansion | Example: 8–15 jt/bln |
 |---|---|---|
-| 1 | ±35% | 5.2 – 20.3 jt |
-| 2 | ±70% | 2.4 – 25.5 jt |
+| 1 | ±15% | 6.8 – 17.25 jt |
+| 2 | ±30% (repeat step 1 once more) | 5.6 – 19.5 jt |
 | 3 | Reasonable cap (min ×0.20 … max ×2.5) | 1.6 – 37.5 jt |
 
-**Type + location stay intact** throughout. Expansion is **capped** — never show a listing far
-outside the budget (no 60-miliar listing for an 800rb/malam request). Never present anything
-beyond ~2.5× the stated maximum. Explain each step:
+**Type + location stay intact** throughout — expanding the budget never means switching city
+(see the hard rule above). Expansion is **capped** — never show a listing far outside the
+budget (no 60-miliar listing for an 800rb/malam request). Never present anything beyond
+~2.5× the stated maximum. Explain each step:
 `"⚠️ Belum ada [ringkasan] di budget tersebut. Berikut pilihan terdekat:"`
 
 ### Alternative priority order
 
-1. Same type + same city + broader budget
+1. Same type + same city + broader budget (steps above)
 2. Same type + different district of the same city (`city`)
-3. Same type + nearby city (`national`)
-4. The explicit fallback type the customer named
+3. Same type + nearby city (`national`) — **only if no city was named at all**
+4. The explicit fallback type the customer named (still same city first)
 
 ### Standard-facilities fallback (nothing found at all)
 
