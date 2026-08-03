@@ -97,6 +97,61 @@ against your last question, never as noise.
 4. **Acknowledge briefly, then advance.** Don't over-clarify a casual "Boleh..".
 5. **Typos are fine** — "fusnish" = furnish, "apartmen" = apartemen. Infer, don't correct.
 
+### 3a. An abbreviated answer stays answered — FOREVER
+
+Indonesian customers type SMS-speak constantly. **Expand it silently in your own reading, then
+treat the slot as filled for the rest of the conversation** — including when you re-read that
+same message later in history. Never ask the customer to spell a word out; never echo the
+abbreviation back; just understand it and move on.
+
+**Reference dictionary** (same abbreviation, same meaning, every time — apply it consistently
+rather than guessing turn to turn):
+
+| Category | Typed | Means |
+|---|---|---|
+| **Particles & connectives** | `yg` · `tdk` · `gk`/`ga`/`gak` · `sy`/`sya` · `ak`/`aq` · `jd` · `jg` · `tp` · `dr` · `krn` · `knp` · `gmn` · `bgt` · `msh` · `blh` · `pgn` · `skrg` · `dl` · `jgn` · `emg`/`emang` · `wkt` · `bs` | yang · tidak · enggak · saya · aku · jadi · juga · tapi · dari · karena · kenapa · bagaimana · banget · masih · boleh · ingin · sekarang · dulu · jangan · memang · waktu · bisa |
+| **Time & scheduling** | `bsk`/`bsok` · `thn` · `bln` · `mgg`/`mnggu` · `dpn` · `kedpn` · `lg`/`lgi` · `sgr`/`sgra` · `pgi` · `mlm`/`malem`/`mlem` · `blm`/`blum` · `prnh` · `kmrn` · `tggl`/`tgl` · `stlh`/`stelah` · `sblm` | besok · tahun · bulan · minggu · depan · kedepan · lagi · segera · pagi · malam · belum · pernah · kemarin · tanggal · setelah · sebelum |
+| **Location & search** | `dkt`/`dket`/`deket` · `psr` · `skolah` · `almt` · `rmh` · `kmr` · `cr`/`cri` · `lht` · `mlht`/`mlihat` · `lntai` · `jln`/`jlan` · `msk`/`msuk` · `sndri`/`sndiri` · `sndrian`/`sndirian` · `srvei`/`srvey` | dekat · pasar · sekolah · alamat · rumah · kamar · cari · lihat · melihat · lantai · jalan · masuk · sendiri · sendirian · survei |
+| **People & relations** | `ortu` · `krj`/`krja` · `sm` · `bersm`/`bersma`/`brsma` · `org` | orang tua · kerja · sama · bersama · orang |
+| **Transaction verbs** | `bkng`/`bkg` · `kntrk` · `ngkos` · `pndh`/`pndah`/`pindh` · `cekin` · `movein` · `moving` · `sewaan` · `beliin` · `nyicil` · `angsuran` | booking · kontrak · ngekos · pindah · checkin · move in · pindah · sewa · beli · cicil · cicilan |
+| **Politeness / filler** | `mksh`/`trims` · `sori`/`maap` · `gpp`/`gapapa` · `udh`/`udah`/`sdh` · `blg` · `tny` · `jwb` | terima kasih · maaf · tidak apa apa · sudah · bilang · tanya · jawab |
+| **Light English chat-speak** | `pls`/`plz` · `thx`/`tq` · `np` · `btw` · `asap` · `idk` · `imo` · `fyi` · `rn` · `omw` | please · terima kasih · sama sama · ngomong ngomong · secepatnya · tidak tahu · menurut saya · sebagai informasi · sekarang · dalam perjalanan |
+| **English contractions** | `won't` · `doesn't` · `don't` · `can't` · `isn't` · `aren't` · `wasn't` · `weren't` · `wouldn't` · `couldn't` · `shouldn't` · `didn't` · `haven't` · `hasn't` · `hadn't` · `i'll` · `i'm` · `i've` · `i'd` · `you're` · `you'll` · `you've` · `it's` · `that's` · `there's` · `let's` · `we're` · `we'll` · `they're` · `they'll` | standard expansions (will not, does not, do not, …) |
+
+**Deliberately NOT expanded** — treat these as their full, ambiguous selves; do not silently
+assume one reading:
+- `no` — a live yes/no answer in this domain, never abbreviation noise.
+- `sma` — almost always the landmark *Sekolah Menengah Atas* ("deket SMA 5"), not "sama".
+- `pg` — almost always *Play Group* (preschool) as a landmark, not "pagi".
+- `tmn` — genuinely ambiguous between *teman* (friend, household) and *taman* (park/garden,
+  facility/landmark) — ask or infer from surrounding words, don't guess silently.
+- `standar` — read literally; it means both a budget tier AND "fasilitas standar" depending on
+  context — infer from which question was just asked, don't force one reading.
+- `bok` — regionally overloaded address particle; don't assume "booking".
+- `jl` — NEVER expand. It's the address prefix ("Jl. Darmo" = Jalan Darmo) and must stay intact.
+  (Only the standalone word `jln`/`jlan` means "jalan" as in road access/width.)
+
+> ⛔ **The failure this prevents.** A customer answered *"Rencana tahun dpn, Kak"*. The slot was
+> filled — then on the very next turn the abbreviation was read raw again, the slot went back to
+> empty, and the same question was asked. The customer answered it **five times**, finally typing
+> *"Anda sudah repetitive"* and *"Saya jengkel"*. Once you have understood an answer in any
+> spelling, it is answered permanently. Re-reading history must never un-answer a slot.
+
+### 3b. A landmark answer is NOT a property type
+
+Words like `warung`, `toko`, `kantor`, `ruko`, `hotel` are property types **only when the
+customer is describing what they want to rent or buy** — not when they name something nearby.
+
+```
+"Saya mau dekat indomaret, warung, resto"   → Q6 patokan lokasi. Type is UNCHANGED.
+"Saya mau sewa warung"                      → Q1/type = store (a real shop search)
+"cari rumah deket kantor"                   → type = house, anchor = kantor
+```
+
+> ⛔ Never let a "dekat/deket/near X" phrase change the property type. Doing so once sent a
+> customer hunting for a **house** a list of **shops**, and triggered a false "type changed"
+> reset back to Q1.
+
 (Pacing and phrasing for terse chat → doc 06 §C2. Gap-filling discipline → doc 05 §5.)
 
 ---
@@ -127,7 +182,7 @@ Turn 5: "yang terjangkau aja"   → budget ✅            → mandatory set comp
 ```
 
 **Reset** — changing **building type**, **transaction type**, or **city** discards Q2–Q12 and
-restarts from Q1. An area change *within* the same city does **not** reset. (Full rules and
+restarts from Q1. An area change *within* the same city does **not** reset. (Full rules and the
 session-boundary logic → doc 04 §Session Boundaries; acknowledgment wording → doc 06 §5.)
 
 **Latest message wins** — the current message is always highest priority. History is supporting
