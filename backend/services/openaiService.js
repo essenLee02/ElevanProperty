@@ -210,15 +210,18 @@ async function generateChatGPTChatbotReply(session, history, userMessage, proper
 }
 
 async function generateChatGPTWhatsappReply(session, history, userMessage, propertyContext = '', extraContext = {}) {
-  // ChatGPT gpt-4o-mini has org-level TPM limit (typically 60K).
-  // Full multi-message history can exceed this. Truncate to last 10-15 messages
-  // to stay within limits while preserving conversation context. Full history
-  // is used server-side (state calculation, filtering) before this point.
-  const MAX_HIST_FOR_CHATGPT = 12;
-  const truncatedHistory = history.length > MAX_HIST_FOR_CHATGPT
-    ? history.slice(-MAX_HIST_FOR_CHATGPT)
-    : history;
-  return callChatGPTResponseAPI(buildWhatsappReplyPrompt(session, truncatedHistory, userMessage, propertyContext, 'chatgpt', extraContext), {
+  // ⚠️ JANGAN memotong `history` di sini. Pemotongan token dilakukan DI DALAM
+  // buildWhatsappReplyPrompt, dan HANYA pada transkrip yang ditampilkan —
+  // QUALIFICATION STATE tetap dihitung dari history PENUH.
+  //
+  // Riwayat: pemotongan pernah dilakukan di titik ini sebagai mitigasi TPM,
+  // dengan asumsi keliru bahwa state sudah dihitung sebelumnya. Nyatanya
+  // extractQualificationState() dipanggil DI DALAM builder, sehingga ikut
+  // menerima history terpotong: pada percakapan panjang, jawaban Q1/Q2/Q3
+  // keluar dari window → seluruh state jadi null → AI menanyakan Q1 lagi →
+  // jawaban baru mendorong pesan lama makin jauh keluar → loop tak berujung.
+  // Ini persis bug M35 (window 24→60) yang muncul kembali.
+  return callChatGPTResponseAPI(buildWhatsappReplyPrompt(session, history, userMessage, propertyContext, 'chatgpt', extraContext), {
     store: true,
     metadata: {
       source: _waSource(),

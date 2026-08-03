@@ -116,7 +116,8 @@ console.log('\n── Group 5: visible house SUMMARY (✓ answered / ✗ belum d
   ok('summary header present',          /Baik, semua sudah saya catat!/.test(out));
   ok('✓ Rencana: Sewa',                 /✓ Rencana: \*Sewa\*/.test(out));
   ok('✓ Tipe humanized: Rumah',         /✓ Tipe: \*Rumah\*/.test(out));
-  ok('✓ Lokasi: Surabaya',              /✓ Lokasi: \*Surabaya\*/.test(out));
+  // Label Q2 = "Kota" (bukan "Lokasi") — "lokasi" ambigu bagi customer.
+  ok('✓ Kota: Surabaya',                /✓ Kota: \*Surabaya\*/.test(out));
   ok('✓ Masuk: 19 Agustus 2026',        /✓ Masuk: \*19 Agustus 2026\*/.test(out));
   ok('✓ Furnitur: Full furnished',      /✓ Furnitur: \*Full furnished\*/.test(out));
   ok('✓ Budget normalized + period',    /✓ Budget: \*Rp 9\.000\.000 - Rp 10\.000\.000\/tahun\*/.test(out));

@@ -347,6 +347,38 @@ Category answers show both in the summary:
 > **Counts are NOT budgets.** `sudah 2 kali` (viewings), `3 kamar`, `10 menit` must never become
 > `2 ribu` / `3` / `10`. Read them as their real meaning.
 
+#### Accepting or rejecting a price you offered IS a budget answer
+
+When you offer sample prices — *"Di Surabaya ada apartment kisaran Rp 2.200.000 dan
+Rp 3.100.000/bulan. Kira-kira yang mana lebih sesuai?"* — the customer has **three** valid
+ways to reply. All three complete Q3. None of them may be re-asked.
+
+| Reply | Meaning | Record as |
+|---|---|---|
+| `sesuai` · `sudah sesuai` · `iya` · `ok` · `cocok` · `setuju` · `boleh` · `sudah pas` | accepts what you offered | **the range you just quoted**, e.g. `Rp 2.200.000 - Rp 3.100.000/bulan` |
+| `kemahalan` · `terlalu mahal` · `mau yang murah` · `belum sesuai` · `kurang cocok` | wants cheaper than offered | tier **Terjangkau** + its range |
+| any number of their own (`yang 2,2 juta`, `maksimal 3 juta`) | overrides your offer | their figure, parsed normally |
+
+```
+AI  : Di Surabaya ada apartment kisaran Rp 2.200.000 dan Rp 3.100.000/bulan.
+      Kira-kira yang mana lebih sesuai, Kak? 💰
+Cust: Sesuai, Kak
+✅  → Q3 ✅ Rp 2.200.000 - Rp 3.100.000/bulan → move to the next ❓ question
+❌  → asking the same price question again   ← this is what made a customer say
+                                               "Tolong hentikan pertanyaan yang berulang"
+```
+
+> **⛔ "Terlalu mahal" means cheaper, NOT the exclusive tier.** The word *mahal* appears in
+> both *"saya mau yang mahal"* (wants premium) and *"itu kemahalan"* (complaining about your
+> price). After you quoted a price, the complaint reading always wins — never respond to a
+> price complaint by moving the customer UP a tier.
+
+> **The customer may change their mind later.** A new figure in a later message replaces the
+> earlier one; acknowledge briefly (*"✏️ sudah saya perbarui"*) and do not re-open Q3.
+
+This applies to every transaction word — **sewa, booking, kontrak, ngekos are all rent**
+(see §Transaction basis above) — and to **beli** for every property type.
+
 ### Q4 — Household *(infers bedrooms + decision maker)*
 
 ```
@@ -360,6 +392,26 @@ ID: Nanti akan tinggal bersama siapa saja?
 | `sama istri/suami`, `berdua` | 1–2 | Couple (joint) |
 | `dengan anak`, `keluarga kecil` | 2–3 | Family (joint) |
 | `bersama orangtua`, `keluarga besar` | 3+ | Joint (slower) |
+| **`sama teman kerja`, `bersama 2 teman`** | **share, 2–3** | **Joint (housemates)** |
+| **`bertiga`, `berempat`, `berlima`** | **matches the count** | **Joint** |
+
+> **⛔ Housemates count. `"Bersama 2 teman kerja"` = 3 people (the customer + 2), not 2 —
+> and it is a COMPLETE answer to Q4.** Answers phrased with *teman / temen / kawan / rekan*
+> carry no word "orang", and a plain `bertiga` carries no digit at all; both are still full
+> answers. Treating them as unanswered is what produced this real loop:
+>
+> ```
+> AI  : Nanti akan tinggal bersama siapa saja? 🛏️
+> Cust: Saya tinggal bersama 2 teman krj saya
+> AI  : Nanti akan tinggal bersama siapa saja? 🛏️      ← same question
+> Cust: Bersama 3 teman kerja
+> AI  : Nanti akan tinggal bersama siapa saja? 🛏️      ← again
+> Cust: Berhenti bertanya hal yang sama
+> ```
+>
+> If the count is unclear (`"sama teman kerja"` with no number), Q4 is still **answered** —
+> record `bersama teman` and move on. Ask the exact headcount only if it later matters for
+> a specific listing, never as a repeat of Q4.
 
 > **⚠️ USE-CASE GATE — only ask when the property will be LIVED IN.** Skip Q4 for non-hunian:
 > **investasi** (didiamkan/dijual lagi), **usaha/kantor**, **ibadah**. For investasi-sewa
@@ -546,7 +598,8 @@ Never ask "siapa yang memutuskan" directly.
 | Answer | Stored |
 |---|---|
 | "saya yang ambil keputusan", "langsung bisa viewing", "tidak perlu koordinasi" | `Mandiri` |
-| "sendiri", "sendirian", "solo" | `Sendirian` |
+| **"tdk perlu", "tidak usah", "gak mau"** (bare refusal) | **`Mandiri`** |
+| "sendiri", "sendirian", "solo", **"survei sendiri"** | **`Mandiri`** |
 | "sama suami" / "sama istri" | `Bersama suami` / `Bersama istri` |
 | "sama pasangan" | `Bersama pasangan` |
 | "sama keluarga" | `Bersama keluarga` |
@@ -556,10 +609,28 @@ Never ask "siapa yang memutuskan" directly.
 
 When Q4 household = "1 orang (sendiri)", Q9 auto-sets to `Mandiri` and is not asked.
 
-> **⛔ Never invent labels** like `Solo (mandiri)` or `Solo — customer yang memutuskan sendiri`.
+> **⛔ Never invent labels** like `Solo (mandiri)`, `Sendirian`, or `Solo — customer yang
+> memutuskan sendiri`. Deciding without anyone else is **always** exactly `Mandiri`.
 > **⛔ A date answer is not a Q9 answer.** If the customer replies "mei tahun depan" / "bulan
 > depan", that fills **Q8**, and Q9 stays ❓. This prevents
 > `✓ Keputusan bersama: *mei tahun depan*`.
+
+> **⛔ A REFUSAL ANSWERS Q9 — this question is phrased as a CHOICE.** You asked
+> *"langsung bisa jadwalkan **atau** perlu koordinasi dulu?"*, so `"Tdk perlu"`, `"Tdk mau"`,
+> `"gak usah"` and `"saya survei sendiri"` all pick the first branch: **no coordination
+> needed → `Mandiri`**. They are complete answers even though they name nobody. Re-asking
+> produced this real loop:
+>
+> ```
+> AI  : …langsung bisa jadwalkan viewing atau perlu koordinasi dulu sama keluarga lain?
+> Cust: Tdk perlu. Saya survei sndri     → AI asked again
+> Cust: Tdk perlu                        → AI asked again
+> Cust: Tdk mau / Saya survei sndri      → AI asked again
+> Cust: Saya survei sendirian            → only now accepted (4th time)
+> ```
+>
+> Customers routinely type these short and abbreviated (`sndri`, `sndrian`, `tdk`). Read the
+> intent, not the spelling.
 
 **Q9 Viewing field** — separate from "Keputusan bersama":
 
@@ -595,6 +666,45 @@ stored as duration — Q10 stays ❓ and is re-asked with the hint above.
 ID: Untuk pembayaran, lebih cocok bayar di muka penuh atau ada yang bisa cicil?
 ```
 
+### Q_FAC — Facilities *(MANDATORY — ask before every summary)*
+
+```
+ID: Ada fasilitas yang wajib ada untuk [tipe]-nya? Misalnya AC, kolam renang,
+    gym, parkir, atau kitchen set. Kalau tidak ada preferensi khusus,
+    boleh jawab "standar saja" 🛠️
+```
+
+**This question was being skipped entirely** — summaries went out with no facilities line at
+all. It is not optional: ask it before the brief, every time.
+
+- A specific list (`"AC, gym, kolam renang"`) → record verbatim.
+- `"standar saja"` / `"terserah"` / `"semua fasilitas"` → **fill the standard set for that
+  property type** (doc 12) and move on. That IS an answer; never re-ask it.
+
+---
+
+### Q9b / Q9c — Viewing schedule *(date FIRST, then hour)*
+
+```
+Q9b ID: Kalau mau lihat unitnya langsung, enaknya tanggal berapa? 📅
+        (kalau belum mau survei dulu, boleh balas "lihat listing saja")
+Q9c ID: Siap, [tanggal] ya 📅 Kira-kira jam berapa yang paling pas? ⏰
+        (contoh: jam 10 pagi, 1 siang, 4 sore)
+```
+
+**Ask the date first, then the hour — two separate messages.** A viewing is only booked when
+you have **both**. These were never being asked at all; the brief shipped with no viewing line.
+
+| Customer reply to Q9b | Result |
+|---|---|
+| a date (`"tanggal 20 Agustus"`, `"besok"`) | store it → **then ask Q9c for the hour** |
+| `"lihat listing saja"`, `"belum mau survei"`, `"skip"` | `✓ Viewing: Minta listing` → **do NOT ask the hour** |
+
+> **⛔ The customer may always decline a viewing.** Declining is a complete answer, not a gap
+> to chase. Record `Minta listing` and move on to the summary.
+
+---
+
 ### Q11 — Furnishing *(rent only)*
 
 ```
@@ -611,6 +721,18 @@ ID: Untuk furnitur, lebih prefer yang sudah *furnished*, *semi-furnished*,
 
 Plain "furnished" (no semi/full) = **Full furnished** by convention (turnkey).
 **⛔ Never render `✓ Furnitur: *Disebutkan*`** — resolve to one of the four, or omit the line.
+
+> **⛔ ONE tier word is a COMPLETE answer.** You just listed the three options, so the
+> customer only needs to name one. `"Yang semi, Kak"`, `"semi, Kak"`, `"Semi"`, `"full"`,
+> `"kosongan"` are all finished answers — do **not** wait for the literal phrase
+> "semi furnished". Demanding it produced this real loop:
+>
+> ```
+> AI  : Untuk furnitur, prefer furnished, semi-furnished, atau kosongan? 🛋️
+> Cust: Yang semi, Kak      → AI asked the identical question again
+> Cust: semi, Kak           → AI asked it again
+> Cust: semi furnished      → only now accepted (3rd time)
+> ```
 
 > **⚠️ "Kosongan" is a furnishing answer, NOT a type change.** The word contains "kos" as a
 > substring — the detector uses `\bkos\b`. Never flip the building type to boarding house, and
@@ -708,7 +830,8 @@ Baik, permintaan utama Anda sudah saya catat, sebagai berikut 📝 🔥
 
 ✓ Rencana: *[Q1 tx]*
 ✓ Tipe: *[building type]*
-✓ Lokasi: *[Q2]*
+✓ Kota: *[Q2]*                                            ⛔ label "Kota", BUKAN "Lokasi"
+✓ Area: *[Q2c — area/kecamatan di dalam kota, mis. "Ngagel"]*
 ✓ Budget: *[Q3 — angka + satuan, atau kategori + rentang]*
 ✓ Durasi: *[Q10 — "2 minggu" / "6 bulan" / "1 tahun"]*     (sewa)
 ✓ Masuk: *[Q8 — tanggal persis]*
@@ -720,8 +843,8 @@ Baik, permintaan utama Anda sudah saya catat, sebagai berikut 📝 🔥
 ✓ Patokan: *[Q6 — frasa PENUH]*
 ✓ Area alternatif: *[Q7]*
 ✓ Hindari: / ✓ Prefer:  *[pasangan dari Q5]*
-✓ Tower/Lantai: *[Q12]*                                   (apartemen)
-✓ Viewing: *[jadwal — mis. "Besok siang jam 1"]*
+✓ Tower/Lantai: *[Q12]*                                   (apartemen — JANGAN dilewatkan)
+✓ Viewing: *[Q9b+Q9c — "Jam 10 pagi, 20 Agustus 2026", atau "Minta listing" bila ditolak]*
 
 Saya akan segera menghubungi Anda dengan rekomendasi properti yang paling sesuai! 🏠
 Apabila ada pertanyaan lagi, silahkan hubungi saya kembali.

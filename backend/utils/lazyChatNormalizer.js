@@ -67,7 +67,8 @@
 const ABBR_DICT = {
   // Core particles & connectives
   yg: 'yang', tdk: 'tidak', gk: 'enggak', ga: 'enggak', gak: 'enggak',
-  sy: 'saya', jd: 'jadi', jg: 'juga', tp: 'tapi', dr: 'dari', krn: 'karena',
+  sy: 'saya', sya: 'saya', ak: 'aku', aq: 'aku',
+  jd: 'jadi', jg: 'juga', tp: 'tapi', dr: 'dari', krn: 'karena',
   knp: 'kenapa', gmn: 'bagaimana', bgt: 'banget', msh: 'masih', blh: 'boleh',
   pgn: 'ingin', skrg: 'sekarang', dl: 'dulu', jgn: 'jangan', emg: 'memang',
   emang: 'memang', wkt: 'waktu', bs: 'bisa',
@@ -87,6 +88,16 @@ const ABBR_DICT = {
   dkt: 'dekat', dket: 'dekat', deket: 'dekat', psr: 'pasar', skolah: 'sekolah',
   almt: 'alamat', rmh: 'rumah', kmr: 'kamar', cr: 'cari', cri: 'cari',
   lht: 'lihat', mlht: 'melihat', mlihat: 'melihat', lntai: 'lantai',
+  // "jln" = jalan (akses jalan / nama jalan). AMAN: "jln" tidak pernah dipakai
+  // sebagai singkatan lain di domain ini. CATATAN: JANGAN tambahkan "jl" —
+  // itu prefiks nama jalan ("Jl. Darmo") yang HARUS tetap utuh, bukan diperluas.
+  jln: 'jalan', jlan: 'jalan',
+  msk: 'masuk', msuk: 'masuk',
+  // "sndri/sndrian" = sendiri/sendirian — jawaban Q9 (keputusan mandiri) yang
+  // sangat lazim diketik singkat. Tanpa ini Q9 tidak pernah terisi dan
+  // pertanyaannya diulang berkali-kali.
+  sndri: 'sendiri', sndiri: 'sendiri', sndrian: 'sendirian', sndirian: 'sendirian',
+  srvei: 'survei', srvey: 'survei',
 
   // People / relations
   ortu: 'orang tua', krj: 'kerja', krja: 'kerja',

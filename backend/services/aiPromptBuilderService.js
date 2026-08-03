@@ -12,6 +12,121 @@ const QS_CUST_ROLES = new Set(['user', 'customer']);
 const QS_AI_ROLES   = new Set(['assistant', 'ai', 'bot']);
 
 /**
+ * Q3 ANCHOR ACCEPTANCE — customer menyetujui / menolak harga yang DITAWARKAN AI.
+ *
+ * Q3 tidak pernah ditanya langsung ("budget berapa?"); AI menawarkan dua harga
+ * kontras sebagai pemancing: *"Di Surabaya ada apartment kisaran Rp 2.200.000
+ * dan Rp 3.100.000/bulan. Kira-kira yang mana lebih sesuai?"*
+ *
+ * Customer boleh merespons dengan tiga cara — dan dulu HANYA satu yang dikenali:
+ *   (a) menyebut angka sendiri        → sudah ditangani `detectBudget()`
+ *   (b) MENERIMA tawaran itu           → "sesuai", "sudah sesuai", "iya", "ok"
+ *   (c) MENOLAK karena kemahalan       → "kemahalan", "terlalu mahal"
+ * (b) dan (c) mengembalikan null, sehingga Q3 tetap ❓ dan AI mengulang
+ * pertanyaan harga yang SAMA tanpa henti — persis yang terjadi di produksi
+ * 3 Agu 2026 (customer menjawab "Sesuai, Kak" lalu "Sudah sesuai, Kak", dan
+ * pertanyaan itu tetap diulang tiga kali).
+ *
+ * @param {string} aiText   pesan AI sebelumnya (pertanyaan anchor harga)
+ * @param {string} custText jawaban customer
+ * @returns {string|null} nilai budget siap-pakai, atau null bila bukan respons anchor
+ */
+function detectBudgetAnchorResponse(aiText = '', custText = '') {
+  const ai = String(aiText || '');
+  const cust = String(custText || '').trim();
+  if (!ai || !cust) return null;
+
+  // Apakah pesan AI memang pertanyaan ANCHOR harga? Butuh nominal Rp DAN
+  // ajakan memilih — supaya kalimat harga biasa (mis. baris katalog) tidak ikut.
+  const amounts = [...ai.matchAll(/rp\s*([\d][\d.,]*)/gi)]
+    .map(m => Number(String(m[1]).replace(/[.,]/g, '')))
+    .filter(n => Number.isFinite(n) && n >= 100000);
+  const asksToChoose = /(mana\s+(?:yang\s+)?lebih|kira-kira|lebih\s+(?:sesuai|cocok)|yang\s+mana|sesuai\?|cocok\?)/i.test(ai);
+  if (amounts.length < 1 || !asksToChoose) return null;
+
+  const lower = cust.toLowerCase();
+
+  // (c) Menolak karena kemahalan → turunkan ke tier terjangkau. Dicek DULU:
+  //     "belum sesuai"/"kemahalan" mengandung kata yang mirip penerimaan.
+  if (/\b(kemahalan|kemahalan|terlalu\s+mahal|mahal\s+(?:banget|sekali|amat)?|kurang\s+cocok|belum\s+sesuai|tidak\s+sesuai|gak\s+sesuai|nggak\s+sesuai|di\s*bawah\s*itu|lebih\s+murah|yang\s+murah)\b/i.test(lower)) {
+    return 'terjangkau';
+  }
+
+  // (b) Menerima tawaran → pakai rentang yang DITAWARKAN sebagai budget.
+  //     Harus jawaban PENDEK & afirmatif; kalimat panjang bisa memuat info lain
+  //     yang lebih tepat ditangani detectBudget().
+  const isAffirmative = /^(?:ya|iya|iyaa|yaa|ok|oke|okay|sip|siap|boleh|cocok|setuju|deal|sesuai|betul|benar|bener)\b/i.test(lower)
+    || /\b(?:sudah|udah|uda)\s+(?:sesuai|cocok|pas|oke|ok)\b/i.test(lower)
+    || /\b(?:sesuai|cocok|pas)\s*(?:kak|ya|aja|saja|banget)?\s*[.!]?$/i.test(lower);
+  if (!isAffirmative || cust.length > 40) return null;
+
+  const fmt = (n) => `Rp ${n.toLocaleString('id-ID')}`;
+  const lo = Math.min(...amounts);
+  const hi = Math.max(...amounts);
+  // Satuan periode ikut dari pertanyaan AI ("/bulan", "/malam", …).
+  const per = (ai.match(/\/\s*(bulan|malam|minggu|hari|tahun)/i) || [])[1];
+  const suffix = per ? `/${per.toLowerCase()}` : '';
+  return (lo === hi ? fmt(lo) : `${fmt(lo)} - ${fmt(hi)}`) + suffix;
+}
+
+/**
+ * Direktif terakhir — diletakkan di BARIS PALING BAWAH prompt.
+ *
+ * WHY (diukur 3 Agu 2026): prompt WhatsApp untuk satu pesan = ±53.000 token,
+ * sedangkan QUALIFICATION STATE (kebenaran otoritatif) hanya ±450 token dan
+ * berada di posisi 8% dari awal — disusul ±49.000 token prosa instruksi.
+ * Rasio sinyal:derau 1:109. Ini kondisi klasik "lost in the middle": model
+ * memperhatikan AWAL dan AKHIR prompt jauh lebih kuat daripada tengahnya,
+ * sehingga gpt-4o-mini kehilangan jejak state dan berperilaku seolah sesi
+ * kosong — menanyakan ulang Q1 ("mau sewa atau beli?") padahal Q1 sudah ✅,
+ * bahkan menolak "Saya sewa apartemen" sebagai non-properti.
+ *
+ * Blok ini MENGULANG hanya inti yang tidak boleh hilang (field ✅ + satu
+ * pertanyaan berikutnya) di posisi perhatian tertinggi. Sengaja SANGAT ringkas
+ * (±150 token) — menambah panjang justru memperburuk masalah yang sama.
+ *
+ * @param {object} state hasil extractQualificationState()
+ * @returns {string} blok direktif, atau '' bila state tidak tersedia
+ */
+function buildFinalDirective(state) {
+  if (!state) return '';
+
+  const answered = [];
+  const push = (label, val) => { if (val) answered.push(`${label}=${val}`); };
+  push('Q1 transaksi', state.transactionType);
+  push('Tipe',         state.buildingType);
+  push('Q2 kota',      state.location);
+  push('Q2c area',     state.district);
+  push('Q3 budget',    state.budget);
+  push('Q8 tanggal',   state.moveInDate);
+  push('Q10 durasi',   state.leaseDuration);
+  push('Q11 furnitur', state.furnishing);
+
+  const nq = findNextQuestion(state, {});
+  const nextLine = nq
+    ? `TANYAKAN SEKARANG → ${nq.q}: ${nq.hint}`
+    : 'Semua field wajib sudah ✅ → TAMPILKAN SUMMARY BRIEF sekarang.';
+
+  return `
+═══════════════════════════════════════════════════════════
+⚡ DIREKTIF FINAL — INI MENANG ATAS SELURUH INSTRUKSI DI ATAS
+═══════════════════════════════════════════════════════════
+SUDAH DIJAWAB (⛔ JANGAN tanya ulang, jangan minta konfirmasi):
+  ${answered.length ? answered.join(' | ') : '(belum ada)'}
+
+${nextLine}
+
+⛔ Pesan customer terakhir adalah JAWABAN atas pertanyaan kamu — apa pun
+   kata-katanya, ia TIDAK PERNAH "non-properti". Jangan pernah membalas
+   "Maaf, saya hanya bisa membantu terkait pencarian properti" di tengah alur
+   kualifikasi yang sedang berjalan.
+⛔ JANGAN mulai "pencarian baru" / tanya "sewa atau beli?" kecuali baris
+   SUDAH DIJAWAB di atas benar-benar kosong.
+⛔ Ajukan TEPAT SATU pertanyaan: yang tertulis di baris TANYAKAN SEKARANG.
+═══════════════════════════════════════════════════════════`;
+}
+
+/**
  * Blok LIVE LANDMARK untuk prompt LLM (Claude & ChatGPT).
  *
  * WHY: `googlePlacesService.js` sebelumnya HANYA di-require oleh
@@ -162,7 +277,21 @@ function isCorrectionMessage(text = '') {
 function extractAnchorTokens(text = '') {
   const tokens = [];
   // Typo-tolerant: "dekay"/"dekt"/"dkt" adalah salah ketik umum "dekat".
-  for (const am of String(text || '').matchAll(/\b(?:dekat|deket|dekay|dekt|dkt|near)\s+(?:dengan\s+)?([a-z][\w ,.\/&-]{2,60})/gi)) {
+  //
+  // Capture BERHENTI sebelum kata-kedekatan BERIKUTNYA (tempered pattern
+  // `(?!…)`). Tanpa itu, satu match melahap seluruh sisa kalimat termasuk
+  // frasa "dekat X" berikutnya, lalu terpotong di tengah kata saat menyentuh
+  // batas panjang — bug nyata di produksi:
+  //   "dekat Kampung warna Jodipan, dekat cafe, resto dan wisata Kampung warna Jodipan"
+  //     → "…, resto dan wisata Kampung w"   ← nama landmark terpenggal
+  // Batas dinaikkan 60 → 80 karena nama tempat Indonesia kerap panjang
+  // ("Kampung Warna-Warni Jodipan", "Taman Wisata Bukit Mas").
+  const NEXT_ANCHOR = '(?!\\b(?:dekat|deket|dekay|dekt|dkt|near)\\b)';
+  const ANCHOR_RE = new RegExp(
+    `\\b(?:dekat|deket|dekay|dekt|dkt|near)\\s+(?:dengan\\s+)?([a-z](?:${NEXT_ANCHOR}[\\w ,.\\/&-]){2,80})`,
+    'gi'
+  );
+  for (const am of String(text || '').matchAll(ANCHOR_RE)) {
     const after = am[1].trim();
     const cleaned = after.replace(/\s+(ya|dong|kak|aja|saja|nih|lainnya)\b.*$/i, '').trim();
     if (!cleaned || detectLocation(after)) continue;
@@ -199,6 +328,45 @@ function joinAnchorTokens(parts = []) {
  * Bila hasil pemangkasan jadi kosong/aneh, kembalikan teks aslinya (fail-safe:
  * lebih baik menyimpan kalimat penuh daripada menghapus jawaban customer).
  */
+/**
+ * True bila teks district hasil pembersihan ternyata TIDAK memuat nama area apa
+ * pun — isinya hanya nama kota (Q2), kata "kota", atau sisa kata kerja/tipe
+ * properti dari kalimat customer.
+ *
+ * WHY: pertanyaan gabungan "di kota atau area mana?" membuat customer menjawab
+ * KOTA lebih dulu ("Saya mau booking hotel di Surabaya"). Tanpa penjaga ini,
+ * kalimat itu tersimpan sebagai district ("Booking Hotel Surabaya") dan karena
+ * slot district first-wins, nama area sungguhan di pesan berikutnya ("Area
+ * Sidotopo") tidak pernah masuk. Akibat nyata di produksi: state block
+ * menampilkan `Area/District [Q2c]: booking hotel Surabaya`, LLM membaca itu
+ * sebagai data sampah lalu MENANYAKAN LOKASI BERULANG-ULANG, dan area yang
+ * customer sebut hilang sama sekali dari summary.
+ *
+ * @param {string} cleaned hasil _cleanDistrictAnswer()
+ * @param {string} city    nilai Q2 yang sudah terdeteksi (boleh kosong)
+ * @returns {boolean} true → JANGAN simpan sebagai district
+ */
+function _isJustTheCity(cleaned = '', city = '') {
+  let s = String(cleaned || '').toLowerCase().trim();
+  if (!s) return true;
+
+  // Buang nama kota yang terdeteksi + kata "kota" itu sendiri.
+  const c = String(city || '').toLowerCase().trim();
+  if (c) s = s.split(c).join(' ');
+  s = s.replace(/\bkota\b/gi, ' ');
+
+  // Buang kata kerja transaksi & tipe properti — sisa kalimat pembuka customer
+  // ("booking hotel", "sewa apartemen") bukan nama area.
+  s = s.replace(/\b(sewa|beli|booking|kontrak|ngekos|kos|rental|rent|buy)\b/gi, ' ')
+       .replace(/\b(hotel|villa|rumah|apartemen|apartment|ruko|kantor|office|gudang|kondo|kost?an?)\b/gi, ' ')
+       .replace(/[^a-z\s]/gi, ' ')
+       .replace(/\s{2,}/g, ' ')
+       .trim();
+
+  // Tidak ada sisa kata bermakna (≥3 huruf) → bukan district.
+  return !s.split(/\s+/).some(w => w.length >= 3);
+}
+
 function _cleanDistrictAnswer(raw = '') {
   let s = String(raw || '').trim();
   if (!s) return raw;
@@ -249,6 +417,8 @@ function extractQualificationState(history = [], currentMessage = '') {
     moveInDate      : null,   // Q8 MANDATORY
     moveInDateAsk   : null,   // 'current_month' | 'soon' — Q8 perlu klarifikasi (rule 25/35)
     decisionMaker   : null,   // Q9
+    viewingDate     : null,   // Q9b — tanggal survei, atau 'Minta listing' bila customer menolak
+    viewingTime     : null,   // Q9c — jam survei (hanya ditanya bila viewingDate ada)
     leaseDuration   : null,   // Q10
     furnishing      : null,   // Q11
     facilities      : null,   // amenities (gym, kids zone, kolam renang, dll) — opsional
@@ -625,6 +795,36 @@ function extractQualificationState(history = [], currentMessage = '') {
       if (!state.household && /\b(rombongan|grup|group|gathering|arisan|reuni|keluarga besar)\b/.test(text)) {
         state.household = 'rombongan/grup';
       }
+      // "N teman/kawan/rekan" — hitungan TANPA kata "orang", bentuk paling lazim
+      // untuk penyewa bersama ("tinggal bersama 2 teman kerja saya"). Dulu tidak
+      // tertangkap sama sekali karena headcount di atas mewajibkan kata
+      // "orang|pax|people", sehingga Q4 ditanyakan berulang tanpa henti.
+      // Total penghuni = customer + N teman (konvensi yang sudah dipakai AI:
+      // "Kak + 5 teman kerja" → 6 orang).
+      if (!state.household) {
+        const mates = text.match(/\b(\d{1,2})\s*(?:orang\s+)?(?:teman|temen|kawan|rekan|sahabat|kolega|friends?)\b/);
+        if (mates) {
+          const n = parseInt(mates[1], 10) + 1;
+          if (n >= 2 && n <= 200) {
+            state.household = n >= 6 ? `${n} orang (rombongan/grup)` : `${n} orang`;
+          }
+        }
+      }
+      // "bertiga/berempat/berlima/berenam" — jumlah tanpa angka.
+      if (!state.household) {
+        const WORD_N = { bertiga: 3, berempat: 4, berlima: 5, berenam: 6, bertujuh: 7, berdelapan: 8 };
+        for (const [w, n] of Object.entries(WORD_N)) {
+          if (new RegExp(`\\b${w}\\b`).test(text)) {
+            state.household = n >= 6 ? `${n} orang (rombongan/grup)` : `${n} orang`;
+            break;
+          }
+        }
+      }
+      // Teman TANPA jumlah ("sama teman kerja", "bareng temen") — jumlahnya
+      // belum jelas, tapi pertanyaannya SUDAH TERJAWAB; jangan ditanya lagi.
+      if (!state.household && /\b(?:sama|bersama|bareng|dengan)\s+(?:teman|temen|kawan|rekan|kolega)\b/.test(text)) {
+        state.household = 'bersama teman';
+      }
       // "sendirian" TIDAK match \bsendiri\b (boundary gagal di "-an") dan "sendiran"
       // adalah typo — pakai sendiri(?:an)? agar "Saya tinggal sendirian" tertangkap.
       if (!state.household && (/\bsendiri(?:an)?\b|\bsendiran\b|\bjust me\b|\balone\b/.test(text))) {
@@ -777,6 +977,60 @@ function extractQualificationState(history = [], currentMessage = '') {
     const aiText   = (ai.message   || '').toLowerCase();
     const custResp = (cust.message || '').trim();
 
+    // Q3 — customer MENERIMA / MENOLAK harga yang ditawarkan AI (anchor).
+    // Butuh pasangan AI↔jawaban: nilainya berasal dari nominal di PERTANYAAN AI,
+    // bukan dari pesan customer (yang cuma berbunyi "Sesuai, Kak").
+    {
+      const anchored = detectBudgetAnchorResponse(ai.message || '', custResp);
+      // Keluhan "kemahalan"/"terlalu mahal" MENIMPA hasil Phase 1. Phase 1
+      // memindai pesan tanpa konteks dan memetakan kata "mahal" ke tier
+      // *eksklusif* — kebalikan dari maksud customer, yang justru minta lebih
+      // murah. Deteksi anchor ini tahu AI baru saja menawarkan harga, jadi
+      // konteksnya lebih lengkap dan berhak menang.
+      if (anchored === 'terjangkau') state.budget = anchored;
+      else if (anchored && !state.budget) state.budget = anchored;
+    }
+
+    // Q9b / Q9c — JADWAL SURVEI (tanggal dulu, lalu jam).
+    // Customer BERHAK menolak survei; penolakan adalah jawaban yang sah dan
+    // dicatat sebagai "Minta listing" — bukan slot kosong yang ditanya ulang.
+    {
+      const aiAsksViewDate = /tanggal berapa|kapan.{0,20}(lihat|survei|survey|viewing)|mau lihat unit|jadwal.{0,15}(survei|viewing)/i.test(ai.message || '');
+      const aiAsksViewTime = /jam berapa|pukul berapa|jam yang|paling pas/i.test(ai.message || '');
+      const lo = custResp.toLowerCase();
+
+      if (aiAsksViewDate && !state.viewingDate) {
+        if (/\b(listing|katalog|lihat\s*listing|tidak\s*(usah|perlu)\s*survei|ga\s*(usah|perlu)\s*survei|belum\s*mau\s*survei|nanti\s*saja|skip)\b/i.test(lo)) {
+          state.viewingDate = 'Minta listing';
+        } else {
+          // Pakai `formatted` ("20 Agustus 2026"), BUKAN `date` (ISO string) —
+          // nilai ini tampil apa adanya di baris summary customer.
+          const d = parseCustomerDate(custResp);
+          if (d && d.formatted) state.viewingDate = d.formatted;
+        }
+      }
+      if (aiAsksViewTime && !state.viewingTime && state.viewingDate !== 'Minta listing') {
+        const t = custResp.match(/\b(?:jam|pukul)?\s*(\d{1,2})(?:[.:](\d{2}))?\s*(pagi|siang|sore|malam|am|pm)?\b/i);
+        if (t) {
+          const label = (t[3] || '').toLowerCase();
+          state.viewingTime = `Jam ${t[1]}${t[2] ? '.' + t[2] : ''}${label ? ' ' + label : ''}`.trim();
+        }
+      }
+    }
+
+    // Q11 — jawaban furnitur TELANJANG ("semi", "yang semi, Kak", "full").
+    // Phase 1 mensyaratkan kata "furn" muncul bersama "semi", jadi jawaban
+    // sependek "Yang semi, Kak" tidak tertangkap dan pertanyaan furnitur
+    // diulang 3× sampai customer mengetik "semi furnished" lengkap (3 Agu 2026).
+    // Di sini konteksnya jelas: AI baru saja menanyakan furnitur, jadi satu kata
+    // tier sudah cukup.
+    if (!state.furnishing && /furnitur|furnished|furnish|perabot|kosongan/i.test(ai.message || '')) {
+      const lo = custResp.toLowerCase();
+      if (/\b(full|fully|lengkap)\b/.test(lo))            state.furnishing = 'fully furnished';
+      else if (/\bsemi\b/.test(lo))                        state.furnishing = 'semi-furnished';
+      else if (/\b(kosong|kosongan|unfurnished|polos)\b/.test(lo)) state.furnishing = 'unfurnished/kosongan';
+    }
+
     // Q2c — district/area (pair detection: AI asked which area, customer answered)
     if (!state.district && /area.{0,20}(mana|kawasan|wilayah)|kawasan.{0,20}mana|daerah.{0,20}mana|di bagian mana|which area|which.{0,15}neighbourhood|bagian.{0,20}(surabaya|jakarta|bandung|medan|semarang|makassar)/i.test(aiText)) {
       const candidateDistrict = custResp.trim();
@@ -795,7 +1049,16 @@ function extractQualificationState(history = [], currentMessage = '') {
         // Ambil NAMA AREA-nya saja, bukan kalimat mentah. Tanpa ini summary menulis
         // "Area: Saya mempertimbangkan area di Sidotopo" — terbaca seperti bot yang
         // menyalin ulang kalimat customer, bukan mencatat datanya (M65).
-        state.district = _cleanDistrictAnswer(candidateDistrict);
+        const cleaned = _cleanDistrictAnswer(candidateDistrict);
+        // ⚠️ AI sering menggabung KOTA dan AREA dalam satu pertanyaan
+        // ("di kota atau area mana?"). Customer menjawab KOTA-nya dulu, dan
+        // dulu jawaban itu tersimpan sebagai district — first-wins mengunci
+        // slot sehingga nama AREA yang sebenarnya ("Sidotopo") di pesan
+        // berikutnya TIDAK PERNAH tercatat, dan LLM terus menanyakan lokasi.
+        // District hanya sah bila menyisakan sesuatu DI LUAR nama kota.
+        if (!_isJustTheCity(cleaned, state.location)) {
+          state.district = cleaned;
+        }
       }
     }
 
@@ -880,7 +1143,18 @@ function extractQualificationState(history = [], currentMessage = '') {
       const DATE_ANSWER_RE = /\b(tahun\s+depan|bulan\s+depan|minggu\s+depan|next\s+(year|month|week)|besok|lusa|hari\s+ini|sekarang|nanti|secepatnya|20\d{2}|\d{1,2}\s*(hari|minggu|bulan))\b/i;
       const SCHEDULING_ONLY_RE = /\b(survei|survey|viewing|lihat|liat|kunjung|datang|jadwal|jadwalkan|cek\s+lokasi|mampir)\b/i;
 
-      if ((MONTH_ID_RE.test(lo) || MONTH_EN_RE.test(lo) || DATE_ANSWER_RE.test(lo) || SCHEDULING_ONLY_RE.test(lo)) &&
+      // PENOLAKAN TELANJANG = JAWABAN. Q9 berbentuk pilihan ("langsung jadwalkan
+      // ATAU perlu koordinasi dulu?"), jadi "tdk perlu" / "tidak usah" / "gak mau"
+      // sudah menjawab dengan jelas: TIDAK perlu koordinasi → Mandiri. Dulu
+      // jawaban ini tidak punya satu pun kata di DECISION_SIGNAL_RE sehingga
+      // jatuh ke null, dan pertanyaan yang sama diulang 4× sampai customer
+      // terpaksa mengetik kalimat panjang "Saya survei sendirian" (3 Agu 2026).
+      const BARE_REFUSAL_RE = /^(?:tdk|tidak|ga|gak|gk|nggak|ngga|enggak|engga|no)\s*(?:perlu|usah|mau|butuh)?\b[\s.,!]*$/i;
+      const REFUSES_COORD_RE = /\b(?:tdk|tidak|ga|gak|gk|nggak|ngga|enggak|engga)\s+(?:perlu|usah|mau|butuh)\b/i;
+
+      if (BARE_REFUSAL_RE.test(lo.trim()) || REFUSES_COORD_RE.test(lo)) {
+        state.decisionMaker = 'Mandiri';
+      } else if ((MONTH_ID_RE.test(lo) || MONTH_EN_RE.test(lo) || DATE_ANSWER_RE.test(lo) || SCHEDULING_ONLY_RE.test(lo)) &&
           !DECISION_SIGNAL_RE.test(lo)) {
         // Jawaban tanggal/jadwal/survei tanpa sinyal keputusan → JANGAN simpan. Q9 ❓.
       } else if (/\b(saya|aku)\b.{0,40}\b(ambil keputusan|yang memutuskan|yang putuskan|yang tentukan|yang decide)\b/i.test(lo) ||
@@ -900,8 +1174,11 @@ function extractQualificationState(history = [], currentMessage = '') {
       } else if (/\b(koordinasi|diskusi|tanya|izin).{0,40}keluarga\b/i.test(lo)) {
         state.decisionMaker = 'Koordinasi dengan keluarga';
       } else if (/\b(sendiri|sendirian|seorang diri|solo)\b/i.test(lo)) {
-        // Customer explicitly said "sendiri" in response to Q9 — normalize to "Sendirian"
-        state.decisionMaker = 'Sendirian';
+        // "survei sendiri", "sendirian", "solo" → memutuskan TANPA koordinasi.
+        // Nilainya HARUS persis "Mandiri" — aturan prompt melarang varian lain
+        // ("Solo", "Sendirian", "Solo (mandiri)"), dan kode ini dulu justru
+        // menghasilkan "Sendirian" sehingga melanggar aturannya sendiri.
+        state.decisionMaker = 'Mandiri';
       } else if (DECISION_SIGNAL_RE.test(lo)) {
         // Ada sinyal keputusan tapi tak match pola spesifik → simpan apa adanya.
         state.decisionMaker = resp;
@@ -1004,6 +1281,51 @@ function extractQualificationState(history = [], currentMessage = '') {
       if (!state.anchorPoint && /\b(dekat|deket|near)\b/i.test(custResp)) {
         const am = custResp.match(/\b(?:dekat|deket|near)\s+(?:dengan\s+)?[^\n.!?]{4,120}/i);
         if (am) state.anchorPoint = am[0].trim();
+      }
+    }
+  }
+
+  // ── Q2 fallback: kota yang sudah dipakai AI dalam pertanyaannya sendiri ─────
+  // Hanya pesan CUSTOMER yang dipindai untuk lokasi. Pada percakapan panjang,
+  // pesan customer yang menyebut kota bisa berada jauh di belakang atau
+  // terhapus oleh reset parsial, sehingga Q2 kembali ❓ — padahal AI sendiri
+  // sudah berkali-kali menulis "Di Surabaya ada apartemen…" dan "di area mana
+  // di Surabaya?". AI TIDAK PERNAH menyebut kota yang belum ditetapkan, jadi
+  // menyebutnya adalah bukti sah bahwa Q2 sudah terjawab. Tanpa ini, AI
+  // menanyakan "di kota mana?" tepat setelah ia sendiri menyebut kotanya —
+  // pemicu utama customer merasa diputar-putar (3 Agu 2026).
+  if (!state.location) {
+    for (let i = ALL.length - 1; i >= 0; i--) {
+      const m = ALL[i];
+      if (!QS_AI_ROLES.has(m.role)) continue;
+      const loc = detectLocation(String(m.message || ''));
+      if (loc) { state.location = loc; break; }
+    }
+  }
+
+  // ── Q2c fallback: area yang customer sebut SENDIRI, tanpa perlu dipasangkan ──
+  // Deteksi berpasangan (AI-bertanya → jawaban BERIKUTNYA) melewatkan area yang
+  // datang di pesan LAIN. Kasus nyata: AI bertanya "di kota ATAU area mana?",
+  // customer menjawab "Kota Surabaya" (ditolak — hanya kota), lalu menyebut
+  // "Area Sidotopo" di pesan TERPISAH yang tidak lagi berpasangan dengan
+  // pertanyaan mana pun → area hilang, LLM menanyakan lokasi berulang kali.
+  //
+  // Customer Indonesia lazim menandai area secara eksplisit ("area X", "daerah
+  // X", "kawasan X"), jadi tangkap penanda itu di mana pun ia muncul. Pesan
+  // TERBARU menang supaya "Saya tetap pilih area Sidotopo saja" mengoreksi
+  // tebakan sebelumnya.
+  if (!state.district) {
+    const AREA_RE = /\b(?:area|daerah|kawasan|wilayah|kecamatan|kelurahan)\s+([A-Za-z][\w'-]*(?:\s+[A-Za-z][\w'-]*){0,2})/gi;
+    for (const m of ALL) {
+      if (!QS_CUST_ROLES.has(m.role)) continue;
+      const txt = String(m.message || '');
+      for (const hit of txt.matchAll(AREA_RE)) {
+        const cand = _cleanDistrictAnswer(hit[1].trim());
+        // Tolak kata pengisi ("lain", "sekitar") dan nilai yang cuma nama kota.
+        if (!cand || cand.length < 3) continue;
+        if (/^(lain|lainnya|sekitar|sekitarnya|mana|manapun|tertentu|itu|ini)$/i.test(cand)) continue;
+        if (_isJustTheCity(cand, state.location)) continue;
+        state.district = cand;   // pesan terbaru menimpa yang lama
       }
     }
   }
@@ -1254,7 +1576,8 @@ function findNextQuestion(state) {
   if (!state.location) {
     if (isBooking) {
       const tipeLabel = type === 'hotel' ? 'Hotel' : 'Kondotel';
-      return { q: 'Q2', hint: `Siap, *booking ${tipeLabel}*! 📍 Di kota atau area mana? Dan sudah ada gambaran tanggal check-in? (Bisa jawab lokasinya dulu)` };
+      return { q: 'Q2', hint: `Siap, *booking ${tipeLabel}*! 📍 Di *kota* mana? (Contoh: Surabaya, Malang, Bali)
+Kalau sudah ada area/kecamatan tertentu, boleh sekalian disebut ya.` };
     }
     if (type === 'villa' && isSewa)
       return { q: 'Q2', hint: `Mau sewa *Villa*! 📍 Di mana — Bali, Malang, Lombok, atau kota lain? (Nanti saya tanyakan periode sewanya: per malam, minggu, atau bulan)` };
@@ -1268,7 +1591,7 @@ function findNextQuestion(state) {
       return { q: 'Q2', hint: `Mau ${isSewa ? 'sewa' : 'beli'} *Toko*. 📍 Di mal/pusat perbelanjaan atau toko pinggir jalan di kota mana?` };
     if (type === 'others')
       return { q: 'Q2', hint: `Mau ${isSewa ? 'sewa' : 'beli'} *Properti*. 📍 Di area mana? Dan apa tujuan penggunaannya?` };
-    return { q: 'Q2', hint: `Oke, mau ${tx} *${typeLbl}*. 📍 Di kota atau area mana yang Anda pertimbangkan?` };
+    return { q: 'Q2', hint: `Oke, mau ${tx} *${typeLbl}*. 📍 Di *kota* mana yang Anda pertimbangkan? (Contoh: Surabaya, Malang, Bali)` };
   }
 
   // Q2c — Area/district dalam kota besar (SEBELUM Q2b — mempersempit area pencarian)
@@ -1395,6 +1718,7 @@ function findNextQuestion(state) {
   if (isApt && !state.apartmentPref)
     return { q: 'Q12', hint: 'Ada preferensi tower atau lantai tertentu? Misalnya hadap timur, lantai rendah/tengah/tinggi? 🏢' };
 
+
   // Q14 — Type-specific slots: 24 kombinasi (12 tipe × sewa/beli).
   // AI checks from conversation history whether these were already answered.
   if (isBooking) {
@@ -1467,6 +1791,22 @@ function findNextQuestion(state) {
     return { q: 'Q14', hint: 'Lanjutkan Q14 apartemen beli: (a) primary dari developer atau secondary? (b) status SHMSRS? (c) jika investasi: furnished lebih cepat laku disewakan — sarankan! — CEK history dulu.' };
   }
 
+
+  // Q_FAC — Fasilitas. WAJIB ditanya; dulu TIDAK ADA sama sekali di urutan ini,
+  // sehingga summary keluar tanpa pernah menanyakan fasilitas (3 Agu 2026).
+  // Jawaban "terserah/standar/semua" tetap sah → isi dengan fasilitas standar
+  // per tipe properti (lihat utils/standardFacilities.js & skill doc 12).
+  if (!state.facilities)
+    return { q: 'Q_FAC', hint: `Ada fasilitas yang wajib ada untuk ${typeLbl === 'apartment' ? 'apartemen' : typeLbl}-nya? Misalnya AC, kolam renang, gym, parkir, atau kitchen set. Kalau tidak ada preferensi khusus, boleh jawab "standar saja" 🛠️` };
+
+  // Q9b / Q9c — JADWAL SURVEI. Juga belum pernah ada di urutan ini.
+  // Aturan: TANGGAL dulu, baru JAM. Customer boleh menolak survei — penolakan
+  // adalah jawaban yang sah dan dicatat sebagai "Minta listing".
+  if (!state.viewingDate)
+    return { q: 'Q9b', hint: 'Kalau mau lihat unitnya langsung, enaknya tanggal berapa? 📅 (kalau belum mau survei dulu, boleh balas "lihat listing saja")' };
+  if (state.viewingDate !== 'Minta listing' && !state.viewingTime)
+    return { q: 'Q9c', hint: `Siap, ${state.viewingDate} ya 📅 Kira-kira jam berapa yang paling pas? ⏰ (contoh: jam 10 pagi, 1 siang, 4 sore)` };
+
   return null; // all answered → show summary
 }
 
@@ -1504,7 +1844,7 @@ function buildQualificationStateBlock(state) {
     const answered = [
       ['Transaksi',      state.transactionType],
       ['Tipe',           state.buildingType],
-      ['Lokasi',         state.location],
+      ['Kota',           state.location],
       ['Budget',         state.budget],
       ['Tanggal masuk',  state.moveInDate],
       ['Penghuni',       state.household],
@@ -1571,8 +1911,8 @@ function buildQualificationStateBlock(state) {
   lines.push(
     row('Tipe transaksi    [Q1]', state.transactionType),
     row('Tipe properti         ', state.buildingType ? state.buildingType + fbNote : null),
-    row('Lokasi            [Q2]', state.location),
-    row('Area/District    [Q2c]', state.district),
+    row('Kota              [Q2]', state.location),
+    row('Area/Kecamatan  [Q2c]', state.district),
     // Q2b: ✅ = customer answered; ⏭️ = AI asked but customer redirected (skip, don't repeat); ❓ = not asked yet.
     state.searchHistory
       ? `✅ Riwayat pencarian [Q2b]: ${state.searchHistory}`
@@ -1596,9 +1936,11 @@ function buildQualificationStateBlock(state) {
       ? `✅ Tanggal masuk  ⚠️WAJIB [Q8]: ${WAITING_THE_UPDATE} — SUDAH DIJAWAB (customer belum tahu tanggal pastinya & akan mengabari sendiri nanti). ⛔ JANGAN tanya ulang soal tanggal/target — lanjut ke Q berikutnya.`
       : row('Tanggal masuk  ⚠️WAJIB [Q8]', state.moveInDate),
     row('Keputusan         [Q9]', state.decisionMaker),
+    row('Tgl survei       [Q9b]', state.viewingDate),
+    row('Jam survei       [Q9c]', state.viewingDate === 'Minta listing' ? 'n/a (customer minta listing)' : state.viewingTime),
     row('Durasi sewa      [Q10]', state.leaseDuration),
     row('Furnitur         [Q11]', state.furnishing),
-    row('Fasilitas (opsional)   ', Array.isArray(state.facilities) && state.facilities.length ? state.facilities.join(', ') : null),
+    row('Fasilitas  ⚠️WAJIB     ', Array.isArray(state.facilities) && state.facilities.length ? state.facilities.join(', ') : null),
     row('Apt preference   [Q12]', state.apartmentPref),
   );
 
@@ -1915,8 +2257,22 @@ function buildWhatsappReplyPrompt(session, history, userMessage, propertyContext
 
   // ── Build server-side qualification state (prevents repeated questions) ──
   // Selalu dihitung — Q1-Q12 selalu aktif.
+  // ⚠️ STATE SELALU DARI HISTORY PENUH. Pemotongan token hanya boleh mengenai
+  // TRANSKRIP YANG DITAMPILKAN (historyForDisplay di bawah) — tidak pernah
+  // perhitungan state. Memotong input state membuat jawaban Q1/Q2/Q3 di awal
+  // percakapan panjang menghilang, seluruh field jadi ❓, dan AI menanyakan
+  // Q1 lagi; jawaban baru mendorong pesan lama makin jauh keluar window →
+  // loop tak berujung (bug M35, terulang 3 Agu 2026).
   const qualState      = extractQualificationState(history, userMessage);
   const qualStateBlock = qualState ? buildQualificationStateBlock(qualState) : '';
+
+  // Transkrip yang ditampilkan dibatasi demi anggaran token — QUALIFICATION
+  // STATE di atas sudah memuat seluruh jawaban, jadi turn lama tidak perlu
+  // dikirim utuh. Aman dipangkas: state tetap lengkap.
+  const MAX_DISPLAY_TURNS  = Number(process.env.AI_PROMPT_DISPLAY_TURNS || 20);
+  const historyForDisplay  = Array.isArray(history) && history.length > MAX_DISPLAY_TURNS
+    ? history.slice(-MAX_DISPLAY_TURNS)
+    : (history || []);
 
   // Landmark live dari Google Places untuk kota yang dipilih customer. Kosong
   // (dan tidak berbiaya token) bila cache belum hangat atau API tidak tersedia.
@@ -2079,7 +2435,9 @@ Baik, permintaan utama Anda sudah saya catat, sebagai berikut 📝 🔥
 
 ✓ Tipe: *[nilai dari building type — HANYA jika ✅]*
 
-✓ Lokasi: *[nilai dari Q2 — HANYA jika ✅]*
+✓ Kota: *[nilai dari Q2 — HANYA jika ✅]*  ⛔ label WAJIB "Kota", JANGAN "Lokasi"
+
+✓ Area: *[nilai dari Q2c — HANYA jika ✅; area/kecamatan di dalam kota, mis. "Ngagel"]*
 
 ✓ Budget: *[nilai dari Q3 — HANYA jika ✅]*
 
@@ -2100,6 +2458,10 @@ Baik, permintaan utama Anda sudah saya catat, sebagai berikut 📝 🔥
 ✓ Patokan lokasi: *[nilai PERSIS dari Q6 di QUALIFICATION STATE — HANYA jika ✅]*
 
 ✓ Area alternatif: *[nilai dari Q7 — HANYA jika ✅]*
+
+✓ Tower/Lantai: *[nilai dari Q12 — HANYA untuk apartemen/kondo dan jika ✅; mis. "Lantai 12-18"]*
+
+✓ Viewing: *[nilai dari Q9b+Q9c — HANYA jika ✅. Format "Jam <jam>, <tanggal>" bila customer mau survei, atau persis "Minta listing" bila customer menolak survei]*
 
 
 
@@ -2150,7 +2512,7 @@ Location: ${session.location || session.normalizedLocation || 'Not provided'}
 Source: ${session.source}
 
 Recent conversation history for context only. Use the customer profile identity (name, phone, and location) to continue the returning customer's context. Do not let old history override the latest customer message. ⚠️ PENTING: QUALIFICATION STATE di atas adalah satu-satunya sumber kebenaran — JANGAN gunakan nilai budget/tanggal/penghuni/furnitur dari history lama (sesi sebelumnya) untuk mengisi field yang masih ❓:
-${formatConversationHistory(history)}
+${formatConversationHistory(historyForDisplay)}
 
 Backend property catalog context for this latest WhatsApp message:
 ${showCatalogAfterBrief ? (propertyContext || 'No backend property catalog context is available.') : '(Property catalog hidden during Q1–Q12 interview — akan digunakan setelah brief jika RESPOND_CATALOG_RUN=ON)'}
@@ -2197,7 +2559,8 @@ Kemudian:
 ⛔ Pesan ambigu ("cari properti", "ada properti?") tanpa tipe/transaksi → tanyakan Q1: "Mau sewa atau beli? Dan tipe propertinya apa?"
 ⛔ JANGAN tampilkan summary jika Q3 (Budget) atau Q8 (Tanggal masuk) masih ❓ di QUALIFICATION STATE — walaupun budget/tanggal muncul di raw conversation history dari sesi lama.
 ⛔ JANGAN tampilkan summary jika ada banner ⚠️ di atas, atau jika ada field ❓ yang belum dijawab.
-⛔ Field ❓ di QUALIFICATION STATE = BELUM dijawab di sesi aktif ini. ABAIKAN semua nilai budget/tanggal/penghuni/furnitur dari percakapan sebelumnya (sesi lama) — itu bukan jawaban untuk sesi ini.`;
+⛔ Field ❓ di QUALIFICATION STATE = BELUM dijawab di sesi aktif ini. ABAIKAN semua nilai budget/tanggal/penghuni/furnitur dari percakapan sebelumnya (sesi lama) — itu bukan jawaban untuk sesi ini.
+${buildFinalDirective(qualState)}`;
 }
 
 function buildIntentDetectionPrompt(message, provider = 'shared') {

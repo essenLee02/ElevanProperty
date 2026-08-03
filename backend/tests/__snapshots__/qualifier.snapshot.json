@@ -264,8 +264,8 @@
       "summaryAlreadyShown": true,
       "transactionType": "rent"
     },
-    "nextQuestion_summary": "Baik! 😊 Untuk pencarian *sewa Rumah* yang baru — di kota atau area mana yang Anda pertimbangkan? 📍",
-    "nextQuestion_catalog": "Baik! 😊 Untuk pencarian *sewa Rumah* yang baru — di kota atau area mana yang Anda pertimbangkan? 📍"
+    "nextQuestion_summary": "Baik! 😊 Untuk pencarian *sewa Rumah* yang baru — di *kota* mana yang Anda pertimbangkan? 📍 _(Contoh: Surabaya, Malang, Bali)_",
+    "nextQuestion_catalog": "Baik! 😊 Untuk pencarian *sewa Rumah* yang baru — di *kota* mana yang Anda pertimbangkan? 📍 _(Contoh: Surabaya, Malang, Bali)_"
   },
   "lazy multi-slot single line": {
     "profile": {
@@ -309,7 +309,7 @@
       "hasViewingHour": true,
       "location": "Surabaya",
       "transactionType": "rent",
-      "viewingDayRef": "2 Agustus 2026",
+      "viewingDayRef": "4 Agustus 2026",
       "viewingTimeOfDay": "siang"
     },
     "nextQuestion_summary": "Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?",

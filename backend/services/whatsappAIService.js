@@ -198,12 +198,12 @@ function buildQualifyReply(filters, message, agentName, contextSource, history =
     if (!type) {
       // Benar-benar kosong
       question = id
-        ? `Halo! 😊 Terima kasih sudah menghubungi *${appName}*.\n\nSaya dengan senang hati akan membantu Anda menemukan properti yang tepat. Sebelum saya carikan pilihan terbaik, boleh saya tanyakan beberapa hal?\n\n1️⃣ Apakah Anda sedang cari untuk *sewa* atau *beli*?\n2️⃣ Tipe properti apa yang Anda inginkan?\n   _Rumah, Apartemen, Villa, Kos-kosan, Ruko, Kantor, Gudang, dll_ 🏡\n3️⃣ Di kota atau area mana?\n4️⃣ Kisaran harga yang Anda siapkan?\n\nSemakin lengkap infonya, semakin tepat rekomendasi yang bisa saya berikan 🙏`
+        ? `Halo! 😊 Terima kasih sudah menghubungi *${appName}*.\n\nSaya dengan senang hati akan membantu Anda menemukan properti yang tepat. Sebelum saya carikan pilihan terbaik, boleh saya tanyakan beberapa hal?\n\n1️⃣ Apakah Anda sedang cari untuk *sewa* atau *beli*?\n2️⃣ Tipe properti apa yang Anda inginkan?\n   _Rumah, Apartemen, Villa, Kos-kosan, Ruko, Kantor, Gudang, dll_ 🏡\n3️⃣ Di *kota* mana? _(Contoh: Surabaya, Malang, Bali)_\n4️⃣ Kisaran harga yang Anda siapkan?\n\nSemakin lengkap infonya, semakin tepat rekomendasi yang bisa saya berikan 🙏`
         : `Hello! 😊 Thank you for reaching out to *${appName}*.\n\nI'd love to help you find the perfect property. Before I start searching, may I ask a few things?\n\n1️⃣ Are you looking to *rent* or *buy*?\n2️⃣ What type of property do you have in mind?\n   _House, Apartment, Villa, Boarding House, Shophouse, Office, Warehouse, etc._ 🏡\n3️⃣ Which city or area?\n4️⃣ What's your price range?\n\nThe more details you share, the better I can match your needs 🙏`;
     } else {
       // Type diketahui, sisanya kosong
       question = id
-        ? `Terima kasih! 😊 Untuk *${typeLbl}* yang Anda cari, saya butuh beberapa informasi tambahan:\n\n1️⃣ Apakah rencananya untuk *sewa* atau *beli*?\n2️⃣ Di kota atau area mana?\n3️⃣ Kisaran harga yang diinginkan? _(Contoh: 5-10 juta/bulan, atau di bawah 1 miliar)_\n\nSilakan ceritakan kebutuhannya, saya siap bantu! 🏡`
+        ? `Terima kasih! 😊 Untuk *${typeLbl}* yang Anda cari, saya butuh beberapa informasi tambahan:\n\n1️⃣ Apakah rencananya untuk *sewa* atau *beli*?\n2️⃣ Di *kota* mana? _(Contoh: Surabaya, Malang, Bali)_\n3️⃣ Kisaran harga yang diinginkan? _(Contoh: 5-10 juta/bulan, atau di bawah 1 miliar)_\n\nSilakan ceritakan kebutuhannya, saya siap bantu! 🏡`
         : `Thank you! 😊 For the *${typeLbl}* you're looking for, I need a bit more information:\n\n1️⃣ Are you planning to *rent* or *buy*?\n2️⃣ Which city or area?\n3️⃣ What's your price range? _(e.g., 5–10 million/month, or under 1 billion)_\n\nPlease share the details and I'll find the best match! 🏡`;
     }
   }
@@ -211,7 +211,7 @@ function buildQualifyReply(filters, message, agentName, contextSource, history =
   // ── KASUS 2: Transaction type tidak diketahui ─────────────────────────────
   else if (!tx) {
     const parts = [];
-    if (!loc) parts.push(id ? 'Di kota atau area mana yang Anda inginkan? 📍' : 'Which city or area? 📍');
+    if (!loc) parts.push(id ? 'Di *kota* mana yang Anda inginkan? 📍 _(Contoh: Surabaya, Malang, Bali)_' : 'Which *city*? 📍');
     if (!bud) parts.push(id ? 'Kisaran harga berapa? _(Contoh: 3-7 juta/bulan)_ 💰' : 'What price range? _(e.g., 3–7 million/month)_ 💰');
 
     question = id
@@ -222,7 +222,7 @@ function buildQualifyReply(filters, message, agentName, contextSource, history =
   // ── KASUS 3: Tipe properti tidak diketahui ────────────────────────────────
   else if (!type) {
     const parts = [];
-    if (!loc) parts.push(id ? 'Di kota atau area mana? 📍' : 'Which city or area? 📍');
+    if (!loc) parts.push(id ? 'Di *kota* mana? 📍 _(Contoh: Surabaya, Malang, Bali)_' : 'Which *city*? 📍');
     if (!bud) parts.push(id ? 'Kisaran harga berapa? 💰' : 'What price range? 💰');
 
     question = id
@@ -237,8 +237,8 @@ function buildQualifyReply(filters, message, agentName, contextSource, history =
       : '';
 
     question = id
-      ? `Baik! Mau *${txWord} ${typeLbl}*. 📍\n\nDi kota atau area mana yang Anda inginkan?\n_(Contoh: Surabaya, Malang, Bali, Jakarta Selatan, dll)_${budPart}`
-      : `Great! Looking to *${txWord} a ${typeLbl}*. 📍\n\nWhich city or area are you considering?\n_(e.g., Surabaya, Malang, Bali, South Jakarta, etc.)_${budPart}`;
+      ? `Baik! Mau *${txWord} ${typeLbl}*. 📍\n\nDi *kota* mana yang Anda inginkan?\n_(Contoh: Surabaya, Malang, Bali, Jakarta Selatan)_\nKalau sudah ada area/kecamatan tertentu, boleh sekalian disebut ya.${budPart}`
+      : `Great! Looking to *${txWord} a ${typeLbl}*. 📍\n\nWhich *city*?\n_(e.g., Surabaya, Malang, Bali, South Jakarta)_\nIf you already have a specific area in mind, feel free to name it too.${budPart}`;
   }
 
   // ── KASUS 5: Hanya budget yang belum diketahui ────────────────────────────

@@ -1036,8 +1036,12 @@ class ResponseBuilderWhatsApp {
       const typeHuman = PropertyFormatter.humanBuildingType(brief.buildingType.value, this.#lang);
       lines.push(`✓ ${isId ? 'Tipe' : 'Type'}: *${typeHuman}*`);
     }
-    const locL = fmt(isId ? 'Lokasi' : 'Location', brief.location);
+    // Label "Kota" (bukan "Lokasi") — "lokasi" ambigu bagi customer: bisa
+    // berarti kota, kecamatan, atau patokan. Q2 selalu KOTA.
+    const locL = fmt(isId ? 'Kota' : 'City', brief.location);
     if (locL) lines.push(locL);
+    const distL = fmt(isId ? 'Area' : 'Area', brief.district);
+    if (distL) lines.push(distL);
     const budL = fmt(isId ? 'Budget' : 'Budget', brief.budget);
     if (budL) lines.push(budL);
     const movL = fmt(isId ? 'Masuk' : 'Move-in', brief.moveInDate);
@@ -1126,7 +1130,8 @@ class ResponseBuilderWhatsApp {
     const lines = [];
     if (txLabel) lines.push(`✓ ${isId ? 'Rencana' : 'Plan'}: *${txLabel}*`);
     if (typeHuman) lines.push(`✓ ${isId ? 'Tipe' : 'Type'}: *${typeHuman}*`);
-    lines.push(row(isId ? 'Lokasi' : 'Location',            brief.location));
+    lines.push(row(isId ? 'Kota' : 'City',                  brief.location));
+    lines.push(row(isId ? 'Area' : 'Area',                  brief.district));
     lines.push(row(isId ? 'Masuk' : 'Move-in',              brief.moveInDate));
     lines.push(row(isId ? 'Keputusan bersama' : 'Decision', brief.decisionMaker));
     lines.push(row(isId ? 'Furnitur' : 'Furnishing',        brief.furnishing));
@@ -2368,7 +2373,7 @@ class ConversationQualifier {
       if (tx && type) {
         // Customer already specified type+tx in this message → ask location (Q2)
         return isId
-          ? `Baik! 😊 Untuk pencarian *${txLabel} ${typeLabel}* yang baru — di kota atau area mana yang Anda pertimbangkan? 📍`
+          ? `Baik! 😊 Untuk pencarian *${txLabel} ${typeLabel}* yang baru — di *kota* mana yang Anda pertimbangkan? 📍 _(Contoh: Surabaya, Malang, Bali)_`
           : `Sure! 😊 For your new *${txLabel} ${typeLabel}* search — which city or area are you considering? 📍`;
       }
       // Type/tx not stated yet → ask Q0/Q1
@@ -3199,6 +3204,13 @@ class ConversationQualifier {
         value : filters.location || 'UNKNOWN',
         source: 'stated', // location always stated
       },
+      // Area/kecamatan di dalam kota (Q2c) — baris terpisah dari Kota supaya
+      // "Sidotopo" tidak hilang saat customer sudah menyebutnya. UNKNOWN →
+      // baris otomatis disembunyikan oleh renderer.
+      district: {
+        value : qualState.district || 'UNKNOWN',
+        source: qualState.district ? 'stated' : 'UNKNOWN',
+      },
       budget: (() => {
         const b = filters.budget;
         const TIER_LABEL = { terjangkau: 'Terjangkau', menengah: 'Menengah', eksklusif: 'Eksklusif', affordable: 'Terjangkau' };
@@ -3533,7 +3545,11 @@ class ConversationQualifier {
     if (/sama teman(-teman)?|bersama teman|teman-teman|with friends?/.test(custText)) return 'Teman';
     if (/langsung bisa|bisa langsung/.test(custText))     return 'Solo (bisa langsung jadwalkan)';
     if (/koordinasikan?|koordinasi dulu|perlu diskusi/.test(custText)) return 'Perlu koordinasi (joint decision)';
-    if (profile.hasHouseholdInfo) return 'Disebutkan di Q4';
+    // JANGAN kembalikan "Disebutkan di Q4" — itu referensi INTERNAL (nomor
+    // pertanyaan) yang bocor ke layar customer. Summary hanya boleh berisi
+    // nilai konkret; bila decision-maker tidak pernah dinyatakan eksplisit,
+    // kembalikan UNKNOWN agar barisnya DISEMBUNYIKAN (lihat #renderField
+    // baris ~1020: value 'UNKNOWN' → baris di-skip).
     return 'UNKNOWN';
   }
 
@@ -3558,7 +3574,10 @@ class ConversationQualifier {
     if (/rombongan|grup|group|reuni|arisan|gathering/.test(custText)) return 'Rombongan/grup';
     if (/keluarga besar/.test(custText))         return 'Keluarga besar';
     if (/keluarga/.test(custText))               return 'Keluarga';
-    return 'Disebutkan';
+    // Tidak ada pola penghuni yang cocok → UNKNOWN (baris disembunyikan),
+    // BUKAN "Disebutkan" — placeholder samar tidak berguna bagi agent dan
+    // terlihat seperti data rusak di mata customer.
+    return 'UNKNOWN';
   }
 
   static #extractFurnishing(custText) {
@@ -3567,7 +3586,10 @@ class ConversationQualifier {
     if (/full\s*furnish|fully\s*furnished|\bfull\b/.test(custText))            return 'Full furnished';
     if (/semi[\s-]*furnish(?:ed)?|\bsemi\b/.test(custText))                    return 'Semi furnished';
     if (/kosongan|unfurnished|tanpa\s+perabot|\bkosong\b/.test(custText))      return 'Kosongan';
-    return 'Disebutkan';
+    // "✓ Furnitur: Disebutkan" pernah tampil ke customer — placeholder samar
+    // yang tidak menjawab apa pun. UNKNOWN → baris disembunyikan sampai
+    // customer benar-benar menyebut full/semi/kosongan.
+    return 'UNKNOWN';
   }
 
   static #extractLeaseDuration(custText) {
@@ -3701,7 +3723,11 @@ class ConversationQualifier {
     const coordMatch = custText.match(/koordinasikan?\s+sama\s+([\w\s-]+?)(?:\s*\.|,|\?|$)/i);
     if (coordMatch) {
       const withWhom = coordMatch[1].trim().replace(/\s*saya\s*$/i, '').trim();
-      return `koordinasikan sama ${withWhom} (Belum ditanyakan)`;
+      // "(Belum ditanyakan)" adalah label status INTERNAL — jangan disisipkan
+      // ke dalam NILAI field, karena hasilnya terbaca rancu di layar customer
+      // ("koordinasikan sama teman (Belum ditanyakan)"). Cukup nyatakan
+      // faktanya; ketiadaan tanggal sudah tercermin dari tidak adanya baris Viewing.
+      return `Perlu koordinasi dulu sama ${withWhom}`;
     }
     if (/koordinasikan?|perlu\s+koordinasi|koordinasi\s+dulu/.test(custText))
       return 'Perlu koordinasi dulu (tanggal belum ditanyakan)';
@@ -3723,7 +3749,7 @@ class ConversationQualifier {
       const m = custText.match(p);
       if (m) return m[1];
     }
-    return 'Disebutkan';
+    return 'UNKNOWN';
   }
 
   static #extractRedFlags(custText) {
@@ -3794,18 +3820,26 @@ class ConversationQualifier {
     const lower = String(redFlagsRawText || '').toLowerCase();
 
     // ── Preferensi POSITIF dengan lawan (avoid) alami ─────────────────────────
+    // `label`      → baris PREFER (apa yang customer INGINKAN, kalimat positif)
+    // `avoidLabel` → baris HINDARI (lawannya, kalimat NEGATIF yang berdiri sendiri)
+    //
+    // Dulu baris Hindari memakai `label` POSITIF + anotasi, sehingga tercetak
+    // "Hindari: Tempat yang sejuk : Hindari tempat yang panas" — agent membaca
+    // sekilas dan mengira customer ingin MENGHINDARI tempat sejuk. Baris Hindari
+    // sekarang HANYA memuat bentuk negatifnya; Prefer memuat bentuk positifnya.
+    // `avoidLabel: null` → preferensi tanpa lawan alami, Prefer saja.
     const PAIRS = [
-      { test: /\b(sejuk|adem|dingin|rindang|teduh|asri)\b/,               label: 'Tempat yang sejuk',   avoidReason: 'Hindari tempat yang panas' },
-      { test: /\bakses\s+(jalan\s+)?(lancar|mudah|gampang)\b/,            label: 'Akses jalan lancar',  avoidReason: 'Hindari tempat macet' },
-      { test: /\b(tenang|sepi)\b/,                                       label: 'Suasana tenang',      avoidReason: 'Hindari tempat bising/ramai' },
-      { test: /\baman\b/,                                                label: 'Lingkungan aman',     avoidReason: 'Hindari lingkungan rawan' },
-      { test: /\bjalan\s+(raya\s+)?(lebar|besar|luas)\b/,                 label: 'Jalan lebar',         avoidReason: 'Hindari gang sempit' },
-      { test: /\bstrategis\b/,                                           label: 'Lokasi strategis',    avoidReason: null },
+      { test: /\b(sejuk|adem|dingin|rindang|teduh|asri)\b/,               label: 'Tempat yang sejuk',   avoidLabel: 'Tempat panas' },
+      { test: /\bakses\s+(jalan\s+)?(lancar|mudah|gampang)\b/,            label: 'Akses jalan lancar',  avoidLabel: 'Jalan macet' },
+      { test: /\b(tenang|sepi)\b/,                                       label: 'Suasana tenang',      avoidLabel: 'Tempat bising/ramai' },
+      { test: /\baman\b/,                                                label: 'Lingkungan aman',     avoidLabel: 'Lingkungan rawan' },
+      { test: /\bjalan\s+(raya\s+)?(lebar|besar|luas)\b/,                 label: 'Jalan lebar',         avoidLabel: 'Gang sempit' },
+      { test: /\bstrategis\b/,                                           label: 'Lokasi strategis',    avoidLabel: null },
     ];
     PAIRS.forEach(p => {
       if (p.test.test(lower)) {
         prefer.push({ label: p.label });
-        avoid.push({ label: p.label, reason: p.avoidReason });
+        if (p.avoidLabel) avoid.push({ label: p.avoidLabel, reason: null });
       }
     });
 
@@ -3825,6 +3859,45 @@ class ConversationQualifier {
         avoid.push({ label: p.label, reason: null });
       }
     });
+
+    // ── PROXIMITY AVOIDANCE — "jauh dari X" / "hindari dekat X" ──────────────
+    // Kelas penghindaran yang sebelumnya TIDAK BISA diungkapkan sistem sama
+    // sekali: customer ingin JAUH dari suatu tempat (pemakaman, masjid, gereja,
+    // diskotik, TPA sampah, rel, tol…). Karena tak satu pun kata kunci di PAIRS
+    // maupun AVOID_ONLY cocok, hasilnya kosong — lalu LLM MENGARANG isinya.
+    // Kasus nyata: "jauh dari pemakaman, masjid, gereja, diskotik/club" keluar
+    // sebagai Hindari "bau busuk"/"tidak ramai" dan Prefer "jauh dari masjid"
+    // (arah TERBALIK — menjauhi masjid itu Hindari, bukan Prefer).
+    //
+    // ⚠️ ARAH TIDAK BOLEH TERBALIK: "jauh dari X" SELALU Hindari, tidak pernah
+    // Prefer. Prefer hanya untuk apa yang customer INGIN DEKATI.
+    const FAR_RE = /\b(?:jauh|jauhkan|menjauh|hindari|menghindari|jangan|nggak?\s+mau|tidak\s+mau|gak\s+mau|bukan)\s+(?:dari\s+|dekat\s+|deket\s+|dgn\s+|dengan\s+|sama\s+)*([^.!?\n;]{3,120})/gi;
+    for (const m of String(redFlagsRawText || '').matchAll(FAR_RE)) {
+      // Pecah daftar: "pemakaman, masjid, gereja, diskotik/club" → 4 item.
+      // "/" DIPERTAHANKAN di dalam item ("diskotik/club" satu tempat, bukan dua).
+      for (let raw of m[1].split(/\s*,\s*|\s+dan\s+|\s+atau\s+|\s*&\s*/i)) {
+        let item = raw.trim()
+          .replace(/^(?:dari|dekat|deket|dengan|dgn|sama|yang|yg|tempat|lokasi|area)\s+/i, '')
+          .replace(/\s*\b(?:aja|saja|ya|yaa|kak|sih|juga|nya|banget)\b\s*$/gi, '')
+          .replace(/[.,;!?]+$/, '')
+          .trim();
+        if (item.length < 3) continue;
+        // Buang sisa kata sambung / kata kerja yang bukan nama tempat.
+        if (/^(?:dan|atau|serta|itu|ini|apa|apapun|semua|pokok|nya)$/i.test(item)) continue;
+        const label = `Jauh dari ${item.toLowerCase()}`;
+        // Dedup LINTAS-MEKANISME: AVOID_ONLY mungkin sudah menangkap hal yang
+        // sama dengan kata lain ("Tidak mau dekat rel kereta" vs "Jauh dari rel
+        // kereta"). Bandingkan INTI-nya saja — buang awalan penolakan di kedua
+        // sisi — supaya satu keberatan tidak tercetak dua kali.
+        const core = (t) => t.toLowerCase()
+          .replace(/^(?:jauh\s+dari|tidak\s+mau\s+dekat|tidak\s+mau|nggak?\s+mau|hindari|dekat)\s+/i, '')
+          .trim();
+        const c = core(label);
+        if (!avoid.some(a => { const ac = core(a.label); return ac === c || ac.includes(c) || c.includes(ac); })) {
+          avoid.push({ label, reason: null });
+        }
+      }
+    }
 
     // ── Orientasi matahari (Q12) — avoid + prefer reframe ────────────────────
     const aptLower = String(apartmentPrefRawText || '').toLowerCase();
@@ -3892,7 +3965,87 @@ class ConversationQualifier {
          .replace(/^[,\s]+|[,\s]+$/g, '')
          .trim();
     if (!s) return 'UNKNOWN';
+    s = this.#dedupeAnchorLandmarks(s);
+    if (!s) return 'UNKNOWN';
     return this.#capitalizeFirst(s);
+  }
+
+  /**
+   * Buang landmark yang DIULANG di dalam satu baris patokan lokasi.
+   *
+   * WHY: patokan akhir adalah gabungan landmark yang terkumpul di Phase 1
+   * (setiap frasa "dekat X" sepanjang percakapan) DENGAN jawaban Q6 utuh.
+   * Customer lazim menyebut landmark yang sama dua kali dengan urutan/ejaan
+   * berbeda, sehingga hasil gabungannya berulang dan terlihat seperti data
+   * rusak di mata customer. Contoh nyata dari produksi:
+   *   "Dekat PTC, Ciputra world dan pasar, dekat pasar, PTC dan ciputra world"
+   *     → "Dekat PTC, Ciputra world, pasar"
+   *   "Dekat Kampung warna Jodipan, dekat cafe, resto dan wisata Kampung warna Jodipan"
+   *     → "Dekat Kampung warna Jodipan, cafe, resto"
+   *
+   * Perbandingan memakai bentuk ter-normalisasi (lowercase, prefiks
+   * "dekat/deket/dkt/near" dan kata pengisi dibuang) TAPI yang disimpan adalah
+   * teks ASLI customer — jadi ejaan & kapitalisasi mereka tetap terjaga.
+   * Token yang TERKANDUNG di dalam token lain juga dibuang ("Kampung warna
+   * Jodipan" ⊂ "wisata Kampung warna Jodipan") agar tidak menyebut satu tempat
+   * dua kali dengan panjang berbeda.
+   *
+   * @param {string} text baris patokan gabungan
+   * @returns {string} baris yang sama tanpa landmark duplikat
+   */
+  static #dedupeAnchorLandmarks(text = '') {
+    const raw = String(text || '').trim();
+    if (!raw) return '';
+
+    // Pisah pada koma / "dan" / "&" / "sama" — pemisah daftar landmark yang lazim.
+    // Kata pengisi di UJUNG frasa ("dekat pasar juga", "…alfamaret aja") —
+    // bukan bagian dari nama tempat, selalu dibuang.
+    const stripFiller = (p) => p
+      .replace(/\s*\b(?:juga|aja|saja|ya|yaa|kak|sih|deh|nya)\b\s*$/gi, '')
+      .replace(/[.!?]+$/, '')
+      .trim();
+
+    const parts = raw
+      .split(/\s*,\s*|\s+dan\s+|\s*&\s*|\s+sama\s+/i)
+      .map(p => p.trim())
+      // "sama" juga muncul di AWAL pecahan ("…, sama deket pasar") — di sana
+      // ia konjungsi ("dan"), bukan kata "sama" yang bermakna.
+      .map(p => p.replace(/^sama\s+/i, '').trim())
+      .filter(Boolean);
+
+    // Satu landmark saja tetap perlu dibersihkan dari filler.
+    if (parts.length <= 1) return stripFiller(raw);
+
+    // Bentuk pembanding: buang prefiks kedekatan + kata pengisi di ujung.
+    const norm = (p) => stripFiller(
+      p.toLowerCase()
+       .replace(/^(?:dekat|deket|dkt|near|di\s+dekat|sekitar)\s+/i, '')
+    ).replace(/\s{2,}/g, ' ').trim();
+
+    const kept = [];      // teks ASLI yang dipertahankan
+    const keptNorm = [];  // bentuk normalisasi yang sudah dipakai
+
+    // Token yang isinya HANYA konjungsi/kata sambung bukan landmark. Ini muncul
+    // saat pemecahan di hulu memotong tepat di kata-kedekatan dan menyisakan
+    // konjungsi berdiri sendiri ("…simpang lima, sama deket pasar" → "sama").
+    const CONJ_ONLY = /^(?:sama|dan|atau|juga|serta|plus|with|and|or|di|ke|yang|yg)$/i;
+
+    for (const part of parts) {
+      const n = norm(part);
+      if (!n || CONJ_ONLY.test(n)) continue;
+      // Lewati bila sudah ada yang identik, atau saling terkandung
+      // (salah satu arah — mana pun yang lebih pendek dianggap duplikat).
+      const dup = keptNorm.some(k => k === n || k.includes(n) || n.includes(k));
+      if (dup) continue;
+      keptNorm.push(n);
+      kept.push(stripFiller(part));
+    }
+
+    if (!kept.length) return raw;
+    // Prefiks "dekat" hanya sekali di depan, sisanya cukup dipisah koma.
+    return kept
+      .map((p, i) => i === 0 ? p : p.replace(/^(?:dekat|deket|dkt|near|di\s+dekat)\s+/i, ''))
+      .join(', ');
   }
 
   /**
