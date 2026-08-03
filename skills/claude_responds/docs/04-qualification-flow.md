@@ -393,21 +393,68 @@ Customers answer "what to avoid" with what they **want**. *"Tempat yang sejuk, a
 dan tidak banjir"* is mostly positive wishes plus one genuine negative. Rendering it raw as
 `✓ Hindari: Tempat yang sejuk…` reads backwards. **Split into two paired lists:**
 
-| Positive wish | `Hindari` (opposite) | `Prefer` (as stated) |
+**`Hindari` carries the NEGATIVE form. `Prefer` carries the POSITIVE form.** Each line must
+stand on its own — never put the positive wish on the `Hindari` line with an explanation
+glued to it.
+
+| Positive wish | `Hindari` (negative form) | `Prefer` (as stated) |
 |---|---|---|
-| sejuk / adem / rindang / asri | Hindari tempat yang panas | Tempat yang sejuk |
-| akses jalan lancar | Hindari tempat macet | Akses jalan lancar |
-| tenang / sepi | Hindari tempat bising | Suasana tenang |
-| **ramai / hidup / lively** | **Tidak mau tempat yang sepi** | **Tempat yang ramai** |
-| aman | Hindari lingkungan rawan | Lingkungan aman |
-| jalan lebar | Hindari gang sempit | Jalan lebar |
+| sejuk / adem / rindang / asri | Tempat panas | Tempat yang sejuk |
+| akses jalan lancar | Jalan macet | Akses jalan lancar |
+| tenang / sepi | Tempat bising/ramai | Suasana tenang |
+| **ramai / hidup / lively** | **Tempat yang sepi** | **Tempat yang ramai** |
+| aman | Lingkungan rawan | Lingkungan aman |
+| jalan lebar | Gang sempit | Jalan lebar |
+| strategis | *(no natural opposite — Prefer only)* | Lokasi strategis |
+
+```
+❌ ✓ Hindari: 1. Tempat yang sejuk : Hindari tempat yang panas
+✅ ✓ Hindari: 1. Tempat panas
+   ✓ Prefer:  1. Tempat yang sejuk
+```
 
 Already-avoidance-framed statements (banjir, hadap barat, gang sempit, bising, rumah tua, rel
 kereta) go straight into `Hindari` **as-is**, with no Prefer counterpart.
 
-> **⚠️ "mau ramai" is a POSITIVE wish, not a red flag.** → `Hindari: Tidak mau tempat yang sepi`
+> **⚠️ "mau ramai" is a POSITIVE wish, not a red flag.** → `Hindari: Tempat yang sepi`
 > + `Prefer: Tempat yang ramai`. Only treat "ramai" as avoidance when explicitly negated
 > ("jangan ramai", "jalan terlalu ramai", "bising").
+
+#### "Jauh dari X" is an AVOIDANCE — it never belongs in `Prefer`
+
+Wanting distance **from** a place is a red flag about that place. `Prefer` is only for what
+the customer wants to be **near** or to **have**. Getting this backwards tells the agent the
+customer wants a mosque nearby when they asked for the opposite.
+
+**Trigger phrases:** `jauh dari` · `hindari` · `jangan dekat` · `nggak mau dekat` ·
+`tidak mau dekat` · `menjauh dari`
+
+```
+Customer: "Saya mau tempat yang jauh dari pemakaman, masjid, gereja, diskotik/club"
+
+✅ ✓ Hindari:
+   1. Jauh dari pemakaman
+   2. Jauh dari masjid
+   3. Jauh dari gereja
+   4. Jauh dari diskotik/club
+   (no Prefer line — nothing positive was stated)
+
+❌ ✓ Prefer: 1. Jauh/hindari masjid        ← backwards: avoidance in the Prefer list
+❌ ✓ Hindari: 1. Bau busuk  2. Tidak ramai  ← invented; the customer said neither
+```
+
+**Rules for this list:**
+1. **Split on commas / `dan` / `atau`** — each place is its own line. Four places named
+   means four lines, not one run-on entry.
+2. **Keep `/` intact.** `diskotik/club` is one place written two ways, not two places.
+3. **Never invent an item.** Every entry must trace to a word the customer typed. Do not
+   infer "bau busuk" from *pemakaman*, or "tempat pembuangan sampah" from nothing at all.
+4. **Never drop an item.** If they named four places, all four appear.
+5. **Do not duplicate.** If the same objection is already on the list in other words
+   ("Tidak mau dekat rel kereta" vs "Jauh dari rel kereta"), keep one.
+6. **Accept any place, known or not.** Cemetery, place of worship, nightclub, landfill,
+   railway, tollroad, factory, hospital, school — record what they said, do not judge it
+   and do not ask them to justify it.
 
 > **⚠️ All negation variants count** — `enggak / gak / gk / ga / nggak / ngga / tdk / ndak` = `tidak`.
 > "Gk banjir" = Tidak mau banjir. These short WA forms are the MOST common. A multi-message batch
@@ -716,6 +763,157 @@ Salam hangat,
 ❌ ✓ Keputusan bersama: Bersama istri    ✅ (omit — Q9 was never asked)
 ❌ ✓ Masuk: Juni                          ✅ (omit — Q8 is ❓)
 ```
+
+### Defects seen in real production summaries — do not repeat these
+
+Every example below is a REAL line that shipped to a customer. Read them as the
+failure modes this format actually produces, not hypotheticals.
+
+**1. ✓ never pairs with a "not asked" placeholder.** A checkmark asserts the field
+is answered; `(Belum ditanyakan)` asserts it is not. Together they are nonsense.
+
+```
+❌ ✓ Keputusan bersama: (Belum ditanyakan)
+❌ ✓ Tower/Lantai: (Belum ditanyakan)
+✅ (omit the line entirely, or render it with ✗ if you are showing gaps on purpose)
+```
+
+**2. Never echo the customer's raw sentence as a field value.** Normalize it.
+
+```
+❌ ✓ Durasi sewa: Saya booking seminggu aja, kak
+✅ ✓ Durasi sewa: *1 minggu*
+```
+
+**3. Never repeat the same landmark in one anchor line.** The anchor is assembled
+from every "dekat X" across the chat PLUS the Q6 answer, so customers who mention a
+place twice produce duplicates. Collapse them — including when one name contains
+another.
+
+```
+❌ ✓ Patokan lokasi: Dekat PTC, Ciputra world dan pasar, dekat pasar, PTC dan ciputra world
+✅ ✓ Patokan lokasi: *Dekat PTC, Ciputra World, pasar*
+
+❌ ✓ Patokan lokasi: Dekat Kampung warna Jodipan, dekat cafe, resto dan wisata Kampung warna Jodipan
+✅ ✓ Patokan lokasi: *Dekat Kampung Warna Jodipan, cafe, resto*
+```
+
+**4. The anchor line holds PLACES only.** A wish or an instruction to you is not a
+landmark — route it to Prefer.
+
+```
+❌ ✓ Patokan lokasi: Dekat pakuwon, tolong carikan tempat yang dingin dan asri
+✅ ✓ Patokan lokasi: *Dekat Pakuwon*
+   ✓ Prefer: *Tempat yang sejuk & asri*
+```
+
+**5. Hindari and Prefer are two separate lists — never fold one into the other.**
+A positively-framed wish belongs in Prefer; state the avoidance plainly in Hindari.
+Full mapping table and the "jauh dari X" rule live in §Q5 above.
+
+```
+❌ ✓ Hindari: 1. Tempat yang sejuk : Hindari tempat yang panas
+             2. Akses jalan lancar : Hindari tempat macet
+✅ ✓ Hindari: 1. Tempat panas
+             2. Jalan macet
+   ✓ Prefer:  1. Tempat yang sejuk
+             2. Akses jalan lancar
+```
+
+Distance is avoidance, not preference — and never invent or drop an item:
+
+```
+❌ ✓ Prefer: 1. Jauh/hindari masjid     ← "jauh dari X" is a Hindari item
+❌ ✓ Hindari: 1. Bau busuk               ← never said; do not infer it from "pemakaman"
+✅ ✓ Hindari: 1. Jauh dari pemakaman  2. Jauh dari masjid
+             3. Jauh dari gereja     4. Jauh dari diskotik/club
+```
+
+**6. Viewing holds a decision, and a viewing has BOTH a date and a time.**
+The customer is always free to decline a viewing — declining is an ANSWER, so record
+it as `Minta listing` (see §"Q9b/Q9c" table). What is never acceptable is a viewing
+marked ✓ with only half the information: if they DO want one, you must have asked for
+the date **and** the hour before the line may appear.
+
+```
+✅ ✓ Viewing: *Minta listing*                 ← customer declined a viewing
+✅ ✓ Viewing: *Jam 11 siang, 24 Juli 2026*    ← date AND time captured
+❌ ✓ Viewing: *Mau viewing*                   ← no date, no time → keep asking
+❌ ✓ Viewing: *Besok*                          ← date without hour → ask the hour
+```
+
+**7. Sanity-check the budget against the property type before printing it.** A tier
+label must match the number beside it. Rp 100 juta–500 juta **per bulan** for a hotel
+room is not "Terjangkau" — it is a mis-mapped tier. If the range looks impossible for
+the type and period, do not print it; re-ask Q3.
+
+```
+❌ ✓ Budget: Terjangkau (Rp 100.000.000 - Rp 500.000.000 /bln)   ← hotel
+✅ ✓ Budget: *Rp 500.000 - Rp 1.500.000 /malam*
+```
+
+**8. Capitalize place names, and label the city line `Kota` — never `Lokasi`.**
+"Lokasi" is ambiguous to customers (city? district? landmark?). Q2 is always the
+CITY; the area/kecamatan inside it is a separate `Area` line from Q2c.
+
+```
+❌ ✓ Lokasi: merr          ✅ ✓ Kota: *Surabaya*
+                              ✓ Area: *MERR*
+❌ ✓ Lokasi: nganjuk       ✅ ✓ Kota: *Nganjuk*
+```
+
+**Ask for the CITY first, on its own.** Never bundle city and area into one question
+("di kota atau area mana?") — customers answer only one half, and the other half is
+then lost or mis-filed. Ask `Di *kota* mana?` with examples, and invite the area as an
+optional extra.
+
+**⛔ An area name you do not recognize is still a valid answer — record it.**
+Every Indonesian city has dozens of kecamatan/kelurahan you will not know. `Sidotopo`,
+`Lowokwaru`, `Rungkut` are real areas. If the customer names one, **write it down as
+given** — never treat an unfamiliar place name as off-topic, never ask for the location
+again to "verify" it, and never silently drop it. Asking twice for a location the
+customer already gave is the single fastest way to make them abandon the chat.
+
+```
+Customer: "Kota Surabaya"          → ✓ Kota: Surabaya
+Customer: "Area Sidotopo"          → ✓ Area: Sidotopo   (record as-is, move on)
+❌ "Maaf, saya hanya bisa membantu terkait pencarian properti"   ← NEVER for a place name
+❌ "Di kota atau area mana?" (asked again)                        ← already answered
+```
+
+**9. Strip conversational filler from every value.** Words like `juga`, `aja`,
+`saja`, `sama`, `kak`, `nya` are speech, not data.
+
+```
+❌ ✓ Patokan lokasi: Dekat pasar juga
+✅ ✓ Patokan lokasi: *Dekat pasar*
+```
+
+**10. `(Belum ditanyakan)` is a BUG REPORT against you, not a valid value.**
+It means you reached the summary without asking a question you were required to ask.
+Treat every one of these lines as work you still owe the customer.
+
+```
+✓ Penghuni: (Belum ditanyakan)      ← you never asked Q4
+✓ Furnitur: (Belum ditanyakan)      ← you never asked Q11
+✓ Fasilitas: (Belum ditanyakan)     ← you never asked Q_FAC
+✓ Viewing: (Belum ditanyakan)       ← you never asked Q9b/Q9c
+```
+
+**Before any summary, these must have been ASKED at least once** (an answer — including
+a refusal — is fine; silence is not):
+
+| Must ask | Q | Accepted outcomes |
+|---|---|---|
+| Penghuni / occupancy | Q4 | a count, a relation, or a use-case |
+| Durasi sewa/menginap | Q10 | any duration (rent/booking only) |
+| Furnitur | Q11 | Full / Semi / Kosongan |
+| Fasilitas | Q_FAC | specific list, **or** "terserah/standar" → standard set for the type |
+| Viewing | Q9b/Q9c | date **+** hour, or `Minta listing` if declined |
+
+If the 12-message cap forces the summary out early, render the un-asked ones so the
+agent can see the gap — but that is a **fallback for a failure**, never the plan. The
+correct behaviour is to have asked them.
 
 ### After the summary
 

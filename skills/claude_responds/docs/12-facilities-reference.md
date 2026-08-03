@@ -72,9 +72,16 @@ time it appears as `✗ Fasilitas: (Belum ditanyakan)` — a visible gap for the
 
 ## 4. Standard Facilities (the "terserah" fallback)
 
-When the customer answers **"standar" / "biasa" / "terserah" / "tidak tahu" / "apa saja" /
-"gak ada"**, they have no specific preference. **Never leave the field empty** — auto-fill from
-the table below. (Server mirror: `utils/standardFacilities.js`, `getStandardFacilitiesByType()`.)
+When the customer answers **"standar" / "fasilitas standar" / "biasa" / "terserah" /
+"fasilitas terserah" / "semua fasilitas" / "semua fasilitas apapun" / "apa saja" /
+"apa aja" / "yang penting lengkap" / "tidak tahu" / "gak ada"**, they have no specific
+preference. **Never leave the field empty and never re-ask** — that IS their answer.
+Auto-fill from the table below, matched to the property type they chose.
+(Server mirror: `utils/standardFacilities.js`, `getStandardFacilitiesByType()`.)
+
+> "Semua fasilitas" does **not** mean list every amenity that exists — it means the
+> customer trusts your judgement. Give the standard set for **their** property type;
+> a villa answer must not be filled with an office's list.
 
 | Property | Fasilitas Standar (Default) |
 |---|---|
