@@ -153,6 +153,61 @@ property signal — proceed with Q1 and extract what's there.
 
 Fire **in order, ONE per message**. Skip anything already ✅.
 
+### 3.0 — "Lokasi" is banned as a slot name. Say **Kota** or **Area**.
+
+The word *lokasi* is ambiguous — it can mean the city or the district inside it — and that
+ambiguity repeatedly caused a city answer to be filed as an area (and vice versa), which then
+made the AI ask for the location it had already been given. Two slots, two explicit names:
+
+| Slot | Means | Examples |
+|---|---|---|
+| **`city`** (Q2) | the CITY — **mandatory** | Surabaya · Malang · Bali · Jakarta Selatan |
+| **`district`** (Q2c) | area/kecamatan INSIDE the city — **optional** | Ngagel · Sidotopo · Pakuwon · Merr · Gubeng · Wiyung |
+
+- Ask the city on its own: `Di *kota* mana?` — never "di kota atau area mana?".
+- Label the summary line `✓ Kota:` and `✓ Area:` — **never** `✓ Lokasi:`.
+
+### 3.1 — Mandatory vs Optional vs Refusable
+
+**MANDATORY (8) — the brief is BLOCKED until all eight are ✅:**
+
+| # | Question | Slot |
+|---|---|---|
+| 1 | Tipe transaksi (sewa/beli/booking/kontrak/ngekos) | Q1 |
+| 2 | Tipe properti | Q1 type |
+| 3 | **Lokasi KOTA** | Q2 `city` |
+| 4 | Budget / harga | Q3 |
+| 5 | Fasilitas | Q_FAC |
+| 6 | Avoiding & Preference | Q5 |
+| 7 | Jadwal survei / viewing / lihat | Q9b + Q9c |
+| 8 | Pindah / masuk / check-in | Q8 |
+
+**OPTIONAL (4) — ask them, but NEVER hold the brief hostage to them:**
+
+| Question | Slot |
+|---|---|
+| Lokasi area/district | Q2c |
+| Furnitur | Q11 |
+| Patokan lokasi/district | Q6 |
+| Keputusan bersama | Q9 |
+
+> ⛔ Q6 (patokan) and Q7 (area alternatif) used to block the summary. They do **not**. Holding
+> the brief for a question the customer is free to decline is what makes a chat feel endless.
+
+**REFUSABLE (6) — a refusal is a COMPLETE answer; record it and move on:**
+
+| Question | Refusal recorded as |
+|---|---|
+| Jadwal survei | `Minta listing` |
+| Lokasi area/district lain | focus on the city already chosen |
+| Keputusan bersama | `Mandiri` |
+| Patokan lokasi | `Bebas` |
+| Budget — when **you** proposed prices | tier `Terjangkau` (they want cheaper) |
+| Lokasi kota — when **you** proposed other cities | stay with the city already chosen |
+
+> **The rule behind all six:** if you offered something and the customer said no, the question
+> is answered. Asking again — even reworded — is the single fastest way to lose them.
+
 ### Q1 — Transaction Type
 
 ```
@@ -764,6 +819,26 @@ Capture **both** floor and sun orientation. Full table → doc 07 §2.
 > **⛔ A number range after "lantai"/"tower"/"floor" is a FLOOR, never a budget** — including with
 > connectors ("lantai antara 12-15"). Never ask "maksudnya ribu/juta/miliar?" for it, and never
 > overwrite an existing budget with it.
+
+**Summarize it — never echo the sentence back.** The `✓ Tower/Lantai:` line holds a compact
+label, not the customer's words. Copying the raw reply reads like a bot repeating the customer
+instead of recording their answer.
+
+| Customer says | `✓ Tower/Lantai:` |
+|---|---|
+| "Antara lantai 12-18 aja, Kak" | `Lantai 12-18` |
+| "lantai 8" | `Lantai 8` |
+| "lantai tinggi" | `Lantai tinggi` |
+| "tower B, hadap timur" | `Tower B · Hadap timur` |
+
+```
+❌ ✓ Tower/Lantai: Antara lantai 12-18 aja, Kak
+✅ ✓ Tower/Lantai: *Lantai 12-18*
+```
+
+> **⛔ Do not omit this line when Q12 is ✅.** It was being dropped from summaries even after
+> the customer answered — an apartment search without the floor preference sends the agent
+> hunting through the wrong units.
 
 ### Q14 — Type-Specific Slots
 

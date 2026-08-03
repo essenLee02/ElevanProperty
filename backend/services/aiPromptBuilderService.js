@@ -12,6 +12,38 @@ const QS_CUST_ROLES = new Set(['user', 'customer']);
 const QS_AI_ROLES   = new Set(['assistant', 'ai', 'bot']);
 
 /**
+ * Ringkas jawaban Q12 (tower/lantai/orientasi) jadi label pendek untuk summary.
+ *
+ * "Antara lantai 12-18 aja, Kak"  → "Lantai 12-18"
+ * "lantai 8"                       → "Lantai 8"
+ * "tower B, hadap timur"           → "Tower B · Hadap timur"
+ * "lantai tinggi"                  → "Lantai tinggi"
+ *
+ * @param {string} raw jawaban mentah customer
+ * @returns {string} label ringkas, atau '' bila tak ada info yang bisa diringkas
+ */
+function _normalizeAptPref(raw = '') {
+  const s = String(raw || '').toLowerCase();
+  if (!s.trim()) return '';
+  const parts = [];
+
+  const tower = s.match(/tower\s*([a-z0-9]{1,3})\b/i);
+  if (tower) parts.push(`Tower ${tower[1].toUpperCase()}`);
+
+  const range = s.match(/lantai\s*(?:antara\s*)?(\d{1,3})\s*(?:-|–|s\/d|sampai|sd|hingga|ke)\s*(\d{1,3})/i);
+  const single = s.match(/lantai\s*(?:ke[-\s]?)?(\d{1,3})\b/i);
+  const qual = s.match(/lantai\s*(tinggi|rendah|tengah|atas|bawah|dasar)/i);
+  if (range)       parts.push(`Lantai ${range[1]}-${range[2]}`);
+  else if (single) parts.push(`Lantai ${single[1]}`);
+  else if (qual)   parts.push(`Lantai ${qual[1]}`);
+
+  const facing = s.match(/hadap\s*(timur|barat|utara|selatan|tenggara|barat\s*daya|timur\s*laut|barat\s*laut)/i);
+  if (facing) parts.push(`Hadap ${facing[1]}`);
+
+  return parts.join(' · ');
+}
+
+/**
  * Q3 ANCHOR ACCEPTANCE — customer menyetujui / menolak harga yang DITAWARKAN AI.
  *
  * Q3 tidak pernah ditanya langsung ("budget berapa?"); AI menawarkan dua harga
@@ -95,7 +127,7 @@ function buildFinalDirective(state) {
   const push = (label, val) => { if (val) answered.push(`${label}=${val}`); };
   push('Q1 transaksi', state.transactionType);
   push('Tipe',         state.buildingType);
-  push('Q2 kota',      state.location);
+  push('Q2 kota',      state.city);
   push('Q2c area',     state.district);
   push('Q3 budget',    state.budget);
   push('Q8 tanggal',   state.moveInDate);
@@ -189,7 +221,10 @@ function normalizeAltAreaAnswer(text = '', loc = '') {
   // Penolakan: "tidak ada", "enggak ada", "nggak ada", "gak ada", "no",
   // "tetap di X", "cukup di X", "di X saja/aja", "fokus di X".
   const isRefusal =
-    /^(tidak|tdk|enggak|engga|nggak|ngga|gak|ga|no|non)\b[\s,.!]*(ada|aja|saja)?\b/i.test(raw)
+    // `gk`/`ngg`/`kgk` ikut disertakan: normalizer sudah memperluasnya di
+    // produksi, tapi ekstraktor tidak boleh bergantung pada itu — jawaban
+    // "Gk mau" harus terbaca sebagai penolakan apa pun jalannya.
+    /^(tidak|tdk|enggak|engga|nggak|ngga|nggk|ngg|gak|gk|ga|kgk|kagak|no|non)\b[\s,.!]*(ada|aja|saja|mau)?\b/i.test(raw)
     // "tetap di X", dan bentuk dengan sisipan: "tetap MAU di X", "tetap INGIN di X".
     || /\b(tetap|cukup|fokus|hanya|cuma)\s+(?:\w+\s+){0,2}(di|pada)\b/i.test(raw)
     || /\bdi\s+.{1,30}\s*(saja|aja)\b/i.test(raw)
@@ -403,8 +438,13 @@ function extractQualificationState(history = [], currentMessage = '') {
     transactionType : null,   // Q1
     buildingType    : null,   // from first message
     fallbackTypes   : [],     // "kalau tidak ada X, Y saja"
-    location        : null,   // Q2
-    district        : null,   // Q2c: area/district within large city (Surabaya → Pakuwon, Rungkut, dll)
+    // ⚠️ ISTILAH "location" SENGAJA TIDAK DIPAKAI — ambigu, bisa berarti kota
+    // ATAU area/kecamatan, dan kerancuan itu sudah beberapa kali membuat
+    // jawaban kota tersimpan ke slot area (dan sebaliknya). Dua slot, dua nama
+    // eksplisit: `city` (Q2) dan `district` (Q2c). Alias `location` masih
+    // di-set di akhir extractQualificationState() demi kompatibilitas.
+    city            : null,   // Q2  — KOTA saja (Surabaya, Malang, Bali)
+    district        : null,   // Q2c — area/kecamatan DI DALAM kota (Ngagel, Pakuwon, Merr)
     budget          : null,   // Q3
     household       : null,   // Q4
     redFlags        : null,   // Q5
@@ -440,7 +480,7 @@ function extractQualificationState(history = [], currentMessage = '') {
   // (sby→Surabaya, jogja→Yogyakarta) + a generic "di X" fallback for unrecognized
   // towns (e.g. "ngajuk"/"nganjuk"). The previous CITY_RE here was a 28-city hardcoded
   // whitelist that silently returned no match for anything outside it — causing
-  // state.location to stay null for smaller/misspelled cities even though the
+  // state.city to stay null for smaller/misspelled cities even though the
   // customer clearly stated one, which left the qualification state shown to the
   // LLM incomplete/inconsistent for the rest of the conversation.
 
@@ -678,15 +718,15 @@ function extractQualificationState(history = [], currentMessage = '') {
     // Q2 — Location (city). detectLocation() already strips "kisaran [price]" internally
     // ("kisaran" = range/approximately in Indonesian, must never be read as the city
     // Kisaran, North Sumatra) — no need to pre-strip it here.
-    if (!state.location) {
+    if (!state.city) {
       const loc = detectLocation(raw);
-      if (loc) state.location = loc;
+      if (loc) state.city = loc;
     }
 
     // Q2c — District / area within large city
     // Only detect when a city-level location is known, and customer mentions a specific area.
-    if (!state.district && state.location) {
-      const locL = state.location.toLowerCase();
+    if (!state.district && state.city) {
+      const locL = state.city.toLowerCase();
       let areaList = null;
       if (locL.includes('surabaya')) {
         areaList = ['rungkut', 'pakuwon', 'pakuwon city', 'darmo', 'wonokromo', 'kenjeran',
@@ -1056,7 +1096,7 @@ function extractQualificationState(history = [], currentMessage = '') {
         // slot sehingga nama AREA yang sebenarnya ("Sidotopo") di pesan
         // berikutnya TIDAK PERNAH tercatat, dan LLM terus menanyakan lokasi.
         // District hanya sah bila menyisakan sesuatu DI LUAR nama kota.
-        if (!_isJustTheCity(cleaned, state.location)) {
+        if (!_isJustTheCity(cleaned, state.city)) {
           state.district = cleaned;
         }
       }
@@ -1111,7 +1151,11 @@ function extractQualificationState(history = [], currentMessage = '') {
       // answered so Q7 goes ✅ and is never asked again. Normalize the refusal
       // into a positive statement of intent so the summary reads
       // "Fokus di Pakuwon saja" instead of the bare "Tidak ada, Kak".
-      state.alternativeAreas = normalizeAltAreaAnswer(custResp, state.district || state.location);
+      // Pakai KOTA, bukan area. Q7 menanyakan area DI LUAR kota ("Selain
+      // Surabaya, area sekitar yang masih oke?"), jadi menolak berarti fokus
+      // di KOTA itu. Memakai district menghasilkan "Fokus di Ngagel saja"
+      // yang salah sasaran — Ngagel justru area DI DALAM Surabaya.
+      state.alternativeAreas = normalizeAltAreaAnswer(custResp, state.city || state.district);
     }
     // Q9 — decision maker (normalized server-side so AI just copies the value)
     //
@@ -1263,9 +1307,12 @@ function extractQualificationState(history = [], currentMessage = '') {
     if (!state.redFlags && /pasti tidak cocok|ingin dihindari|yang\s+dihindari|hadap barat|gang sempit|rumah tua|rawan banjir|rel kereta/.test(aiText)) {
       state.redFlags = custResp;
     }
-    // Q12 — apartment preference
+    // Q12 — apartment preference (tower/lantai/orientasi)
+    // Simpan bentuk RINGKAS, bukan kalimat mentah. Tanpa ini summary menulis
+    // "✓ Tower/Lantai: Antara lantai 12-18 aja, Kak" — terbaca seperti bot
+    // yang menyalin ulang kalimat customer, bukan mencatat datanya.
     if (!state.apartmentPref && /tower atau lantai|preferensi tower|lantai berapa/.test(aiText)) {
-      state.apartmentPref = custResp;
+      state.apartmentPref = _normalizeAptPref(custResp) || custResp;
     }
     // Q2b — search history (highest-value question, fires early)
     // Detect when AI asked search-history question and capture customer's answer.
@@ -1294,12 +1341,12 @@ function extractQualificationState(history = [], currentMessage = '') {
   // menyebutnya adalah bukti sah bahwa Q2 sudah terjawab. Tanpa ini, AI
   // menanyakan "di kota mana?" tepat setelah ia sendiri menyebut kotanya —
   // pemicu utama customer merasa diputar-putar (3 Agu 2026).
-  if (!state.location) {
+  if (!state.city) {
     for (let i = ALL.length - 1; i >= 0; i--) {
       const m = ALL[i];
       if (!QS_AI_ROLES.has(m.role)) continue;
       const loc = detectLocation(String(m.message || ''));
-      if (loc) { state.location = loc; break; }
+      if (loc) { state.city = loc; break; }
     }
   }
 
@@ -1324,7 +1371,7 @@ function extractQualificationState(history = [], currentMessage = '') {
         // Tolak kata pengisi ("lain", "sekitar") dan nilai yang cuma nama kota.
         if (!cand || cand.length < 3) continue;
         if (/^(lain|lainnya|sekitar|sekitarnya|mana|manapun|tertentu|itu|ini)$/i.test(cand)) continue;
-        if (_isJustTheCity(cand, state.location)) continue;
+        if (_isJustTheCity(cand, state.city)) continue;
         state.district = cand;   // pesan terbaru menimpa yang lama
       }
     }
@@ -1362,7 +1409,7 @@ function extractQualificationState(history = [], currentMessage = '') {
       state.buildingType     = null;
       state.transactionType  = null;
       state.fallbackTypes    = [];
-      state.location         = null;
+      state.city         = null;
       state.budget           = null;
       state.household        = null;
       state.redFlags         = null;
@@ -1414,8 +1461,9 @@ function extractQualificationState(history = [], currentMessage = '') {
       // Agent yang membalas template Q1 ("mau sewa atau beli? Dan tipe propertinya
       // apa?") BERULANG-ULANG walau customer sudah menyebut tipe & lokasi (M52).
       const curLoc = detectLocation(currentMessage || '');
-      if (curLoc) state.location = curLoc;
+      if (curLoc) state.city = curLoc;
 
+      state.location = state.city;   // alias kompatibilitas (lihat return utama)
       return state;  // summary reset takes full priority — skip 3B
     }
   }
@@ -1505,7 +1553,7 @@ function extractQualificationState(history = [], currentMessage = '') {
     if (buildingTypeChanged) {
       if (curType) state.buildingType    = curType;
       if (curTx)   state.transactionType = curTx;
-      state.location         = null;
+      state.city         = null;
       state.budget           = null;
       state.household        = null;
       state.redFlags         = null;
@@ -1526,6 +1574,10 @@ function extractQualificationState(history = [], currentMessage = '') {
       state.fallbackTypes    = [];
     }
   }
+
+  // Alias kompatibilitas — kode & tes lama masih membaca `location`.
+  // `city` adalah nama KANONIK; jangan menulis ke `location` di mana pun.
+  state.location = state.city;
 
   return state;
 }
@@ -1553,9 +1605,14 @@ function _typeKeyFromWord(word = '') {
  * Returns { q, hint } or null when all mandatory questions are answered.
  */
 function findNextQuestion(state) {
+  // Terima `city` (kanonik) MAUPUN `location` (alias lama) — pemanggil lama
+  // dan fixture tes masih memakai `location`. Dinormalkan sekali di sini agar
+  // sisa fungsi cukup membaca satu nama saja.
+  if (state && !state.city && state.location) state = { ...state, city: state.location };
+
   const tx   = (state.transactionType || '').toLowerCase();
   const type = (state.buildingType    || '').toLowerCase();
-  const loc  = state.location ? `*${state.location}*` : '*[area]*';
+  const loc  = state.city ? `*${state.city}*` : '*[area]*';
   const typeLbl = state.buildingType || '[tipe]';
   const _humanType = {
     house: 'Rumah', apartment: 'Apartemen', villa: 'Villa', hotel: 'Hotel',
@@ -1573,7 +1630,7 @@ function findNextQuestion(state) {
     return { q: 'Q1', hint: 'Tanyakan: mau sewa atau beli? Dan tipe propertinya apa? (rumah, apartemen, villa, hotel, kos, ruko, kantor, gudang, toko, mansion, kondotel, dll) 🏠' };
 
   // Q2 — Lokasi (per-type context)
-  if (!state.location) {
+  if (!state.city) {
     if (isBooking) {
       const tipeLabel = type === 'hotel' ? 'Hotel' : 'Kondotel';
       return { q: 'Q2', hint: `Siap, *booking ${tipeLabel}*! 📍 Di *kota* mana? (Contoh: Surabaya, Malang, Bali)
@@ -1597,19 +1654,19 @@ Kalau sudah ada area/kecamatan tertentu, boleh sekalian disebut ya.` };
   // Q2c — Area/district dalam kota besar (SEBELUM Q2b — mempersempit area pencarian)
   // Hanya berlaku untuk kota besar yang punya banyak area/district.
   const LARGE_CITIES_Q2C = ['surabaya', 'jakarta', 'bandung', 'medan', 'semarang', 'makassar', 'palembang', 'tangerang'];
-  if (!state.district && state.location &&
-      LARGE_CITIES_Q2C.some(c => state.location.toLowerCase().includes(c)) &&
+  if (!state.district && state.city &&
+      LARGE_CITIES_Q2C.some(c => state.city.toLowerCase().includes(c)) &&
       !isBooking && !isCommercial) {
     let areaEx = 'Misalnya pusat kota, area selatan, kawasan tertentu?';
-    if (state.location.toLowerCase().includes('surabaya'))
+    if (state.city.toLowerCase().includes('surabaya'))
       areaEx = 'Misalnya Pakuwon, Darmo, Rungkut, Gubeng, Kenjeran, atau area lainnya?';
-    else if (state.location.toLowerCase().includes('jakarta'))
+    else if (state.city.toLowerCase().includes('jakarta'))
       areaEx = 'Misalnya Kebayoran, Menteng, Kelapa Gading, Kemang, atau area lainnya?';
-    else if (state.location.toLowerCase().includes('bandung'))
+    else if (state.city.toLowerCase().includes('bandung'))
       areaEx = 'Misalnya Dago, Buah Batu, Antapani, Pasteur, atau area lainnya?';
-    else if (state.location.toLowerCase().includes('semarang'))
+    else if (state.city.toLowerCase().includes('semarang'))
       areaEx = 'Misalnya Banyumanik, Tembalang, Gajahmungkur, atau area lainnya?';
-    else if (state.location.toLowerCase().includes('makassar'))
+    else if (state.city.toLowerCase().includes('makassar'))
       areaEx = 'Misalnya Panakkukang, Tamalate, Rappocini, atau area lainnya?';
     return { q: 'Q2c', hint: `Di area atau kawasan mana di ${loc} yang Anda pertimbangkan? 📍 ${areaEx}` };
   }
@@ -1672,7 +1729,7 @@ Kalau sudah ada area/kecamatan tertentu, boleh sekalian disebut ya.` };
   if (!state.anchorPoint) {
     if (isCommercial)
       return { q: 'Q6', hint: `Ada lokasi atau kawasan tertentu yang jadi prioritas? Misalnya dekat kawasan industri, pelabuhan, atau pusat bisnis? 📍` };
-    if (state.location && state.location.toLowerCase().includes('surabaya'))
+    if (state.city && state.city.toLowerCase().includes('surabaya'))
       return { q: 'Q6', hint: 'Ada lokasi atau tempat tertentu yang jadi patokan? Misalnya dekat Grand City, Pakuwon, KBS, wisata mangrove, sekolah anak, atau jalan tertentu? 📍' };
     return { q: 'Q6', hint: 'Ada lokasi atau tempat tertentu yang jadi patokan? Misalnya dekat sekolah anak, mal, wisata, kawasan tertentu, atau jalan tertentu? 📍' };
   }
@@ -1844,7 +1901,7 @@ function buildQualificationStateBlock(state) {
     const answered = [
       ['Transaksi',      state.transactionType],
       ['Tipe',           state.buildingType],
-      ['Kota',           state.location],
+      ['Kota',           state.city],
       ['Budget',         state.budget],
       ['Tanggal masuk',  state.moveInDate],
       ['Penghuni',       state.household],
@@ -1911,7 +1968,7 @@ function buildQualificationStateBlock(state) {
   lines.push(
     row('Tipe transaksi    [Q1]', state.transactionType),
     row('Tipe properti         ', state.buildingType ? state.buildingType + fbNote : null),
-    row('Kota              [Q2]', state.location),
+    row('Kota              [Q2]', state.city),
     row('Area/Kecamatan  [Q2c]', state.district),
     // Q2b: ✅ = customer answered; ⏭️ = AI asked but customer redirected (skip, don't repeat); ❓ = not asked yet.
     state.searchHistory
@@ -1978,14 +2035,29 @@ function buildQualificationStateBlock(state) {
     '→ ⏭️  berarti SUDAH DITANYAKAN tapi customer redirect/tidak jawab langsung — SKIP saja, lanjut ke Q berikutnya.',
   );
 
-  // Inline hard-blocks for fields most commonly hallucinated
+  // ── FIELD WAJIB (8) — summary DIBLOKIR sampai semuanya ✅ ─────────────────
+  //   1 Tipe transaksi · 2 Tipe properti · 3 Lokasi KOTA · 4 Budget
+  //   5 Fasilitas · 6 Avoiding & Preference (red flags) · 7 Jadwal survei
+  //   8 Tanggal pindah/masuk/check-in
+  //
+  // ── FIELD OPSIONAL — TIDAK memblokir summary ─────────────────────────────
+  //   Area/district (Q2c) · Furnitur (Q11) · Patokan lokasi (Q6) ·
+  //   Keputusan bersama (Q9)
+  //
+  // Q6 Patokan dan Q7 Area alternatif DULU ikut memblokir summary. Itu keliru:
+  // keduanya opsional, dan memblokir di situ membuat AI menahan brief sambil
+  // menanyakan hal yang boleh saja tidak dijawab customer.
   const missingMandatory = [];
-  if (!state.budget)           missingMandatory.push('Q3 Budget');
-  if (!state.moveInDate)       missingMandatory.push('Q8 Tanggal masuk');
+  if (!state.transactionType)     missingMandatory.push('Q1 Tipe transaksi');
+  if (!state.buildingType)        missingMandatory.push('Tipe properti');
+  if (!state.city)                missingMandatory.push('Q2 Lokasi KOTA');
+  if (!state.budget)              missingMandatory.push('Q3 Budget');
+  if (!(Array.isArray(state.facilities) ? state.facilities.length : state.facilities))
+                                  missingMandatory.push('Q_FAC Fasilitas');
+  if (!state.redFlags)            missingMandatory.push('Q5 Avoiding & Preference');
+  if (!state.viewingDate)         missingMandatory.push('Q9b Jadwal survei (tanggal, atau "Minta listing")');
+  if (!state.moveInDate)          missingMandatory.push('Q8 Tanggal masuk/check-in');
   if (isSale && !state.financing) missingMandatory.push('Q_KPR Pembiayaan (WAJIB untuk beli)');
-  if (!state.redFlags)         missingMandatory.push('Q5 Red flags');
-  if (!state.anchorPoint)      missingMandatory.push('Q6 Patokan lokasi');
-  if (!state.alternativeAreas) missingMandatory.push('Q7 Area alternatif');
 
   if (missingMandatory.length > 0) {
     lines.push('');

@@ -102,5 +102,26 @@ console.log('\n── Alur BELI (Q14) tidak boleh terpotong Q_FAC ──');
      findNextQuestion({ ...beliBase, buildingType: 'hotel', financing: 'cash' }).hint.includes('operasional'));
 }
 
+console.log('\n── Q12: Tower/Lantai diringkas, bukan kalimat mentah ──');
+{
+  const Q12 = 'Ada preferensi tower atau lantai tertentu? Misalnya hadap timur, lantai rendah/tengah/tinggi? 🏢';
+  const pref = (ans) => extractQualificationState([u('sewa apartemen surabaya'), a(Q12)], ans).apartmentPref;
+  ok('"Antara lantai 12-18 aja, Kak" → "Lantai 12-18"', pref('Antara lantai 12-18 aja, Kak') === 'Lantai 12-18');
+  ok('"lantai 8" → "Lantai 8"',                          pref('lantai 8') === 'Lantai 8');
+  ok('"tower B, hadap timur" diringkas',                 /Tower B/.test(String(pref('tower B, hadap timur'))));
+  ok('"lantai tinggi" → "Lantai tinggi"',                pref('lantai tinggi') === 'Lantai tinggi');
+}
+
+console.log('\n── Q7: penolakan menyebut KOTA, bukan area di dalamnya ──');
+{
+  const st = extractQualificationState([
+    u('booking apartemen di Surabaya, area Ngagel'),
+    a('Ada patokan? 📍'), u('Dekat Ngagel'),
+    a('Selain Surabaya, area sekitar yang masih oke? 🗺️'),
+  ], 'Gk mau');
+  const v = String(st.alternativeAreas);
+  ok('menyebut Surabaya (kota), bukan Ngagel', /Surabaya/i.test(v) && !/Ngagel/i.test(v));
+}
+
 console.log(`\nRESULT: ${pass}/${total}`);
 process.exit(pass === total ? 0 : 1);
