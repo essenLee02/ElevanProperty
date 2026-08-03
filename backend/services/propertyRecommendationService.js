@@ -421,7 +421,20 @@ function escapeRegExp(value = '') {
  * → prevents false-positive office/warehouse type detection.
  */
 function stripNearPhrases(text) {
-  return text.replace(/\b(dekat|deket|near|di\s+dekat|di\s+sekitar|sekitar|samping|sebelah)\s+\S+/gi, '');
+  // Buang KESELURUHAN daftar landmark setelah kata kedekatan, bukan hanya token
+  // pertama. Customer lazim menyebut beberapa patokan sekaligus:
+  //   "Saya mau dekat indomaret, warung, resto"
+  // Dulu hanya "dekat indomaret" yang dibuang, menyisakan ", warung, resto" —
+  // lalu "warung" terbaca sebagai TIPE PROPERTI (store) dan memicu reset sesi
+  // ke Q1. Akibatnya setiap jawaban patokan lokasi menghapus seluruh sesi dan
+  // customer diputar dari awal berulang kali (bug produksi 3 Agu 2026).
+  //
+  // Daftar dianggap berlanjut selama dipisah koma / "dan" / "atau" / "&".
+  // Berhenti di tanda baca akhir kalimat supaya kalimat berikutnya tetap utuh.
+  return text.replace(
+    /\b(?:dekat|deket|dkt|near|di\s+dekat|di\s+sekitar|sekitar|samping|sebelah)\s+[^.!?;\n]*/gi,
+    ''
+  );
 }
 
 /**

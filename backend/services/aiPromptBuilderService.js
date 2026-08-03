@@ -1433,7 +1433,7 @@ function extractQualificationState(history = [], currentMessage = '') {
       // Skip entirely if the opener is a hedge ("kalau gak ada X, Y juga boleh") — an
       // ambiguous first message shouldn't commit to whichever type the priority chain
       // happens to match first.
-      const cur = stripCommercialUsePhrases((currentMessage || '').toLowerCase().trim());
+      const cur = stripCommercialUsePhrases(stripMovingFromPhrases(stripAmbiguousRumah(stripNearPhrases((currentMessage || '').toLowerCase().trim()))));
       if (isConditionalFallbackMessage(currentMessage)) {
         // leave buildingType/transactionType null — nothing confirmed yet
       }
@@ -1481,7 +1481,7 @@ function extractQualificationState(history = [], currentMessage = '') {
 
     const histType = histMsgs.reduce((t, msg) => {
       if (t) return t;
-      const w = stripCommercialUsePhrases((msg.message || '').toLowerCase());
+      const w = stripCommercialUsePhrases(stripMovingFromPhrases(stripAmbiguousRumah(stripNearPhrases((msg.message || '').toLowerCase()))));
       if (/\bkondotel\b|\bcondotel\b/.test(w))                             return 'kondotel';
       if (/\bmansion\b|\brumah\s+mewah\b/.test(w))                        return 'mansion';
       if (/\bvill?a\b/.test(w))                                            return 'villa';
@@ -1507,7 +1507,7 @@ function extractQualificationState(history = [], currentMessage = '') {
 
     // Strip commercial use-phrases so "dipakai kantor"/"buat usaha" doesn't read as
     // a type switch (house→office) and reset the search.
-    const cur = stripCommercialUsePhrases((currentMessage || '').toLowerCase().trim());
+    const cur = stripCommercialUsePhrases(stripMovingFromPhrases(stripAmbiguousRumah(stripNearPhrases((currentMessage || '').toLowerCase().trim()))));
     // A hedge message ("kalau gak ada apartemen, villa juga boleh") names a fallback
     // type without confirming a switch — must not compute a curType from it, or this
     // block force-flips buildingType/wipes budget before the primary type is even
