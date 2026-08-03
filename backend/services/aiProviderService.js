@@ -26,6 +26,13 @@ const {
   checkDeepSeekConfig
 } = require('./deepseekService');
 
+const {
+  generateKimiContactReply,
+  generateKimiChatbotReply,
+  generateKimiWhatsappReply,
+  checkKimiConfig
+} = require('./kimiService');
+
 // ENABLE_CLAUDE_FALLBACK: mengontrol apakah Claude diizinkan digunakan sama sekali.
 // Nama "Fallback" dipertahankan untuk backward-compat .env; secara efektif adalah toggle Claude.
 function isClaudeEnabled() {
@@ -38,6 +45,7 @@ function getPrimaryAIProvider() {
   if (value === 'claude')    return 'claude';
   if (value === 'qwen')      return 'qwen';
   if (value === 'deepseek')  return 'deepseek';
+  if (value === 'kimi')      return 'kimi';
   if (value === 'private')   return 'private';
 
   return 'chatgpt'; // default
@@ -53,6 +61,7 @@ const PROVIDER_ORDER = {
   claude   : ['claude'],
   chatgpt  : ['chatgpt'],
   deepseek : ['deepseek'],
+  kimi     : ['kimi'],
 };
 
 function getAIProviderOrder() {
@@ -79,6 +88,11 @@ function canUseQwen() {
 
 function canUseDeepSeek() {
   const cfg = checkDeepSeekConfig();
+  return cfg.hasApiKey;
+}
+
+function canUseKimi() {
+  const cfg = checkKimiConfig();
   return cfg.hasApiKey;
 }
 
@@ -117,6 +131,7 @@ function logProviderFallback(taskName, fromProvider, toProvider, reason) {
 //   claude   → Try Claude → Error? → Fallback Private Agent
 //   chatgpt  → Try ChatGPT → Error? → Fallback Private Agent
 //   deepseek → Try DeepSeek → Error? → Fallback Private Agent
+//   kimi     → Try Kimi → Error? → Fallback Private Agent
 //   private  → Private Agent only (no external AI)
 //
 // Fallback otomatis jika primary provider error (token, billing, API, timeout).
@@ -124,7 +139,7 @@ function logProviderFallback(taskName, fromProvider, toProvider, reason) {
 // ═════════════════════════════════════════════════════════════════════════════
 // (PROVIDER_ORDER dipindahkan ke atas — lihat catatan di getAIProviderOrder)
 
-async function executeAIProviderWithFallback(taskName, chatGPTFn, claudeFn, qwenFn = null, deepseekFn = null) {
+async function executeAIProviderWithFallback(taskName, chatGPTFn, claudeFn, qwenFn = null, deepseekFn = null, kimiFn = null) {
   const primary = getPrimaryAIProvider();
 
   if (primary === 'private') {
@@ -135,12 +150,13 @@ async function executeAIProviderWithFallback(taskName, chatGPTFn, claudeFn, qwen
   }
 
   const order = PROVIDER_ORDER[primary] || PROVIDER_ORDER.chatgpt;
-  const fns   = { chatgpt: chatGPTFn, claude: claudeFn, qwen: qwenFn, deepseek: deepseekFn };
+  const fns   = { chatgpt: chatGPTFn, claude: claudeFn, qwen: qwenFn, deepseek: deepseekFn, kimi: kimiFn };
   const avail = {
     chatgpt  : () => canUseChatGPT()   && !!chatGPTFn,
     claude   : () => canUseClaude()    && !!claudeFn,
     qwen     : () => canUseQwen()      && !!qwenFn,
     deepseek : () => canUseDeepSeek()  && !!deepseekFn,
+    kimi     : () => canUseKimi()      && !!kimiFn,
   };
 
   const providerErrors  = [];
@@ -186,18 +202,19 @@ async function executeAIProviderWithFallback(taskName, chatGPTFn, claudeFn, qwen
 }
 
 // Digunakan saat Private Agent gagal (AI_PRIMARY_PROVIDER=private):
-// urutan: DeepSeek → Claude → ChatGPT → QWEN
-async function executeExternalAIFallbackChain(taskName, chatGPTFn, claudeFn, qwenFn = null, deepseekFn = null) {
-  const fns   = { chatgpt: chatGPTFn, claude: claudeFn, qwen: qwenFn, deepseek: deepseekFn };
+// urutan: DeepSeek → Kimi → Claude → ChatGPT → QWEN
+async function executeExternalAIFallbackChain(taskName, chatGPTFn, claudeFn, qwenFn = null, deepseekFn = null, kimiFn = null) {
+  const fns   = { chatgpt: chatGPTFn, claude: claudeFn, qwen: qwenFn, deepseek: deepseekFn, kimi: kimiFn };
   const avail = {
     chatgpt  : () => canUseChatGPT()   && !!chatGPTFn,
     claude   : () => canUseClaude()    && !!claudeFn,
     qwen     : () => canUseQwen()      && !!qwenFn,
     deepseek : () => canUseDeepSeek()  && !!deepseekFn,
+    kimi     : () => canUseKimi()      && !!kimiFn,
   };
   const providerErrors = [];
 
-  for (const providerName of ['deepseek', 'claude', 'chatgpt', 'qwen']) {
+  for (const providerName of ['deepseek', 'kimi', 'claude', 'chatgpt', 'qwen']) {
     if (!avail[providerName]()) {
       logProviderSkipped(providerName, taskName, `${providerName} not available (private-agent fallback).`);
       continue;
@@ -229,7 +246,8 @@ async function generateContactReplyWithProviderFallback(contactPayload) {
     () => generateChatGPTContactReply(contactPayload),
     () => generateClaudeContactReply(contactPayload),
     () => generateQwenContactReply(contactPayload),
-    () => generateDeepSeekContactReply(contactPayload)
+    () => generateDeepSeekContactReply(contactPayload),
+    () => generateKimiContactReply(contactPayload)
   );
 }
 
@@ -239,7 +257,8 @@ async function generateChatbotReplyWithProviderFallback(session, history, userMe
     () => generateChatGPTChatbotReply(session, history, userMessage, propertyContext),
     () => generateClaudeChatbotReply(session, history, userMessage, propertyContext),
     () => generateQwenChatbotReply(session, history, userMessage, propertyContext),
-    () => generateDeepSeekChatbotReply(session, history, userMessage, propertyContext)
+    () => generateDeepSeekChatbotReply(session, history, userMessage, propertyContext),
+    () => generateKimiChatbotReply(session, history, userMessage, propertyContext)
   );
 }
 
@@ -249,19 +268,21 @@ async function generateWhatsappReplyWithProviderFallback(session, history, userM
     () => generateChatGPTWhatsappReply(session, history, userMessage, propertyContext, extraContext),
     () => generateClaudeWhatsappReply(session, history, userMessage, propertyContext, extraContext),
     () => generateQwenWhatsappReply(session, history, userMessage, propertyContext, extraContext),
-    () => generateDeepSeekWhatsappReply(session, history, userMessage, propertyContext, extraContext)
+    () => generateDeepSeekWhatsappReply(session, history, userMessage, propertyContext, extraContext),
+    () => generateKimiWhatsappReply(session, history, userMessage, propertyContext, extraContext)
   );
 }
 
 // Fallback eksternal saat Private Agent gagal (primary=private):
-// urutan: DeepSeek → Claude → ChatGPT → QWEN
+// urutan: DeepSeek → Kimi → Claude → ChatGPT → QWEN
 async function generateWhatsappExternalAIFallback(session, history, userMessage, propertyContext = '', extraContext = {}) {
   return executeExternalAIFallbackChain(
     'whatsapp_private_fallback',
     () => generateChatGPTWhatsappReply(session, history, userMessage, propertyContext, extraContext),
     () => generateClaudeWhatsappReply(session, history, userMessage, propertyContext, extraContext),
     () => generateQwenWhatsappReply(session, history, userMessage, propertyContext, extraContext),
-    () => generateDeepSeekWhatsappReply(session, history, userMessage, propertyContext, extraContext)
+    () => generateDeepSeekWhatsappReply(session, history, userMessage, propertyContext, extraContext),
+    () => generateKimiWhatsappReply(session, history, userMessage, propertyContext, extraContext)
   );
 }
 
@@ -270,6 +291,7 @@ function checkAIProviderConfig() {
   const claude    = checkClaudeConfig();
   const qwen      = checkQwenConfig();
   const deepseek  = checkDeepSeekConfig();
+  const kimi      = checkKimiConfig();
 
   return {
     primaryProvider      : getPrimaryAIProvider(),
@@ -279,10 +301,12 @@ function checkAIProviderConfig() {
     claudeReady          : canUseClaude(),
     qwenReady            : canUseQwen(),
     deepseekReady        : canUseDeepSeek(),
+    kimiReady            : canUseKimi(),
     chatGPT,
     claude,
     qwen,
     deepseek,
+    kimi,
   };
 }
 
@@ -294,6 +318,7 @@ module.exports = {
   canUseClaude,
   canUseQwen,
   canUseDeepSeek,
+  canUseKimi,
   executeAIProviderWithFallback,
   executeExternalAIFallbackChain,
   generateContactReplyWithProviderFallback,

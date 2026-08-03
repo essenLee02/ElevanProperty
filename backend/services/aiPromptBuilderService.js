@@ -1,6 +1,7 @@
 const { loadProjectSkillPrompt } = require('./skillPromptService');
 const { detectBudget, detectFacilities, stripCommercialUsePhrases, stripNearPhrases, stripAmbiguousRumah, stripInvestmentIntentPhrases, stripMovingFromPhrases, detectUseCase, isNonResidentialUse, detectLocation, isKnownLocationName } = require('./propertyRecommendationService');
 const { parseCustomerDate, isDontKnowDateAnswer, WAITING_THE_UPDATE } = require('../utils/customerDateParser');
+const { expandAbbreviations }                 = require('../utils/lazyChatNormalizer');
 const { detectCustomerFrustration } = require('../utils/propertyKeywordFilter');
 
 /* ─── Qualification State Extractor ────────────────────────────────────────── */
@@ -427,6 +428,30 @@ function _cleanDistrictAnswer(raw = '') {
 }
 
 function extractQualificationState(history = [], currentMessage = '') {
+  // ⛔ NORMALISASI SINGKATAN WAJIB DI SINI — jangan pindahkan ke pemanggil.
+  // whatsappAIService hanya meng-expand PESAN SAAT INI; transkrip yang tersimpan
+  // di DB sengaja RAW (autentik untuk takeover agent). Konsekuensinya: giliran
+  // berikutnya, jawaban yang tadi tertangkap kembali terbaca sebagai SMS-speak
+  // mentah dan TIDAK cocok regex mana pun → slot yang sudah ✅ berubah lagi jadi
+  // ❓ → pertanyaan yang sama diulang tanpa henti (M73).
+  // Terbukti: "Rencana tahun dpn" → Q8 terisi di giliran N, lalu null di N+1.
+  // Karena SETIAP slot diturunkan ulang dari history tiap giliran, satu singkatan
+  // saja cukup membuat percakapan tidak pernah sampai summary.
+  // Ditaruh di dalam fungsi ini (bukan di builder) supaya jalur LLM DAN Private
+  // Agent — dua basis kode terpisah — sama-sama terlindungi (pelajaran M52/M54).
+  const _norm = (m) => {
+    try { return expandAbbreviations(String(m || '')); }
+    catch (_) { return String(m || ''); }   // fail-open: jangan pernah blokir alur
+  };
+  const normalizedHistory = (history || []).map(item => ({
+    ...item,
+    message: _norm(item.message),
+  }));
+  const normalizedCurrent = _norm(currentMessage);
+
+  history        = normalizedHistory;
+  currentMessage = normalizedCurrent;
+
   // Build chronological message array (history is already oldest-first from DB reverse)
   const ALL = [...(history || []), { role: 'customer', message: currentMessage }];
 
@@ -665,7 +690,17 @@ function extractQualificationState(history = [], currentMessage = '') {
     // Strip USE-phrases first so "rumah utk bangun kos", "ruko buat ibadah",
     // "dipakai sebagai kantor" don't flip the type to the USE word.
     if (!state.buildingType) {
-      const tt = stripCommercialUsePhrases(text);
+      // ⚠️ RANTAI STRIP HARUS SAMA dengan 3 call-site lain (baris ~1461/1509/1535).
+      // Dulu di sini HANYA stripCommercialUsePhrases, sehingga jawaban PATOKAN
+      // LOKASI (Q6) "Saya mau dekat indomaret, warung, resto" membuat
+      // buildingType = 'store' — customer yang jelas mencari RUMAH dicarikan TOKO,
+      // dan karena tipe bersifat first-match-wins, "Saya mau beli rumah" berikutnya
+      // TIDAK bisa mengoreksinya. Ini juga memicu reset ke Q1 saat tipe dianggap
+      // berubah (M73).
+      // stripNearPhrases membuang "dekat/deket/near X" — persis kelas kalimat ini.
+      const tt = stripCommercialUsePhrases(
+        stripMovingFromPhrases(stripAmbiguousRumah(stripNearPhrases(text)))
+      );
       if (/\bkondotel\b|\bcondotel\b/.test(tt))                          state.buildingType = 'kondotel';
       else if (/\bmansion\b|\brumah\s+mewah\b/.test(tt))               state.buildingType = 'mansion';
       else if (/\bvill?a\b/.test(tt))                                    state.buildingType = 'villa';

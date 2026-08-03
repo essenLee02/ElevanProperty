@@ -39,7 +39,7 @@ const SKILL_GROUPS = {
 function normalizeProvider(provider = 'shared') {
   const value = String(provider || 'shared').toLowerCase().trim();
 
-  if (['chatgpt', 'chat_gpt', 'openai', 'gpt', 'qwen', 'deepseek'].includes(value)) return 'chatgpt';
+  if (['chatgpt', 'chat_gpt', 'openai', 'gpt', 'qwen', 'deepseek', 'kimi', 'moonshot'].includes(value)) return 'chatgpt';
   if (['claude', 'anthropic'].includes(value)) return 'claude';
   if (['private', 'private_agent', 'local'].includes(value)) return 'private_agent';
 
@@ -283,6 +283,7 @@ function getSkillRegistryStatus() {
       chatgpt: 'skills/chat_gpt_responds',
       qwen: 'skills/chat_gpt_responds',   // qwen → chatgpt skill set
       deepseek: 'skills/chat_gpt_responds',
+      kimi: 'skills/chat_gpt_responds',   // kimi (Moonshot AI, OpenAI-compatible) → chatgpt skill set
       claude: 'skills/claude_responds',
       private_agent: ['skills/chat_gpt_responds', 'skills/claude_responds']
     },

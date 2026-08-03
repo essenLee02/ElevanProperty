@@ -401,13 +401,14 @@ async function generateWhatsAppAIReply(params) {
 
   // ── Step 3.5: CHECK AI_PRIMARY_PROVIDER ───────────────────────────────────
   //
-  // AI_PRIMARY_PROVIDER: 'chatgpt' | 'claude' | 'qwen' | 'deepseek' | 'private'
+  // AI_PRIMARY_PROVIDER: 'chatgpt' | 'claude' | 'qwen' | 'deepseek' | 'kimi' | 'private'
   //
   // ✨ PROVIDER FALLBACK (Tingkatkan penggunaan AI):
   //   QWEN    → Try QWEN     → Error? → Fallback Private Agent
   //   Claude  → Try Claude   → Error? → Fallback Private Agent
   //   ChatGPT → Try ChatGPT  → Error? → Fallback Private Agent
   //   DeepSeek→ Try DeepSeek → Error? → Fallback Private Agent
+  //   Kimi    → Try Kimi     → Error? → Fallback Private Agent
   //   private → Private Agent only (skip all external AI)
   //
   // Fallback otomatis jika primary provider gagal (token error, billing, API error, timeout).
