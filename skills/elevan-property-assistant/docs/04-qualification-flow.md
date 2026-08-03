@@ -709,6 +709,94 @@ Salam hangat,
 ❌ ✓ Masuk: Juni                          ✅ (omit — Q8 is ❓)
 ```
 
+### Defects seen in real production summaries — do not repeat these
+
+Every example below is a REAL line that shipped to a customer. Read them as the
+failure modes this format actually produces, not hypotheticals.
+
+**1. ✓ never pairs with a "not asked" placeholder.** A checkmark asserts the field
+is answered; `(Belum ditanyakan)` asserts it is not. Together they are nonsense.
+
+```
+❌ ✓ Keputusan bersama: (Belum ditanyakan)
+❌ ✓ Tower/Lantai: (Belum ditanyakan)
+✅ (omit the line entirely, or render it with ✗ if you are showing gaps on purpose)
+```
+
+**2. Never echo the customer's raw sentence as a field value.** Normalize it.
+
+```
+❌ ✓ Durasi sewa: Saya booking seminggu aja, kak
+✅ ✓ Durasi sewa: *1 minggu*
+```
+
+**3. Never repeat the same landmark in one anchor line.** The anchor is assembled
+from every "dekat X" across the chat PLUS the Q6 answer, so customers who mention a
+place twice produce duplicates. Collapse them — including when one name contains
+another.
+
+```
+❌ ✓ Patokan lokasi: Dekat PTC, Ciputra world dan pasar, dekat pasar, PTC dan ciputra world
+✅ ✓ Patokan lokasi: *Dekat PTC, Ciputra World, pasar*
+
+❌ ✓ Patokan lokasi: Dekat Kampung warna Jodipan, dekat cafe, resto dan wisata Kampung warna Jodipan
+✅ ✓ Patokan lokasi: *Dekat Kampung Warna Jodipan, cafe, resto*
+```
+
+**4. The anchor line holds PLACES only.** A wish or an instruction to you is not a
+landmark — route it to Prefer.
+
+```
+❌ ✓ Patokan lokasi: Dekat pakuwon, tolong carikan tempat yang dingin dan asri
+✅ ✓ Patokan lokasi: *Dekat Pakuwon*
+   ✓ Prefer: *Tempat yang sejuk & asri*
+```
+
+**5. Hindari and Prefer are two separate lists — never fold one into the other.**
+A positively-framed wish belongs in Prefer; state the avoidance plainly in Hindari.
+
+```
+❌ ✓ Hindari: 1. Tempat yang sejuk : Hindari tempat yang panas
+             2. Akses jalan lancar : Hindari tempat macet
+✅ ✓ Hindari: 1. Tempat panas
+             2. Jalan macet
+   ✓ Prefer:  1. Tempat sejuk
+             2. Akses jalan lancar
+```
+
+**6. Viewing holds a date/time — never anything else.** If the customer asked for
+listings instead of a viewing, that is not a viewing.
+
+```
+❌ ✓ Viewing: Minta listing
+✅ (omit the Viewing line — no viewing was scheduled)
+```
+
+**7. Sanity-check the budget against the property type before printing it.** A tier
+label must match the number beside it. Rp 100 juta–500 juta **per bulan** for a hotel
+room is not "Terjangkau" — it is a mis-mapped tier. If the range looks impossible for
+the type and period, do not print it; re-ask Q3.
+
+```
+❌ ✓ Budget: Terjangkau (Rp 100.000.000 - Rp 500.000.000 /bln)   ← hotel
+✅ ✓ Budget: *Rp 500.000 - Rp 1.500.000 /malam*
+```
+
+**8. Capitalize place names.** They are proper nouns even when typed lowercase.
+
+```
+❌ ✓ Lokasi: merr          ✅ ✓ Lokasi: *MERR, Surabaya*
+❌ ✓ Lokasi: nganjuk       ✅ ✓ Lokasi: *Nganjuk*
+```
+
+**9. Strip conversational filler from every value.** Words like `juga`, `aja`,
+`saja`, `sama`, `kak`, `nya` are speech, not data.
+
+```
+❌ ✓ Patokan lokasi: Dekat pasar juga
+✅ ✓ Patokan lokasi: *Dekat pasar*
+```
+
 ### After the summary
 
 The state block gains:
