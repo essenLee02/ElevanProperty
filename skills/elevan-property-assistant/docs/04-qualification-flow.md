@@ -1067,6 +1067,59 @@ Treat every one of these lines as work you still owe the customer.
 ✓ Viewing: (Belum ditanyakan)       ← you never asked Q9b/Q9c
 ```
 
+**11. Every field value is ONE LINE — never merge two different answers into one
+field.** A real production summary (Malang hotel booking, 4 Agu 2026) rendered
+`✓ Area: *kota Malang\nKamar yang standard*` — the city name and an unrelated
+room-type answer glued together with a line break. If the source data for a field
+looks like two different answers stitched together, the field is **not** valid data;
+treat it as if Q2c were ❓ and omit the line rather than copying the mess.
+
+```
+❌ ✓ Area: *kota Malang
+             Kamar yang standard*
+✅ (omit the Area line — Q2c was never actually answered with a district name)
+```
+
+**12. `Area` is never just a restatement of `Kota`.** Q2 (Kota) and Q2c (Area) are
+different questions; the area is a neighbourhood/kecamatan **inside** the city, never
+the city name itself and never an answer to some other question (room type,
+facilities, etc). This matters even more here than for other agents — since this
+skill has no backend qualification-state block to fall back on, you are the only
+thing keeping Kota and Area from being conflated.
+
+```
+❌ ✓ Kota: *Malang*   ✓ Area: *Kota Malang*   ← Area just repeats Kota, not a real area
+✅ ✓ Kota: *Malang*   (Area line omitted — customer never named a district)
+```
+
+**13. `Keputusan bersama` is copied from the Q9 answer — never a fabricated quote.**
+A real production summary invented `✓ Keputusan bersama: *Iya, Kak\nSaya survei
+bersama istri*`, dialogue that reads like the customer said it but does not match
+anything they actually typed. Only write what the customer said in response to Q9,
+normalized to a short phrase — never compose a sentence and put it in their mouth,
+even if it "sounds like" something they might have said.
+
+```
+❌ ✓ Keputusan bersama: *Iya, Kak
+                          Saya survei bersama istri*
+✅ ✓ Keputusan bersama: *Bersama istri*
+```
+
+**14. `Viewing` uses the ABSOLUTE date the customer/AI actually settled on, never a
+relative word you insert yourself.** A real production summary showed `✓ Viewing:
+*Besok siang jam 2*` — "besok" never appeared anywhere in that chat; the AI
+substituted a relative word for a concrete date it should have carried forward
+verbatim ("DD Bulan YYYY"). If you stated a date earlier in the conversation while
+asking for the hour (e.g. "untuk tanggal 5 Agustus 2026, jam berapa yang pas?"),
+that IS the answer to "when" — copy it forward into the summary; do not replace it
+with "besok"/"lusa"/any relative word, and do not drop it just because the customer's
+reply only contained the hour.
+
+```
+❌ ✓ Viewing: *Besok siang jam 2*
+✅ ✓ Viewing: *Jam 2 siang, 5 Agustus 2026*
+```
+
 **Before any summary, these must have been ASKED at least once** (an answer — including
 a refusal — is fine; silence is not):
 

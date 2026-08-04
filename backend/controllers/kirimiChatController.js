@@ -49,7 +49,7 @@ const { hasPropertyKeyword,
         isPropertyContextContinuation,
         isInPropertyFlow,
         isPostSummaryDormant }          = require('../utils/propertyKeywordFilter');
-const { generateWhatsAppAIReply }       = require('../services/whatsappAIService');
+const { generateWhatsAppAIReply, normalizeAiResponderLabel } = require('../services/whatsappAIService');
 const { getConversationHistory }        = require('../services/sessionService');
 const { sanitizeLog, maskPhone, maskName, appendSentViaTag, isOwnEcho, stripOwnEcho, buildOffTopicRedirect } = require('../utils/whatsappUtils');
 
@@ -391,6 +391,13 @@ async function processIncomingMessage(body, agent) {
   // ── Skip pesan kosong, grup & pesan kita sendiri ────────────────────
   if (!message) return;
   if (fromMe) {
+    // ⛔ AGENT INTERRUPTION — bila pesan keluar ini BUKAN balasan AI kita sendiri
+    // (tidak ada footer "Sent via …"), berarti agent baru saja mengetik LANGSUNG
+    // ke customer ini lewat app WhatsApp di device yang sama. Itu artinya agent
+    // mengambil alih — matikan AI untuk customer ini OTOMATIS, tanpa perlu
+    // perintah eksplisit. Lihat maybeHandleAgentInterruption() untuk detail.
+    const { maybeHandleAgentInterruption } = require('../services/customerAiToggleService');
+    await maybeHandleAgentInterruption({ customerPhone: sender, message, agent, platform: 'kirimi', customerName: name });
     console.log(`[KIRIMI] Skip pesan keluar (fromMe) ke ${maskPhone(sender)}`);
     return;
   }
@@ -589,6 +596,7 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
     role          : 'customer',
     message,
     channel       : 'whatsapp',
+    customer_phone: sender,
     metadata      : JSON.stringify({ agentName: agent.name, messageId, platform: 'kirimi' })
   });
 
@@ -621,6 +629,8 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
     role          : 'ai',
     message       : aiResult.reply,
     channel       : 'whatsapp',
+    customer_phone: sender,
+    ai_responder  : normalizeAiResponderLabel(aiResult.provider),
     metadata      : JSON.stringify({ aiProvider: aiResult.provider, contextSource: ctxSource })
   });
 

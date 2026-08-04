@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "env:check": "node -e \"require('dotenv').config({path:require('path').resolve(__dirname,'.env')}); console.log({PORT:process.env.PORT, DB_NAME:process.env.DB_NAME, OPENAI_MODEL:process.env.OPENAI_MODEL, CLAUDE_MODEL:process.env.CLAUDE_MODEL, CHATBOT_COOKIE_TTL_MINUTES:process.env.CHATBOT_COOKIE_TTL_MINUTES})\"",
+    "env:check": "node -e \"require('dotenv').config({path:require('path').resolve(__dirname,'.env')}); console.log({PORT:process.env.PORT, DB_NAME:process.env.DB_NAME, CHAT_GPT_MODEL:process.env.CHAT_GPT_MODEL, CLAUDE_MODEL:process.env.CLAUDE_MODEL, CHATBOT_COOKIE_TTL_MINUTES:process.env.CHATBOT_COOKIE_TTL_MINUTES})\"",
     "reinstall": "npm install",
     "lint": "eslint ."
   },

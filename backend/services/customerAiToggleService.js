@@ -231,10 +231,121 @@ async function maybeHandleAiToggleCommand({ message, senderPhone, agent }) {
   }
 }
 
+/* ══════════════════════════════════════════════════════════════════════════════
+   AGENT INTERRUPTION — handover OTOMATIS, tanpa perintah eksplisit
+══════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Handover OTOMATIS: agent tiba-tiba mengetik LANGSUNG ke seorang customer
+ * (bukan ke nomornya sendiri) di tengah AI sedang menjawab customer itu. AI
+ * harus BERHENTI SEPENUHNYA untuk customer ini — tidak menunggu perintah
+ * eksplisit "matikan AI", karena tindakan agent mengetik itu SENDIRI sudah
+ * menyatakan maksudnya: mengambil alih.
+ *
+ * MEKANISME DETEKSI: webhook WhatsApp meng-echo pesan KELUAR (yang dikirim
+ * dari nomor terhubung agent) sebagai event `fromMe:true`. Selama ini event
+ * itu HANYA di-skip diam-diam oleh setiap controller — tidak pernah dibedakan
+ * apakah isinya balasan AI kita sendiri, atau ketikan MANUAL agent lewat app
+ * WhatsApp di HP-nya (device yang sama dengan yang dipakai bot).
+ *
+ * Pembeda yang sudah tersedia: SETIAP balasan AI selalu diberi footer
+ * "Sent via <AI_PRIMARY_TAG>" oleh `appendSentViaTag()` sebelum dikirim —
+ * `isOwnEcho()` sudah mengenali footer ini. Sebuah `fromMe:true` TANPA footer
+ * itu PASTI bukan pesan yang dikirim oleh pipeline AI kita → satu-satunya
+ * sumber lain untuk event `fromMe:true` adalah agent mengetik manual.
+ *
+ * ⚠️ Hanya aktif bila `AI_PRIMARY_TAG` terisi — tanpa tag, `isOwnEcho()` SELALU
+ * false, dan setiap balasan AI sendiri akan salah terbaca sebagai interupsi
+ * (mematikan AI untuk customer yang justru sedang dilayani AI). Fail-safe:
+ * bila tag kosong, fungsi ini tidak melakukan apa pun (biarkan skip lama).
+ *
+ * PENCATATAN TRANSKRIP (BARU): sebelum ini, pesan manual agent pada event
+ * `fromMe:true` HILANG TOTAL — tidak pernah masuk `chat_messages` sama sekali.
+ * Sekarang SETIAP pesan manual (bukan hanya yang PERTAMA kali mematikan AI)
+ * dicatat sebagai baris `role:'ai'` dengan `ai_responder:'agent interruption'`
+ * (bukan nama provider apa pun — ini penanda eksplisit bahwa baris ini
+ * ketikan MANUSIA, bukan hasil panggilan AI provider), supaya riwayat
+ * percakapan tetap utuh setelah agent mengambil alih.
+ *
+ * @param {object} p
+ * @param {string} p.customerPhone - nomor customer (= `sender` pada event fromMe:true)
+ * @param {string} p.message       - isi pesan keluar yang di-echo webhook
+ * @param {object} p.agent         - row users agent pemilik terminal ini
+ * @param {string} p.platform      - 'kirimi' | 'fonnte' | 'timelinesai' — untuk
+ *                                    membentuk `source` ChatSession yang KONSISTEN
+ *                                    dengan alur normal controller pemanggil.
+ * @param {string} [p.customerName] - nama tampilan customer (opsional, untuk
+ *                                    ChatSession BARU bila sesi belum pernah ada).
+ * @returns {Promise<{handedOver:boolean, customerName?:string}|null>} null = tidak relevan
+ */
+async function maybeHandleAgentInterruption({ customerPhone, message, agent, platform, customerName }) {
+  const tag = String(process.env.AI_PRIMARY_TAG || '').trim();
+  if (!tag) return null;   // fail-safe — lihat catatan di atas
+
+  const { isOwnEcho } = require('../utils/whatsappUtils');
+  if (isOwnEcho(message)) return null;   // ini balasan AI kita sendiri, bukan interupsi
+
+  const phone = normPhone(customerPhone);
+  if (!phone || !agent?.user_id) return null;
+
+  try {
+    const { Customer, ChatSession, ChatMessage } = require('../models');
+    const row = await Customer.findOne({
+      where: { user_id: String(agent.user_id).toUpperCase(), phone },
+      attributes: ['customer_id', 'name', 'phone', 'ai_response'],
+    });
+    if (!row) return null;   // agent chat ke nomor yang bukan customer terdaftarnya — abaikan
+
+    const wasOn = String(row.ai_response || 'ON').toUpperCase() === 'ON';
+    if (wasOn) {
+      await Customer.update(
+        { ai_response: 'OFF', updated_date: _todayDate(), updated_by: String(agent.user_id).toUpperCase() },
+        { where: { customer_id: row.customer_id } }
+      );
+      console.log(`[AgentInterruption] ⛔ Agent ${agent.user_id} mengetik manual ke ${phone} — AI di-nonaktifkan otomatis untuk customer ini.`);
+    }
+
+    // Catat pesan manual ini ke transkrip — SELALU, walau ai_response sudah OFF
+    // sebelumnya (agent mungkin melanjutkan obrolan; setiap baris tetap bagian
+    // sah dari riwayat, bukan hanya baris PERTAMA yang memicu handover).
+    try {
+      const source = `${platform || 'whatsapp'}_${String(agent.name || '').toLowerCase().replace(/\s+/g, '_')}`;
+      let session = await ChatSession.findOne({ where: { normalizedPhone: phone, source } });
+      if (!session) {
+        const displayName = customerName || row.name || 'Customer';
+        session = await ChatSession.create({
+          name: displayName, normalizedName: String(displayName).toLowerCase(),
+          phone, normalizedPhone: phone, source, location: null, normalizedLocation: null,
+        });
+      }
+      await ChatMessage.create({
+        chatSessionId : session.id,
+        user_id       : agent.user_id,
+        role          : 'ai',
+        message,
+        channel       : 'whatsapp',
+        customer_phone: phone,
+        ai_responder  : 'agent interruption',
+        metadata      : JSON.stringify({ agentInterruption: true, handedOverNow: wasOn }),
+      });
+    } catch (logErr) {
+      // Gagal mencatat transkrip TIDAK boleh membatalkan handover di atas —
+      // ai_response sudah tersimpan; ini murni kegagalan pencatatan sekunder.
+      console.error('[AgentInterruption] gagal mencatat pesan ke transkrip:', logErr.message);
+    }
+
+    return { handedOver: wasOn, customerName: row.name };
+  } catch (err) {
+    console.error('[AgentInterruption] gagal handover otomatis:', err.message);
+    return null;   // fail-open — jangan sampai error di sini mengganggu alur webhook
+  }
+}
+
 module.exports = {
   detectAiToggleCommand,
   extractPhones,
   normPhone,
   setAiResponseByPhones,
   maybeHandleAiToggleCommand,
+  maybeHandleAgentInterruption,
 };

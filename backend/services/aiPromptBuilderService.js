@@ -1090,6 +1090,20 @@ function extractQualificationState(history = [], currentMessage = '') {
           const label = (t[3] || '').toLowerCase();
           state.viewingTime = `Jam ${t[1]}${t[2] ? '.' + t[2] : ''}${label ? ' ' + label : ''}`.trim();
         }
+        // ⚠️ FALLBACK tanggal dari kalimat AI sendiri. Bug nyata (4 Agu 2026):
+        // AI kadang MENYATAKAN tanggal survei sambil MENANYAKAN jamnya dalam
+        // SATU kalimat ("...jadwal survei di tanggal 18 Agustus 2026, kira-
+        // kira jam berapa yang paling pas?") — bukan pola interogatif "tanggal
+        // berapa" yang dicek `aiAsksViewDate` di atas, jadi giliran sebelumnya
+        // tidak pernah menyimpan viewingDate. Customer lalu hanya menjawab
+        // jamnya saja ("Jam 2 siang") tanpa mengulang tanggal, dan summary
+        // akhir memakai tanggal fabrikasi/kosong. Di sini kita coba baca
+        // tanggal eksplisit dari PESAN AI ITU SENDIRI, bukan dari jawaban
+        // customer (yang mungkin cuma berisi jam).
+        if (!state.viewingDate) {
+          const dFromAi = parseCustomerDate(ai.message || '');
+          if (dFromAi && dFromAi.formatted) state.viewingDate = dFromAi.formatted;
+        }
       }
     }
 
@@ -1145,7 +1159,32 @@ function extractQualificationState(history = [], currentMessage = '') {
     // red-flags reply AFTER Q6). Only when no landmark is extractable (negative /
     // flexible answers like "bebas", "terserah") keep the raw reply so downstream
     // normalization can render "Bebas".
+    // ⚠️ GUARD (!state.anchorPoint || isCorrectionMsg) — DULU TIDAK ADA. Q6 yang
+    // sudah terjawab bisa TERTIMPA nilai lebih buruk hanya karena pertanyaannya
+    // diulang lagi (bug lain, mis. race condition debounce — lihat
+    // responseDebounce.js) tanpa customer benar-benar ingin mengganti jawaban.
+    // Kasus nyata: jawaban baik "Di Dinoyo" tertimpa "Tdk ada" setelah Q6
+    // ditanya ulang beberapa kali, dan summary akhir menampilkan "Bebas" —
+    // padahal customer sudah menjawab dengan jelas di awal. Sekarang HANYA
+    // pesan RALAT eksplisit yang boleh menimpa jawaban Q6 yang sudah ada.
     if (/patokan|dekat sekolah|dekat kantor|mall tertentu|anchor|wisata|kawasan tertentu|tempat tertentu.*patokan/.test(aiText)) {
+      // Jawaban Q6 berbentuk "Di <NamaTempat>" (bukan "dekat X", tanpa awalan
+      // kedekatan) sering kali sebenarnya nama AREA/kecamatan, bukan patokan
+      // ("Di Dinoyo" saat AI menanyakan patokan → customer memaksudkan area).
+      // Dicek DI LUAR guard anchorPoint di bawah — district punya guard
+      // sendiri (!state.district) dan HARUS tetap jalan walau anchorPoint
+      // sudah terisi lebih dulu oleh landmark Phase 1 (mis. dari jawaban Q5).
+      // Tanpa ini, info area hilang begitu saja saat anchorPoint sudah penuh.
+      if (!state.district) {
+        const asPlace = custResp.trim().match(/^di\s+([A-Za-z][\w'-]*(?:\s+[A-Za-z][\w'-]*){0,2})$/i);
+        if (asPlace) {
+          const cleaned = _cleanDistrictAnswer(asPlace[1].trim());
+          if (!_isJustTheCity(cleaned, state.city)) state.district = cleaned;
+        }
+      }
+    }
+    if (/patokan|dekat sekolah|dekat kantor|mall tertentu|anchor|wisata|kawasan tertentu|tempat tertentu.*patokan/.test(aiText)
+        && (!state.anchorPoint || CORRECTION_RE.test(custResp))) {
       const q6Tokens = extractAnchorTokens(custResp);
       if (q6Tokens.length) {
         for (const t of q6Tokens) {
@@ -1259,12 +1298,38 @@ function extractQualificationState(history = [], currentMessage = '') {
         // menghasilkan "Sendirian" sehingga melanggar aturannya sendiri.
         state.decisionMaker = 'Mandiri';
       } else if (DECISION_SIGNAL_RE.test(lo)) {
-        // Ada sinyal keputusan tapi tak match pola spesifik → simpan apa adanya.
-        state.decisionMaker = resp;
+        // Ada sinyal keputusan tapi tak match pola spesifik. DULU disimpan
+        // MENTAH (`resp` apa adanya) — bila `resp` berasal dari beberapa pesan
+        // yang di-debounce/join (mengandung newline, mis. "Iya, Kak\nSaya
+        // survei bersama istri"), nilai multi-baris kotor itu ikut tersimpan
+        // dan muncul apa adanya di summary customer. Rapikan dulu: satu baris,
+        // whitespace rapi, dipotong wajar — tetap "apa adanya" secara MAKNA,
+        // hanya tidak lagi membawa newline/spasi ganda mentah.
+        state.decisionMaker = resp
+          .replace(/\s*\n+\s*/g, ' — ')
+          .replace(/\s{2,}/g, ' ')
+          .trim()
+          .slice(0, 80);
       }
       // else: tidak ada sinyal keputusan sama sekali → biarkan null (Q9 tetap ❓,
       // AI akan menanyakannya; JANGAN tangkap jawaban yang tak relevan).
     }
+    // Q10 — lease duration, SELF-VOLUNTEERED (independen dari pertanyaan AI).
+    // Customer kerap menyebut durasi TANPA diminta, sering DIGABUNG dengan info
+    // lain dalam satu pesan ("Rencana checkin 2 minggu lagi, Kak. Durasi sewa
+    // 5 hari") — di sini "2 minggu" adalah OFFSET tanggal masuk, "5 hari" adalah
+    // DURASI. Blok Q10 di bawah (yang butuh aiText bertanya durasi) tidak akan
+    // pernah jalan kalau AI justru sedang menanyakan hal lain (mis. tanggal
+    // check-in) — akibatnya durasi hilang dan Q8 malah salah menangkap durasi
+    // sebagai tanggal, atau leaseDuration tetap ❓ selamanya. Anchor KETAT pada
+    // kata "durasi" itu sendiri (bukan sekadar angka+satuan pertama di kalimat)
+    // supaya "2 minggu" (bagian dari tanggal) tidak ikut tertangkap secara keliru.
+    if (!state.leaseDuration) {
+      const DURATION_ANCHOR_RE = /durasi\s*(?:sewa|menginap|booking|nginap|kontrak)?\s*[:\-]?\s*(\d+)\s*(hari|malam|minggu|pekan|bulan|tahun|thn|day|days|night|nights|week|weeks|month|months|year|years)\b/i;
+      const m = custResp.match(DURATION_ANCHOR_RE);
+      if (m) state.leaseDuration = normalizeDuration(`${m[1]} ${m[2]}`);
+    }
+
     // Q10 — lease duration
     // Skip if customer answers with a date instead of a duration (e.g. "26 Juni 2026" → misunderstood question)
     // Like Q7, the LLM paraphrases freely and often drops the word "sewa"
@@ -2596,6 +2661,10 @@ ${resolvedAppName}
 - **⛔ DILARANG KERAS: Jangan tampilkan summary jika Q6 (Patokan lokasi) masih ❓.** Tanyakan Q6 dulu.
 - **⛔ Label "Hindari" TIDAK ADA** dalam template brief. Jangan gunakan label "Hindari" — gunakan "Red flags" jika Q5 ✅.
 - **⛔ Q9 nilai "Mandiri"** — jika customer memutuskan sendiri, tampilkan persis: "Mandiri". Jangan tulis "Solo (mandiri)", "Solo", atau varian lain.
+- **⛔ DILARANG KERAS: setiap nilai field HARUS SATU BARIS, tanpa line break di dalamnya.** Jika baris QUALIFICATION STATE tampak menggabungkan dua info berbeda (mis. nama kota + jawaban pertanyaan lain yang tidak terkait), itu BUKAN nilai field yang sah — jangan disalin apa adanya, dan jangan digabung sendiri. Field seperti itu dianggap ❓ dan barisnya dilewati.
+- **⛔ DILARANG KERAS: "Area" TIDAK BOLEH sama dengan/hanya mengulang nama Kota (Q2), dan TIDAK BOLEH berisi jawaban dari pertanyaan lain** (mis. tipe kamar, fasilitas). Area hanya nama area/kecamatan DI DALAM kota tersebut. Jika QUALIFICATION STATE Q2c ❓ → baris "Area" TIDAK ADA di summary sama sekali, meskipun nama kota disebut berkali-kali di riwayat chat.
+- **⛔ DILARANG KERAS: "Keputusan bersama" HANYA salinan PERSIS nilai Q9 di QUALIFICATION STATE.** JANGAN mengarang kutipan/dialog customer ("Iya, Kak... saya survei bersama istri") yang tidak muncul sebagai nilai Q9. Jika Q9 ❓ → baris ini TIDAK ADA.
+- **⛔ DILARANG KERAS: "Viewing" TIDAK BOLEH memakai kata relatif ("besok", "lusa", "minggu depan").** QUALIFICATION STATE Q9b sudah berisi tanggal ABSOLUT hasil normalisasi ("DD Bulan YYYY") — salin PERSIS itu. Jangan menebak atau mengganti dengan kata relatif apa pun.
 - One question per message only.
 - Maximum 12 AI messages before showing brief (even if incomplete).
 - ${showCatalogAfterBrief

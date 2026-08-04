@@ -282,7 +282,7 @@ class ContactController {
       },
       message: success
         ? 'AI provider and Fonnte configuration are ready.'
-        : 'AI provider or Fonnte configuration is not ready. Check OPENAI_API_KEY, ANTHROPIC_API_KEY, ENABLE_CLAUDE_FALLBACK, and FONNTE_TOKEN in backend/.env.'
+        : 'AI provider or Fonnte configuration is not ready. Check CHAT_GPT_API_KEY, ANTHROPIC_API_KEY, ENABLE_CLAUDE_FALLBACK, and FONNTE_TOKEN in backend/.env.'
     });
   }
 }

@@ -42,6 +42,39 @@ const HISTORY_WINDOW = (() => {
   return Number.isFinite(n) && n >= 24 ? n : 60;
 })();
 
+/**
+ * Normalisasi `result.provider` (nilai internal whatsappAIService, banyak
+ * variasi historis) menjadi label `chat_messages.ai_responder` yang bersih:
+ * salah satu dari chatgpt|claude|qwen|deepseek|kimi|private, atau `null`
+ * bila balasan ini BUKAN benar-benar hasil AI provider mana pun.
+ *
+ * ⚠️ ATURAN WAJIB (user, 4 Agu 2026): ai_responder mencatat provider yang
+ * BENAR-BENAR menjawab, BUKAN sekadar menyalin AI_PRIMARY_PROVIDER dari .env.
+ * Saat primary provider gagal/token habis dan sistem otomatis fallback ke
+ * chatbotPrivateController.js, nilainya HARUS 'private' — walau
+ * AI_PRIMARY_PROVIDER di .env masih tertulis 'chatgpt', misalnya.
+ *
+ * Pemetaan:
+ *   'chatgpt'|'claude'|'qwen'|'deepseek'|'kimi'  → apa adanya (provider asli menjawab)
+ *   'private_agent'                              → 'private' (fallback ke Private Agent)
+ *   'qualification'                               → null (gerbang info-minimum,
+ *                                                    belum ada AI provider ATAU
+ *                                                    Private Agent yang dipanggil)
+ *   'fallback_generic'                            → null (last-resort statis,
+ *                                                    bukan hasil provider mana pun)
+ *   lainnya/tidak dikenal                          → null (jangan menebak)
+ *
+ * @param {string} rawProvider - `result.provider` dari generateWhatsAppAIReply()
+ * @returns {string|null}
+ */
+function normalizeAiResponderLabel(rawProvider) {
+  const KNOWN_PROVIDERS = new Set(['chatgpt', 'claude', 'qwen', 'deepseek', 'kimi']);
+  const p = String(rawProvider || '').toLowerCase().trim();
+  if (KNOWN_PROVIDERS.has(p)) return p;
+  if (p === 'private_agent') return 'private';
+  return null;   // 'qualification' / 'fallback_generic' / kosong / tidak dikenal
+}
+
 /* ══════════════════════════════════════════════════════════════════════════════
    QUALIFICATION GATE — 4 Minimum Info Required
    (Runs before ANY AI provider is called)
@@ -566,4 +599,5 @@ module.exports = {
   generateWhatsAppAIReply,
   analyzePropertyMessage,
   formatWhatsAppResponse,
+  normalizeAiResponderLabel,
 };

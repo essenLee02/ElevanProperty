@@ -12,7 +12,7 @@ project saat ini — terutama lihat doc **17** untuk ringkasan lengkap perubahan
 
 ---
 
-## Files (urut 00–17, tanpa duplikat)
+## Files (urut 00–18, tanpa duplikat)
 
 | # | File | Isi |
 |---|------|-----|
@@ -21,7 +21,7 @@ project saat ini — terutama lihat doc **17** untuk ringkasan lengkap perubahan
 | 03 | `03-database-design-and-models.md` | Skema tabel + model Sequelize (15 model) |
 | 04 | `04-auth-and-agents.md` | JWT, login/register, agent, normalisasi telepon, token per-agent |
 | 05 | `05-backend-api-and-services.md` | Semua route, controller, service, util |
-| 06 | `06-ai-integration-system.md` | Provider AI (QWEN/Claude/ChatGPT/DeepSeek → Private, tanpa cross-AI), whatsappAIService, katalog per-agent + fallback fasilitas standar, prompt builder, skill loader |
+| 06 | `06-ai-integration-system.md` | Provider AI (DeepSeek/Kimi/QWEN/ChatGPT/Claude → Private, tanpa cross-AI), whatsappAIService, katalog per-agent + fallback fasilitas standar, prompt builder, skill loader |
 | 07 | `07-frontend-and-modules.md` | Vue 3, router/auth guard, 6 modul master, ConfirmModal, Facility, vendor global (App.vue) |
 | 08 | `08-fonnte-whatsapp-integration.md` | Fonnte multi-agent (implementasi: webhook, per-agent token, flow) |
 | 09 | `09-whatsapp-terminal-multiagent.md` | Terminal multi-agent: Fonnte + Kirimi + TimelinesAI, dedup DB, fromMe/group filter, cookie response timer, MASSEGE_TERMINAL, gate, routing |
@@ -32,7 +32,9 @@ project saat ini — terutama lihat doc **17** untuk ringkasan lengkap perubahan
 | 14 | `14-external-integrations-s3-email.md` | S3, Email, dan integrasi eksternal lain |
 | 15 | `15-deployment-and-troubleshooting.md` | Deploy checklist, NGROK, start command, troubleshoot |
 | 16 | `16-facility-city-ai-context.md` | Facility & city DB injection into AI prompt (aiContextService) |
-| 17 | `17-recent-updates-and-reconstruction-checklist.md` | BARU: konsolidasi perubahan sesi Juli 2026 + checklist rekonstruksi lengkap |
+| 17 | `17-recent-updates-and-reconstruction-checklist.md` | Konsolidasi perubahan sesi Juli 2026 + checklist rekonstruksi lengkap |
+| 18 | `18-chatbot-private-agent-fallback.md` | BARU (V7): Private Agent architecture, ConversationQualifier, fallback trigger, vs LLM path comparison |
+| 19 | `19-feature-routes-and-modules-reference.md` | BARU (V7): Quick lookup — feature → controller/service/model/route, CRUD examples, debugging paths |
 
 ---
 
@@ -45,7 +47,7 @@ project saat ini — terutama lihat doc **17** untuk ringkasan lengkap perubahan
 - **Tabel database?** → 03 (skema) → 01 (struktur)
 - **Tambah agent WhatsApp?** → 04 (token per-agent) → 03 (kolom users)
 - **RESPOND_CATALOG_RUN (Q1–Q12 selalu jalan; OFF=brief, ON=+katalog per-agent)?** → 06 → 10 → 17
-- **AI provider (QWEN/Claude/ChatGPT/DeepSeek → Private)?** → 06
+- **AI provider (DeepSeek/Kimi/QWEN/ChatGPT/Claude → Private)?** → 06
 - **Data properti backend-driven / katalog per-agent?** → 12 → 03 → 06 → 17
 - **ngrok auto-start?** → 15 → 02
 - **Tambah master data module baru (mengikuti pola Country/Property)?** → 03 → 05 → 07 → 17

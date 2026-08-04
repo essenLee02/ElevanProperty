@@ -130,7 +130,7 @@ conversation actually mentions facilities or landmarks.
 | File | Topic |
 |---|---|
 | `docs/08-catalog-and-recommendations.md` | Matching priority, location fallback, budget expansion, reply templates, Rumah123 |
-| `docs/09-offtopic-and-escalation.md` | Off-topic guard (82 categories) + exceptions, negotiation limits, escalation |
+| `docs/09-offtopic-and-escalation.md` | Off-topic guard (82 categories) + exceptions, agent self-chat admin commands (AI/catalog on-off), agent interruption auto-handover, negotiation limits, escalation |
 | `docs/10-date-money-parsing.md` | 35 date rules, 51 budget cases, 13 rental periods |
 | `docs/11-house-pilots.md` | House v2 agent-representative pilot + v1 listing-referral pilot |
 

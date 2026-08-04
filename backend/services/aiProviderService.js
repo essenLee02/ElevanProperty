@@ -56,6 +56,14 @@ function getPrimaryAIProvider() {
 // dieksekusi, jadi susunan lama akan melempar ReferenceError bila fungsi ini pernah
 // dipanggil saat modul masih dimuat. Aman hari ini, tapi persis kelas bug yang
 // membuat M62/M63 senyap — jadi dirapikan, bukan dibiarkan.
+//
+// ⛔ ATURAN WAJIB (user, 4 Agu 2026): SETIAP primary — Kimi, DeepSeek, Qwen,
+// Claude, ChatGPT — bila error (token habis, key invalid, network, dll) LANGSUNG
+// jatuh ke Private Agent (chatbotPrivateController.js). TIDAK PERNAH mencoba
+// provider eksternal LAIN dulu. Karena itu tiap key di bawah HANYA berisi SATU
+// elemen (dirinya sendiri) — JANGAN pernah menambah provider kedua ke array
+// manapun di bawah ini, itu akan melanggar aturan ini secara diam-diam.
+// Terkunci oleh tests/providerFallbackRule.test.js.
 const PROVIDER_ORDER = {
   qwen     : ['qwen'],
   claude   : ['claude'],

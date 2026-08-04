@@ -9,22 +9,29 @@ gagal, sistem **TIDAK** melompat ke AI eksternal lain — langsung jatuh ke
 ```
 AI_PRIMARY_PROVIDER=qwen      → QWEN     → Private Agent
 AI_PRIMARY_PROVIDER=claude    → Claude   → Private Agent
-AI_PRIMARY_PROVIDER=chatgpt   → ChatGPT  → Private Agent   ← DEFAULT SAAT INI (31 Jul 2026)
+AI_PRIMARY_PROVIDER=chatgpt   → ChatGPT  → Private Agent
 AI_PRIMARY_PROVIDER=deepseek  → DeepSeek → Private Agent
+AI_PRIMARY_PROVIDER=kimi      → Kimi     → Private Agent   ← DEFAULT SAAT INI (3 Agu 2026)
 AI_PRIMARY_PROVIDER=private   → Private Agent (langsung, tanpa AI eksternal)
 ```
 
+`PROVIDER_ORDER` di `aiProviderService.js` memberi tiap primary chain **satu
+provider saja** (`{ qwen:['qwen'], claude:['claude'], chatgpt:['chatgpt'],
+deepseek:['deepseek'], kimi:['kimi'] }`) — primary gagal → LANGSUNG Private
+Agent, tidak mencoba provider eksternal lain lebih dulu.
+
 > ⚠️ **Diagnosis wajib cek jalur AKTUAL, bukan asumsi.** `AI_PRIMARY_PROVIDER`
-> pernah berganti dari `deepseek` ke `chatgpt` tanpa dokumentasi ini
-> diperbarui. Bug re-ask-loop pernah salah didiagnosis karena diuji terhadap
-> `chatbotPrivateController.js` (Private Agent) padahal produksi sedang
-> memakai jalur LLM (`aiPromptBuilderService.js`) — dua kode base yang MIRIP
-> tapi TERPISAH. Selalu `grep AI_PRIMARY_PROVIDER .env` dan cek log runtime
-> (`[WhatsAppAI] Calling AI provider: { primaryProvider: … }`) sebelum
-> mereproduksi bug perilaku AI.
+> sudah berganti beberapa kali (`deepseek` → `chatgpt` → `kimi`) tanpa
+> dokumentasi lama diperbarui. Bug re-ask-loop pernah salah didiagnosis karena
+> diuji terhadap `chatbotPrivateController.js` (Private Agent) padahal
+> produksi sedang memakai jalur LLM (`aiPromptBuilderService.js`) — dua kode
+> base yang MIRIP tapi TERPISAH. Selalu `grep AI_PRIMARY_PROVIDER .env` dan
+> cek log runtime (`[WhatsAppAI] Calling AI provider: { primaryProvider: … }`)
+> sebelum mereproduksi bug perilaku AI.
 
 Pengecualian: bila primary = `private` dan Private Agent gagal, ada rantai
-darurat eksternal (`executeExternalAIFallbackChain`): DeepSeek → Claude → ChatGPT → QWEN.
+darurat eksternal (`executeExternalAIFallbackChain`), urutan tetap (bukan
+dipengaruhi `AI_PRIMARY_PROVIDER`): **DeepSeek → Kimi → Claude → ChatGPT → QWEN**.
 
 ```
 Customer Message (WhatsApp or Website)
@@ -41,11 +48,42 @@ Ajukan pertanyaan berikutnya (brief interview, belum tampilkan katalog)
 
 Toggle via `backend/.env`:
 ```env
-AI_PRIMARY_PROVIDER=chatgpt          # qwen | claude | chatgpt | deepseek | private
+AI_PRIMARY_PROVIDER=kimi             # qwen | claude | chatgpt | deepseek | kimi | private
 ENABLE_CLAUDE_FALLBACK=true          # efektif = toggle global Claude (on/off)
 ENABLE_CHATBOT_PRIVATE_CONTROLLER=true
 RESPOND_CATALOG_RUN=OFF              # OFF = brief saja ; ON = brief + katalog
 ```
+
+## ⛔ Kebijakan Billing — Larangan Auto-Recharge (WAJIB, 3 Agu 2026)
+
+Untuk **KELIMA** provider (ChatGPT, Claude, QWEN, DeepSeek, Kimi): **DILARANG
+KERAS** menambahkan kode/script/UI apa pun yang melakukan auto-recharge atau
+auto-topup billing saat token/kredit habis. Perilaku yang benar saat kuota
+habis: service melempar error → provider chain jatuh ke Private Agent (lihat
+di atas) → isi ulang kredit **hanya manual** oleh owner via dashboard billing
+masing-masing provider. Didokumentasikan juga sebagai komentar eksplisit di
+`backend/.env` tepat sebelum `CHAT_GPT_API_KEY`.
+
+## Audit Koneksi API Langsung ke Live Endpoint (3 Agu 2026)
+
+Dilakukan pengecekan riil (bukan asumsi) terhadap seluruh 5 provider dengan
+memanggil fungsi `generate*WhatsappReply()` masing-masing secara langsung:
+
+| Provider | Model di `.env` | Hasil |
+|---|---|---|
+| Kimi (primary) | `kimi-k2.6` | ✅ berhasil |
+| DeepSeek | `deepseek-chat` | ✅ berhasil (`deepseek-v4-flash` juga dites, SAMA-SAMA jalan dengan key ini — catatan lama yang bilang v4-flash "tidak tersedia" TIDAK akurat untuk akun ini) |
+| Qwen | `qwen3-vl-flash` | ✅ berhasil |
+| ChatGPT | `gpt-oss-20b` (nilai lama) | ❌ HTTP 400 "model does not exist" — **diperbaiki** ke `gpt-4o-mini` (teruji jalan; `gpt-4.1-mini` juga jalan sebagai alternatif). `gpt-5.6-terra-pro` yang tercantum di komentar `.env` **juga tidak valid** — jangan pakai. |
+| Claude | `claude-3-haiku` | ❌ **HTTP 401 "API key is invalid"** — `CLAUDE_API_KEY` perlu diganti manual oleh owner di console.anthropic.com. Kode & nama env var (mendukung `CLAUDE_API_KEY` maupun alias lama `ANTHROPIC_API_KEY`) sudah benar; murni masalah kredensial, BUKAN bug. |
+
+**Dampak produksi hari ini: NOL** — primary=`kimi` (sehat), dan `PROVIDER_ORDER`
+per-primary hanya berisi provider itu sendiri (lihat di atas), jadi ChatGPT/
+Claude yang bermasalah tidak pernah tersentuh selama primary tetap `kimi`.
+Baru relevan jika: (a) `AI_PRIMARY_PROVIDER` diganti ke `chatgpt`/`claude`, atau
+(b) primary=`private` dan Private Agent gagal → `executeExternalAIFallbackChain`
+akan mencoba Claude & ChatGPT dan gagal di keduanya sebelum lanjut ke provider
+berikutnya dalam urutan (lihat urutan chain di atas).
 
 ## ⚠️ Plafon TPM (Tokens Per Minute) — gpt-4o-mini (BARU, 31 Jul 2026)
 
@@ -130,7 +168,7 @@ kepercayaan lebih cepat daripada landmark basi).
 > — JSON statis benar-benar last resort. Lihat "Agent-Scoped Catalog" di bawah.
 
 > **Larangan:** dilarang membuat `const` hardcode untuk nama model AI. Semua nama
-> model dibaca dari `.env` (`OPENAI_MODEL`, `CLAUDE_MODEL`, `QWEN_MODEL`, `DEEPSEEK_MODEL`).
+> model dibaca dari `.env` (`CHAT_GPT_MODEL`, `CLAUDE_MODEL`, `QWEN_MODEL`, `DEEPSEEK_MODEL`).
 
 ---
 
@@ -397,10 +435,10 @@ Empat wrapper (masing-masing meneruskan `deepseekFn`):
 
 ## ChatGPT Integration (`openaiService.js`)
 
-- Model: `gpt-4o-mini` (from `OPENAI_MODEL` env)
-- Key: `OPENAI_API_KEY`
+- Model: `gpt-4o-mini` (from `CHAT_GPT_MODEL` env)
+- Key: `CHAT_GPT_API_KEY`
 - SDK: official `openai` npm package
-- `OPENAI_STORE_RESPONSE=true` enables response storage in OpenAI dashboard
+- `CHAT_GPT_STORE_RESPONSE=true` enables response storage in OpenAI dashboard
 
 ---
 

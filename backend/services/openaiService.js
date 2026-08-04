@@ -9,7 +9,7 @@ const {
   buildPreferenceExtractionPrompt
 } = require('./aiPromptBuilderService');
 
-const OPENAI_RESPONSES_URL = 'https://api.openai.com/v1/responses';
+const CHAT_GPT_RESPONSES_URL = 'https://api.openai.com/v1/responses';
 
 function _waSource() {
   const t = String(process.env.MESSAGE_TERMINAL || '').toUpperCase();
@@ -101,7 +101,7 @@ function normalizeChatGPTError(error) {
 
   if (status === 401) {
     return tagChatGPTError(
-      new Error('ChatGPT rejected the API key. Please replace OPENAI_API_KEY in backend/.env with a new active key, then restart the backend.'),
+      new Error('ChatGPT rejected the API key. Please replace CHAT_GPT_API_KEY in backend/.env with a new active key, then restart the backend.'),
       { status, originalMessage: apiMessage, fallbackEligible: false }
     );
   }
@@ -115,7 +115,7 @@ function normalizeChatGPTError(error) {
 
   if ((status === 400 || status === 404) && String(apiMessage).toLowerCase().includes('model')) {
     return tagChatGPTError(
-      new Error(`ChatGPT model error: ${apiMessage}. Please check OPENAI_MODEL in backend/.env.`),
+      new Error(`ChatGPT model error: ${apiMessage}. Please check CHAT_GPT_MODEL in backend/.env.`),
       { status, originalMessage: apiMessage, fallbackEligible: false }
     );
   }
@@ -127,13 +127,13 @@ function normalizeChatGPTError(error) {
 }
 
 function getChatGPTConfig() {
-  const apiKey = sanitizeEnvValue(process.env.OPENAI_API_KEY);
-  const model = sanitizeEnvValue(process.env.OPENAI_MODEL);
+  const apiKey = sanitizeEnvValue(process.env.CHAT_GPT_API_KEY);
+  const model = sanitizeEnvValue(process.env.CHAT_GPT_MODEL);
 
   return {
     apiKey,
     model,
-    store: String(process.env.OPENAI_STORE_RESPONSE || 'true').toLowerCase() !== 'false'
+    store: String(process.env.CHAT_GPT_STORE_RESPONSE || 'true').toLowerCase() !== 'false'
   };
 }
 
@@ -141,11 +141,11 @@ async function callChatGPTResponseAPI(input, options = {}) {
   const config = getChatGPTConfig();
 
   if (!config.apiKey) {
-    throw tagChatGPTError(new Error('OPENAI_API_KEY is missing in backend/.env'), { fallbackEligible: false });
+    throw tagChatGPTError(new Error('CHAT_GPT_API_KEY is missing in backend/.env'), { fallbackEligible: false });
   }
 
   if (!config.apiKey.startsWith('sk-')) {
-    throw tagChatGPTError(new Error('OPENAI_API_KEY format is invalid. It should start with sk-.'), { fallbackEligible: false });
+    throw tagChatGPTError(new Error('CHAT_GPT_API_KEY format is invalid. It should start with sk-.'), { fallbackEligible: false });
   }
 
   const payload = {
@@ -158,7 +158,7 @@ async function callChatGPTResponseAPI(input, options = {}) {
     payload.metadata = options.metadata;
   }
 
-  const maxOutputTokens = Number(options.max_output_tokens || process.env.OPENAI_MAX_OUTPUT_TOKENS || 0);
+  const maxOutputTokens = Number(options.max_output_tokens || process.env.CHAT_GPT_MAX_OUTPUT_TOKENS || 0);
   if (maxOutputTokens > 0) payload.max_output_tokens = maxOutputTokens;
 
   try {
@@ -170,7 +170,7 @@ async function callChatGPTResponseAPI(input, options = {}) {
       channel: options.metadata?.channel || 'unknown'
     });
 
-    const response = await axios.post(OPENAI_RESPONSES_URL, payload, {
+    const response = await axios.post(CHAT_GPT_RESPONSES_URL, payload, {
       headers: {
         Authorization: `Bearer ${config.apiKey}`,
         'Content-Type': 'application/json'

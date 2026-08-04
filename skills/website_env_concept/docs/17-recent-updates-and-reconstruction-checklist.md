@@ -403,11 +403,53 @@ bug perilaku AI — jalur produksi mungkin bukan yang diasumsikan.
 
 ### 13.9 AI_PRIMARY_PROVIDER berganti: deepseek → chatgpt
 `.env` produksi sekarang `AI_PRIMARY_PROVIDER=chatgpt`,
-`OPENAI_MODEL=gpt-4o-mini`. Lihat §13.3 untuk implikasi TPM.
+`CHAT_GPT_MODEL=gpt-4o-mini`. Lihat §13.3 untuk implikasi TPM.
 
 ---
 
-## 14. Reconstruction Checklist — Ringkas
+## 15. Update Sesi 3 Agustus 2026 — Provider Kimi + Audit Koneksi API
+
+### 15.1 Provider ke-5 ditambahkan: Kimi (Moonshot AI)
+`services/kimiService.js` (baru), OpenAI-compatible endpoint
+(`https://api.moonshot.ai/v1`). `AI_PRIMARY_PROVIDER` sekarang menerima
+`kimi` di semua tempat yang relevan (`aiProviderService.js` PROVIDER_ORDER +
+`getPrimaryAIProvider`, `skillPromptService.js` mapping ke skill set
+`chat_gpt_responds`). Model default `kimi-k3`; `.env` produksi memakai
+`kimi-k2.6` (juga terbukti jalan). ⚠️ `kimi-k3` **hanya** menerima
+`top_p=0.95` — nilai lain ditolak API dengan pesan eksplisit.
+`AI_PRIMARY_PROVIDER` produksi sekarang **`kimi`** (berganti dari `chatgpt`).
+
+### 15.2 Env var ChatGPT di-rename: `OPENAI_*` → `CHAT_GPT_*`
+`OPENAI_API_KEY`/`OPENAI_MODEL`/`OPENAI_STORE_RESPONSE`/
+`OPENAI_MAX_OUTPUT_TOKENS` → `CHAT_GPT_API_KEY`/`CHAT_GPT_MODEL`/
+`CHAT_GPT_STORE_RESPONSE`/`CHAT_GPT_MAX_OUTPUT_TOKENS`. Diverifikasi 3 Agu
+2026: `openaiService.js` sudah 100% konsisten dengan nama baru, nol sisa
+referensi `OPENAI_*` di seluruh backend.
+
+### 15.3 Audit koneksi API langsung ke live endpoint
+Dipanggil langsung (bukan asumsi dari dokumentasi) — hasil lengkap di doc 06
+§"Audit Koneksi API". Ringkas: Kimi/DeepSeek/Qwen sehat. ChatGPT sempat rusak
+(`CHAT_GPT_MODEL=gpt-oss-20b` → HTTP 400 model tidak ada) — **diperbaiki** ke
+`gpt-4o-mini`. Claude **masih rusak**: HTTP 401 API key invalid — perlu
+diganti manual oleh owner, bukan bug kode. Dampak produksi NOL karena
+primary=`kimi` sehat dan `PROVIDER_ORDER` per-primary tidak menyentuh provider
+lain (lihat doc 06).
+
+### 15.4 Kebijakan billing eksplisit: larangan auto-recharge
+Ditambahkan sebagai komentar wajib di `.env` (tepat sebelum
+`CHAT_GPT_API_KEY`) dan di doc 06: untuk kelima provider, dilarang keras
+auto-recharge/auto-topup kredit lewat jalur apa pun. Kuota habis → biarkan
+error → fallback chain → Private Agent. Isi ulang hanya manual oleh owner.
+
+### 15.5 Koreksi catatan DeepSeek yang tidak akurat
+`.env` sebelumnya mencatat `deepseek-v4-flash` "tidak tersedia di API resmi".
+Dites langsung: **v4-flash tetap berhasil**, sama seperti `deepseek-chat` yang
+kini aktif. Catatan diperbaiki di `.env`, bukan klaim yang bisa dipercaya
+tanpa verifikasi ulang di masa depan.
+
+---
+
+## 16. Reconstruction Checklist — Ringkas
 
 Bila membangun ulang sistem ini dari nol, pastikan urutan berikut tercakup:
 
@@ -423,7 +465,7 @@ Bila membangun ulang sistem ini dari nol, pastikan urutan berikut tercakup:
 - [ ] 3 controller WhatsApp (Fonnte/Kirimi/TimelinesAI) — SINKRON: fromMe
       guard, filter grup, dedup 2-layer (in-memory+DB), cookie response timer,
       registrasi customer otomatis (Q1+Q2), gate `ai_response=OFF`
-- [ ] 5 AI provider (ChatGPT/Claude/QWEN/DeepSeek/Private), satu PRIMARY
+- [ ] 6 AI provider (ChatGPT/Claude/QWEN/DeepSeek/Kimi/Private), satu PRIMARY
       (**cek `.env` aktual** — jangan asumsikan) → Private Agent, nama model
       dari `.env` (tidak boleh hardcode)
 - [ ] Q1–Q14 qualification flow — IDENTIK di kedua mode `RESPOND_CATALOG_RUN`,

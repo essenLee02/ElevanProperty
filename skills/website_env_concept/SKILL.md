@@ -1,9 +1,9 @@
 ---
 name: elevan-property-system
-description: Elevan Property — Node.js+Express backend, Vue 3 frontend, MySQL (Sequelize v6), AI chatbot multi-provider (QWEN/Claude/ChatGPT/DeepSeek → Private Agent, primary saat ini ChatGPT gpt-4o-mini), WhatsApp multi-agent (Fonnte/Kirimi/TimelinesAI, sinkron fromMe/group/dedup DB/cookie-timer), JWT auth, backend-driven agent-scoped property catalog (Property/PropertyFacility/PropertyLocation), fallback fasilitas standar 11-tipe+tier premium, master data 7-modul (Country/Province/City/Location/Facility/Property/Customer) dengan GeneralController + ConfirmModal reusable, Rumah123 via Apify, Google Places landmark live (wired ke jalur LLM) + Google Calendar viewing auto-schedule, Q1–Q14 qualification, ngrok auto-start. Panggil skill ini untuk merekonstruksi atau mengembangkan modul/API/environment/database/framework/komponen/security yang SAMA dengan kondisi project saat ini.
-version: 12.0
+description: Elevan Property — Node.js+Express backend, Vue 3 frontend, MySQL (Sequelize v6), AI chatbot multi-provider (QWEN/Claude/ChatGPT/DeepSeek/Kimi → Private Agent, primary saat ini Kimi kimi-k2.6), WhatsApp multi-agent (Fonnte/Kirimi/TimelinesAI, sinkron fromMe/group/dedup DB/cookie-timer), JWT auth, backend-driven agent-scoped property catalog (Property/PropertyFacility/PropertyLocation), fallback fasilitas standar 11-tipe+tier premium, master data 7-modul (Country/Province/City/Location/Facility/Property/Customer) dengan GeneralController + ConfirmModal reusable, Rumah123 via Apify, Google Places landmark live (wired ke jalur LLM) + Google Calendar viewing auto-schedule, Q1–Q14 qualification, ngrok auto-start. Panggil skill ini untuk merekonstruksi atau mengembangkan modul/API/environment/database/framework/komponen/security yang SAMA dengan kondisi project saat ini.
+version: 13.0
 status: production
-updated: 2026-07-31
+updated: 2026-08-03
 ---
 
 # Elevan Property — System Documentation
@@ -21,10 +21,28 @@ response timer debounce, lazy-chat normalizer). Master data: **Country,
 Province, City, Location, Facility, Property, Customer** — 7 modul CRUD pola
 seragam via `GeneralController` + `ConfirmModal.vue`.
 
-⚠️ **AI_PRIMARY_PROVIDER saat ini `chatgpt`** (gpt-4o-mini) — BUKAN `deepseek`
-seperti versi dokumen sebelumnya. Selalu cek `.env` aktual + log runtime
-sebelum mendiagnosis bug perilaku AI; lihat doc 06 §Plafon TPM untuk implikasi
-penting bagi provider ini.
+⚠️ **AI_PRIMARY_PROVIDER saat ini `kimi`** (Moonshot AI, model `kimi-k2.6`) —
+BUKAN `chatgpt` maupun `deepseek` seperti versi dokumen sebelumnya. 5 provider
+eksternal kini tersedia: **ChatGPT, Claude, QWEN, DeepSeek, Kimi**. Selalu cek
+`.env` aktual + log runtime sebelum mendiagnosis bug perilaku AI; lihat doc 06
+§Plafon TPM untuk implikasi khusus gpt-4o-mini (ChatGPT).
+
+⚠️ **Env var ChatGPT di-rename**: `OPENAI_API_KEY`/`OPENAI_MODEL`/… → **`CHAT_GPT_API_KEY`**/
+**`CHAT_GPT_MODEL`**/dst. Kode sudah 100% konsisten memakai nama baru (diverifikasi
+3 Agu 2026, nol sisa referensi `OPENAI_*` di backend).
+
+⚠️ **Audit koneksi API langsung ke live endpoint (3 Agu 2026)** — hasil:
+Kimi ✅ · DeepSeek ✅ (`deepseek-chat` maupun `deepseek-v4-flash` sama-sama jalan
+dengan key ini) · Qwen ✅ · ChatGPT ✅ setelah `CHAT_GPT_MODEL` diperbaiki ke
+`gpt-4o-mini` (nilai sebelumnya, `gpt-oss-20b`, HTTP 400 "model does not exist";
+`gpt-5.6-terra-pro` yang tercantum di komentar `.env` juga tidak valid — jangan
+pakai) · **Claude ❌ HTTP 401 "API key is invalid"** — `CLAUDE_API_KEY` di `.env`
+perlu diganti manual oleh owner via console.anthropic.com; kode & nama env var
+sudah benar, murni masalah kredensial. Dampak produksi saat ini NOL karena
+primary=`kimi` (rantai fallback per-provider hanya `[primary]` → langsung
+Private Agent, lihat doc 06), tapi Claude akan gagal bila dipakai lewat
+`executeExternalAIFallbackChain` (primary=`private` & Private Agent error) atau
+bila `AI_PRIMARY_PROVIDER` diganti ke `claude`.
 
 ## Doc Files (`docs/`) — urut 00–17
 
@@ -36,10 +54,10 @@ penting bagi provider ini.
                                                   termasuk Customer BARU + facilities.keywords)
 04-auth-and-agents.md                          ← JWT, login/register, token per-agent
 05-backend-api-and-services.md                 ← semua route, controller, service, util
-06-ai-integration-system.md                    ← QWEN/Claude/ChatGPT/DeepSeek→Private (primary=chatgpt),
+06-ai-integration-system.md                    ← QWEN/Claude/ChatGPT/DeepSeek/Kimi→Private (primary=kimi),
                                                   whatsappAIService, katalog per-agent + fallback fasilitas
-                                                  standar, skill loader, ⚠️ plafon TPM OpenAI, Google Places
-                                                  landmark live wiring (BARU)
+                                                  standar, skill loader, ⚠️ plafon TPM ChatGPT, Google Places
+                                                  landmark live wiring, hasil audit koneksi API (3 Agu 2026)
 07-frontend-and-modules.md                     ← Vue 3, router/guard, 7 modul master (+Customer BARU),
                                                   ConfirmModal, vendor global
 08-fonnte-whatsapp-integration.md              ← Fonnte multi-agent (implementasi)
@@ -57,7 +75,7 @@ penting bagi provider ini.
                                                   termasuk §13 update 20 Jul→31 Jul (Customer module,
                                                   skill docs 21→13, plafon TPM, Google Places/Calendar,
                                                   bug loop Q7, rewrite date/facilities/normalizer)
-                                                  + checklist rekonstruksi lengkap (§14)
+                                                  + checklist rekonstruksi lengkap (§16)
 ```
 
 ## Quick Reference
@@ -89,7 +107,7 @@ penting bagi provider ini.
 | Fonnte | Kirim WA contact form + fonnteChatController multi-agent |
 | Kirimi | kirimiChatController multi-agent (device_id per-agent, shared account) |
 | TimelinesAI | timelinesAIChatController multi-agent |
-| QWEN / Claude / ChatGPT / DeepSeek | AI primary (dipilih `AI_PRIMARY_PROVIDER`, satu saja — saat ini `chatgpt`) |
+| QWEN / Claude / ChatGPT / DeepSeek / Kimi | AI primary (dipilih `AI_PRIMARY_PROVIDER`, satu saja — saat ini `kimi`). ⚠️ Claude 401 invalid key (3 Agu 2026), lihat catatan di atas |
 | Private Agent | Fallback terjamin tiap primary (web: chatbot; WA: terminal message) — JALUR TERPISAH dari LLM, jangan disamakan saat debug |
 | Google Sheets | Backup submission contact form |
 | Google Places | Landmark live untuk contoh Q2c/Q6 — wired ke jalur LLM (BARU), saat ini DORMAN (billing Google Cloud project off) |
@@ -106,10 +124,15 @@ penting bagi provider ini.
 
 ```env
 # AI — satu primary → Private Agent (tanpa cross-AI). DILARANG hardcode nama model di kode.
-AI_PRIMARY_PROVIDER=chatgpt        # qwen | claude | chatgpt | deepseek | private  ← default saat ini
+# ⛔ Untuk KELIMA provider: DILARANG auto-recharge/auto-topup saat kredit habis
+# (kebijakan wajib, lihat komentar di .env tepat sebelum CHAT_GPT_API_KEY).
+AI_PRIMARY_PROVIDER=kimi           # qwen | claude | chatgpt | deepseek | kimi | private  ← default saat ini
 ENABLE_CLAUDE_FALLBACK=true        ENABLE_CHATBOT_PRIVATE_CONTROLLER=true
-OPENAI_MODEL=gpt-4o-mini / ANTHROPIC(CLAUDE_MODEL) / QWEN_MODEL / DEEPSEEK_MODEL  (semua dari .env)
-# ⚠️ gpt-4o-mini org TPM limit 60.000/menit — skill docs saja pakai 39–51K. Lihat doc 06.
+CHAT_GPT_API_KEY / CHAT_GPT_MODEL=gpt-4o-mini   # ⚠️ BUKAN lagi OPENAI_API_KEY/OPENAI_MODEL (rename)
+CLAUDE_API_KEY (alias ANTHROPIC_API_KEY) / CLAUDE_MODEL / QWEN_API_KEY / QWEN_MODEL
+DEEPSEEK_API_KEY / DEEPSEEK_MODEL=deepseek-chat
+KIMI_API_KEY / KIMI_MODEL=kimi-k2.6 / KIMI_BASE_URL   # ⚠️ kimi-k3 HANYA terima top_p=0.95
+# ⚠️ gpt-4o-mini (ChatGPT) org TPM limit 60.000/menit — skill docs saja pakai 39–51K. Lihat doc 06.
 DEEPSEEK_BASE_URL / DEEPSEEK_TEMPERATURE / DEEPSEEK_TOP_P / *_MAX_TOKENS
 RESPOND_CATALOG_RUN=OFF            # OFF = brief saja ; ON = brief + katalog per-agent (Q1–Q14 SELALU sama)
 AI_COOKIE_RESPONSE_TIMER=12000     # ms, debounce pesan beruntun WhatsApp sebelum diproses

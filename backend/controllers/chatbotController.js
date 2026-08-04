@@ -94,7 +94,7 @@ class ChatbotController {
       },
       message: ready
         ? 'AI provider configuration is ready. If ChatGPT and Claude fail, chatbotPrivateController can respond as local private agent.'
-        : 'AI provider configuration is not ready. Check OPENAI_API_KEY, ANTHROPIC_API_KEY, or ENABLE_CHATBOT_PRIVATE_CONTROLLER in backend/.env.'
+        : 'AI provider configuration is not ready. Check CHAT_GPT_API_KEY, ANTHROPIC_API_KEY, or ENABLE_CHATBOT_PRIVATE_CONTROLLER in backend/.env.'
     });
   }
 

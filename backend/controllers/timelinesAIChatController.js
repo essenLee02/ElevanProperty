@@ -42,7 +42,7 @@ const { hasPropertyKeyword,
         isPropertyContextContinuation,
         isInPropertyFlow,
         isPostSummaryDormant }          = require('../utils/propertyKeywordFilter');
-const { generateWhatsAppAIReply }       = require('../services/whatsappAIService');
+const { generateWhatsAppAIReply, normalizeAiResponderLabel } = require('../services/whatsappAIService');
 const { getConversationHistory }        = require('../services/sessionService');
 const { sanitizeLog, maskPhone, maskName, appendSentViaTag, isOwnEcho, stripOwnEcho, buildOffTopicRedirect } = require('../utils/whatsappUtils');
 
@@ -337,6 +337,9 @@ async function processIncomingMessage(body, agent) {
   // ── Skip media/non-teks, grup & pesan kita sendiri ───────────────────
   if (!message) return;
   if (fromMe) {
+    // ⛔ AGENT INTERRUPTION — lihat kirimiChatController.js untuk detail lengkap.
+    const { maybeHandleAgentInterruption } = require('../services/customerAiToggleService');
+    await maybeHandleAgentInterruption({ customerPhone: sender, message, agent, platform: 'timelinesai', customerName: name });
     console.log(`[TIMELINESAI] Skip pesan keluar (fromMe) ke ${maskPhone(sender)}`);
     return;
   }
@@ -529,6 +532,7 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
     role          : 'customer',
     message,
     channel       : 'whatsapp',
+    customer_phone: normSender,
     metadata      : JSON.stringify({ agentName: agent.name, messageId, platform: 'timelinesai' })
   });
 
@@ -561,6 +565,8 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
     role          : 'ai',
     message       : aiResult.reply,
     channel       : 'whatsapp',
+    customer_phone: normSender,
+    ai_responder  : normalizeAiResponderLabel(aiResult.provider),
     metadata      : JSON.stringify({ aiProvider: aiResult.provider, contextSource: ctxSource })
   });
 

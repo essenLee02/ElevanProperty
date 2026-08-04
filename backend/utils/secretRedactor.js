@@ -32,8 +32,8 @@ const RULES = [
   // Anthropic / Claude:  sk-ant-api03-xxxx
   { re: /sk-ant-[A-Za-z0-9_-]{8,}/g,                 replace: '[REDACTED_ANTHROPIC_KEY]' },
   // OpenAI (project & legacy): sk-proj-xxxx , sk-xxxx
-  { re: /sk-proj-[A-Za-z0-9_-]{8,}/g,                replace: '[REDACTED_OPENAI_KEY]' },
-  { re: /\bsk-[A-Za-z0-9]{20,}/g,                    replace: '[REDACTED_OPENAI_KEY]' },
+  { re: /sk-proj-[A-Za-z0-9_-]{8,}/g,                replace: '[REDACTED_CHAT_GPT_KEY]' },
+  { re: /\bsk-[A-Za-z0-9]{20,}/g,                    replace: '[REDACTED_CHAT_GPT_KEY]' },
   // Apify: apify_api_xxxx
   { re: /apify_api_[A-Za-z0-9]{10,}/g,               replace: '[REDACTED_APIFY_TOKEN]' },
   // Google API key: AIza....
@@ -59,7 +59,7 @@ const RULES = [
     replace: '[REDACTED_PRIVATE_KEY]' },
 
   // ── Assignment gaya .env untuk nama variabel SENSITIF ──────────────────────
-  // Menangkap: OPENAI_API_KEY=... , ANTHROPIC_API_KEY=... , CLAUDE_API_KEY=... ,
+  // Menangkap: CHAT_GPT_API_KEY=... , ANTHROPIC_API_KEY=... , CLAUDE_API_KEY=... ,
   // *_TOKEN=... , *_SECRET=... , *_PASSWORD=... , DB_PASSWORD=... , dll.
   // Hanya nilai yang disensor; nama variabel dipertahankan agar tetap informatif.
   { re: /^([ \t]*[A-Za-z_][A-Za-z0-9_]*(?:API[_-]?KEY|APIKEY|_KEY|TOKEN|SECRET|PASSWORD|PASSWD|PWD|PRIVATE_KEY|CLIENT_SECRET|ACCESS_TOKEN|REFRESH_TOKEN))[ \t]*=[ \t]*.+$/gim,

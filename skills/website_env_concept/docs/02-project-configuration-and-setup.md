@@ -34,14 +34,14 @@ DB_DIALECT=mysql
 
 > **Larangan (security):** dilarang membuat `const` hardcode nama model AI di kode.
 > Semua nama model WAJIB dibaca dari `.env`. Jangan menaruh komentar inline setelah
-> nilai model (mis. `OPENAI_MODEL=gpt-4o-mini # ...`) — bisa mengorupsi nilai model.
+> nilai model (mis. `CHAT_GPT_MODEL=gpt-4o-mini # ...`) — bisa mengorupsi nilai model.
 
 ### OpenAI (ChatGPT)
 ```env
-OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4o-mini
-OPENAI_STORE_RESPONSE=true
-OPENAI_MAX_OUTPUT_TOKENS=4096
+CHAT_GPT_API_KEY=sk-...
+CHAT_GPT_MODEL=gpt-4o-mini
+CHAT_GPT_STORE_RESPONSE=true
+CHAT_GPT_MAX_OUTPUT_TOKENS=4096
 ```
 
 ### Claude (Anthropic)

@@ -207,6 +207,29 @@ async function ensureRequiredDatabaseColumns() {
     }
   }
 
+  try {
+    const chatMessagesTable = await queryInterface.describeTable('chat_messages');
+    if (chatMessagesTable && !chatMessagesTable.customer_phone) {
+      await queryInterface.addColumn('chat_messages', 'customer_phone', {
+        type: DataTypes.STRING(30),
+        allowNull: true
+      });
+      console.log('Database migration completed: added chat_messages.customer_phone column');
+    }
+    if (chatMessagesTable && !chatMessagesTable.ai_responder) {
+      await queryInterface.addColumn('chat_messages', 'ai_responder', {
+        type: DataTypes.STRING(20),
+        allowNull: true,
+        defaultValue: null
+      });
+      console.log('Database migration completed: added chat_messages.ai_responder column');
+    }
+  } catch (error) {
+    if (!String(error.message || '').toLowerCase().includes('no description found')) {
+      console.warn('Chat messages schema check warning:', error.message);
+    }
+  }
+
 }
 
 sequelize.sync()
@@ -235,7 +258,7 @@ sequelize.sync()
 
     console.log('Database connected and synced');
     console.log('Environment file loaded from:', path.resolve(__dirname, '.env'));
-    console.log('OpenAI key configured:', Boolean(process.env.OPENAI_API_KEY));
+    console.log('OpenAI key configured:', Boolean(process.env.CHAT_GPT_API_KEY));
     console.log('Apify token configured:', Boolean(process.env.APIFY_API_TOKEN) && process.env.APIFY_API_TOKEN !== 'isi_apify_token_anda');
     app.listen(port, () => {
       console.log(`Backend listening at http://localhost:${port}`);

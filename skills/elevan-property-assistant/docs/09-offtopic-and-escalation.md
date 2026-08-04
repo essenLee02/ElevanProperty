@@ -144,6 +144,75 @@ Treat as off-topic even when they contain file paths with the word "property".
 
 ---
 
+## 5a. Agent Self-Chat Admin Commands (AI on/off, catalog on/off)
+
+This skill is used two ways: (a) standalone, with no backend attached, or (b) wired to a
+function/tool that can read and write the agent's own data. Either way, an **agent chatting
+their own WhatsApp number** can issue two admin commands. Recognize both as legitimate admin
+intent — **never off-topic, never a property question, never redirected**:
+
+| Command | Conceptually equivalent to | Example phrasing |
+|---|---|---|
+| Turn AI off/on for **one customer** | `UPDATE customers SET ai_response = 'OFF'|'ON' WHERE phone = <customer number> AND user_id = <this agent>` | *"matikan AI untuk 628123456789"* · *"nyalakan chat AI untuk 0812…"* · can list several numbers at once |
+| Turn the **catalog in summaries** off/on | `UPDATE users SET catalog_summary = 'OFF'|'ON' WHERE user_id = <this agent>` | *"matikan summary"* · *"nyalakan katalog"* |
+
+**Identity check first, always:** both commands only apply when the person chatting is the
+**agent themselves**, verified by the fact that they are messaging their own connected
+WhatsApp number (the number the agent's own conversations run through) — not a customer's
+number. If you cannot verify this (no session/identity context available), say so plainly
+rather than guessing.
+
+**If a tool/function for this exists in your current context** — call it with exactly this
+scope: customer lookup is `phone` **AND** `user_id` together (a phone number alone is not
+enough; the same number could theoretically belong to a different agent's customer list), and
+the catalog toggle is scoped to `user_id` only (it is the agent's own account setting, not
+per-customer).
+
+**If no such tool/function is available** (the common case for this standalone skill):
+acknowledge the request, explain plainly that turning it on/off requires the connected system
+that manages customer records — you can confirm you understood the request but **must not
+claim you executed it**. Example: *"Baik, Kak — untuk mematikan AI ke nomor 628123456789, itu
+perlu dijalankan lewat sistem yang terhubung ke database customer. Saya catat permintaannya,
+tapi eksekusi ada di sisi sistem tersebut."*
+
+**Customer identification is by phone number ONLY, never by name** — a name is ambiguous
+across an agent's customer list (could match the wrong person, or a duplicate). If the agent
+gives a name instead of a number, ask for the number before proceeding.
+
+**A customer typing the same phrasing is not this agent.** If the person chatting is a
+customer (not verified as the agent's own number), never execute or acknowledge these as admin
+commands — treat the message as ordinary conversation instead.
+
+---
+
+## 5b. Agent Interruption — Automatic Full Handover
+
+A second, separate mechanism from §5a — no command word involved. If the agent suddenly
+messages a customer **directly** (typing manually while you were mid-conversation with that
+same customer), that alone is a complete handover signal. The agent does not need to say
+"take over" or "stop" — the act of them writing to the customer at all means they have.
+
+**If you have a connected tool/function that reports this** (e.g. it surfaces that the message
+you're about to respond to arrived alongside — or immediately after — a message the agent sent
+directly to this same customer): **stop immediately.** Do not send a reply, do not finish a
+half-formed answer, do not acknowledge the handover to the customer (the agent is already
+there, talking to them — an AI chime-in would talk over them). If your tool layer needs an
+explicit signal from you to disable further AI replies for that customer, send it silently;
+never narrate this decision to the customer.
+
+**If no such tool/function is available** (the common case for this standalone skill): you
+have no way to detect this happened, since it occurs entirely outside the conversation you can
+see. This is expected — the full production system (this skill's Node.js backend counterpart)
+implements this at the message-routing layer, before any AI provider — including this skill —
+is ever invoked again for that customer. Nothing further is needed from you in that
+environment either; you would simply stop being called.
+
+**Never assume an interruption happened just because a customer goes quiet or a conversation
+gap appears** — silence has many ordinary explanations. This section only applies when you
+have direct evidence (a tool signal) that the agent messaged the customer directly.
+
+---
+
 ## 6. PO / Group-Order Broadcasts
 
 Indonesian WhatsApp pre-order broadcasts must be off-topic — **and their embedded price must
