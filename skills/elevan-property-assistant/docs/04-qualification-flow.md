@@ -623,9 +623,25 @@ comma. `✓ Patokan: *Deket indomaret, cafe dan ubaya*`
 
 ### Q7 — Alternative Areas *(always ask unless volunteered)*
 
+Asks for **another AREA / kecamatan INSIDE the same city** — never another city.
+The city was settled at Q2 and is **not** reopened here.
+
 ```
-ID: Selain lokasi *[area]*, apakah Anda mau pilihan lokasi lainnya? 🗺️
+ID: Selain area *[Area dari Q2c]*, apakah area sekitar masih oke? 🗺️
 ```
+
+| | |
+|---|---|
+| ✅ **Correct** | "Selain area *Pakuwon*, apakah area sekitar masih oke? 🗺️" |
+| ❌ **Wrong** | "Selain *Surabaya*, area sekitar yang masih oke? 🗺️" |
+
+> ⛔ Anchoring Q7 on the **city** reads as offering to move cities — the customer already
+> chose Surabaya at Q2. Anchor on the **area** from Q2c. Use the city name only if the
+> customer has not named an area at all (in practice Q2c fires first, so an area is
+> normally known by the time Q7 is asked).
+>
+> A refusal is an answer, and it refers to the **area**: "Tidak ada" / "tetap di Pakuwon"
+> → record `Fokus di Pakuwon saja`, never "Fokus di Surabaya saja".
 
 ### Q8 — Move-in / Check-in Date *(MANDATORY — never skip)*
 

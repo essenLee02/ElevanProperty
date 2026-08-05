@@ -1124,8 +1124,26 @@ function extractQualificationState(history = [], currentMessage = '') {
           if (d && d.formatted) state.viewingDate = d.formatted;
         }
       }
-      if (aiAsksViewTime && !state.viewingTime && state.viewingDate !== 'Minta listing') {
-        const t = custResp.match(/\b(?:jam|pukul)?\s*(\d{1,2})(?:[.:](\d{2}))?\s*(pagi|siang|sore|malam|am|pm)?\b/i);
+      // ⚠️ JAM YANG DIBERIKAN SUKARELA JUGA HARUS DITANGKAP.
+      // Dulu blok ini HANYA berjalan bila AI baru saja menanyakan jam
+      // (aiAsksViewTime). Kasus nyata (5 Agu 2026): AI menanyakan Q9 (decision
+      // maker), customer menjawab "Saya mau servei 5 hari lagi. Jam 4 sore" —
+      // SATU kalimat berisi tanggal DAN jam. Tanggal tertangkap (pola
+      // "jadwalkan viewing" cocok aiAsksViewDate), tapi jamnya DIBUANG karena
+      // AI belum menanyakan jam. Akibatnya AI bertanya "jam berapa yang paling
+      // pas?" padahal customer sudah menjawabnya (M75).
+      // Aturan: informasi yang SUDAH diberikan customer tidak boleh dibuang
+      // hanya karena urutan pertanyaannya belum sampai situ.
+      const custMentionsClock = /\b(?:jam|pukul)\s*\d{1,2}\b/i.test(custResp);
+      if ((aiAsksViewTime || custMentionsClock) && !state.viewingTime && state.viewingDate !== 'Minta listing') {
+        // Saat jam diberikan sukarela, WAJIB ada kata "jam"/"pukul" eksplisit —
+        // tanpa itu angka seperti "5 hari lagi" atau "3 kamar" bisa salah
+        // terbaca sebagai jam. Saat AI memang bertanya jam, pola longgar tetap
+        // dipakai supaya jawaban telanjang ("4 sore") tetap tertangkap.
+        const timeRe = aiAsksViewTime
+          ? /\b(?:jam|pukul)?\s*(\d{1,2})(?:[.:](\d{2}))?\s*(pagi|siang|sore|malam|am|pm)?\b/i
+          : /\b(?:jam|pukul)\s*(\d{1,2})(?:[.:](\d{2}))?\s*(pagi|siang|sore|malam|am|pm)?\b/i;
+        const t = custResp.match(timeRe);
         if (t) {
           const label = (t[3] || '').toLowerCase();
           state.viewingTime = `Jam ${t[1]}${t[2] ? '.' + t[2] : ''}${label ? ' ' + label : ''}`.trim();
@@ -1265,11 +1283,21 @@ function extractQualificationState(history = [], currentMessage = '') {
       // answered so Q7 goes ✅ and is never asked again. Normalize the refusal
       // into a positive statement of intent so the summary reads
       // "Fokus di Pakuwon saja" instead of the bare "Tidak ada, Kak".
-      // Pakai KOTA, bukan area. Q7 menanyakan area DI LUAR kota ("Selain
-      // Surabaya, area sekitar yang masih oke?"), jadi menolak berarti fokus
-      // di KOTA itu. Memakai district menghasilkan "Fokus di Ngagel saja"
-      // yang salah sasaran — Ngagel justru area DI DALAM Surabaya.
-      state.alternativeAreas = normalizeAltAreaAnswer(custResp, state.city || state.district);
+      // Jangkar penolakan HARUS MENGIKUTI jangkar PERTANYAAN yang benar-benar
+      // diajukan (M76). Q7 kini berjangkar AREA ("Selain area *Pakuwon*, apakah
+      // area sekitar masih oke?") sehingga "tidak ada" = "Fokus di Pakuwon saja".
+      // TAPI provider LLM sering memparafrase; bila kalimatnya ternyata memakai
+      // KOTA, penolakannya harus berbunyi kota — kalau tidak, jawaban customer
+      // dicatat dengan cakupan yang salah (mis. menolak "selain Surabaya" tapi
+      // tercatat "Fokus di Ngagel saja", padahal Ngagel justru DI DALAM Surabaya).
+      // Karena itu: pilih jangkar dari nama yang MUNCUL di pertanyaan AI.
+      const _esc = (v) => String(v || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const askedDistrict = state.district && new RegExp(`\\b${_esc(state.district)}\\b`, 'i').test(aiText);
+      const askedCity     = state.city     && new RegExp(`\\b${_esc(state.city)}\\b`, 'i').test(aiText);
+      const altAnchor     = askedDistrict ? state.district
+                          : askedCity     ? state.city
+                          : (state.district || state.city);
+      state.alternativeAreas = normalizeAltAreaAnswer(custResp, altAnchor);
     }
     // Q9 — decision maker (normalized server-side so AI just copies the value)
     //
@@ -1310,11 +1338,28 @@ function extractQualificationState(history = [], currentMessage = '') {
       const BARE_REFUSAL_RE = /^(?:tdk|tidak|ga|gak|gk|nggak|ngga|enggak|engga|no)\s*(?:perlu|usah|mau|butuh)?\b[\s.,!]*$/i;
       const REFUSES_COORD_RE = /\b(?:tdk|tidak|ga|gak|gk|nggak|ngga|enggak|engga)\s+(?:perlu|usah|mau|butuh)\b/i;
 
+      // ORANG LAIN yang mungkin ikut memutuskan. Bila TIDAK SATU PUN disebut,
+      // customer bertindak sendiri.
+      const OTHER_PERSON_RE = /\b(istri|suami|pasangan|keluarga|orang\s*tua|orangtua|ayah|ibu|bapak|mama|papa|parents|anak|teman|kawan|rekan|saudara|sepupu|kerabat|kakak|adik|om|tante|bos|atasan|partner|kantor|tim)\b/i;
+
       if (BARE_REFUSAL_RE.test(lo.trim()) || REFUSES_COORD_RE.test(lo)) {
         state.decisionMaker = 'Mandiri';
       } else if ((MONTH_ID_RE.test(lo) || MONTH_EN_RE.test(lo) || DATE_ANSWER_RE.test(lo) || SCHEDULING_ONLY_RE.test(lo)) &&
+          !DECISION_SIGNAL_RE.test(lo) && !OTHER_PERSON_RE.test(lo)) {
+        // Q9 berbentuk PILIHAN: "langsung jadwalkan viewing ATAU perlu koordinasi
+        // dulu sama keluarga lain?". Customer yang langsung menjadwalkan survei
+        // untuk dirinya sendiri — TANPA menyebut istri/keluarga/teman/siapa pun —
+        // sudah memilih cabang PERTAMA: tidak perlu koordinasi = Mandiri.
+        // Dulu cabang ini sengaja dibiarkan ❓ agar AI menanyakan otoritas dengan
+        // jelas, tetapi hasilnya AI mengulang Q9 persis setelah customer menjawab
+        // "Saya mau servei 5 hari lagi. Jam 4 sore" (M75). Menjadwalkan survei
+        // sendiri ADALAH jawabannya.
+        state.decisionMaker = 'Mandiri';
+      } else if ((MONTH_ID_RE.test(lo) || MONTH_EN_RE.test(lo) || DATE_ANSWER_RE.test(lo) || SCHEDULING_ONLY_RE.test(lo)) &&
           !DECISION_SIGNAL_RE.test(lo)) {
-        // Jawaban tanggal/jadwal/survei tanpa sinyal keputusan → JANGAN simpan. Q9 ❓.
+        // Menyebut orang lain TAPI tanpa sinyal keputusan yang jelas
+        // (mis. "besok saya lihat sama istri") → ambigu, biarkan Q9 ❓ supaya
+        // AI menanyakan otoritas keputusan dengan jelas. JANGAN mengarang nilai.
       } else if (/\b(saya|aku)\b.{0,40}\b(ambil keputusan|yang memutuskan|yang putuskan|yang tentukan|yang decide)\b/i.test(lo) ||
           /\b(ambil keputusan|yang memutuskan|saya sendiri)\b/i.test(lo) ||
           /\btidak perlu koordinasi\b|\b(nggak|ngga|gak|ga|tdk|tidak)\s+perlu koordinasi\b|\btanpa koordinasi\b|\blangsung\s+(bisa|aja|saja|jadwal\w*|viewing|survei|survey|book\w*)\b|\bbisa langsung\b/i.test(lo)) {
@@ -1446,6 +1491,21 @@ function extractQualificationState(history = [], currentMessage = '') {
     // Q5 — red flags
     if (!state.redFlags && /pasti tidak cocok|ingin dihindari|yang\s+dihindari|hadap barat|gang sempit|rumah tua|rawan banjir|rel kereta/.test(aiText)) {
       state.redFlags = custResp;
+    }
+    // ⚠️ RED FLAG YANG DIBERIKAN SUKARELA (di luar giliran Q5) JUGA DICATAT.
+    // Customer sering menyebut hal yang dihindari saat menjawab pertanyaan LAIN —
+    // kasus nyata (5 Agu 2026): Q2b "sudah lihat berapa rumah?" dijawab
+    // "Saya pingin cari rmh yg tdk banjir, tdk panas, tdk bau". Dulu kalimat itu
+    // hanya masuk searchHistory, sehingga Q5 tetap ❓ dan baris "Hindari" HILANG
+    // dari summary — padahal AI sempat mengakuinya di chat ("Berarti yang
+    // dihindari: rawan banjir, area panas, bau"). Data yang sudah diberikan
+    // customer tidak boleh hilang hanya karena urutan pertanyaan belum sampai (M75).
+    // Syarat ketat: minimal DUA penanda penghindaran ("tidak X, tidak Y") atau
+    // kata hindar/jangan eksplisit — supaya satu kata "tidak" biasa tidak ikut.
+    if (!state.redFlags) {
+      const avoidHits = (custResp.match(/\b(?:tidak|tdk|ga|gak|gk|nggak|ngga|enggak|jangan|hindari|anti|bukan|tanpa)\s+\S+/gi) || []).length;
+      const explicitAvoid = /\b(hindari|dihindari|jangan|jauh\s+dari|anti)\b/i.test(custResp);
+      if (avoidHits >= 2 || explicitAvoid) state.redFlags = custResp;
     }
     // Q12 — apartment preference (tower/lantai/orientasi)
     // Simpan bentuk RINGKAS, bukan kalimat mentah. Tanpa ini summary menulis
@@ -1889,9 +1949,17 @@ Kalau sudah ada area/kecamatan tertentu, boleh sekalian disebut ya.` };
     return { q: 'Q6', hint: 'Ada lokasi atau tempat tertentu yang jadi patokan? Misalnya dekat sekolah anak, mal, wisata, kawasan tertentu, atau jalan tertentu? 📍' };
   }
 
-  // Q7 — Area alternatif
-  if (!state.alternativeAreas)
-    return { q: 'Q7', hint: `Selain ${loc}, area sekitar yang masih oke? 🗺️` };
+  // Q7 — Area alternatif (AREA lain DI DALAM kota yang sama, BUKAN kota lain).
+  // ⚠️ Kota sudah ditetapkan di Q2 dan TIDAK ditawar ulang di sini. Bertanya
+  // "Selain Surabaya, area sekitar yang masih oke?" terbaca seperti menawarkan
+  // PINDAH KOTA — padahal yang dimaksud adalah kecamatan/kawasan lain di dalam
+  // Surabaya. Bila area (Q2c) sudah diketahui, jadikan AREA itu jangkarnya
+  // ("Selain area Pakuwon, apakah area sekitar masih oke?"). Kota hanya dipakai
+  // sebagai jangkar bila customer belum menyebut area sama sekali (M76).
+  if (!state.alternativeAreas) {
+    const anchor = state.district ? `area *${state.district}*` : loc;
+    return { q: 'Q7', hint: `Selain ${anchor}, apakah area sekitar masih oke? 🗺️` };
+  }
 
   // Q9 — Decision maker
   if (!state.decisionMaker)
@@ -2595,7 +2663,14 @@ Most customers don't know exactly what they want. Guide discovery through OPTION
 "Ada lokasi tertentu yang jadi patokan? Misalnya dekat sekolah anak, kantor, atau mall tertentu?"
 
 **Q7 — Alternative areas** (ask AT MOST ONCE — see "A REFUSAL IS AN ANSWER" above)
-"Selain [area], area sekitar yang masih oke?"
+"Selain area [Area], apakah area sekitar masih oke?"
+⛔ Q7 menanyakan AREA/KECAMATAN LAIN DI DALAM KOTA YANG SAMA — BUKAN kota lain.
+   Kota sudah final sejak Q2 dan TIDAK ditawar ulang di sini.
+   ✅ BENAR : "Selain area *Pakuwon*, apakah area sekitar masih oke? 🗺️"
+   ❌ SALAH : "Selain *Surabaya*, area sekitar yang masih oke? 🗺️"  ← terdengar
+      seperti menawarkan PINDAH KOTA; customer sudah memilih Surabaya.
+   Jangkar = AREA dari Q2c. Pakai nama KOTA hanya bila customer belum menyebut
+   area sama sekali.
 → ASK ONLY IF Q7 is ❓. If Q7 shows ✅ — including when the value is a refusal like
   "Tidak ada" / "tetap di Pakuwon" — it is ANSWERED. Do NOT ask again, in any wording.
 → Declining other areas = "Fokus di [area] saja". That is a complete answer. Move on.
@@ -2788,6 +2863,7 @@ Kemudian:
 ⛔ JANGAN tampilkan listing properti SELAMA proses interview Q1-Q12 (sebelum brief).
 ⛔ JANGAN tanya ulang pertanyaan yang sudah ✅ di QUALIFICATION STATE.
 ⛔ SATU pertanyaan per pesan — jangan gabungkan dua pertanyaan.
+⛔ JANGAN pernah menulis kode slot internal (Q1, Q9, Q9b, Q_FAC, Q_KPR, dst) di pesan ke customer. Itu label internal. Tulis "Siap, Kak. Kalau nanti ada yang cocok…", BUKAN "Untuk Q9, kalau nanti…".
 ⛔ Q3 Budget: JANGAN tanya langsung — gunakan 2 harga kontras sebagai pilihan reaksi.
 ⛔ Pesan ambigu ("cari properti", "ada properti?") tanpa tipe/transaksi → tanyakan Q1: "Mau sewa atau beli? Dan tipe propertinya apa?"
 ⛔ JANGAN tampilkan summary jika Q3 (Budget) atau Q8 (Tanggal masuk) masih ❓ di QUALIFICATION STATE — walaupun budget/tanggal muncul di raw conversation history dari sesi lama.

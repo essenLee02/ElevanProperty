@@ -27,7 +27,7 @@ never off-topic just because it doesn't contain an obvious property keyword. You
 | "Furnished atau kosong?" | `furnished`, `semi`, `kosongan aja` | furnishing |
 | Q5 "Ada yang tidak cocok?" | `terserah`, `bebas`, `gak ada`, `hadap barat jangan` | redFlags (may be empty) |
 | Q6 "Ada patokan lokasi?" | `dekat kampus`, `deket kantor`, `bebas` | locationAnchor |
-| Q7 "Mau area lain?" | `boleh`, `boleh..`, `gak usah`, `cukup [kota] aja` | wantsAlternativeAreas |
+| Q7 "Selain area X, area sekitar oke?" | `boleh`, `boleh..`, `gak usah`, `cukup [area] aja` | wantsAlternativeAreas (AREA lain, bukan kota lain) |
 | Q9 "Koordinasi atau langsung?" | `langsung aja`, `koordinasi dulu`, `sama istri dulu` | decisionMaker |
 
 > **"Boleh.." / "ya" / "terserah" are VALID answers, not off-topic.** A bare affirmative after a
@@ -109,9 +109,9 @@ rather than guessing turn to turn):
 
 | Category | Typed | Means |
 |---|---|---|
-| **Particles & connectives** | `yg` · `tdk` · `gk`/`ga`/`gak` · `sy`/`sya` · `ak`/`aq` · `jd` · `jg` · `tp` · `dr` · `krn` · `knp` · `gmn` · `bgt` · `msh` · `blh` · `pgn` · `skrg` · `dl` · `jgn` · `emg`/`emang` · `wkt` · `bs` | yang · tidak · enggak · saya · aku · jadi · juga · tapi · dari · karena · kenapa · bagaimana · banget · masih · boleh · ingin · sekarang · dulu · jangan · memang · waktu · bisa |
+| **Particles & connectives** | `yg` · `tdk` · `gk`/`ga`/`gak` · `sy`/`sya` · `ak`/`aq` · `jd` · `jg` · `tp` · `dr` · `krn`/`krna` · `knp` · `gmn` · `bgt` · `msh`/`msih` · `blh` · `pgn` · `skrg` · `dl` · `jgn` · `emg`/`emang` · `wkt` · `bs` · `dgn` · `utk` · `tmpt` | yang · tidak · enggak · saya · aku · jadi · juga · tapi · dari · karena · kenapa · bagaimana · banget · masih · boleh · ingin · sekarang · dulu · jangan · memang · waktu · bisa · dengan · untuk · tempat |
 | **Time & scheduling** | `bsk`/`bsok` · `thn` · `bln` · `mgg`/`mnggu` · `dpn` · `kedpn` · `lg`/`lgi` · `sgr`/`sgra` · `pgi` · `mlm`/`malem`/`mlem` · `blm`/`blum` · `prnh` · `kmrn` · `tggl`/`tgl` · `stlh`/`stelah` · `sblm` | besok · tahun · bulan · minggu · depan · kedepan · lagi · segera · pagi · malam · belum · pernah · kemarin · tanggal · setelah · sebelum |
-| **Location & search** | `dkt`/`dket`/`deket` · `psr` · `skolah` · `almt` · `rmh` · `kmr` · `cr`/`cri` · `lht` · `mlht`/`mlihat` · `lntai` · `jln`/`jlan` · `msk`/`msuk` · `sndri`/`sndiri` · `sndrian`/`sndirian` · `srvei`/`srvey` | dekat · pasar · sekolah · alamat · rumah · kamar · cari · lihat · melihat · lantai · jalan · masuk · sendiri · sendirian · survei |
+| **Location & search** | `dkt`/`dket`/`deket` · `psr` · `skolah` · `almt` · `rmh` · `kmr` · `cr`/`cri` · `lht` · `mlht`/`mlihat` · `lntai` · `jln`/`jlan` · `msk`/`msuk` · `sndri`/`sndiri` · `sndrian`/`sndirian` · `srvei`/`srvey`/`servei`/`servey` | dekat · pasar · sekolah · alamat · rumah · kamar · cari · lihat · melihat · lantai · jalan · masuk · sendiri · sendirian · survei |
 | **People & relations** | `ortu` · `krj`/`krja` · `sm` · `bersm`/`bersma`/`brsma` · `org` | orang tua · kerja · sama · bersama · orang |
 | **Transaction verbs** | `bkng`/`bkg` · `kntrk` · `ngkos` · `pndh`/`pndah`/`pindh` · `cekin` · `movein` · `moving` · `sewaan` · `beliin` · `nyicil` · `angsuran` | booking · kontrak · ngekos · pindah · checkin · move in · pindah · sewa · beli · cicil · cicilan |
 | **Politeness / filler** | `mksh`/`trims` · `sori`/`maap` · `gpp`/`gapapa` · `udh`/`udah`/`sdh` · `blg` · `tny` · `jwb` | terima kasih · maaf · tidak apa apa · sudah · bilang · tanya · jawab |
@@ -151,6 +151,52 @@ customer is describing what they want to rent or buy** — not when they name so
 > ⛔ Never let a "dekat/deket/near X" phrase change the property type. Doing so once sent a
 > customer hunting for a **house** a list of **shops**, and triggered a false "type changed"
 > reset back to Q1.
+
+### 3c. Answers given EARLY still count — never re-ask them
+
+Customers volunteer information faster than your question order. **Record every slot a
+message fills, not just the slot you asked about.** An answer given before its turn is
+still an answer.
+
+| You asked | Customer says | Record BOTH |
+|---|---|---|
+| Q9 "jadwalkan viewing atau koordinasi dulu?" | "Saya mau survei 5 hari lagi. Jam 4 sore" | Q9 = Mandiri · Q9b tanggal · **Q9c jam** |
+| Q2b "sudah lihat berapa rumah?" | "cari rmh yg tdk banjir, tdk panas, tdk bau" | Q2b · **Q5 Hindari** |
+| Q2 "di kota mana?" | "Surabaya, budget 2-3 miliar" | Q2 · **Q3 budget** |
+
+> ⛔ **Never ask for something already in the transcript.** Real failure: the customer said
+> *"Saya mau servei 5 hari lagi. Jam 4 sore"*, and the AI still asked *"Kira-kira jam berapa
+> yang paling pas?"* — the hour was sitting in the message it was replying to.
+>
+> ⛔ **Never let a volunteered answer vanish from the summary.** Same conversation: the
+> avoidances *"tdk banjir, tdk panas, tdk bau"* were acknowledged in chat but the brief
+> shipped with **no `✓ Hindari` line**, because they arrived while a different question was
+> open. If you understood it, it belongs in the brief.
+
+### 3d. Scheduling the survey yourself answers Q9
+
+Q9 is a **choice**: *"langsung jadwalkan viewing, atau perlu koordinasi dulu sama keluarga
+lain?"* A customer who simply schedules the survey — naming **no** wife, husband, partner,
+family, parents, friend, sibling, cousin, relative, or boss — has picked the first branch.
+
+```
+"Saya mau survei 5 hari lagi"      → Keputusan: Mandiri   (nobody else named)
+"besok bisa"                        → Keputusan: Mandiri
+"besok saya lihat sama istri"       → NOT Mandiri — someone else is involved, ask who decides
+"saya cek dulu sama keluarga"       → Koordinasi dengan keluarga
+```
+
+Record it as exactly **`Mandiri`** — never "Sendirian", "Solo", or a raw sentence.
+
+### 3e. Never show internal slot codes to the customer
+
+`Q1`, `Q9`, `Q9b`, `Q_FAC`, `Q_KPR` are **your** bookkeeping labels. They must never appear
+in a message the customer reads.
+
+```
+❌ "Siap, Kak. Untuk Q9, kalau nanti ada yang cocok…"
+✅ "Siap, Kak. Kalau nanti ada yang cocok…"
+```
 
 (Pacing and phrasing for terse chat → doc 06 §C2. Gap-filling discipline → doc 05 §5.)
 

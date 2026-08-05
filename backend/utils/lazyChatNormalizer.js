@@ -68,10 +68,12 @@ const ABBR_DICT = {
   // Core particles & connectives
   yg: 'yang', tdk: 'tidak', gk: 'enggak', ga: 'enggak', gak: 'enggak',
   sy: 'saya', sya: 'saya', ak: 'aku', aq: 'aku',
-  jd: 'jadi', jg: 'juga', tp: 'tapi', dr: 'dari', krn: 'karena',
-  knp: 'kenapa', gmn: 'bagaimana', bgt: 'banget', msh: 'masih', blh: 'boleh',
+  jd: 'jadi', jg: 'juga', tp: 'tapi', dr: 'dari', krn: 'karena', krna: 'karena',
+  knp: 'kenapa', gmn: 'bagaimana', bgt: 'banget', msh: 'masih', msih: 'masih',
+  blh: 'boleh',
   pgn: 'ingin', skrg: 'sekarang', dl: 'dulu', jgn: 'jangan', emg: 'memang',
   emang: 'memang', wkt: 'waktu', bs: 'bisa',
+  dgn: 'dengan', utk: 'untuk', tmpt: 'tempat',
 
   // Time & scheduling (⚠️ "minggu"/"mgg"/"mnggu" deliberately map to the WEEK
   // unit reading — the customerDateParser.js hari/minggu/bulan/tahun regex
@@ -97,7 +99,10 @@ const ABBR_DICT = {
   // sangat lazim diketik singkat. Tanpa ini Q9 tidak pernah terisi dan
   // pertanyaannya diulang berkali-kali.
   sndri: 'sendiri', sndiri: 'sendiri', sndrian: 'sendirian', sndirian: 'sendirian',
-  srvei: 'survei', srvey: 'survei',
+  // "servei"/"servey" = salah ketik "survei" yang muncul di transkrip nyata
+  // (5 Agu 2026). Tanpa ini SCHEDULING_ONLY_RE di ekstraktor Q9 tidak mengenali
+  // kalimat "Saya mau servei 5 hari lagi" sebagai konteks survei.
+  srvei: 'survei', srvey: 'survei', servei: 'survei', servey: 'survei',
 
   // People / relations
   ortu: 'orang tua', krj: 'kerja', krja: 'kerja',

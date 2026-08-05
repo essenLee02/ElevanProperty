@@ -2625,10 +2625,14 @@ class ConversationQualifier {
       }
 
       /* ── Q7: Alternative areas (always unless already volunteered) ── */
+      // ⚠️ Q7 = AREA/KECAMATAN LAIN DI DALAM kota yang sama — BUKAN kota lain.
+      // Kota sudah final sejak Q2. Frasa lama "Selain lokasi *Surabaya*, …"
+      // terbaca seperti menawarkan PINDAH KOTA; kota kini diposisikan sebagai
+      // WADAH ("Di *Surabaya*, ada area lain…"), bukan hal yang diganti (M76).
       if (!profile.hasAlternativeArea && !profile.aiAskedAltArea && loc) {
         return isId
-          ? `Selain lokasi *${loc}*, apakah Anda mau pilihan lokasi lainnya? 🗺️`
-          : `Besides *${loc}*, are there nearby neighborhoods you'd consider? 🗺️`;
+          ? `Di *${loc}*, apakah ada area lain yang masih oke buat Kak pertimbangkan? 🗺️`
+          : `Within *${loc}*, are there other neighbourhoods you'd consider? 🗺️`;
       }
 
       /* ── Q9: Decision maker / viewing logistics (never ask directly) ── */
@@ -2946,10 +2950,11 @@ class ConversationQualifier {
     }
 
     /* ── QA: Alternative areas ── */
+    // Sama seperti Q7 di atas: kota adalah WADAH, bukan hal yang ditawar ulang (M76).
     if (!profile.hasAlternativeArea && !profile.aiAskedAltArea && loc) {
       return isId
-        ? `Selain *${loc}*, ada area lain yang masih oke buat Kak pertimbangkan? 🗺️`
-        : `Besides *${loc}*, any other areas you'd consider, Kak? 🗺️`;
+        ? `Di *${loc}*, ada area lain yang masih oke buat Kak pertimbangkan? 🗺️`
+        : `Within *${loc}*, any other areas you'd consider, Kak? 🗺️`;
     }
 
     if (tx === 'sale') {
