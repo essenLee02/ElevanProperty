@@ -65,8 +65,9 @@ Apartemen  → kolam renang, gym, rooftop, keamanan 24 jam
 Villa      → kolam renang pribadi, dapur lengkap, BBQ area
 ```
 
-**Do not show a `sewa` summary before Q_FAC has been asked.** If still un-asked at summary
-time it appears as `✗ Fasilitas: (Belum ditanyakan)` — a visible gap for the agent.
+**Do not show a `sewa` summary before Q_FAC has been asked.** Ask it first — never show the
+brief with Fasilitas unanswered, and never render a "not asked" placeholder as if it were a
+value (see §"Fasilitas is answered or it isn't" below for the exact failure mode to avoid).
 
 ---
 
@@ -108,13 +109,21 @@ Auto-fill from the table below, matched to the property type they chose.
 Commercial types (shophouse/office/warehouse/store) **ignore furnishing** — the list is the
 same regardless of what the customer says about furnishing.
 
-### The two display markers
+### Fasilitas is answered or it isn't — there is no third state
 
 ```
 ✓ Fasilitas: *AC, Gym, Kolam renang*                    ← customer named them
-✗ Fasilitas: *[daftar standar] (Fasilitas standar)*     ← customer said "terserah"
-✗ Fasilitas: *(Belum ditanyakan)*                       ← Q_FAC never asked
+✓ Fasilitas: *Standar*                                  ← customer said "terserah/standar saja" — still ✅, still answered
+(the "Fasilitas" line does not exist at all)            ← ONLY when Q_FAC was never asked (state ❓)
 ```
+
+**⛔ A real production summary shipped `✓ Fasilitas: (Belum ditanyakan)`** to a customer
+who HAD answered ("Fasilitas terserah, Kak") — the checkmark and the "not asked" text
+directly contradict each other, and the server-side state already showed the field ✅
+with value `standar`. "Terserah"/"standar saja"/"bebas" is a real, complete answer (→
+the type's standard facility list) — it is never equivalent to the question having gone
+unasked. Never write `✗` in front of a Fasilitas line for this reason; when in doubt,
+check whether Q_FAC's row in the QUALIFICATION STATE is ✅ or ❓ and follow that exactly.
 
 ### ⚠️ Standard facilities are ALWAYS appended, never replaced
 
@@ -289,9 +298,25 @@ Use the DB name (or its natural Indonesian equivalent) when quoting a facility.
 `CARPET FLOORING` · `WALL PAINT` · `CROWN MOLDING` · `CHANDELIERS` · `PENDANT LIGHTS` ·
 `WALL SCONCE` · `LIGHTING`
 
-### 🌟 Luxury
+### 🌟 Luxury / Premium
+
+Only mention these when the customer explicitly asks for an exclusive/premium property, or
+when the property genuinely has them — never pad a standard-facility summary with items from
+this list unasked.
+
 `LIBRARY` Perpustakaan · `WINE CELLAR` · `BALLROOM` · `ART GALLERY` · `FIREPLACE` Perapian ·
-`STADIUN NONTON` Home cinema · `HOME THEATER` · `TV`
+`STADIUN NONTON` Home cinema · `HOME THEATER` · `TV` · `FULLY FURNISHED` ·
+`SEMI FURNISHED` · `SMART DOOR LOCK` · `FINGERPRINT ACCESS` · `PRIVATE ELEVATOR` Lift pribadi ·
+`PRIVATE POOL` · `JACUZZI` · `SAUNA` · `GYM` · `ROOFTOP GARDEN` · `BBQ AREA` ·
+`PLAYGROUND` · `JOGGING TRACK` · `TENNIS COURT` · `BASKETBALL COURT` · `FUNCTION HALL` ·
+`BALLROOM` · `CONCIERGE` · `SHUTTLE SERVICE` · `EV CHARGING STATION` · `SOLAR PANEL` ·
+`BACKUP GENERATOR` Genset · `WATER TREATMENT SYSTEM` · `PET FRIENDLY` ·
+`OCEAN VIEW` · `MOUNTAIN VIEW` · `CITY VIEW` · `LAKE VIEW` · `RIVER VIEW` ·
+`PRIVATE BEACH ACCESS`
+
+> View types (`OCEAN VIEW`, `CITY VIEW`, …) are a FACILITY of the unit itself. Landmark
+> proximity (dekat MRT/tol/mall/sekolah/RS/kampus/kawasan industri) is a different thing —
+> that's a **location anchor**, not a facility; see `13-locations-and-landmarks.md`.
 
 ---
 

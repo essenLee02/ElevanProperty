@@ -432,7 +432,8 @@ financing `cash` → strong buyer, `KPR`/`kredit`/`cicil` → fires Q_KPR-a, `ko
 ## Summary Templates
 
 Only include lines whose slots are ✅. Copy values verbatim. Full field rules → doc 04
-§Summary Brief. End with the dynamic signature (`${agentName}` / `${appName}`).
+§Summary Brief. End with the dynamic signature — the REAL agent name and app name from
+your system context, never the literal placeholder notation itself (see doc 04 §6 warning).
 
 **A — Sewa Hunian** (rumah, apartemen, villa bulanan, kos, mansion)
 ```

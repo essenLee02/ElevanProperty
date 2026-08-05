@@ -79,27 +79,45 @@ function detectBudgetAnchorResponse(aiText = '', custText = '') {
 
   const lower = cust.toLowerCase();
 
-  // (c) Menolak karena kemahalan → turunkan ke tier terjangkau. Dicek DULU:
-  //     "belum sesuai"/"kemahalan" mengandung kata yang mirip penerimaan.
-  if (/\b(kemahalan|kemahalan|terlalu\s+mahal|mahal\s+(?:banget|sekali|amat)?|kurang\s+cocok|belum\s+sesuai|tidak\s+sesuai|gak\s+sesuai|nggak\s+sesuai|di\s*bawah\s*itu|lebih\s+murah|yang\s+murah)\b/i.test(lower)) {
-    return 'terjangkau';
-  }
-
-  // (b) Menerima tawaran → pakai rentang yang DITAWARKAN sebagai budget.
-  //     Harus jawaban PENDEK & afirmatif; kalimat panjang bisa memuat info lain
-  //     yang lebih tepat ditangani detectBudget().
-  const isAffirmative = /^(?:ya|iya|iyaa|yaa|ok|oke|okay|sip|siap|boleh|cocok|setuju|deal|sesuai|betul|benar|bener)\b/i.test(lower)
-    || /\b(?:sudah|udah|uda)\s+(?:sesuai|cocok|pas|oke|ok)\b/i.test(lower)
-    || /\b(?:sesuai|cocok|pas)\s*(?:kak|ya|aja|saja|banget)?\s*[.!]?$/i.test(lower);
-  if (!isAffirmative || cust.length > 40) return null;
-
   const fmt = (n) => `Rp ${n.toLocaleString('id-ID')}`;
   const lo = Math.min(...amounts);
   const hi = Math.max(...amounts);
   // Satuan periode ikut dari pertanyaan AI ("/bulan", "/malam", …).
   const per = (ai.match(/\/\s*(bulan|malam|minggu|hari|tahun)/i) || [])[1];
   const suffix = per ? `/${per.toLowerCase()}` : '';
-  return (lo === hi ? fmt(lo) : `${fmt(lo)} - ${fmt(hi)}`) + suffix;
+  const range = (lo === hi ? fmt(lo) : `${fmt(lo)} - ${fmt(hi)}`) + suffix;
+
+  // (d) Memilih anchor yang LEBIH TINGGI dengan menyebut namanya langsung
+  // ("yang mahal aja, yang penting bagus", "yang eksklusif", "yang atas").
+  // Dicek SEBELUM cabang (c) di bawah: "yang mahal" adalah PILIHAN sadar
+  // (mau yang mahal), beda dari bare "mahal"/"kemahalan" yang berarti
+  // KOMPLAIN (terlalu mahal, mau yang lebih murah) — kedua makna memuat kata
+  // "mahal" yang sama, jadi urutan pengecekan menentukan siapa menang.
+  if (/\b(yang\s+mahal|yang\s+eksklusif|eksklusif\s+aja|yang\s+(?:lebih\s+)?(?:tinggi|atas)|premium)\b/i.test(lower) && cust.length <= 60) {
+    return fmt(hi) + suffix;
+  }
+
+  // (c) Memilih/menolak ke arah anchor yang LEBIH RENDAH — baik dengan
+  // menyebut namanya langsung ("yang terjangkau aja", "yang murah") maupun
+  // dengan komplain kemahalan ("kemahalan", "terlalu mahal"). Bug nyata
+  // (5 Agu 2026): dulu cabang ini mengembalikan STRING 'terjangkau' TANPA
+  // angka sama sekali — padahal AI baru saja menyebut nominal PERSIS di
+  // pertanyaannya (`amounts`). Sekarang pakai angka ANCHOR RENDAH yang
+  // benar-benar ditawarkan, bukan kategori kosong.
+  if (/\b(kemahalan|terlalu\s+mahal|mahal\s+(?:banget|sekali|amat)?|kurang\s+cocok|belum\s+sesuai|tidak\s+sesuai|gak\s+sesuai|nggak\s+sesuai|di\s*bawah\s*itu|lebih\s+murah|yang\s+murah|terjangkau|yang\s+terjangkau)\b/i.test(lower) && cust.length <= 60) {
+    return fmt(lo) + suffix;
+  }
+
+  // (b) Menerima tawaran APA ADANYA (tanpa memilih salah satu secara eksplisit)
+  //     → pakai rentang PENUH yang ditawarkan sebagai budget. Harus jawaban
+  //     PENDEK & afirmatif; kalimat panjang bisa memuat info lain yang lebih
+  //     tepat ditangani detectBudget().
+  const isAffirmative = /^(?:ya|iya|iyaa|yaa|ok|oke|okay|sip|siap|boleh|cocok|setuju|deal|sesuai|betul|benar|bener)\b/i.test(lower)
+    || /\b(?:sudah|udah|uda)\s+(?:sesuai|cocok|pas|oke|ok)\b/i.test(lower)
+    || /\b(?:sesuai|cocok|pas)\s*(?:kak|ya|aja|saja|banget)?\s*[.!]?$/i.test(lower);
+  if (!isAffirmative || cust.length > 40) return null;
+
+  return range;
 }
 
 /**
@@ -1057,13 +1075,35 @@ function extractQualificationState(history = [], currentMessage = '') {
     // bukan dari pesan customer (yang cuma berbunyi "Sesuai, Kak").
     {
       const anchored = detectBudgetAnchorResponse(ai.message || '', custResp);
-      // Keluhan "kemahalan"/"terlalu mahal" MENIMPA hasil Phase 1. Phase 1
-      // memindai pesan tanpa konteks dan memetakan kata "mahal" ke tier
-      // *eksklusif* — kebalikan dari maksud customer, yang justru minta lebih
-      // murah. Deteksi anchor ini tahu AI baru saja menawarkan harga, jadi
-      // konteksnya lebih lengkap dan berhak menang.
-      if (anchored === 'terjangkau') state.budget = anchored;
-      else if (anchored && !state.budget) state.budget = anchored;
+      // `anchored` SELALU MENIMPA hasil Phase 1 ketika truthy. Phase 1 memindai
+      // pesan tanpa konteks dan memetakan kata "mahal" ke tier *eksklusif* —
+      // kebalikan dari maksud customer yang justru komplain kemahalan/minta
+      // lebih murah. Deteksi anchor ini tahu AI baru saja menawarkan harga
+      // NYATA (nominal Rp asli), jadi konteksnya lebih lengkap dan berhak
+      // menang — nilainya sendiri sekarang SELALU angka Rupiah asli (bukan
+      // kategori kosong seperti "terjangkau" tanpa nominal, bug 5 Agu 2026).
+      if (anchored) state.budget = anchored;
+    }
+
+    // Q3a — jawaban atas follow-up "kisaran berapa" (lihat findNextQuestion Q3a).
+    // Menutup celah Budget yang hanya berupa KATEGORI ("terjangkau/affordable")
+    // tanpa angka sama sekali. Diterima SEKALI SAJA — apa pun jawabannya
+    // (angka valid ATAU tetap vague), state.budgetRangeAsked dikunci true supaya
+    // Q3a tidak pernah ditanya dua kali.
+    if (/kisaran berapa|budget.{0,10}(nya|nya kira)/i.test(ai.message || '') && !state.budgetRangeAsked) {
+      state.budgetRangeAsked = true;
+      const b2 = detectBudget(custResp);
+      if (b2 && !b2.ambiguous && b2.preference !== 'affordable') {
+        const periodSuffix2 = b2.period === 'year'  ? '/tahun'
+          : b2.period === 'month' ? '/bulan'
+          : b2.period === 'night' ? '/malam'
+          : b2.period === 'week'  ? '/minggu'
+          : '';
+        state.budget = b2.text + periodSuffix2;
+      }
+      // Jika customer tetap vague ("terserah aja, yang penting terjangkau") →
+      // state.budget TETAP kategori lama, tapi budgetRangeAsked=true mencegah
+      // pertanyaan ini diulang — customer sudah diberi kesempatan menjawab.
     }
 
     // Q9b / Q9c — JADWAL SURVEI (tanggal dulu, lalu jam).
@@ -1780,6 +1820,21 @@ Kalau sudah ada area/kecamatan tertentu, boleh sekalian disebut ya.` };
   // Q3 — Budget (via 2 harga kontras — JANGAN tanya langsung)
   if (!state.budget)
     return { q: 'Q3', hint: `Di ${loc} ada *${typeLbl}* kisaran [harga rendah${isBooking ? '/malam' : ''}] dan [harga tinggi${isBooking ? '/malam' : ''}]. Kira-kira yang mana lebih sesuai? 💰` };
+
+  // Q3a — Follow-up SEKALI SAJA saat Q3 hanya terisi KATEGORI ("terjangkau/affordable")
+  // TANPA angka sama sekali. Bug nyata (5 Agu 2026, Jakarta beli-rumah): customer
+  // menjawab "Cari yang harga terjangkau" SEBELUM AI sempat menawarkan 2 harga
+  // kontras (Q3 preempted) → state.budget = 'terjangkau/affordable', tidak pernah
+  // ada Rupiah sama sekali → summary akhir "✓ Budget: Terjangkau" tanpa angka,
+  // tidak berguna untuk agent mencocokkan listing. Server hanya bisa mendeteksi
+  // KATEGORI dari kata "terjangkau/murah/mahal" — TIDAK PERNAH menyimpan angka
+  // aktual yang AI tawarkan (anchor 2-harga hanya menyimpan arah, bukan nominal),
+  // jadi baik jalur "customer mendahului" MAUPUN "customer menerima salah satu
+  // dari 2 opsi" sama-sama berakhir tanpa angka. Follow-up ini menutup celah itu
+  // dengan SATU pertanyaan tambahan, lalu diterima apa pun jawabannya (termasuk
+  // tetap vague) — tidak pernah diulang dua kali.
+  if (/^(terjangkau|affordable|murah|eksklusif|premium|mahal)(\/[a-z]+)?$/i.test(state.budget || '') && !state.budgetRangeAsked)
+    return { q: 'Q3a', hint: `Baik, Kak! Kira-kira di kisaran berapa ya budgetnya? Misalnya "900jt-2 miliar", "700-900 juta", atau "300rb-2jt${isBooking ? '/malam' : ''}" 💰` };
 
   // Q8 — Tanggal masuk/check-in/target beli (MANDATORY — wording per 24 kombinasi)
   if (!state.moveInDate) {
@@ -2665,6 +2720,8 @@ ${resolvedAppName}
 - **⛔ DILARANG KERAS: "Area" TIDAK BOLEH sama dengan/hanya mengulang nama Kota (Q2), dan TIDAK BOLEH berisi jawaban dari pertanyaan lain** (mis. tipe kamar, fasilitas). Area hanya nama area/kecamatan DI DALAM kota tersebut. Jika QUALIFICATION STATE Q2c ❓ → baris "Area" TIDAK ADA di summary sama sekali, meskipun nama kota disebut berkali-kali di riwayat chat.
 - **⛔ DILARANG KERAS: "Keputusan bersama" HANYA salinan PERSIS nilai Q9 di QUALIFICATION STATE.** JANGAN mengarang kutipan/dialog customer ("Iya, Kak... saya survei bersama istri") yang tidak muncul sebagai nilai Q9. Jika Q9 ❓ → baris ini TIDAK ADA.
 - **⛔ DILARANG KERAS: "Viewing" TIDAK BOLEH memakai kata relatif ("besok", "lusa", "minggu depan").** QUALIFICATION STATE Q9b sudah berisi tanggal ABSOLUT hasil normalisasi ("DD Bulan YYYY") — salin PERSIS itu. Jangan menebak atau mengganti dengan kata relatif apa pun.
+- **⛔ DILARANG KERAS: "✓" TIDAK PERNAH berpasangan dengan "(Belum ditanyakan)".** Bug nyata (4 Agu 2026): Q_FAC sudah ditanya DAN dijawab ("Fasilitas terserah, Kak" → QUALIFICATION STATE menunjukkan ✅ Fasilitas: standar), tapi brief tetap menulis "✓ Fasilitas: (Belum ditanyakan)" — kontradiksi, dan mengarang nilai yang bertentangan dengan state ✅ yang sudah tersedia. Field ✅ SELALU pakai nilai ASLI dari QUALIFICATION STATE (mis. "Standar" untuk marker 'standar'); field ❓ TIDAK ADA barisnya sama sekali — tidak pernah "✓ ... (Belum ditanyakan)".
+- **⛔ DILARANG KERAS: tanda tangan HARUS berupa NAMA ASLI, JANGAN PERNAH literal \${agentName} atau \${appName}.** Bug nyata (4 Agu 2026): brief terkirim ke customer dengan teks harfiah "\${agentName}" dan "\${appName}" alih-alih nama agent dan nama aplikasi sungguhan. Nama ASLI SUDAH ADA di baris "Salam hangat," pada template brief di atas (sudah diisi otomatis) dan di baris "Customer profile" — salin/pakai nama itu APA ADANYA sebagai teks biasa. JANGAN PERNAH mengetik karakter dolar, kurung kurawal buka, atau kurung kurawal tutup di baris tanda tangan dalam kondisi apa pun.
 - One question per message only.
 - Maximum 12 AI messages before showing brief (even if incomplete).
 - ${showCatalogAfterBrief

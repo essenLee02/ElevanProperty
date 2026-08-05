@@ -84,9 +84,9 @@ console.log('\n── (C) Penolakan dihitung sebagai jawaban ──');
      ans('langsung bisa jadwalkan viewing atau perlu koordinasi dulu sama keluarga lain?', 'Tdk perlu', 'decisionMaker') === 'Mandiri');
   ok('patokan ditolak → tercatat terjawab',
      !!ans('Ada lokasi atau tempat tertentu yang jadi patokan? 📍', 'tidak ada', 'anchorPoint'));
-  ok('budget: tawaran AI ditolak → tier terjangkau',
+  ok('budget: tawaran AI ditolak → anchor rendah (angka asli, bukan kategori kosong)',
      ans('Di Surabaya ada apartemen kisaran Rp 2.200.000 dan Rp 3.100.000/bulan. Mana yang lebih sesuai?',
-         'kemahalan', 'budget') === 'terjangkau');
+         'kemahalan', 'budget') === 'Rp 2.200.000/bulan');
   ok('budget: tawaran AI diterima → rentang tawaran',
      /2\.200\.000/.test(String(ans('Di Surabaya ada apartemen kisaran Rp 2.200.000 dan Rp 3.100.000/bulan. Mana yang lebih sesuai?',
          'sesuai', 'budget'))));

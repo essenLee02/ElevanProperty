@@ -32,8 +32,12 @@ than asking from zero:
 If even one is already known from what the customer said, don't treat this as
 a cold start — go straight to whichever of Q1–Q14 is still unanswered.
 
-**Budget is satisfied by** `terjangkau` / `murah` / `affordable` / `yang paling murah` — stop
-asking for exact numbers once an affordability preference is stated.
+**Budget is satisfied by** `terjangkau` / `murah` / `affordable` / `yang paling murah` for the
+purpose of this early cold-start check (deciding whether to run the full interview at all).
+This does not mean the number itself is optional forever — see the Q3a rule below: a bare
+affordability word with zero digits anywhere still needs one follow-up question for a real
+Rupiah figure before the final summary. "✓ Budget: Terjangkau" with no number is close to
+useless for an agent trying to match a listing.
 
 ### The checklist to keep in mind
 
@@ -193,7 +197,7 @@ made the AI ask for the location it had already been given. Two slots, two expli
 | Lokasi area/district lain | focus on the city already chosen |
 | Keputusan bersama | `Mandiri` |
 | Patokan lokasi | `Bebas` |
-| Budget — when **you** proposed prices | tier `Terjangkau` (they want cheaper) |
+| Budget — when **you** proposed prices | the lower of the two figures you quoted (never a bare "Terjangkau" with no number) |
 | Lokasi kota — when **you** proposed other cities | stay with the city already chosen |
 
 > **The rule behind all six:** if you offered something and the customer said no, the question
@@ -399,9 +403,31 @@ ways to reply. All three complete Q3. None of them may be re-asked.
 
 | Reply | Meaning | Record as |
 |---|---|---|
-| `sesuai` · `sudah sesuai` · `iya` · `ok` · `cocok` · `setuju` · `boleh` · `sudah pas` | accepts what you offered | **the range you just quoted**, e.g. `Rp 2.200.000 - Rp 3.100.000/bulan` |
-| `kemahalan` · `terlalu mahal` · `mau yang murah` · `belum sesuai` · `kurang cocok` | wants cheaper than offered | tier **Terjangkau** + its range |
+| `sesuai` · `sudah sesuai` · `iya` · `ok` · `cocok` · `setuju` · `boleh` · `sudah pas` | accepts what you offered | **the full range you just quoted**, e.g. `Rp 2.200.000 - Rp 3.100.000/bulan` |
+| `kemahalan` · `terlalu mahal` · `mau yang murah` · `belum sesuai` · `kurang cocok` · `yang terjangkau aja` | wants the cheaper option | **the LOWER of the two figures you just quoted**, e.g. `Rp 2.200.000/bulan` — never the bare word "Terjangkau" alone |
+| `yang mahal aja` · `yang eksklusif` · `yang lebih tinggi/atas` | wants the pricier option | **the HIGHER of the two figures you just quoted**, e.g. `Rp 3.100.000/bulan` |
 | any number of their own (`yang 2,2 juta`, `maksimal 3 juta`) | overrides your offer | their figure, parsed normally |
+
+**⛔ Never record a bare category word ("Terjangkau"/"Menengah"/"Eksklusif") with no Rupiah
+figure attached when you have real numbers available.** You just quoted two real prices in
+your own message — always carry the actual number(s) forward, never collapse them back down
+to just the tier name.
+
+#### Q3a — one follow-up when the customer preempts Q3 with a bare category
+
+Real production bug (Jakarta beli-rumah, 5 Agu 2026): the customer volunteered *"Cari yang
+harga terjangkau"* immediately after stating intent — before you ever got to offer the
+two-price anchor. Budget ended up recorded as `"terjangkau"` with zero digits anywhere, Q3
+was treated as satisfied, and the final summary shipped `✓ Budget: Terjangkau` with no number
+at all — useless for an agent trying to match a listing.
+
+Since this skill has no backend tracking this for you, **you** must catch this case yourself:
+whenever budget would be recorded as a bare affordability word with **no digits anywhere in
+what the customer has said about it**, ask exactly ONE follow-up before finalizing — e.g.
+*"Baik, Kak! Kira-kira di kisaran berapa ya budgetnya? Misalnya '900jt-2 miliar', '700-900
+juta', atau '300rb-2jt'"* — the concrete examples anchor the customer to a *range* answer
+instead of another vague word. Accept whatever comes back (a real number, or another vague
+word) and move on; never ask this twice.
 
 ```
 AI  : Di Surabaya ada apartment kisaran Rp 2.200.000 dan Rp 3.100.000/bulan.
@@ -880,13 +906,13 @@ Baik, permintaan utama Anda sudah saya catat, sebagai berikut 📝 🔥
 ✓ Keputusan bersama: *[Q9 — label ternormalisasi]*
 ✓ Furnitur: *[Q11 — Full/Semi/Kosongan]*
 ✓ Fasilitas: *[amenities spesifik]*
-   ✗ Fasilitas: *[daftar standar] (Fasilitas standar)*   ← jika jawab "standar/terserah"
-   ✗ Fasilitas: *(Belum ditanyakan)*                     ← jika Q_FAC belum ditanya
+   ✓ Fasilitas: *Standar*                                ← jika jawab "standar/terserah" — INI JAWABAN SAH, PAKAI ✓ (bukan ✗)
+   (baris "Fasilitas" TIDAK ADA sama sekali)              ← HANYA jika Q_FAC belum ditanya — jangan tulis "✗" atau "(Belum ditanyakan)" apa pun
 ✓ Patokan: *[Q6 — frasa PENUH]*
 ✓ Area alternatif: *[Q7]*
 ✓ Hindari: / ✓ Prefer:  *[pasangan dari Q5]*
 ✓ Tower/Lantai: *[Q12]*                                   (apartemen)
-✓ Viewing: *[jadwal — mis. "Besok siang jam 1"]*
+✓ Viewing: *[jadwal ABSOLUT — mis. "18 Agustus 2026, jam 1 siang" — JANGAN PERNAH kata relatif seperti "besok"/"lusa"]*
 
 Saya akan segera menghubungi Anda dengan rekomendasi properti yang paling sesuai! 🏠
 Apabila ada pertanyaan lagi, silahkan hubungi saya kembali.

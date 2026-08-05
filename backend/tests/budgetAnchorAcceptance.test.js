@@ -13,6 +13,13 @@
  * Loop ini makin konsisten setelah DIREKTIF FINAL ditambahkan (AI kini patuh
  * pada state) — bukti bahwa state yang salah HARUS diperbaiki di ekstraktor,
  * bukan ditambal aturan prompt.
+ *
+ * Bug produksi 5 Agu 2026: cabang "MENOLAK karena mahal" dulu mengembalikan
+ * STRING KATEGORI KOSONG 'terjangkau' — TANPA angka sama sekali — padahal AI
+ * baru saja menyebut nominal PERSIS di pertanyaan anchor-nya. Summary akhir
+ * jadi "✓ Budget: Terjangkau" tanpa kisaran harga, tidak berguna untuk agent.
+ * Fix: cabang ini sekarang mengembalikan ANCHOR RENDAH yang benar-benar
+ * ditawarkan (mis. "Rp 2.200.000/bulan"), bukan kategori kosong.
  */
 const { extractQualificationState } = require('../services/aiPromptBuilderService');
 
@@ -30,10 +37,16 @@ for (const ans of ['Sesuai, Kak', 'Sudah sesuai, Kak', 'iya', 'ok', 'Cocok kak',
   ok(`"${ans}" → rentang tawaran`, b === 'Rp 2.200.000 - Rp 3.100.000/bulan');
 }
 
-console.log('\n── MENOLAK karena mahal → turun ke tier terjangkau ──');
-for (const ans of ['Itu kemahalan, Kak', 'terlalu mahal', 'Saya mau yang murah saja', 'Belum sesuai', 'kurang cocok']) {
+console.log('\n── MENOLAK karena mahal → pakai ANCHOR RENDAH (angka asli, bukan kategori kosong) ──');
+for (const ans of ['Itu kemahalan, Kak', 'terlalu mahal', 'Saya mau yang murah saja', 'Belum sesuai', 'kurang cocok', 'Yang terjangkau aja']) {
   const b = budgetFor(ANCHOR, ans);
-  ok(`"${ans}" → terjangkau`, b === 'terjangkau');
+  ok(`"${ans}" → Rp 2.200.000/bulan (anchor rendah)`, b === 'Rp 2.200.000/bulan');
+}
+
+console.log('\n── MEMILIH anchor TINGGI dengan menyebut namanya langsung → angka asli ──');
+for (const ans of ['Yang mahal aja, yang penting bagus', 'Yang eksklusif saja', 'Yang lebih tinggi aja']) {
+  const b = budgetFor(ANCHOR, ans);
+  ok(`"${ans}" → Rp 3.100.000/bulan (anchor tinggi)`, b === 'Rp 3.100.000/bulan');
 }
 
 console.log('\n── Menyebut angka sendiri tetap menang atas tawaran ──');

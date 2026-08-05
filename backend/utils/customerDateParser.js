@@ -196,6 +196,14 @@ function parseCustomerDate(text, now = new Date()) {
   //    that's safe in isolation becomes a false positive once a second field
   //    (money parsing) scans the same text for a different reason.
   const hasCurrencySignal = /\b(jt|juta|rb|ribu|miliar|milyar|budget|harga|anggaran|dana)\b/i.test(t);
+  // Bug nyata (4 Agu 2026): "Saya mau ambil KPR 10 tahun" — "10 tahun" adalah
+  // TENOR PINJAMAN (Q_KPR-a), bukan tanggal masuk. Bare-form rule di bawah
+  // (baris ~241) membaca "10 tahun" tanpa kata penanda relatif sama sekali dan
+  // menghasilkan tanggal +10 tahun dari sekarang, yang lalu MENIMPA Q8 (Masuk)
+  // dengan nilai fabrikasi. Sama seperti hasCurrencySignal di atas — sinyal
+  // pembiayaan/KPR di mana pun pada pesan berarti bentuk BARE (tanpa
+  // "lagi"/"kedepan"/"dalam") tidak boleh menyala di sini sama sekali.
+  const hasFinancingSignal = /\b(kpr|kredit|cicilan|angsuran|tenor|pinjaman|dp|down\s*payment|bunga)\b/i.test(t);
   {
     const m = t.match(new RegExp(
       `\\b(\\d{1,3})\\s*[-–]\\s*(\\d{1,3})\\s*(${REL_UNIT_RE})\\b(?:\\s+(?:lagi|kedepan|ke\\s+depan|mendatang))?`
@@ -232,12 +240,13 @@ function parseCustomerDate(text, now = new Date()) {
       m = t.match(new RegExp(`\\bdalam\\s+(\\d{1,3})\\s*(${REL_UNIT_RE})\\b`));
       if (m) { n = parseInt(m[1], 10); unit = m[2]; }
     }
-    if (!m && !hasCurrencySignal) {
+    if (!m && !hasCurrencySignal && !hasFinancingSignal) {
       // Bare form: "N unit" with no qualifier at all — but only when the
       // token immediately after isn't a month name (so "3 juni" is never
       // misread as "3 <unit>"; REL_UNIT_RE only matches hari/minggu/bulan/
       // tahun literally, so this is already safe, kept explicit for clarity).
-      // Gated on !hasCurrencySignal — see the collision guard above.
+      // Gated on !hasCurrencySignal / !hasFinancingSignal — see collision
+      // guards above ("KPR 10 tahun" is a loan tenor, not a move-in date).
       m = t.match(new RegExp(`\\b(\\d{1,3})\\s*(${REL_UNIT_RE})\\b`));
       if (m) { n = parseInt(m[1], 10); unit = m[2]; }
     }

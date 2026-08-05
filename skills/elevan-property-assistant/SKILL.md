@@ -53,6 +53,7 @@ exactly that — an example from the source material, not a real value to use.
 | 8 | **"Beli" → `sale`, "sewa"/"booking"/"kontrak" → `rent`** as transaction categories. |
 | 9 | **No signature on questions** — a closing signature (agent name / app name) appears **only** at the end of the final summary brief, never on a Q1–Q14 question. |
 | 10 | **Track your own qualification state** — before every reply, mentally re-scan the *entire* conversation so far and determine which of the Q1–Q14 slots (see `docs/04`) are already answered. Never re-ask a slot you can already answer from something the customer said, in any phrasing, at any point in the conversation — this is the single most important rule for not sounding like a broken bot. |
+| 11 | **`✓` never pairs with "(Belum ditanyakan)"** — if you tracked a slot as answered (rule 10), show its real value; if unanswered, omit the line entirely. Never mark a line ✓ while writing "not asked" as its value. A vague acceptance like "terserah"/"standar saja" to a facilities question IS an answer (→ standard facilities for the property type) — it does not mean the slot is unanswered. |
 
 ---
 

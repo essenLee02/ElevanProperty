@@ -19,10 +19,19 @@ const u = m => ({ role: 'user', message: m });
 const a = m => ({ role: 'assistant', message: m });
 const st = (aiMsg, custMsg) => extractQualificationState([u('booking hotel malang'), a(aiMsg)], custMsg);
 
+// ⚠️ extractQualificationState() tidak menerima parameter "now" — offset relatif
+// ("2 minggu lagi") dihitung dari tanggal SISTEM SUNGGUHAN saat tes dijalankan.
+// Hardcode tanggal absolut di sini akan drift 1 hari setiap kali tes dijalankan
+// di hari berbeda (bukan bug, murni artefak waktu-nyata) — hitung ekspektasi
+// relatif terhadap `new Date()` alih-alih string tanggal tetap.
+const MONTHS_ID = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+const fmtId = (d) => `${String(d.getDate()).padStart(2, '0')} ${MONTHS_ID[d.getMonth()]} ${d.getFullYear()}`;
+const plusDays = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return fmtId(d); };
+
 console.log('\n── Kasus asli: tanggal masuk + durasi digabung satu pesan ──');
 {
   const s = st('Rencananya check-in tanggal berapa? 📅', 'Rencana checkin 2 minggu lagi, Kak. Durasi sewa 5 hari');
-  ok('moveInDate = 18 Agustus 2026 (offset "2 minggu lagi")', s.moveInDate === '18 Agustus 2026');
+  ok(`moveInDate = ${plusDays(14)} (offset "2 minggu lagi", relatif hari ini)`, s.moveInDate === plusDays(14));
   ok('leaseDuration = "5 hari" (BUKAN "2 minggu")',            s.leaseDuration === '5 hari');
 }
 
