@@ -61,13 +61,22 @@ async function sendWhatsAppMessage(phone, message) {
     } catch (error) {
       lastError = error;
 
-      // Only retry on network-level errors — not on Fonnte API rejections (status:false)
+      // Retry pada error JARINGAN **dan** HTTP 5xx/429 — bukan pada penolakan
+      // API Fonnte (status:false) atau 4xx lain (kondisi permanen).
+      // ⚠️ Lihat catatan M77 di kirimiChatController.sendViaKirimi: balasan
+      // HTTP 5xx memberi error.code='ERR_BAD_RESPONSE' yang TIDAK ada di
+      // RETRYABLE, sehingga dulu gangguan sesaat langsung menggugurkan kirim.
+      const httpStatus   = error.response?.status;
+      const isServerSide = httpStatus >= 500 && httpStatus <= 599;
+      const isRateLimit  = httpStatus === 429;
       const isRetryable = RETRYABLE.has(error.code) ||
-        (error.code === 'ECONNABORTED' && /timeout/i.test(error.message));
+        (error.code === 'ECONNABORTED' && /timeout/i.test(error.message)) ||
+        isServerSide || isRateLimit;
       if (!isRetryable || attempt >= maxRetries) break;
 
-      const delay = retryDelay * attempt;  // linear back-off: 3s, 6s, 9s …
-      console.warn(`[FONNTE SERVICE] Send attempt ${attempt}/${maxRetries} failed (${error.code || error.message}). Retry in ${delay}ms…`);
+      const delay  = retryDelay * attempt;  // linear back-off: 3s, 6s, 9s …
+      const reason = httpStatus ? `HTTP ${httpStatus}` : (error.code || error.message);
+      console.warn(`[FONNTE SERVICE] Send attempt ${attempt}/${maxRetries} failed (${reason}). Retry in ${delay}ms…`);
       await new Promise(r => setTimeout(r, delay));
     }
   }

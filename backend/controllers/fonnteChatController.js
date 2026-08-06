@@ -203,13 +203,24 @@ async function sendViaFonnte(targetPhone, message, agentToken) {
     } catch (err) {
       lastError = err;
 
-      // Only retry on network-level errors — not on Fonnte API rejections
+      // Retry pada error JARINGAN **dan** HTTP 5xx/429 (gangguan sesaat sisi
+      // server) — tapi TIDAK pada penolakan API Fonnte (status:false) maupun
+      // 4xx lain, yang merupakan kondisi permanen.
+      // ⚠️ Sebelum M77 blok ini hanya mengenal kode error jaringan; balasan
+      // HTTP 5xx memberi err.code='ERR_BAD_RESPONSE' yang TIDAK ada di
+      // RETRYABLE → break di percobaan PERTAMA → balasan customer hilang
+      // permanen hanya karena satu gangguan sesaat. Terbukti di Kirimi.
+      const httpStatus   = err.response?.status;
+      const isServerSide = httpStatus >= 500 && httpStatus <= 599;
+      const isRateLimit  = httpStatus === 429;
       const isRetryable = RETRYABLE.has(err.code) ||
-        (err.code === 'ECONNABORTED' && /timeout/i.test(err.message));
+        (err.code === 'ECONNABORTED' && /timeout/i.test(err.message)) ||
+        isServerSide || isRateLimit;
       if (!isRetryable || attempt >= maxRetries) break;
 
-      const delay = retryDelay * attempt;  // linear back-off: 3s, 6s, 9s …
-      console.warn(`[FONNTE] Send attempt ${attempt}/${maxRetries} failed (${err.code || err.message}). Retry in ${delay}ms…`);
+      const delay  = retryDelay * attempt;  // linear back-off: 3s, 6s, 9s …
+      const reason = httpStatus ? `HTTP ${httpStatus}` : (err.code || err.message);
+      console.warn(`[FONNTE] Send attempt ${attempt}/${maxRetries} failed (${reason}). Retry in ${delay}ms…`);
       await new Promise(r => setTimeout(r, delay));
     }
   }

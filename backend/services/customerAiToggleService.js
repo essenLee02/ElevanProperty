@@ -259,17 +259,6 @@ async function maybeHandleAiToggleCommand({ message, senderPhone, agent }) {
  * (mematikan AI untuk customer yang justru sedang dilayani AI). Fail-safe:
  * bila tag kosong, fungsi ini tidak melakukan apa pun (biarkan skip lama).
  *
- * ⛔ DIKECUALIKAN — agent mengetik ke NOMORNYA SENDIRI (self-chat). Itu bukan
- * percakapan dengan customer melainkan jalur perintah pribadi agent: mengirim
- * nomor customer untuk "matikan/nyalakan AI", atau menyalakan/mematikan katalog
- * sebelum summary. Handover di sana akan mematikan AI untuk nomor agent sendiri.
- * Lihat guard `agent.phone === phone` di badan fungsi.
- *
- * ⚠️ TIDAK bergantung pada customer sudah terdaftar. Baris `customers` normalnya
- * baru dibuat saat AI mengirim SUMMARY, sedangkan interupsi agent justru paling
- * sering terjadi SEBELUM itu — bila baris belum ada (dan sudah ada ChatSession),
- * fungsi ini membuatnya lebih dulu supaya status OFF punya tempat tersimpan.
- *
  * PENCATATAN TRANSKRIP (BARU): sebelum ini, pesan manual agent pada event
  * `fromMe:true` HILANG TOTAL — tidak pernah masuk `chat_messages` sama sekali.
  * Sekarang SETIAP pesan manual (bukan hanya yang PERTAMA kali mematikan AI)
@@ -299,52 +288,13 @@ async function maybeHandleAgentInterruption({ customerPhone, message, agent, pla
   const phone = normPhone(customerPhone);
   if (!phone || !agent?.user_id) return null;
 
-  // ⛔ SELF-CHAT GUARD — agent mengetik ke NOMORNYA SENDIRI, bukan ke customer.
-  // Ini jalur perintah/catatan pribadi agent (mis. mengirim nomor customer untuk
-  // "matikan AI 62812…", atau menyalakan/mematikan katalog sebelum summary).
-  // Menganggapnya "interupsi" akan mematikan AI untuk nomor agent itu sendiri —
-  // efek samping yang salah total. Dicek EKSPLISIT di sini: dulu proteksinya
-  // hanya KEBETULAN (nomor agent biasanya tidak ada di tabel customers), dan
-  // kebetulan itu HILANG begitu handover boleh membuat baris customer sendiri
-  // (lihat blok "belum terdaftar" di bawah).
-  if (agent.phone && normPhone(agent.phone) === phone) return null;
-
   try {
     const { Customer, ChatSession, ChatMessage } = require('../models');
-    let row = await Customer.findOne({
+    const row = await Customer.findOne({
       where: { user_id: String(agent.user_id).toUpperCase(), phone },
       attributes: ['customer_id', 'name', 'phone', 'ai_response'],
     });
-
-    // ⚠️ BELUM TERDAFTAR ≠ BUKAN CUSTOMER. Baris `customers` baru dibuat saat AI
-    // MENGIRIM SUMMARY (registerCustomerFromChat), padahal interupsi agent justru
-    // paling sering terjadi JAUH SEBELUM summary — persis kasus produksi 5 Agu
-    // 2026: customer baru mengirim 1 pesan, agent langsung mengambil alih, dan
-    // handover BATAL DIAM-DIAM karena `row` masih null → AI tetap ikut menjawab
-    // beberapa menit kemudian, bertabrakan dengan agent di chat yang sama.
-    // Kolom `ai_response` adalah satu-satunya yang dibaca gate AI, jadi tanpa
-    // baris tidak ada tempat menyimpan status OFF sama sekali.
-    //
-    // Namun JANGAN mendaftarkan sembarang nomor: satu device WhatsApp yang sama
-    // juga dipakai agent mengobrol dengan teman/keluarga/vendor, dan nomor itu
-    // tidak boleh ikut masuk master customer. Syaratnya: HARUS sudah ada
-    // ChatSession — bukti nomor ini memang sedang/pernah berbicara dengan bot.
-    // Tanpa sesi → benar-benar nomor luar → no-op (perilaku lama dipertahankan).
-    if (!row) {
-      const sessionSource = `${platform || 'whatsapp'}_${String(agent.name || '').toLowerCase().replace(/\s+/g, '_')}`;
-      const convo = await ChatSession.findOne({ where: { normalizedPhone: phone, source: sessionSource } });
-      if (!convo) return null;   // nomor luar (bukan lawan bicara bot) — abaikan
-
-      const { registerCustomerFromChat } = require('./customerRegistrationService');
-      const reg = await registerCustomerFromChat({
-        agentUserId: String(agent.user_id).toUpperCase(),
-        phone,
-        waName: customerName || convo.name || null,
-      });
-      if (!reg?.customer) return null;   // registrasi ditolak (nomor tak valid, dll)
-      row = reg.customer;
-      console.log(`[AgentInterruption] 📇 Customer ${phone} didaftarkan lebih awal (interupsi agent sebelum summary).`);
-    }
+    if (!row) return null;   // agent chat ke nomor yang bukan customer terdaftarnya — abaikan
 
     const wasOn = String(row.ai_response || 'ON').toUpperCase() === 'ON';
     if (wasOn) {

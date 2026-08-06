@@ -263,11 +263,17 @@ ID: Oke, mau *[sewa/beli] [Tipe]*. 📍 Di kota atau area mana yang Anda pertimb
 EN: Got it, *[rent/buy] a [Type]*. 📍 Which city or area are you considering?
 ```
 
-### Q2c — District within a large city
+### Q2c — District / area inside the city
 
-**Fires when** location is a large city (Surabaya, Jakarta, Bandung, Semarang, Makassar, Medan)
-and no district was named. **Does not fire for** commercial types or hotel/kondotel booking.
-**Fires BEFORE Q2b.**
+**Fires when** a city is known and no district was named yet — for **every** city, not just the
+big ones. **Does not fire for** commercial types or hotel/kondotel booking. **Fires BEFORE Q2b.**
+
+> ⚠️ **This used to be limited to a short list of large cities, and that caused a real
+> production bug (M84).** A customer asked for a house in **Malang**; Malang was not on the
+> list, so the area question was never asked and `district` stayed empty for the whole
+> conversation. Q7 then had no area to anchor on, and the assistant **invented one**
+> (see Q7 below). Ask the area question for any city — an unasked slot is what invites
+> invention.
 
 ```
 Di area atau kawasan mana di *[kota]* yang Anda pertimbangkan? 📍
@@ -626,22 +632,41 @@ comma. `✓ Patokan: *Deket indomaret, cafe dan ubaya*`
 Asks for **another AREA / kecamatan INSIDE the same city** — never another city.
 The city was settled at Q2 and is **not** reopened here.
 
-```
-ID: Selain area *[Area dari Q2c]*, apakah area sekitar masih oke? 🗺️
-```
+**Which anchor to use depends on whether Q2c produced a real area.**
+
+| Q2c state | Ask this |
+|---|---|
+| Area **known** (customer typed it) | `Selain area *<that area>*, apakah area sekitar masih oke? 🗺️` |
+| Area **unknown / declined** | `Selain *<the city>*, apakah area sekitar masih oke? 🗺️` |
 
 | | |
 |---|---|
-| ✅ **Correct** | "Selain area *Pakuwon*, apakah area sekitar masih oke? 🗺️" |
-| ❌ **Wrong** | "Selain *Surabaya*, area sekitar yang masih oke? 🗺️" |
+| ✅ **Correct** (area known = Pakuwon) | "Selain area *Pakuwon*, apakah area sekitar masih oke? 🗺️" |
+| ✅ **Correct** (area unknown, city = Malang) | "Selain *Malang*, apakah area sekitar masih oke? 🗺️" |
+| ❌ **Wrong** (area known, but you named the city) | "Selain *Surabaya*, area sekitar yang masih oke? 🗺️" |
+| ❌ **Wrong** (area unknown, so you invented one) | "Selain area *Ciputra*, apakah area sekitar masih oke? 🗺️" |
 
-> ⛔ Anchoring Q7 on the **city** reads as offering to move cities — the customer already
-> chose Surabaya at Q2. Anchor on the **area** from Q2c. Use the city name only if the
-> customer has not named an area at all (in practice Q2c fires first, so an area is
-> normally known by the time Q7 is asked).
+> ⛔ **Never invent an area name. This is not hypothetical — it shipped (M84).**
+> A customer asked for a house in **Malang** and never typed any area at all. Because the
+> area slot was empty and this document used to say "anchor on the area, never the city",
+> the assistant filled the blank with **"Ciputra"** — a *Surabaya* developer name that
+> appears frequently in the property playbooks. Two different providers produced the *same*
+> invented name, which is what a primed corpus looks like. The invented area then flowed
+> into the summary as `✓ Area: Ciputra masih ok`, so the agent received a brief describing
+> a place the customer had never mentioned.
 >
-> A refusal is an answer, and it refers to the **area**: "Tidak ada" / "tetap di Pakuwon"
-> → record `Fokus di Pakuwon saja`, never "Fokus di Surabaya saja".
+> The rule that produced that bug was too absolute. Corrected: anchoring on the **city is
+> correct and required** whenever no area is known. Anchoring on the area is only better
+> *when an area actually exists*. **If you are about to type an area name, it must be a
+> name the CUSTOMER typed.** If you cannot point to the customer message it came from, do
+> not write it — use the city.
+>
+> ⛔ The same applies to the summary: an area name that appears only in **your own earlier
+> messages** is not evidence. Re-reading your own invention does not make it true.
+>
+> A refusal is an answer, and it refers to whichever anchor you actually used:
+> "Tidak ada" / "tetap di Pakuwon" → record `Fokus di Pakuwon saja` when the question was
+> anchored on the area; `Fokus di Malang saja` when it was anchored on the city.
 
 ### Q8 — Move-in / Check-in Date *(MANDATORY — never skip)*
 
@@ -933,14 +958,30 @@ Baik, saya sudah catat permintaan Anda, sebagai berikut 📝 🔥
 Terima kasih sudah menghubungi saya. 🙏
 
 Salam hangat,
-*[agent name]*
-*[app/company name]*
+⟨the agent name you were given — plain text, no brackets⟩
+⟨the app/company name you were given — plain text, no brackets⟩
 ```
+
+> ⛔ **The two signature lines are the ONLY lines in this template that are not
+> placeholders.** Every `*[...]*` above is a slot you fill from the qualification state.
+> The signature is different: the real names are given to you in the conversation context,
+> so you copy them verbatim. Do **not** carry the bracket habit down into the signature.
 
 > **The signature is ALWAYS dynamic** — use the agent name and app/company name given
 > in your conversation context (see SKILL.md §1). **Never hardcode** "LEO FELIX" or
 > "Elevan Property" — both are only source-material examples. The signature appears
 > **ONLY** in the summary brief — never on a Q1–Q14 question.
+>
+> **⛔ A real production summary was sent to a customer containing the literal text
+> `[Nama Agen]` and `[Nama Aplikasi]`** — Indonesian bracket placeholders, invented on the
+> spot by translating this document's own `*[...]*` notation into the reply. An earlier
+> incident produced `${agentName}` / `${appName}` the same way. Both are the same mistake:
+> writing the *name of the slot* instead of the *value in it*. If the signature you are
+> about to write contains `[`, `]`, `<`, `>`, `$`, `{`, or `}`, it is wrong — no matter
+> how reasonable the label inside it looks. Write the actual name, as ordinary text.
+>
+> If you genuinely were not given an agent name, sign with the neutral fallback
+> ("Tim Properti") — never with a placeholder, and never with the customer's own name.
 >
 > **⛔ Sign as the AGENT, never as the CUSTOMER.** The name you were told to answer as
 > is the agent; a name that came from the customer's own messages, profile, or display
@@ -948,6 +989,12 @@ Salam hangat,
 > own name while the agent was someone else — the customer appeared to receive a letter
 > from themselves. If you truly cannot tell which is which, use the neutral fallback
 > ("Tim Properti"); signing with the wrong name is worse than signing generically.
+
+> **After the brief — catalogue or not?** Decided by `users.catalog_summary` for this agent:
+> `ON` + listings available → continue straight into the recommendations in the same turn;
+> `ON` + empty catalogue → apologise that nothing suitable exists yet and promise follow-up;
+> `OFF` → the brief alone, no listings. Full contract and templates: **doc 08 §0**.
+> ⛔ Never invent listings to fill an empty catalogue, and never show listings when `OFF`.
 
 ### Strict summary rules
 

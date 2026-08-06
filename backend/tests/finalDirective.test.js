@@ -37,7 +37,20 @@ console.log('\n── Posisi: direktif harus PALING AKHIR ──');
   const p = build(HIST, 'Saya cari yang harga terjangkau');
   const i = p.indexOf('⚡ DIREKTIF FINAL');
   ok('direktif ada di prompt', i > 0);
-  ok('berada di >98% panjang prompt', i / p.length > 0.98);
+
+  // ⚠️ Asersi ini DULU berbunyi `i / p.length > 0.98` — mengukur posisi AWAL
+  // direktif. Proxy itu rapuh: menambah baris SAH ke dalam direktif (M84/M85/M86
+  // menambah larangan area, tanda tangan, dan mode katalog) menggeser posisi
+  // awalnya ke bawah 98% dan memicu kegagalan palsu, padahal tidak ada satu pun
+  // konten yang ditambahkan SESUDAH direktif — yang justru menjadi maksud
+  // asersinya. Diganti dengan dua asersi yang mengukur maksud itu secara
+  // langsung, dan JUSTRU LEBIH KETAT:
+  //   (a) prompt benar-benar BERAKHIR di direktif (tidak ada apa pun sesudahnya)
+  //   (b) direktif tetap RINGKAS relatif terhadap prompt (M62: memanjangkannya
+  //       memperburuk masalah yang sama yang ia obati)
+  ok('prompt BERAKHIR di direktif (tidak ada konten sesudahnya)',
+     /═{10,}\s*$/.test(p.trimEnd()) && p.trimEnd().lastIndexOf('⚡ DIREKTIF FINAL') === i);
+  ok('direktif tetap ringkas (<5% panjang prompt)', (p.length - i) / p.length < 0.05);
   ok('tidak ada QUALIFICATION STATE sesudahnya',
      !p.slice(i).includes('📋 QUALIFICATION STATE'));
   ok('ekor setelah direktif ringkas (<400 token)', (p.length - i) / 4 < 400);

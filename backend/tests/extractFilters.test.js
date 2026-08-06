@@ -246,8 +246,20 @@ console.log('\n── Group 10: use-case decides whether "tinggal bersama siapa"
   ok('ibadah → useCase non-hunian',       /ibadah/.test(ibSt.useCase || ''));
 
   // Flow: sewa villa untuk LIBURAN → TETAP tanya kapasitas, framing "menginap berapa orang"
+  //
+  // ⚠️ Riwayat ini sengaja TIDAK memuat jawaban Q2c. Dulu itu tidak berpengaruh:
+  // Batu tidak ada di allowlist LARGE_CITIES_Q2C sehingga Q2c memang tidak pernah
+  // ditanya untuk kota mana pun di luar 8 kota besar — dan asersi di bawah
+  // mengunci Q4 sebagai pertanyaan berikutnya. Sejak M84 Q2c berlaku untuk SEMUA
+  // kota (allowlist itu justru yang menyebabkan AI mengarang nama area), jadi
+  // urutan yang benar sesuai prioritas terdokumentasi — Q2 → Q2c → … → Q4 —
+  // kini menuntut Q2c dijawab lebih dulu. Q2c ditambahkan ke riwayat agar tes
+  // ini kembali menguji hal yang memang ingin diuji: FRAMING Q4 untuk liburan,
+  // bukan posisi Q2c.
   const libHist = [
-    C('Sewa villa di batu buat liburan'), A('Sudah lihat berapa villa?'), C('Belum pernah'),
+    C('Sewa villa di batu buat liburan'),
+    A('Di area atau kawasan mana di *Batu* yang Anda pertimbangkan? 📍'), C('Songgoriti'),
+    A('Sudah lihat berapa villa?'), C('Belum pernah'),
     A('Di Batu kisaran 2jt dan 8jt/malam, mana mendekati?'), C('sekitar 3jt/malam'),
     A('Ada yang pasti tidak cocok? 🚫'), C('nggak ada'),
     A('Rencananya check-in bulan apa? 📅'), C('Juli 2026'),

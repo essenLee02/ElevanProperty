@@ -31,6 +31,7 @@ const { getConversationHistory }                    = require('./sessionService'
 const { loadAIContextBlocks }                       = require('./aiContextService');
 const { splitCatalogReply }                         = require('../utils/replySplitter');
 const { resolveCatalogMode, envFallbackMode }       = require('./catalogModeService');
+const { guardReplyIdentity }                        = require('../utils/replyIdentityGuard');
 const sessionAnchors                                = require('../utils/sessionAnchors');
 const { expandAbbreviations }                       = require('../utils/lazyChatNormalizer');
 
@@ -472,9 +473,21 @@ async function generateWhatsAppAIReply(params) {
         propertyCtx,
         { facilityContext, cityContext, locationContext }
       );
+      // Jaring pengaman DETERMINISTIK: model kadang tetap menulis "[Nama Agen]"
+      // / "${agentName}" alih-alih nama sungguhan, meski nama itu sudah tertulis
+      // apa adanya di prompt DAN dilarang eksplisit (M85). Ganti di sisi kirim —
+      // nol token tambahan, dan menutup kelas bug ini untuk SEMUA provider.
+      const guarded = guardReplyIdentity(result.reply, {
+        agentName: session?.agentName || agentName,
+        appName  : process.env.APP_NAME || 'Elevan Property',
+      });
+      if (guarded.replaced > 0) {
+        console.warn(`[WhatsAppAI] ⚠️ ${result.provider} menulis ${guarded.replaced} placeholder identitas ` +
+                     `di balasan — diganti nama sungguhan sebelum kirim (M85).`);
+      }
       return {
-        reply         : result.reply,
-        replyParts    : splitCatalogReply(result.reply),
+        reply         : guarded.text,
+        replyParts    : splitCatalogReply(guarded.text),
         provider      : result.provider,
         contextSource,
       };
@@ -520,9 +533,19 @@ async function generateWhatsAppAIReply(params) {
         const aiResult = await generateWhatsappExternalAIFallback(
           session, history, message, enrichedPropertyCtx, { facilityContext, cityContext }
         );
+        // Guard identitas yang sama (M85) — jalur fallback eksternal juga
+        // dilayani provider LLM, jadi punya kelas bug yang persis sama.
+        const guardedExt = guardReplyIdentity(aiResult.reply, {
+          agentName: session?.agentName || agentName,
+          appName  : process.env.APP_NAME || 'Elevan Property',
+        });
+        if (guardedExt.replaced > 0) {
+          console.warn(`[WhatsAppAI] ⚠️ ${aiResult.provider} menulis ${guardedExt.replaced} placeholder ` +
+                       `identitas — diganti nama sungguhan sebelum kirim (M85).`);
+        }
         return {
-          reply      : aiResult.reply,
-          replyParts : splitCatalogReply(aiResult.reply),
+          reply      : guardedExt.text,
+          replyParts : splitCatalogReply(guardedExt.text),
           provider   : aiResult.provider,
           contextSource,
         };

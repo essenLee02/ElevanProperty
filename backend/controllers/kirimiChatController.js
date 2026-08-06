@@ -347,12 +347,27 @@ async function sendViaKirimi(targetPhone, message, deviceId) {
         break;
       }
 
+      // ⚠️ HTTP 5xx & 429 WAJIB di-retry — dulu TIDAK PERNAH di-retry sama sekali.
+      // RETRYABLE hanya berisi kode error JARINGAN (ETIMEDOUT, ECONNRESET, …).
+      // Saat Kirimi membalas HTTP 500, axios mengisi err.response.status=500 dan
+      // err.code='ERR_BAD_RESPONSE' — yang TIDAK ada di RETRYABLE — sehingga
+      // isRetryable=false dan loop langsung break pada percobaan PERTAMA.
+      // Akibatnya satu gangguan sesaat di sisi Kirimi membuat balasan customer
+      // HILANG PERMANEN, padahal sekali retry sudah cukup. Terbukti: pesan 271
+      // char yang gagal 500 di produksi terkirim HTTP 200 saat diuji ulang
+      // dengan payload yang sama persis (M77).
+      // 4xx TETAP tidak di-retry (400/401/403 sudah ditangani di atas) karena
+      // itu kondisi permanen — retry hanya membuang waktu.
+      const isServerSide = httpStatus >= 500 && httpStatus <= 599;
+      const isRateLimit  = httpStatus === 429;
       const isRetryable = RETRYABLE.has(err.code) ||
-        (err.code === 'ECONNABORTED' && /timeout/i.test(err.message));
+        (err.code === 'ECONNABORTED' && /timeout/i.test(err.message)) ||
+        isServerSide || isRateLimit;
       if (!isRetryable || attempt >= maxRetries) break;
 
-      const delay = retryDelay * attempt;  // linear back-off: 3s, 6s, 9s …
-      console.warn(`[KIRIMI] Send attempt ${attempt}/${maxRetries} failed (${err.code || err.message}). Retry in ${delay}ms…`);
+      const delay  = retryDelay * attempt;  // linear back-off: 3s, 6s, 9s …
+      const reason = httpStatus ? `HTTP ${httpStatus}` : (err.code || err.message);
+      console.warn(`[KIRIMI] Send attempt ${attempt}/${maxRetries} failed (${reason}). Retry in ${delay}ms…`);
       await new Promise(r => setTimeout(r, delay));
     }
   }
@@ -1105,3 +1120,7 @@ class KirimiChatController {
 }
 
 module.exports = KirimiChatController;
+// Ekspor TAMBAHAN (tidak mengubah bentuk export utama — `require(...)` yang sudah
+// ada tetap mendapat class-nya). sendViaKirimi diekspos agar loop retry-nya bisa
+// diuji langsung terhadap server mock, bukan lewat reimplementasi di test (M77).
+module.exports.sendViaKirimi = sendViaKirimi;

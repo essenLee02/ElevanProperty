@@ -303,12 +303,21 @@ async function sendViaTimelinesAI(targetPhone, message) {
         break;
       }
 
+      // HTTP 5xx & 429 WAJIB di-retry — lihat catatan lengkap di
+      // kirimiChatController.sendViaKirimi (M77). Singkatnya: RETRYABLE hanya
+      // berisi kode error JARINGAN, sedangkan balasan HTTP 5xx memberi
+      // err.code='ERR_BAD_RESPONSE' sehingga loop break di percobaan PERTAMA
+      // dan balasan customer hilang permanen karena gangguan sesaat.
+      const isServerSide = httpStatus >= 500 && httpStatus <= 599;
+      const isRateLimit  = httpStatus === 429;
       const isRetryable = RETRYABLE.has(err.code) ||
-        (err.code === 'ECONNABORTED' && /timeout/i.test(err.message));
+        (err.code === 'ECONNABORTED' && /timeout/i.test(err.message)) ||
+        isServerSide || isRateLimit;
       if (!isRetryable || attempt >= maxRetries) break;
 
-      const delay = retryDelay * attempt;  // linear back-off: 3s, 6s, 9s …
-      console.warn(`[TIMELINESAI] Send attempt ${attempt}/${maxRetries} failed (${err.code || err.message}). Retry in ${delay}ms…`);
+      const delay  = retryDelay * attempt;  // linear back-off: 3s, 6s, 9s …
+      const reason = httpStatus ? `HTTP ${httpStatus}` : (err.code || err.message);
+      console.warn(`[TIMELINESAI] Send attempt ${attempt}/${maxRetries} failed (${reason}). Retry in ${delay}ms…`);
       await new Promise(r => setTimeout(r, delay));
     }
   }
