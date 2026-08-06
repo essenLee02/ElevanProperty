@@ -12,7 +12,7 @@ project saat ini — terutama lihat doc **17** untuk ringkasan lengkap perubahan
 
 ---
 
-## Files (urut 00–18, tanpa duplikat)
+## Files (urut 00–19, tanpa duplikat)
 
 | # | File | Isi |
 |---|------|-----|
@@ -48,6 +48,8 @@ project saat ini — terutama lihat doc **17** untuk ringkasan lengkap perubahan
 - **Tambah agent WhatsApp?** → 04 (token per-agent) → 03 (kolom users)
 - **RESPOND_CATALOG_RUN (Q1–Q12 selalu jalan; OFF=brief, ON=+katalog per-agent)?** → 06 → 10 → 17
 - **AI provider (DeepSeek/Kimi/QWEN/ChatGPT/Claude → Private)?** → 06
+- **Nama agent di tanda tangan summary (users.name) / summary tertanda nama customer?** → 06 (§Identitas agent vs customer)
+- **AI berhenti saat agent chat customer langsung (handover) / self-chat agent?** → 09 (§Agent Interruption)
 - **Data properti backend-driven / katalog per-agent?** → 12 → 03 → 06 → 17
 - **ngrok auto-start?** → 15 → 02
 - **Tambah master data module baru (mengikuti pola Country/Property)?** → 03 → 05 → 07 → 17

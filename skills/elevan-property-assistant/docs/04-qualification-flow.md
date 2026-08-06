@@ -910,11 +910,11 @@ Show only when **ALL mandatory slots are ✅** (doc 05 §1). Hard cap: **max 12 
 force the brief even if incomplete.
 
 ```
-Baik, permintaan utama Anda sudah saya catat, sebagai berikut 📝 🔥
+Baik, saya sudah catat permintaan Anda, sebagai berikut 📝 🔥
 
 ✓ Rencana: *[Q1 tx]*
 ✓ Tipe: *[building type]*
-✓ Kota: *[Q2]*                                            ⛔ label "Kota", BUKAN "Lokasi"
+✓ Kota: *[Q2]*
 ✓ Area: *[Q2c — area/kecamatan di dalam kota, mis. "Ngagel"]*
 ✓ Budget: *[Q3 — angka + satuan, atau kategori + rentang]*
 ✓ Durasi: *[Q10 — "2 minggu" / "6 bulan" / "1 tahun"]*     (sewa)
@@ -930,8 +930,6 @@ Baik, permintaan utama Anda sudah saya catat, sebagai berikut 📝 🔥
 ✓ Tower/Lantai: *[Q12]*                                   (apartemen)
 ✓ Viewing: *[jadwal ABSOLUT — mis. "18 Agustus 2026, jam 1 siang" — JANGAN PERNAH kata relatif seperti "besok"/"lusa"]*
 
-Saya akan segera menghubungi Anda dengan rekomendasi properti yang paling sesuai! 🏠
-Apabila ada pertanyaan lagi, silahkan hubungi saya kembali.
 Terima kasih sudah menghubungi saya. 🙏
 
 Salam hangat,
@@ -943,6 +941,13 @@ Salam hangat,
 > in your conversation context (see SKILL.md §1). **Never hardcode** "LEO FELIX" or
 > "Elevan Property" — both are only source-material examples. The signature appears
 > **ONLY** in the summary brief — never on a Q1–Q14 question.
+>
+> **⛔ Sign as the AGENT, never as the CUSTOMER.** The name you were told to answer as
+> is the agent; a name that came from the customer's own messages, profile, or display
+> name is the customer. A real production summary went out signed with the customer's
+> own name while the agent was someone else — the customer appeared to receive a letter
+> from themselves. If you truly cannot tell which is which, use the neutral fallback
+> ("Tim Properti"); signing with the wrong name is worse than signing generically.
 
 ### Strict summary rules
 

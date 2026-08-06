@@ -393,9 +393,39 @@ Assembles complete prompt injected to ChatGPT or Claude:
    - Summary Strict Rules (bans "Disebutkan", "Hindari" label, "Solo (mandiri)")
    - Signature rules (only in brief, not in Q1-Q12 questions)
 4. QUALIFICATION STATE block (from `buildQualificationStateBlock`)
-5. Customer profile + conversation history
+5. **🪪 IDENTITAS ANDA (AGENT)** block + Customer profile + conversation history
 6. Property context (Rumah123 or flat JSON)
 7. Task block (6 numbered instructions, includes Q5/Q6/Q7 required before summary)
+
+#### Identitas agent vs customer — DUA nama, jangan tertukar
+
+```
+resolvedAppName   = process.env.APP_NAME || 'Elevan Property'
+resolvedAgentName = session?.agentName || process.env.AGENT_NAME || resolvedAppName
+```
+
+`session.agentName` diisi di `whatsappAIService.generateWhatsAppAIReply()` dari
+`agent.name` (kolom **`users.name`**) yang dikirim ketiga controller WhatsApp.
+Itu properti ad-hoc pada instance ChatSession — tabel `chat_sessions` TIDAK punya
+kolom `agentName` (kolom `name` di sana adalah nama **customer**).
+
+> **⚠️ Bug produksi 6 Agu 2026 — summary tertanda NAMA CUSTOMER.** Datanya sudah
+> benar (`resolvedAgentName` = "Leo Felix"), tapi prompt memuat DUA nama dan
+> hanya SATU yang diberi label eksplisit: blok `Customer profile` punya baris
+> `Name: <customer>`, sedangkan nama agent hanya muncul diam-diam di dalam
+> template tanda tangan. Sebuah aturan prompt bahkan keliru mengarahkan model ke
+> blok `Customer profile` untuk mencari nama agent. Model memilih satu-satunya
+> baris berlabel `Name:` → summary ditandatangani "Nigel 期凡努" (customer),
+> seolah customer menerima surat dari dirinya sendiri.
+>
+> **Fix:** blok `🪪 IDENTITAS ANDA (AGENT)` eksplisit (berisi
+> `Nama agent (users.name)` + `Nama aplikasi (APP_NAME)`) ditempatkan SEBELUM
+> blok customer, dan blok customer ditandai tegas `(LAWAN BICARA — jangan
+> dipakai sebagai tanda tangan)` dengan penanda `← nama CUSTOMER` pada barisnya.
+> Pelajaran umum: kalau prompt memuat dua nilai sejenis, keduanya WAJIB berlabel —
+> memberi label hanya pada yang salah membuat model konsisten memilih yang salah.
+
+Regression: `backend/tests/agentSignatureIdentity.test.js`.
 
 ---
 

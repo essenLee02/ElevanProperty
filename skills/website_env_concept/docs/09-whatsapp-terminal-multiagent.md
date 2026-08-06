@@ -329,6 +329,49 @@ jendela waktu selesai.
 
 ---
 
+## Agent Interruption — handover OTOMATIS saat agent mengetik manual
+
+**File:** `backend/services/customerAiToggleService.js` → `maybeHandleAgentInterruption()`
+Dipanggil dari KETIGA controller di cabang `if (fromMe)`, sebelum event di-skip.
+
+Webhook meng-echo pesan KELUAR sebagai `fromMe:true`. Dulu event ini selalu
+di-skip mentah-mentah, sehingga tidak ada bedanya antara balasan AI sendiri dan
+ketikan MANUAL agent lewat app WhatsApp di device yang sama.
+
+**Pembeda:** setiap balasan AI diberi footer `Sent via <AI_PRIMARY_TAG>` oleh
+`appendSentViaTag()`. `fromMe:true` TANPA footer itu = ketikan manual agent →
+agent sedang mengambil alih → `customers.ai_response` di-set `OFF` otomatis,
+tanpa perlu perintah eksplisit. Gate di controller (`isAiDisabledForCustomer`)
+lalu membuat AI diam untuk customer itu.
+
+| Kondisi | Perilaku |
+|---|---|
+| `AI_PRIMARY_TAG` kosong | **Fitur MATI total** (fail-safe). Tanpa tag, `isOwnEcho()` selalu false → setiap balasan AI sendiri akan salah terbaca sebagai interupsi dan mematikan AI untuk customer yang justru sedang dilayani. |
+| Pesan ADA footer `Sent via …` | Balasan AI sendiri → abaikan. |
+| Nomor tujuan = `agent.phone` (**self-chat**) | **Abaikan.** Agent mengetik ke nomornya sendiri = jalur perintah pribadi (kirim nomor customer untuk "matikan/nyalakan AI", toggle katalog sebelum summary). Handover di sini akan mematikan AI untuk nomor agent sendiri. |
+| Nomor belum ada di `customers` **tapi** sudah ada `ChatSession` | Baris customer **dibuat lebih awal** (idempoten, lewat `registerCustomerFromChat`) lalu di-set OFF. |
+| Nomor belum ada di `customers` **dan** tidak ada `ChatSession` | Abaikan — nomor luar (teman/vendor di device yang sama), jangan cemari master customer. |
+
+> **⚠️ Kenapa baris customer perlu dibuat lebih awal.** `customers` normalnya baru
+> dibuat saat AI MENGIRIM SUMMARY (`registerCustomerFromChat` via
+> `maybeRegisterOnSummary`), sedangkan interupsi agent justru paling sering
+> terjadi JAUH SEBELUM summary. Bug produksi 5 Agu 2026: customer baru mengirim
+> 1 pesan, agent langsung mengambil alih, `Customer.findOne()` mengembalikan
+> null → handover BATAL DIAM-DIAM (tanpa log) → AI tetap ikut menjawab beberapa
+> menit kemudian, bertabrakan dengan agent di chat yang sama. Kolom
+> `ai_response` adalah SATU-SATUNYA yang dibaca gate AI, jadi tanpa baris tidak
+> ada tempat menyimpan status OFF.
+
+Setiap pesan manual agent (bukan hanya yang pertama memicu handover) dicatat ke
+`chat_messages` dengan `role:'ai'` + `ai_responder:'agent interruption'` —
+penanda eksplisit bahwa baris itu ketikan MANUSIA, bukan hasil panggilan AI.
+Sebelumnya pesan-pesan ini hilang total dari transkrip.
+
+Regression: `backend/tests/agentInterruption.test.js` (menulis baris DB nyata &
+membersihkannya sendiri; run yang crash bisa meninggalkan baris `TESTAGENT_INTERRUPT`).
+
+---
+
 ## Controller 1 — fonnteChatController
 
 **File:** `backend/controllers/fonnteChatController.js`
