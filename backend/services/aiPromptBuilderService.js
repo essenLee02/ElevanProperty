@@ -2,6 +2,7 @@ const { loadProjectSkillPrompt } = require('./skillPromptService');
 const { detectBudget, detectFacilities, stripCommercialUsePhrases, stripNearPhrases, stripAmbiguousRumah, stripInvestmentIntentPhrases, stripMovingFromPhrases, detectUseCase, isNonResidentialUse, detectLocation, isKnownLocationName } = require('./propertyRecommendationService');
 const { parseCustomerDate, isDontKnowDateAnswer, WAITING_THE_UPDATE } = require('../utils/customerDateParser');
 const { expandAbbreviations }                 = require('../utils/lazyChatNormalizer');
+const { expandStandardFacilities }            = require('../utils/standardFacilities');
 const { detectCustomerFrustration } = require('../utils/propertyKeywordFilter');
 
 /* ─── Qualification State Extractor ────────────────────────────────────────── */
@@ -2188,9 +2189,28 @@ function buildQualificationStateBlock(state) {
   lines.push('     kata "kisaran" dalam pesan customer sebagai referensi lokasi.');
   lines.push('');
 
+  // ⚠️ LABEL INDONESIA, BUKAN ENUM INTERNAL. Bug produksi (5 Agu 2026): state
+  // menampilkan enum mentah `sale`, LLM menerjemahkannya sendiri jadi "Jual",
+  // dan customer yang jelas-jelas bilang "Mau BELI rumah" menerima summary
+  // "✓ Rencana: Jual" — kebalikan makna dari sudut pandangnya. Enum `sale`/`rent`
+  // ditulis dari sudut pandang LISTING (properti ini dijual/disewakan),
+  // sedangkan summary bicara dari sudut pandang CUSTOMER (dia membeli/menyewa).
+  // Sajikan label siap-salin supaya LLM tidak perlu menerjemahkan apa pun.
+  const TX_LABEL_ID   = { sale: 'Beli', rent: 'Sewa', buy: 'Beli', beli: 'Beli', sewa: 'Sewa' };
+  const TYPE_LABEL_ID = {
+    house: 'Rumah', apartment: 'Apartemen', villa: 'Villa', hotel: 'Hotel',
+    boarding_house: 'Kos', shophouse: 'Ruko', office: 'Kantor',
+    warehouse: 'Gudang', store: 'Toko', mansion: 'Mansion',
+    kondotel: 'Kondotel', condo: 'Kondominium', others: 'Properti',
+  };
+  const txRaw    = String(state.transactionType || '').trim().toLowerCase();
+  const typeRaw  = String(state.buildingType    || '').trim().toLowerCase();
+  const txLabel  = state.transactionType ? (TX_LABEL_ID[txRaw]   || state.transactionType) : null;
+  const typeLabel = state.buildingType   ? (TYPE_LABEL_ID[typeRaw] || state.buildingType) : null;
+
   lines.push(
-    row('Tipe transaksi    [Q1]', state.transactionType),
-    row('Tipe properti         ', state.buildingType ? state.buildingType + fbNote : null),
+    row('Tipe transaksi    [Q1]', txLabel),
+    row('Tipe properti         ', typeLabel ? typeLabel + fbNote : null),
     row('Kota              [Q2]', state.city),
     row('Area/Kecamatan  [Q2c]', state.district),
     // Q2b: ✅ = customer answered; ⏭️ = AI asked but customer redirected (skip, don't repeat); ❓ = not asked yet.
@@ -2220,7 +2240,13 @@ function buildQualificationStateBlock(state) {
     row('Jam survei       [Q9c]', state.viewingDate === 'Minta listing' ? 'n/a (customer minta listing)' : state.viewingTime),
     row('Durasi sewa      [Q10]', state.leaseDuration),
     row('Furnitur         [Q11]', state.furnishing),
-    row('Fasilitas  ⚠️WAJIB     ', Array.isArray(state.facilities) && state.facilities.length ? state.facilities.join(', ') : null),
+    // Marker internal 'standar' DIEKSPANSI jadi daftar fasilitas nyata per tipe
+    // properti — dulu tampil apa adanya sebagai "✓ Fasilitas: Standar" (satu
+    // kata tanpa isi) di summary customer. Lihat utils/standardFacilities.js.
+    row('Fasilitas  ⚠️WAJIB     ', (() => {
+      const expanded = expandStandardFacilities(state.facilities, state.buildingType);
+      return expanded.length ? expanded.join(', ') : null;
+    })()),
     row('Apt preference   [Q12]', state.apartmentPref),
   );
 
@@ -2737,7 +2763,7 @@ Baik, permintaan utama Anda sudah saya catat, sebagai berikut 📝 🔥
 
 ✓ Tipe: *[nilai dari building type — HANYA jika ✅]*
 
-✓ Kota: *[nilai dari Q2 — HANYA jika ✅]*  ⛔ label WAJIB "Kota", JANGAN "Lokasi"
+✓ Kota: *[nilai dari Q2 — HANYA jika ✅]*
 
 ✓ Area: *[nilai dari Q2c — HANYA jika ✅; area/kecamatan di dalam kota, mis. "Ngagel"]*
 
@@ -2779,6 +2805,8 @@ ${resolvedAppName}
 \`\`\`
 
 ### Summary Strict Rules
+- **⛔ Label baris WAJIB persis seperti template di atas.** Baris kota memakai label "Kota" — JANGAN "Lokasi". Anotasi/penjelasan apa pun dari dokumen ini TIDAK BOLEH ikut tersalin ke pesan customer: yang dikirim hanya "✓ Label: *nilai*", tanpa tanda ⛔, tanpa catatan kurung, tanpa komentar instruksi. (Bug nyata 5 Agu 2026: baris "✓ Kota: Surabaya ⛔ label Kota, BUKAN Lokasi" terkirim mentah ke customer.)
+- **⛔ Nilai "Rencana" memakai sudut pandang CUSTOMER: "Beli" atau "Sewa".** JANGAN PERNAH menulis "Jual" — customer adalah pembeli, bukan penjual. QUALIFICATION STATE sudah memberi label Indonesia siap-salin di baris "Tipe transaksi"; salin persis, jangan menerjemahkan enum internal sendiri.
 - **HANYA sertakan field yang ✅ di QUALIFICATION STATE.** Jangan sertakan field yang ❓ — lewati baris itu seluruhnya. Tidak ada tanda "Belum", "N/A", atau apapun untuk field ❓.
 - **Gunakan nilai PERSIS yang tertera setelah ": " di baris ✅** — salin kata per kata tanpa parafrase.
 - **JANGAN gunakan nilai dari raw conversation history** jika field tersebut ❓ di QUALIFICATION STATE.

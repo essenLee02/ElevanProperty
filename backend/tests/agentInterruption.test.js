@@ -116,6 +116,72 @@ async function main() {
     ok('tidak ada baris baru tercatat', afterCount === beforeCount);
   }
 
+  console.log('\n── SELF-CHAT: agent mengetik ke NOMORNYA SENDIRI → JANGAN pernah handover ──');
+  {
+    // Jalur perintah pribadi agent ("matikan AI 62812…", toggle katalog sebelum
+    // summary). Mematikan AI untuk nomor agent sendiri adalah efek samping salah.
+    const SELF = '62822222299902';
+    const selfAgent = { ...TEST_AGENT, phone: SELF };
+    await Customer.destroy({ where: { user_id: TEST_AGENT.user_id, phone: SELF } });
+    await Customer.create({
+      user_id: TEST_AGENT.user_id, customer_id: 'TSTSELF001', name: 'Agent Self',
+      phone: SELF, ai_response: 'ON', status: 1,
+      created_date: '2026-08-05', created_by: TEST_AGENT.user_id,
+    });
+    const r = await maybeHandleAgentInterruption({
+      customerPhone: SELF, message: 'matikan AI 628123456789', agent: selfAgent, platform: PLATFORM,
+    });
+    const row = await Customer.findOne({ where: { user_id: TEST_AGENT.user_id, phone: SELF } });
+    ok('return null (self-chat, bukan interupsi)', r === null);
+    ok('ai_response nomor agent sendiri TIDAK dimatikan', row.ai_response === 'ON');
+    await Customer.destroy({ where: { user_id: TEST_AGENT.user_id, phone: SELF } });
+  }
+
+  console.log('\n── Interupsi SEBELUM summary (customer belum terdaftar, tapi sudah ada sesi) ──');
+  {
+    // Bug produksi 5 Agu 2026: baris `customers` baru dibuat saat AI mengirim
+    // SUMMARY, sedangkan agent mengambil alih jauh sebelum itu → handover batal
+    // diam-diam (row null) dan AI tetap ikut menjawab beberapa menit kemudian.
+    const NEW = '62833333399903';
+    const source = `${PLATFORM}_${TEST_AGENT.name.toLowerCase().replace(/\s+/g, '_')}`;
+    await Customer.destroy({ where: { user_id: TEST_AGENT.user_id, phone: NEW } });
+    const sess = await ChatSession.create({
+      name: 'Prospek Baru', normalizedName: 'prospek baru',
+      phone: NEW, normalizedPhone: NEW, source,
+    });
+
+    const r = await maybeHandleAgentInterruption({
+      customerPhone: NEW, message: 'Mau beli rumah di area mana, Kak?',
+      agent: TEST_AGENT, platform: PLATFORM, customerName: 'Prospek Baru',
+    });
+    const row = await Customer.findOne({ where: { user_id: TEST_AGENT.user_id, phone: NEW } });
+    ok('handedOver: true walau customer belum terdaftar sebelumnya', r && r.handedOver === true);
+    ok('baris customer dibuat otomatis', !!row);
+    ok('ai_response = OFF (AI berhenti ikut campur)', row && row.ai_response === 'OFF');
+
+    const logged = await ChatMessage.findOne({
+      where: { customer_phone: NEW, ai_responder: 'agent interruption' }, order: [['id', 'DESC']],
+    });
+    ok('pesan manual agent tercatat di transkrip', !!logged);
+
+    await ChatMessage.destroy({ where: { chatSessionId: sess.id } });
+    await ChatSession.destroy({ where: { id: sess.id } });
+    await Customer.destroy({ where: { user_id: TEST_AGENT.user_id, phone: NEW } });
+  }
+
+  console.log('\n── Nomor luar TANPA sesi chat → tetap no-op (jangan cemari master customer) ──');
+  {
+    // Device WhatsApp yang sama juga dipakai agent mengobrol dengan teman/vendor.
+    const OUTSIDER = '62844444499904';
+    await Customer.destroy({ where: { user_id: TEST_AGENT.user_id, phone: OUTSIDER } });
+    const r = await maybeHandleAgentInterruption({
+      customerPhone: OUTSIDER, message: 'nanti ketemu jam 7 ya', agent: TEST_AGENT, platform: PLATFORM,
+    });
+    const row = await Customer.findOne({ where: { user_id: TEST_AGENT.user_id, phone: OUTSIDER } });
+    ok('return null (tidak ada sesi chat dengan bot)', r === null);
+    ok('TIDAK membuat baris customer untuk nomor luar', !row);
+  }
+
   await cleanup();
 
   console.log(`\nRESULT: ${pass}/${total}`);
