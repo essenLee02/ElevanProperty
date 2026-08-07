@@ -259,6 +259,22 @@ extractTransactionTypeFromMessage(message)// → "sale"|"rent"|""
 - ada, available, kosong, ready, listing
 - harga, berapa, cicilan, dp, uang muka
 - mau, ingin, pengen, butuh, tanya
+- **TUJUAN/use-case (BARU 7 Agu 2026):** investasi, invest, ditinggali, ditempati,
+  dihuni, hunian, untuk usaha, buat kantor, dikoskan
+
+> **⚠️ Kenapa kata TUJUAN perlu masuk daftar aksi.** Bug produksi 7 Agu 2026 —
+> log: `PESAN MASUK (bukan query properti — tidak dibalas) | Message: Rumahnya
+> untuk investasi`. Pesan itu punya TIPE properti ("rumah") tapi tidak punya
+> KATA AKSI: customer menyebut **tujuan**, bukan aksi. Gerbang kedua
+> (`isPropertyContextContinuation`) juga gagal karena customer membalas **9 jam**
+> kemudian sedangkan `CHATBOT_COOKIE_TTL_MINUTES=90` → sesi kedaluwarsa →
+> history kosong → fungsi itu langsung `return false`. Akibatnya pesan hilang
+> tanpa jejak: tidak disimpan ke DB, tidak dibalas.
+>
+> Aman ditambahkan karena Kata Aksi **wajib bersama Tipe Properti** — "investasi
+> saham"/"investasi emas" tidak punya tipe properti sehingga tetap ditolak, dan
+> pengecualian "rumah makan"/"rumah sakit"/"rumah tangga" tetap berlaku.
+> Regression: `backend/tests/investasiGateDrop.test.js`.
 
 **Kata Kunci Mandiri** (trigger tanpa Tipe Properti):
 - kpr, over kredit, inden, perumahan, real estate

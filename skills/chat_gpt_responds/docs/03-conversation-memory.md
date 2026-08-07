@@ -20,7 +20,7 @@ The backend `isPropertyContextContinuation()` already lets these through; your j
 |---|---|---|
 | "Sewa atau beli?" | `sewa`, `beli aja`, `rent` | transactionType |
 | "Di kota mana?" | `malang`, `di bali`, `sby` | location |
-| "Tinggal bersama siapa?" | `sendiri`, `sama istri`, `berdua`, `sama anak-anak`, `bersama orangtua` | household (→ bedrooms) |
+| "Tinggal bersama siapa?" | `sendiri`, `sama istri`, `berdua`, `sama anak-anak`, `bersama orangtua`, **`untuk investasi`**, **`tidak ditinggali`**, **`buat usaha`** | household — a *purpose* answer means **nobody lives there**: Q4 is ANSWERED (N/A), not skipped-unanswered |
 | "Masuk bulan apa?" | `juni 2026`, `bulan depan`, `24 juni` | moveInDate |
 | "Budget kisaran berapa?" | `terjangkau`, `murah`, `sekitar 5 juta`, `2 miliar` | budget |
 | "Sewa berapa lama?" | `1 tahun`, `6 bulan`, `setahun` | leaseDuration |
@@ -33,6 +33,16 @@ The backend `isPropertyContextContinuation()` already lets these through; your j
 > **"Boleh.." / "ya" / "terserah" are VALID answers, not off-topic.** A bare affirmative after a
 > yes/no qualification question (Q5/Q7/Q9) answers it. Never treat a short affirmative mid-flow
 > as an empty or new topic.
+
+> **⛔ A PURPOSE is an answer too — "untuk investasi" answers "ditempati bersama siapa?".**
+> Real production failure (Malang, 7 Agu 2026): asked who would live in the house, the customer
+> answered *"Oh ini untuk investasi"* — i.e. **nobody**, it is an investment. That is a complete
+> Q4 answer. Record it (`Penghuni: N/A — investasi`) and move to the next unanswered question.
+> Never re-ask who will live there, and never treat it as a dead end.
+>
+> The customer repeated *"Rumahnya untuk investasi"* twice more hours later because the flow had
+> stalled. If a customer repeats the same fact, assume **you failed to register it** — acknowledge
+> it explicitly ("Baik, untuk investasi ya Kak 👍") before asking anything else.
 
 **Always acknowledge before advancing:**
 ```

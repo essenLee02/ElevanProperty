@@ -2,6 +2,7 @@ const { loadProjectSkillPrompt } = require('./skillPromptService');
 const { detectBudget, detectFacilities, stripCommercialUsePhrases, stripNearPhrases, stripAmbiguousRumah, stripInvestmentIntentPhrases, stripMovingFromPhrases, detectUseCase, isNonResidentialUse, detectLocation, isKnownLocationName } = require('./propertyRecommendationService');
 const { parseCustomerDate, isDontKnowDateAnswer, WAITING_THE_UPDATE } = require('../utils/customerDateParser');
 const { expandAbbreviations }                 = require('../utils/lazyChatNormalizer');
+const { expandStandardFacilities }            = require('../utils/standardFacilities');
 const { detectCustomerFrustration } = require('../utils/propertyKeywordFilter');
 const { getCityLandmarks }                    = require('../utils/locationLandmarks');
 
@@ -2153,6 +2154,36 @@ Kalau sudah ada area/kecamatan tertentu, boleh sekalian disebut ya.` };
  * @param {object} state - From extractQualificationState()
  * @returns {string}
  */
+/**
+ * Field WAJIB yang masih kosong — sumber tunggal untuk "boleh tampilkan summary?".
+ *
+ * Dipakai DUA tempat yang harus selalu sepakat:
+ *   1. `buildQualificationStateBlock()` → banner "🚫 SUMMARY DIBLOKIR".
+ *   2. `buildWhatsappReplyPrompt()`     → menyembunyikan TEMPLATE BRIEF selama
+ *      masih ada field wajib kosong (lihat catatan di sana).
+ * Dulu daftar ini hanya hidup di dalam (1); (2) tidak punya cara mengetahuinya.
+ *
+ * @param {object} state hasil extractQualificationState()
+ * @returns {string[]} label field wajib yang belum terisi (kosong = summary boleh)
+ */
+function listMissingMandatory(state = {}) {
+  const isSale = (state.transactionType || '').toLowerCase().includes('sale')
+    || (state.transactionType || '').toLowerCase().includes('beli');
+
+  const missing = [];
+  if (!state.transactionType)     missing.push('Q1 Tipe transaksi');
+  if (!state.buildingType)        missing.push('Tipe properti');
+  if (!state.city)                missing.push('Q2 Lokasi KOTA');
+  if (!state.budget)              missing.push('Q3 Budget');
+  if (!(Array.isArray(state.facilities) ? state.facilities.length : state.facilities))
+                                  missing.push('Q_FAC Fasilitas');
+  if (!state.redFlags)            missing.push('Q5 Avoiding & Preference');
+  if (!state.viewingDate)         missing.push('Q9b Jadwal survei (tanggal, atau "Minta listing")');
+  if (!state.moveInDate)          missing.push('Q8 Tanggal masuk/check-in');
+  if (isSale && !state.financing) missing.push('Q_KPR Pembiayaan (WAJIB untuk beli)');
+  return missing;
+}
+
 function buildQualificationStateBlock(state) {
   const row = (label, val) => val
     ? `✅ ${label}: ${val}`
@@ -2244,9 +2275,27 @@ function buildQualificationStateBlock(state) {
   lines.push('     kata "kisaran" dalam pesan customer sebagai referensi lokasi.');
   lines.push('');
 
+  // ⚠️ LABEL INDONESIA, BUKAN ENUM INTERNAL. Bug produksi (5 Agu 2026): state
+  // menampilkan enum mentah `sale`, LLM menerjemahkannya sendiri jadi "Jual",
+  // dan customer yang jelas bilang "Mau BELI rumah" menerima "✓ Rencana: Jual"
+  // — kebalikan makna. Enum `sale`/`rent` ditulis dari sudut pandang LISTING
+  // (properti ini dijual/disewakan); summary bicara dari sudut pandang CUSTOMER
+  // (dia membeli/menyewa). Sajikan label siap-salin agar LLM tidak menerjemahkan.
+  const TX_LABEL_ID   = { sale: 'Beli', rent: 'Sewa', buy: 'Beli', beli: 'Beli', sewa: 'Sewa' };
+  const TYPE_LABEL_ID = {
+    house: 'Rumah', apartment: 'Apartemen', villa: 'Villa', hotel: 'Hotel',
+    boarding_house: 'Kos', shophouse: 'Ruko', office: 'Kantor',
+    warehouse: 'Gudang', store: 'Toko', mansion: 'Mansion',
+    kondotel: 'Kondotel', condo: 'Kondominium', others: 'Properti',
+  };
+  const _txRaw    = String(state.transactionType || '').trim().toLowerCase();
+  const _typeRaw  = String(state.buildingType    || '').trim().toLowerCase();
+  const txLabel   = state.transactionType ? (TX_LABEL_ID[_txRaw]     || state.transactionType) : null;
+  const typeLabel = state.buildingType    ? (TYPE_LABEL_ID[_typeRaw] || state.buildingType)    : null;
+
   lines.push(
-    row('Tipe transaksi    [Q1]', state.transactionType),
-    row('Tipe properti         ', state.buildingType ? state.buildingType + fbNote : null),
+    row('Tipe transaksi    [Q1]', txLabel),
+    row('Tipe properti         ', typeLabel ? typeLabel + fbNote : null),
     row('Kota              [Q2]', state.city),
     row('Area/Kecamatan  [Q2c]', state.district),
     // Q2b: ✅ = customer answered; ⏭️ = AI asked but customer redirected (skip, don't repeat); ❓ = not asked yet.
@@ -2276,7 +2325,13 @@ function buildQualificationStateBlock(state) {
     row('Jam survei       [Q9c]', state.viewingDate === 'Minta listing' ? 'n/a (customer minta listing)' : state.viewingTime),
     row('Durasi sewa      [Q10]', state.leaseDuration),
     row('Furnitur         [Q11]', state.furnishing),
-    row('Fasilitas  ⚠️WAJIB     ', Array.isArray(state.facilities) && state.facilities.length ? state.facilities.join(', ') : null),
+    // Marker internal 'standar' DIEKSPANSI jadi daftar fasilitas nyata per tipe
+    // properti — dulu tampil apa adanya sebagai "✓ Fasilitas: Standar" (satu
+    // kata tanpa isi) di summary customer. Lihat utils/standardFacilities.js.
+    row('Fasilitas  ⚠️WAJIB     ', (() => {
+      const expanded = expandStandardFacilities(state.facilities, state.buildingType, state.furnishing || '');
+      return expanded.length ? expanded.join(', ') : null;
+    })()),
     row('Apt preference   [Q12]', state.apartmentPref),
   );
 
@@ -2326,17 +2381,7 @@ function buildQualificationStateBlock(state) {
   // Q6 Patokan dan Q7 Area alternatif DULU ikut memblokir summary. Itu keliru:
   // keduanya opsional, dan memblokir di situ membuat AI menahan brief sambil
   // menanyakan hal yang boleh saja tidak dijawab customer.
-  const missingMandatory = [];
-  if (!state.transactionType)     missingMandatory.push('Q1 Tipe transaksi');
-  if (!state.buildingType)        missingMandatory.push('Tipe properti');
-  if (!state.city)                missingMandatory.push('Q2 Lokasi KOTA');
-  if (!state.budget)              missingMandatory.push('Q3 Budget');
-  if (!(Array.isArray(state.facilities) ? state.facilities.length : state.facilities))
-                                  missingMandatory.push('Q_FAC Fasilitas');
-  if (!state.redFlags)            missingMandatory.push('Q5 Avoiding & Preference');
-  if (!state.viewingDate)         missingMandatory.push('Q9b Jadwal survei (tanggal, atau "Minta listing")');
-  if (!state.moveInDate)          missingMandatory.push('Q8 Tanggal masuk/check-in');
-  if (isSale && !state.financing) missingMandatory.push('Q_KPR Pembiayaan (WAJIB untuk beli)');
+  const missingMandatory = listMissingMandatory(state);
 
   if (missingMandatory.length > 0) {
     lines.push('');
@@ -2635,6 +2680,25 @@ function buildWhatsappReplyPrompt(session, history, userMessage, propertyContext
   // (dan tidak berbiaya token) bila cache belum hangat atau API tidak tersedia.
   const liveLandmarkBlock = buildLiveLandmarkBlock(qualState?.district || qualState?.location);
 
+  // ── Boleh tampilkan summary sekarang? ────────────────────────────────────
+  // Bug produksi 7 Agu 2026 (Malang, beli untuk investasi): state, direktif
+  // final, dan banner "🚫 SUMMARY DIBLOKIR" SEMUA sudah benar — findNextQuestion
+  // mengembalikan Q7 — tapi AI tetap membalas dengan kalimat penutup
+  // "Mohon maaf … belum ada properti di katalog saya yang cocok". Kalimat itu
+  // TIDAK dikarang: ia ada di TEMPLATE BRIEF dalam prompt ini, siap disalin.
+  // Malang memang belum punya listing sama sekali (hasCatalogContext=false),
+  // jadi cabang katalog-kosong itulah yang tercetak di template.
+  //
+  // Pelajaran yang sama seperti bug-bug prompt sebelumnya: menambah larangan
+  // tidak menutup celah — MENGHILANGKAN kalimatnya yang menutup. Selama masih
+  // ada field wajib kosong, template brief (khususnya kalimat penutupnya)
+  // tidak boleh hadir utuh di prompt; yang tersisa hanya kerangka format.
+  const missingNow       = qualState ? listMissingMandatory(qualState) : [];
+  const summaryIsBlocked = missingNow.length > 0;
+  const summaryBlockedNote = summaryIsBlocked
+    ? `\n\n⛔ **SUMMARY SEDANG DIBLOKIR** — field wajib belum terisi: ${missingNow.join(', ')}.\nTemplate di bawah HANYA referensi format untuk NANTI. DILARANG KERAS mengirim bagian mana pun darinya pada giliran ini — termasuk kalimat pembuka, baris ✓, maupun kalimat PENUTUP. Balasan Anda giliran ini WAJIB berupa SATU pertanyaan berikutnya sesuai DIREKTIF FINAL.`
+    : '';
+
   // ── Q1-Q12 qualification instructions — selalu diinjeksi ─────────────────
   const summaryModeInstructions = `
 
@@ -2791,15 +2855,15 @@ Show the structured brief ONLY when ALL of the following are answered:
 - Q4 or Q9 (household/decision maker)
 - Q7 (alternative areas)
 
-**Brief format:**
+**Brief format:**${summaryBlockedNote}
 \`\`\`
-Baik, permintaan utama Anda sudah saya catat, sebagai berikut 📝 🔥
+Baik, saya sudah catat permintaan Anda, sebagai berikut 📝 🔥
 
 ✓ Rencana: *[nilai dari Q1 tx — HANYA jika ✅]*
 
 ✓ Tipe: *[nilai dari building type — HANYA jika ✅]*
 
-✓ Kota: *[nilai dari Q2 — HANYA jika ✅]*  ⛔ label WAJIB "Kota", JANGAN "Lokasi"
+✓ Kota: *[nilai dari Q2 — HANYA jika ✅]*
 
 ✓ Area: *[nilai dari Q2c — HANYA jika ✅; area/kecamatan di dalam kota, mis. "Ngagel"]*
 
@@ -2830,12 +2894,12 @@ Baik, permintaan utama Anda sudah saya catat, sebagai berikut 📝 🔥
 
 
 ${!showCatalogAfterBrief
-  ? `Saya akan segera menghubungi Anda dengan rekomendasi properti yang paling sesuai! 🏠
-
-Terima kasih sudah menghubungi saya. 🙏`
+  ? `Terima kasih sudah menghubungi saya. 🙏`
   : hasCatalogContext
     ? `[Setelah brief di atas, LANJUTKAN LANGSUNG tanpa jeda — tampilkan rekomendasi properti dari "Backend property catalog context". Jika ada exact match tampilkan dulu. Jika tidak ada, sampaikan tidak ada yang persis cocok lalu tampilkan alternatif terdekat. Gunakan format yang jelas dan mudah dibaca di WhatsApp.]`
-    : `Mohon maaf, Kak 🙏 untuk saat ini belum ada properti di katalog saya yang cocok dengan kriteria di atas. Permintaan Anda sudah saya catat, dan saya kabari begitu ada unit yang sesuai masuk.
+    : summaryIsBlocked
+      ? `[kalimat penutup katalog-kosong SENGAJA DISEMBUNYIKAN selama summary diblokir — jangan mengarang penggantinya, cukup tanyakan pertanyaan berikutnya]`
+      : `Mohon maaf, Kak 🙏 untuk saat ini belum ada properti di katalog saya yang cocok dengan kriteria di atas. Permintaan Anda sudah saya catat, dan saya kabari begitu ada unit yang sesuai masuk.
 
 Terima kasih sudah menghubungi saya. 🙏`}
 
@@ -2845,6 +2909,8 @@ ${resolvedAppName}
 \`\`\`
 
 ### Summary Strict Rules
+- **⛔ Label baris WAJIB persis seperti template di atas.** Baris kota memakai label "Kota" — JANGAN "Lokasi". Anotasi/penjelasan apa pun dari dokumen ini TIDAK BOLEH ikut tersalin ke pesan customer: yang dikirim hanya "✓ Label: *nilai*", tanpa tanda ⛔, tanpa catatan kurung, tanpa komentar instruksi. (Bug nyata 5 Agu 2026: baris "✓ Kota: Surabaya ⛔ label Kota, BUKAN Lokasi" terkirim mentah ke customer.)
+- **⛔ Nilai "Rencana" memakai sudut pandang CUSTOMER: "Beli" atau "Sewa".** JANGAN PERNAH menulis "Jual" — customer adalah pembeli, bukan penjual. QUALIFICATION STATE sudah memberi label Indonesia siap-salin di baris "Tipe transaksi"; salin persis, jangan menerjemahkan enum internal sendiri.
 - **HANYA sertakan field yang ✅ di QUALIFICATION STATE.** Jangan sertakan field yang ❓ — lewati baris itu seluruhnya. Tidak ada tanda "Belum", "N/A", atau apapun untuk field ❓.
 - **Gunakan nilai PERSIS yang tertera setelah ": " di baris ✅** — salin kata per kata tanpa parafrase.
 - **JANGAN gunakan nilai dari raw conversation history** jika field tersebut ❓ di QUALIFICATION STATE.
@@ -2862,7 +2928,8 @@ ${resolvedAppName}
 - **⛔ DILARANG KERAS: "Keputusan bersama" HANYA salinan PERSIS nilai Q9 di QUALIFICATION STATE.** JANGAN mengarang kutipan/dialog customer ("Iya, Kak... saya survei bersama istri") yang tidak muncul sebagai nilai Q9. Jika Q9 ❓ → baris ini TIDAK ADA.
 - **⛔ DILARANG KERAS: "Viewing" TIDAK BOLEH memakai kata relatif ("besok", "lusa", "minggu depan").** QUALIFICATION STATE Q9b sudah berisi tanggal ABSOLUT hasil normalisasi ("DD Bulan YYYY") — salin PERSIS itu. Jangan menebak atau mengganti dengan kata relatif apa pun.
 - **⛔ DILARANG KERAS: "✓" TIDAK PERNAH berpasangan dengan "(Belum ditanyakan)".** Bug nyata (4 Agu 2026): Q_FAC sudah ditanya DAN dijawab ("Fasilitas terserah, Kak" → QUALIFICATION STATE menunjukkan ✅ Fasilitas: standar), tapi brief tetap menulis "✓ Fasilitas: (Belum ditanyakan)" — kontradiksi, dan mengarang nilai yang bertentangan dengan state ✅ yang sudah tersedia. Field ✅ SELALU pakai nilai ASLI dari QUALIFICATION STATE (mis. "Standar" untuk marker 'standar'); field ❓ TIDAK ADA barisnya sama sekali — tidak pernah "✓ ... (Belum ditanyakan)".
-- **⛔ DILARANG KERAS: tanda tangan HARUS berupa NAMA ASLI, JANGAN PERNAH literal \${agentName} atau \${appName}.** Bug nyata (4 Agu 2026): brief terkirim ke customer dengan teks harfiah "\${agentName}" dan "\${appName}" alih-alih nama agent dan nama aplikasi sungguhan. Nama ASLI SUDAH ADA di baris "Salam hangat," pada template brief di atas (sudah diisi otomatis) dan di baris "Customer profile" — salin/pakai nama itu APA ADANYA sebagai teks biasa. JANGAN PERNAH mengetik karakter dolar, kurung kurawal buka, atau kurung kurawal tutup di baris tanda tangan dalam kondisi apa pun.
+- **⛔ DILARANG KERAS: tanda tangan HARUS berupa NAMA ASLI, JANGAN PERNAH literal \${agentName} atau \${appName}.** Bug nyata (4 Agu 2026): brief terkirim ke customer dengan teks harfiah "\${agentName}" dan "\${appName}" alih-alih nama sungguhan. Nama ASLI ada di blok "🪪 IDENTITAS ANDA (AGENT)" dan sudah terisi otomatis di baris "Salam hangat," pada template brief di atas — salin APA ADANYA sebagai teks biasa. JANGAN PERNAH mengetik karakter dolar, kurung kurawal buka, atau kurung kurawal tutup di baris tanda tangan.
+- **⛔ DILARANG KERAS: JANGAN menandatangani summary dengan NAMA CUSTOMER.** Bug nyata (6 Agu 2026): summary tertanda "Nigel 期凡努" (nama customer di blok "Customer profile") padahal agent-nya "Leo Felix" — customer seolah menerima surat dari dirinya sendiri. Blok "Customer profile" adalah LAWAN BICARA; tanda tangan SELALU dari blok "🪪 IDENTITAS ANDA (AGENT)". Kalau ragu: nama di "Salam hangat," pada template sudah benar — jangan diganti.
 - One question per message only.
 - Maximum 12 AI messages before showing brief (even if incomplete).
 - ${!showCatalogAfterBrief
@@ -2889,8 +2956,8 @@ Nama aplikasi (APP_NAME): ${resolvedAppName}
    adalah BUG yang pernah terkirim ke customer sungguhan — bukan keluaran sah.
 ${summaryModeInstructions}
 ${qualStateBlock ? `\n${qualStateBlock}\n` : ''}${liveLandmarkBlock}
-Customer profile:
-Name: ${session.name}
+Customer profile (LAWAN BICARA — jangan dipakai sebagai tanda tangan):
+Name: ${session.name}   ← nama CUSTOMER
 Phone: ${session.normalizedPhone}
 Location: ${session.location || session.normalizedLocation || 'Not provided'}
 Source: ${session.source}

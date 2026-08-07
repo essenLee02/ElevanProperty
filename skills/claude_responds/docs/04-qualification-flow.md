@@ -504,6 +504,25 @@ ID: Nanti akan tinggal bersama siapa saja?
 > (kos/kontrakan) ask the **target penyewa** instead. For liburan/dinas ask **capacity**
 > ("menginap berapa orang"). Never change the building type because of the use-case.
 
+> **⛔ "Untuk investasi" is an ANSWER to Q4 — never a reason to end the conversation.**
+> Real production failure (Malang, 7 Agu 2026): asked *"Nanti akan ditempati bersama siapa
+> saja?"*, the customer replied *"Oh ini untuk investasi"*. That fully answers Q4 (nobody
+> will live there). The correct move is to record it and ask the **next unanswered
+> question**. Instead the assistant replied *"Maaf, belum ada properti di katalog saya
+> yang cocok…"* and the conversation died with qualification only half done.
+>
+> ```
+> Cust: Oh ini untuk investasi
+> ✅  → Q4 answered (N/A — investasi) → ask the next ❓ question (Q5/Q6/Q7/Q_KPR/…)
+> ❌  → "Maaf, belum ada properti di katalog…"   ← ends a live interview
+> ❌  → repeating "ditempati bersama siapa?"      ← already answered
+> ```
+>
+> **A "nothing in the catalog" message is ONLY ever the closing of a completed brief.**
+> It is never a valid standalone reply while any mandatory field is still ❓ — an empty
+> catalog says nothing about whether the interview is finished. If the state block shows
+> `🚫 SUMMARY DIBLOKIR`, you owe the customer a question, not an apology.
+
 ### Q5 — Red Flags *(skip if captured in Q2b)*
 
 ```

@@ -103,6 +103,20 @@ const ACTION_WORDS = [
   // Perubahan / koreksi pencarian — "ganti villa", "ubah ke rumah", "ralat apartemen"
   // Hanya valid BERSAMA tipe properti (tidak bisa standalone)
   'ganti', 'ubah', 'ralat', 'cancel', 'batal', 'edit',
+  // ── TUJUAN / USE-CASE ─────────────────────────────────────────────────────
+  // Bug produksi 7 Agu 2026: "Rumahnya untuk investasi" DIBUANG gate ("bukan
+  // query properti") padahal jelas soal properti. Sebabnya: ada tipe properti
+  // ("rumah") tapi TIDAK ada kata aksi — customer menyebut TUJUAN, bukan aksi.
+  // Pesan itu adalah jawaban Q4 (rumah tidak ditinggali), dan saat sesi sudah
+  // kedaluwarsa (TTL 90 menit — customer membalas 9 jam kemudian) history
+  // kosong, sehingga isPropertyContextContinuation() juga ikut gagal dan pesan
+  // hilang tanpa jejak: tidak disimpan, tidak dibalas.
+  // Aman: tetap WAJIB bersama tipe properti — "investasi saham" tidak punya
+  // tipe properti sehingga tetap TIDAK memicu.
+  'investasi', 'invest', 'investment',
+  'ditinggali', 'ditempati', 'dihuni', 'huni', 'hunian',
+  'disewakan lagi', 'dikost', 'dikoskan', 'kos-kosan',
+  'untuk usaha', 'buat usaha', 'untuk kantor', 'buat kantor',
 
   // ── English (bilingual support) ───────────────────────────────────────────
   // Transactions

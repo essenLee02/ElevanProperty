@@ -299,13 +299,26 @@ console.log('\n── Group 7: REAL module — slot cross-contamination (M63) �
   const sSurvey = extractQualificationState(hViewing, 'Bisa survei besok?');
   assert('"Bisa survei besok?" TIDAK mengisi Q8', sSurvey.moveInDate, null);
 
+  // ⚠️ Tanggal TANPA tahun ("6 Agustus") mengikuti aturan parser: bila tanggal
+  // itu sudah LEWAT tahun ini, ia dibaca sebagai tahun DEPAN. Menuliskan tahun
+  // secara hardcode membuat tes ini gagal sendiri setiap kali tanggal server
+  // melewati 6 Agustus (bukan bug — murni artefak waktu-nyata). Hitung tahun
+  // yang diharapkan dengan aturan yang sama.
+  const _expectAug6 = (() => {
+    const now = new Date();
+    const thisYear = new Date(now.getFullYear(), 7, 6);   // 6 Agustus tahun ini
+    const y = thisYear < new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      ? now.getFullYear() + 1 : now.getFullYear();
+    return `06 Agustus ${y}`;
+  })();
+
   const hAfter = hViewing.concat([C('Bisa survei besok?'), A('oke, kapan check-in?')]);
   const sCheckin = extractQualificationState(hAfter, 'Saya checkin tanggal 6 Agustus ini');
-  assert('check-in ASLI tetap tertangkap', sCheckin.moveInDate, '06 Agustus 2026');
+  assert('check-in ASLI tetap tertangkap', sCheckin.moveInDate, _expectAug6);
 
   // Kalimat yang menyebut check-in DAN viewing sekaligus → tetap tanggal masuk.
   const sBoth = extractQualificationState(hViewing, 'Saya checkin tanggal 6 Agustus, sekalian viewing');
-  assert('check-in + viewing satu kalimat → tetap Q8', sBoth.moveInDate, '06 Agustus 2026');
+  assert('check-in + viewing satu kalimat → tetap Q8', sBoth.moveInDate, _expectAug6);
 
   // (B) District tidak boleh menyerap jawaban TANGGAL saat AI menggabung 2 pertanyaan.
   const hTwoQ = [

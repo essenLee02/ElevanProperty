@@ -143,4 +143,61 @@ function wantsPremiumFacilities(text = '', budgetTier = '') {
     || /\beksklusif\b/i.test(tier);
 }
 
-module.exports = { getStandardFacilitiesByType, getPremiumFacilities, wantsPremiumFacilities };
+/** Marker internal yang disimpan state saat customer menjawab "standar/terserah". */
+const STANDARD_MARKER = 'standar';
+
+/** Fallback bila tipe properti belum diketahui saat marker perlu diekspansi. */
+const GENERIC_STANDARD = 'Kamar Tidur, Kamar Mandi, Listrik, Air, Parkir, Keamanan';
+
+/**
+ * Ganti marker `'standar'` dengan daftar fasilitas NYATA sesuai tipe properti.
+ *
+ * BUG PRODUKSI (Surabaya beli-rumah, 5 Agu 2026): customer menjawab "Fasilitas
+ * standar", ekstraktor menyimpan marker internal `['standar']`, dan marker itu
+ * tampil apa adanya di summary sebagai "✓ Fasilitas: Standar" — satu kata tanpa
+ * isi, tidak berguna bagi agent maupun customer.
+ *
+ * ⚠️ Marker tetap DISIMPAN di state; ekspansi hanya saat RENDER. Tipe properti
+ * bisa berganti di tengah sesi (rumah → apartemen), jadi menyimpan marker
+ * menjaga jawaban customer tetap utuh ("dia bilang standar") sambil membiarkan
+ * daftarnya mengikuti tipe terakhir.
+ *
+ * Urutan: item SPESIFIK customer lebih dulu, standar menyusul — yang ia sebut
+ * sendiri adalah yang paling ia pedulikan. Dedup case-insensitive supaya item
+ * yang kebetulan ada di kedua daftar ("AC") tidak tampil dua kali.
+ *
+ * @param {string[]|null} facilities daftar dari state (boleh mengandung marker)
+ * @param {string|null} buildingType enum tipe properti
+ * @param {string} [furnishing] diteruskan ke getStandardFacilitiesByType()
+ * @returns {string[]} daftar siap tampil (tanpa marker internal)
+ */
+function expandStandardFacilities(facilities, buildingType, furnishing = '') {
+  const list = Array.isArray(facilities) ? facilities : [];
+  if (!list.length) return [];
+
+  const isMarker = (f) => String(f || '').trim().toLowerCase() === STANDARD_MARKER;
+  if (!list.some(isMarker)) return list.slice();   // tak ada marker → apa adanya
+
+  const specific = list.filter(f => !isMarker(f));
+  const standardStr = getStandardFacilitiesByType(buildingType, furnishing) || GENERIC_STANDARD;
+
+  const out = [];
+  const seen = new Set();
+  for (const item of [...specific, ...standardStr.split(',')]) {
+    const val = String(item).trim();
+    if (!val) continue;
+    const key = val.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(val);
+  }
+  return out;
+}
+
+module.exports = {
+  getStandardFacilitiesByType,
+  getPremiumFacilities,
+  wantsPremiumFacilities,
+  expandStandardFacilities,
+  STANDARD_MARKER,
+};
