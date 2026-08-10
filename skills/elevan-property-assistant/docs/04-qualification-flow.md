@@ -522,6 +522,14 @@ ID: Ada yang pasti tidak cocok atau ingin dihindari?
     gang sempit, atau dekat rel kereta?
 ```
 
+> ⛔ **A wish is not a red flag.** Q5 asks what to *avoid*. If the answer contains no
+> avoidance at all and only states a want — `"Saya cari jalan yang strategis dan dekat
+> dengan mall dan rumah makan"` — then the red-flag value is **`Tidak ada`**, and the wish
+> belongs to the location anchor (Q6) / Prefer line. A real production brief (Versi 2)
+> printed `✓ Red flags: Saya cari jalan yang strategis dan dekat dengan mall dan rumah
+> makan`, handing the agent a list of things to avoid that were actually the things the
+> customer wanted. Q5 still counts as answered — do not re-ask it.
+
 | Customer says | Stored |
 |---|---|
 | `rawan banjir`, `sering banjir` | Rawan banjir |
@@ -777,12 +785,32 @@ When Q4 household = "1 orang (sendiri)", Q9 auto-sets to `Mandiri` and is not as
 > **⚠️ Viewing MUST appear in the summary** once a schedule is confirmed (day/hour). Don't drop
 > the line just because there's no explicit calendar date — "besok siang jam 1" is a schedule.
 
-### Q10 — Lease Duration *(rent only)*
+### Q10 — Lease / Stay Duration *(rent & booking)*
 
-```
-ID: Rencananya sewa untuk berapa lama? ⏱️
-    (durasi, bukan tanggal — contoh: 6 bulan, 1 tahun)
-```
+**Match the wording to the stay.** A five-night apartment booking is not a yearly lease;
+asking one in the language of the other reads as not listening.
+
+| Context | Ask |
+|---|---|
+| Long-term rent (house, yearly apartment, kos) | `Rencananya sewa untuk berapa lama? ⏱️ (durasi, bukan tanggal — contoh: 6 bulan, 1 tahun)` |
+| **Short stay / booking** — the customer said *booking*, *menginap*, *check-in*, or gave a duration in days/nights | `Rencananya menginap berapa lama? ⏱️ (durasi, bukan tanggal — contoh: 3 malam, 5 hari, 1 minggu)` |
+
+> ⚠️ **Booking is the third transaction type, not a footnote.** Q1 recognises *sewa /
+> beli / **booking***. A booking is still stored under the rent branch, but every
+> customer-facing sentence — the duration question, the price anchors (per malam, not
+> per bulan), and the summary — must speak in stay terms.
+>
+> A real production run (Versi 2, 8–10 Aug 2026) asked *"Rencananya **sewa** untuk berapa
+> lama? (contoh: 6 bulan, 1 tahun)"* to someone who had just written *"saya butuh book
+> selama 5 hari saja"*, and offered price anchors **per bulan** for a nightly stay.
+
+**Volunteered duration counts.** The duration is frequently given long before this question,
+bundled with something else: `"Cari yang badget 800K-1.4 juta/hari. Karena saya butuh book
+selama 5 hari saja"`. That is the answer — record it and never ask again.
+
+**Duration ≠ date offset.** `5 hari lagi` / `2 minggu lagi` is *when they arrive*, not
+*how long they stay*. Only phrases anchored on `durasi`, `selama`, `untuk N <unit>`,
+`book/menginap N <unit>` are durations.
 **Duration ≠ date.** If the customer answers with a calendar date ("26 Juni 2026"), it is **not**
 stored as duration — Q10 stays ❓ and is re-asked with the hint above.
 

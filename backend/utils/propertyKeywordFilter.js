@@ -43,6 +43,11 @@ const PROPERTY_TYPES = [
   'toko', 'pertokoan',
   'penginapan', 'resort',
   'klinik', 'kios',
+  // Kondotel/kondominium: tipe hunian yang dipakai cabang `isBooking` di
+  // findNextQuestion (hotel|kondotel) dan punya slot Q12 tower/lantai sendiri,
+  // tapi sempat TIDAK ada di daftar tipe gate — "Saya booking kondotel di Batu"
+  // ikut dibuang bersama bug booking (7 Agu 2026).
+  'kondotel', 'condotel', 'kondominium', 'condominium', 'kondo',
   // Tanah / kavling
   'kavling', 'kapling', 'tanah kavling',
   'lahan', 'tanah',
@@ -86,6 +91,20 @@ const ACTION_WORDS = [
   'beli', 'purchase',
   'jual', 'dijual', 'disewakan', 'dikontrakkan',
   'cari', 'nyari', 'mencari',
+  // ── BOOKING — transaksi KETIGA, sempat hilang dari daftar ini ──────────────
+  // Bug produksi 7 Agu 2026: "Saya booking hotel di Surabaya" DIBUANG gate
+  // ("bukan query properti") padahal ada tipe properti (hotel) DAN kota.
+  // Sebabnya: Q1 mengenal TIGA transaksi — sewa / beli / **booking** — dan
+  // seluruh alur punya cabang `isBooking` (hotel/kondotel/villa), tapi kata
+  // "booking" tidak pernah masuk ACTION_WORDS. Jadi gate hanya meloloskan
+  // kalimat booking yang KEBETULAN memuat kata aksi lain ("Saya *mau* booking
+  // hotel" lolos, "Saya booking hotel" tidak) — perbedaan yang tidak masuk akal
+  // bagi customer. Seluruh alur booking praktis tidak bisa dimulai secara alami.
+  // Aman: tetap WAJIB bersama tipe properti, jadi "booking tiket pesawat" /
+  // "booking meja restoran" tidak punya tipe properti → tetap TIDAK memicu.
+  'booking', 'bookingan', 'membooking', 'reservasi', 'reservation',
+  'menginap', 'nginap', 'nginep', 'inap',
+  'check in', 'check-in', 'checkin',
   // Ketersediaan
   'ada', 'tersedia', 'kosong', 'ready',
   'masih ada', 'masih kosong', 'masih available',
@@ -120,7 +139,7 @@ const ACTION_WORDS = [
 
   // ── English (bilingual support) ───────────────────────────────────────────
   // Transactions
-  'buy', 'sell', 'rent', 'lease',
+  'buy', 'sell', 'rent', 'lease', 'book',
   // Search intent
   'get', 'find', 'search', 'look for', 'looking for', 'looking',
   'want', 'need', 'require',
@@ -142,6 +161,9 @@ const ACTION_WORDS_STRICT_BOUNDARY = new Set([
   // English short words yang bisa nyangkut di kata Indonesia/Inggris lain
   'get', 'rent', 'cost', 'show', 'info', 'edit', 'sell', 'buy', 'want', 'need',
   'lease', 'ready', 'price', 'unit', 'list', 'find', 'search', 'rental', 'available',
+  // 'book' ⊂ "facebook"/"bookmark"/"notebook"; 'inap' ⊂ "menginapkan" (aman) tapi
+  // juga ⊂ "sinapsis" — keduanya wajib word-boundary.
+  'book', 'inap',
   // Indonesian
   'ada', 'dp',
 ]);
@@ -417,7 +439,13 @@ function extractTransactionTypeFromMessage(message) {
   if (!message) return '';
   const lower = message.toLowerCase();
 
-  if (lower.match(/\b(sewa|rental|ngontrak|kontrak|disewakan|kost|kos|boarding|rent|lease)\b/i)) return 'rent';
+  // ⚠️ BOOKING = SEWA. Master flow Q2 memperlakukan booking (hotel/kondotel/
+  // villa, tarif per malam) sebagai cabang sewa — lihat propertyRecommendation
+  // Service TRANSACTION_KEYWORDS.rent yang sudah memuat 'booking'/'menginap'.
+  // Fungsi ini sempat TIDAK memuatnya, sehingga "Saya booking hotel di Surabaya"
+  // menghasilkan transactionType kosong dan katalog dicari tanpa filter
+  // transaksi — dua ekstraktor untuk konsep yang sama, berbeda isi (7 Agu 2026).
+  if (lower.match(/\b(sewa|rental|ngontrak|kontrak|disewakan|kost|kos|boarding|rent|lease|booking|book|reservasi|menginap|nginap|nginep)\b/i)) return 'rent';
   if (lower.match(/\b(beli|jual|dijual|purchase|buy|sell|kpr|inden|dp|cicilan|over kredit)\b/i)) return 'sale';
 
   return '';
@@ -436,6 +464,14 @@ const PROPERTY_QUESTION_PATTERNS = [
   /sewa\s+atau\s+beli/, /beli\s+atau\s+sewa/, /kisaran\s+harga/, /budget/,
   /harga\s+berapa/, /berapa\s+harga/, /di\s+kota\s+(apa|mana)/,
   /lokasi\s+(apa|mana|yang|di)/, /area\s+(mana|apa)/, /wilayah\s+(mana|apa)/,
+  // ⚠️ Q2c ditanyakan dengan kalimat "Di area atau kawasan mana di *Kota* yang
+  // Anda pertimbangkan?" — dan TIDAK SATU PUN pola di atas mencocokinya
+  // ("area mana" tidak pernah bersebelahan; "kawasan" tidak terdaftar sama
+  // sekali). Akibatnya pertanyaan Q2c INVISIBLE bagi gate: hasRecentPropertyQ
+  // dan isInPropertyFlow sama-sama false, sehingga jawaban customer
+  // ("Daerah Gubeng") dibuang sebagai "bukan query properti" (M88, 9 Agu 2026).
+  /\barea\b.{0,20}\bmana\b/, /\bkawasan\b.{0,20}\bmana\b/, /\bdaerah\b.{0,20}\bmana\b/,
+  /\bkecamatan\b.{0,20}\bmana\b/,
   /tipe\s+properti/, /jenis\s+properti/, /furnished|furnish|furnitur/,
   /kamar\s+(tidur|mandi)/, /berapa\s+kamar/, /luas\s+(berapa|bangunan|tanah)/,
   /\bfasilitas\b/, /ada\s+fasilitas/,
@@ -888,7 +924,16 @@ function isPropertyContextContinuation(message, history = []) {
     // — tidak lagi menuntut frasa pertanyaannya terdaftar di PROPERTY_QUESTION_PATTERNS.
     // Ini menutup seluruh kelas bug "AI bertanya, customer jawab, jawaban dianggap
     // off-topic" untuk pertanyaan baru yang belum pernah didaftarkan (M51).
-    if (inPropertyFlow && (hasRecentPropertyQ || aiJustAsked) && lower.length <= 150) {
+    // ⚠️ DULU: `inPropertyFlow && (hasRecentPropertyQ || aiJustAsked)`.
+    // `inPropertyFlow` menuntut MINIMAL DUA pertanyaan properti dari AI, jadi
+    // jawaban atas pertanyaan PERTAMA tidak pernah bisa lolos jalur ini —
+    // padahal justru di situ konteksnya paling tipis (kata tipe/kota baru
+    // muncul sekali). Kasus nyata M88: AI menanyakan Q2c sebagai pertanyaan
+    // pertama, customer menjawab "Daerah Gubeng" lima kali, tidak pernah
+    // dibalas. Syarat dilonggarkan: pertanyaan properti yang DIKENALI
+    // (hasRecentPropertyQ) sudah cukup kuat sendiri — jumlahnya tidak relevan.
+    // `aiJustAsked` (sinyal LEMAH) TETAP menuntut inPropertyFlow.
+    if ((hasRecentPropertyQ || (inPropertyFlow && aiJustAsked)) && lower.length <= 150) {
       const OBVIOUSLY_OFF_TOPIC = [
         /\b(pesan\s+makanan|order\s+makanan|gofood|grabfood|shopeefood|mau\s+makan\s+di|lagi\s+di\s+restoran)\b/i,
         /\b(tiket\s+(pesawat|kereta|bus|kapal)|booking\s+tiket|paket\s+wisata|tur\s+wisata)\b/i,
@@ -905,7 +950,13 @@ function isPropertyContextContinuation(message, history = []) {
       // aiJustAsked SAJA = hanya tahu "AI mengakhiri pesan dengan tanda tanya"
       //   (sinyal LEMAH) → tetap saring CLEAR_NON_PROPERTY, supaya obrolan seperti
       //   "kasi makan dulu ya" tidak lolos hanya karena kebetulan AI baru bertanya.
-      if (!hasRecentPropertyQ && CLEAR_NON_PROPERTY.some(p => p.test(lower))) return false;
+      // ⚠️ Bypass CLEAR_NON_PROPERTY hanya sah bila percakapan SUDAH mapan
+      // (inPropertyFlow) DAN frasa pertanyaannya dikenali. Saat baru ada SATU
+      // pertanyaan (kasus M88), sinyalnya belum cukup untuk meloloskan kosakata
+      // non-properti: "kasi makan dulu ya" tepat sesudah pertanyaan properti
+      // pertama tetap harus ditolak.
+      const strongEnoughToBypass = hasRecentPropertyQ && inPropertyFlow;
+      if (!strongEnoughToBypass && CLEAR_NON_PROPERTY.some(p => p.test(lower))) return false;
       return true;
     }
 
@@ -1078,6 +1129,16 @@ function isPropertyContextContinuation(message, history = []) {
   //     Customer bebas menyebut nama apapun sebagai patokan — yang penting ada
   //     kata penunjuk jarak/lokasi di depannya.
   if (/\b(dekat|deket|near|close\s+to|di\s+jalan|di\s+sekitar|samping|next\s+to|beside)\b/i.test(lower))
+    return true;
+
+  // 11a) Jawaban AREA/DISTRIK Q2c — "Daerah Gubeng", "Area Ijen", "Kawasan
+  //      Dinoyo", "Kecamatan Lowokwaru". Pola 3 di atas hanya mengenali nama
+  //      KOTA (dari _locationCache) dan bentuk "di <kata>"; nama KECAMATAN
+  //      tidak ada di cache mana pun, jadi jawaban Q2c yang sah tidak cocok
+  //      pola apa pun dan ikut terbuang (M88).
+  //      Aman: penanda area (daerah/area/kawasan/…) HARUS diikuti nama, dan
+  //      konteks properti sudah diverifikasi jauh di atas (baris hasPropertyCtx).
+  if (/\b(daerah|area|kawasan|wilayah|kecamatan|kelurahan|district)\s+[a-z]/i.test(lower))
     return true;
 
   // 12) Jawaban fleksibel / tidak ada preferensi (valid untuk Q5/Q6/Q7/Q11)

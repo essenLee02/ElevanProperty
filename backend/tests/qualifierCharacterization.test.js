@@ -19,6 +19,28 @@
 
 'use strict';
 
+/* ─── JAM DIBEKUKAN ───────────────────────────────────────────────────────────
+ * Beberapa skenario memakai kata RELATIF ("besok bisa") yang dinormalisasi jadi
+ * tanggal ABSOLUT ("11 Agustus 2026"). Nilainya otomatis berubah setiap hari,
+ * sehingga snapshot GAGAL setiap kali dijalankan di tanggal berbeda — bukan
+ * karena ada regresi. Ini sudah menghabiskan waktu diagnosis beberapa kali
+ * (M75 dan M88 sama-sama harus mem-A/B dulu untuk membuktikannya artefak jam),
+ * dan peringatannya di V7 §M75 menyarankan pembekuan ini.
+ *
+ * `Date` di-patch SEBELUM modul apa pun membaca waktu. new Date() tanpa argumen
+ * dan Date.now() memakai tanggal acuan tetap; bentuk lain (new Date(x)) tidak
+ * disentuh, sehingga parsing tanggal eksplisit tetap berjalan normal.
+ */
+const FROZEN_NOW = new Date('2026-08-10T09:00:00+07:00').getTime();
+const _RealDate = Date;
+// eslint-disable-next-line no-global-assign
+Date = class extends _RealDate {
+  constructor(...args) { return args.length ? new _RealDate(...args) : new _RealDate(FROZEN_NOW); }
+  static now() { return FROZEN_NOW; }
+};
+Date.UTC = _RealDate.UTC;
+Date.parse = _RealDate.parse;
+
 const fs = require('fs');
 const path = require('path');
 const { ConversationQualifier: CQ } = require('../controllers/chatbotPrivateController');
@@ -26,6 +48,8 @@ const { ConversationQualifier: CQ } = require('../controllers/chatbotPrivateCont
 const SNAP_DIR = path.join(__dirname, '__snapshots__');
 const SNAP_FILE = path.join(SNAP_DIR, 'qualifier.snapshot.json');
 const UPDATE = process.env.UPDATE_SNAPSHOT === '1';
+
+
 
 /* ─── Transcript helpers ──────────────────────────────────────────────────── */
 const u = (message) => ({ role: 'user', message });

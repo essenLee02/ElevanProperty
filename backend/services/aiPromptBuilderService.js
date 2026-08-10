@@ -561,6 +561,12 @@ function extractQualificationState(history = [], currentMessage = '') {
     // Tanpa flag ini, memperluas Q2c ke SEMUA kota (M84) akan membuat customer
     // yang menolak ditanya area terjebak loop tak berujung.
     q2cDeclined     : false,
+    // Customer memakai bahasa BOOKING/menginap ("booking apartemen", "book
+    // selama 5 hari", "checkin tanggal 15"). transactionType tetap 'rent'
+    // (booking = cabang sewa, master flow Q2), tapi NADA pertanyaannya harus
+    // ikut: menanyakan "Rencananya SEWA untuk berapa lama?" kepada orang yang
+    // menginap 5 hari terbaca seperti bot yang tidak menyimak (M89).
+    bookingIntent   : false,
   };
 
   const MONTH_ID = 'januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember';
@@ -823,6 +829,15 @@ function extractQualificationState(history = [], currentMessage = '') {
     if (!state.city) {
       const loc = detectLocation(raw);
       if (loc) state.city = loc;
+    }
+
+    // Sinyal BOOKING / menginap jangka pendek (M89). Loop ini SUDAH difilter ke
+    // peran CUSTOMER di atas — penting, karena kata "booking"/"check-in" sering
+    // muncul di pesan AI sendiri ("langsung bisa jadwalkan viewing…"), sehingga
+    // memindai pesan AI akan menyalakan flag ini untuk sewa tahunan biasa.
+    if (!state.bookingIntent &&
+        /\b(booking|bookingan|book|menginap|nginap|nginep|check[\s-]?in|checkin|reservasi)\b/i.test(raw)) {
+      state.bookingIntent = true;
     }
 
     // Q2c — District / area within large city
@@ -1465,8 +1480,27 @@ function extractQualificationState(history = [], currentMessage = '') {
     // kata "durasi" itu sendiri (bukan sekadar angka+satuan pertama di kalimat)
     // supaya "2 minggu" (bagian dari tanggal) tidak ikut tertangkap secara keliru.
     if (!state.leaseDuration) {
-      const DURATION_ANCHOR_RE = /durasi\s*(?:sewa|menginap|booking|nginap|kontrak)?\s*[:\-]?\s*(\d+)\s*(hari|malam|minggu|pekan|bulan|tahun|thn|day|days|night|nights|week|weeks|month|months|year|years)\b/i;
-      const m = custResp.match(DURATION_ANCHOR_RE);
+      const UNIT = '(hari|malam|minggu|pekan|bulan|tahun|thn|day|days|night|nights|week|weeks|month|months|year|years)';
+      // (a) Anchor eksplisit pada kata "durasi" (M82).
+      const DURATION_ANCHOR_RE = new RegExp(`durasi\\s*(?:sewa|menginap|booking|nginap|kontrak)?\\s*[:\\-]?\\s*(\\d+)\\s*${UNIT}\\b`, 'i');
+      // (b) Anchor pada kata "SELAMA" / "untuk N <unit>" / "book N malam" (M89).
+      //     Kasus nyata (transkrip Versi 2, 8–10 Agu 2026): "Cari yang badget
+      //     800K-1.4 juta/hari. Karena saya butuh book selama 5 hari saja" —
+      //     durasi jelas disebutkan, tapi tanpa kata "durasi" sehingga anchor
+      //     (a) tidak cocok dan blok Q10 di bawah juga tidak jalan (AI sedang
+      //     menanyakan BUDGET, bukan durasi). Akibatnya AI tetap bertanya
+      //     "Rencananya sewa untuk berapa lama?" — pertanyaan yang SUDAH
+      //     dijawab, persis keluhan repetitif dari customer.
+      //     ⚠️ "selama"/"book"/"menginap" WAJIB ada. Tanpa penanda itu
+      //     "5 hari lagi" (OFFSET tanggal masuk, bukan durasi) akan ikut
+      //     tertangkap — justru kesalahan yang dicegah M82.
+      const DURATION_SELAMA_RE = new RegExp(
+        `\\b(?:selama|untuk|book(?:ing)?|nginap|menginap|nginep|stay(?:ing)?|for)\\s+(\\d+)\\s*${UNIT}\\b`, 'i');
+      const m = custResp.match(DURATION_ANCHOR_RE)
+        // "5 hari lagi" / "2 minggu lagi" = offset tanggal → JANGAN dibaca durasi.
+        || (!/\b\d+\s*(?:hari|malam|minggu|pekan|bulan|tahun)\s+lagi\b/i.test(custResp)
+            ? custResp.match(DURATION_SELAMA_RE)
+            : null);
       if (m) state.leaseDuration = normalizeDuration(`${m[1]} ${m[2]}`);
     }
 
@@ -1545,7 +1579,25 @@ function extractQualificationState(history = [], currentMessage = '') {
     }
     // Q5 — red flags
     if (!state.redFlags && /pasti tidak cocok|ingin dihindari|yang\s+dihindari|hadap barat|gang sempit|rumah tua|rawan banjir|rel kereta/.test(aiText)) {
-      state.redFlags = custResp;
+      // ⚠️ JAWABAN Q5 YANG SEBENARNYA PREFERENSI, BUKAN PENGHINDARAN (M89).
+      // Kasus nyata (transkrip Versi 2, 8–10 Agu 2026): Q5 "Ada yang pasti
+      // tidak cocok?" dijawab "Saya cari jalan yang strategis dan dekat dengan
+      // mall dan rumah makan" — itu KEINGINAN, bukan hal yang dihindari. Dulu
+      // kalimat mentahnya disimpan bulat-bulat sehingga summary mencetak
+      // "✓ Red flags: Saya cari jalan yang strategis dan dekat dengan mall dan
+      // rumah makan" — membalik makna slot, dan agent membaca daftar
+      // "hindari" yang isinya justru hal yang DIINGINKAN customer.
+      // Isi preferensinya sendiri TIDAK hilang: kalimat yang sama sudah
+      // ditangkap sebagai patokan lokasi (Q6/anchorPoint) lewat "dekat …".
+      const hasAvoidMarker = /\b(tidak|tdk|ga|gak|gk|nggak|ngga|enggak|jangan|hindari|dihindari|anti|bukan|tanpa|jauh\s+dari|hadap\s+barat|gang\s+sempit|rumah\s+tua|rawan|bising|banjir|macet|kumuh|panas|bau)\b/i.test(custResp);
+      const looksLikeWant   = /\b(cari|mau|ingin|pengen|pingin|butuh|prefer|maunya|yang\s+penting|pokok(?:nya)?|dekat|deket|strategis)\b/i.test(custResp);
+      if (!hasAvoidMarker && looksLikeWant) {
+        // Q5 SUDAH ditanya & dijawab → JANGAN diulang; tapi nilainya jujur:
+        // customer tidak menyebut satu pun hal yang dihindari.
+        state.redFlags = 'Tidak ada';
+      } else {
+        state.redFlags = custResp;
+      }
     }
     // ⚠️ RED FLAG YANG DIBERIKAN SUKARELA (di luar giliran Q5) JUGA DICATAT.
     // Customer sering menyebut hal yang dihindari saat menjawab pertanyaan LAIN —
@@ -1877,6 +1929,13 @@ function findNextQuestion(state) {
   const isSewa  = tx.includes('sewa') || tx.includes('rent');
   const isApt   = type === 'apartment';
   const isBooking = (type === 'hotel' || type === 'kondotel') && isSewa;
+  // Menginap jangka pendek — TIDAK sama dengan isBooking. isBooking mengubah
+  // ALUR (melewati Q2c/Q2b dan hanya berlaku untuk hotel/kondotel); isShortStay
+  // hanya mengubah NADA satu pertanyaan, sehingga aman dipakai untuk tipe apa
+  // pun tanpa menggeser urutan Q (pelajaran M69: menyisipkan/menggeser
+  // pertanyaan memutus alur lain).
+  const isShortStay = isBooking || state.bookingIntent === true ||
+    /\b\d+\s*(hari|malam|day|night)/i.test(String(state.leaseDuration || ''));
   const isCommercial = ['shophouse', 'office', 'warehouse', 'store'].includes(type);
   const isLuxury = type === 'mansion';
 
@@ -2024,7 +2083,10 @@ Kalau sudah ada area/kecamatan tertentu, boleh sekalian disebut ya.` };
 
   // Q10 — Durasi sewa (sewa only, skip hotel/kondotel/villa booking — durasi = malam/minggu)
   if (isSewa && !isBooking && !state.leaseDuration)
-    return { q: 'Q10', hint: 'Rencananya sewa untuk berapa lama? ⏱️ (durasi, bukan tanggal — contoh: 6 bulan, 1 tahun)' };
+    // Nada pertanyaan mengikuti KONTEKS: menginap 5 hari ≠ sewa tahunan (M89).
+    return isShortStay
+      ? { q: 'Q10', hint: 'Rencananya menginap berapa lama? ⏱️ (durasi, bukan tanggal — contoh: 3 malam, 5 hari, 1 minggu)' }
+      : { q: 'Q10', hint: 'Rencananya sewa untuk berapa lama? ⏱️ (durasi, bukan tanggal — contoh: 6 bulan, 1 tahun)' };
 
   // Q_KPR — Pembiayaan (MANDATORY untuk SEMUA tipe beli — pengganti durasi sewa)
   if (!isSewa && !state.financing) {
