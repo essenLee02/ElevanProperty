@@ -188,7 +188,7 @@ function extractMessage(body = {}) {
 async function getAllAgents() {
   const agents = await User.findAll({
     where      : { privilege: 'agent', status: 1 },
-    attributes : ['id', 'user_id', 'name', 'phone', 'email', 'username'],
+    attributes : ['id', 'user_id', 'name', 'phone', 'email', 'username', 'ai_primary'],
     order      : [['created_date', 'ASC']]
   });
   return agents;
@@ -553,6 +553,7 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
       session,
       message,
       agentName  : agent.name,
+      agentAiPrimary: agent.ai_primary,
       agentUserId: agent.user_id,   // scoping katalog per-agent (RESPOND_CATALOG_RUN=ON)
     });
     aiResult = result;

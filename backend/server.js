@@ -201,6 +201,45 @@ async function ensureRequiredDatabaseColumns() {
       });
       console.log('Database migration completed: added users.catalog_summary column');
     }
+
+    // ── Preferensi agent: AI provider + jenis transaksi yang dilayani ────────
+    // NOT NULL + defaultValue → baris lama otomatis terisi default yang aman
+    // (Default/Both/Cash), jadi tidak ada agent yang tiba-tiba kehilangan
+    // konfigurasi setelah upgrade.
+    const USER_PREF_COLUMNS = [
+      ['ai_primary',      { type: DataTypes.STRING(30), allowNull: false, defaultValue: 'Default' }],
+      ['trans_type',      { type: DataTypes.STRING(30), allowNull: false, defaultValue: 'Both' }],
+      ['payment_type',    { type: DataTypes.STRING(30), allowNull: false, defaultValue: 'Cash' }],
+      ['rental_duration', { type: DataTypes.INTEGER,    allowNull: true,  defaultValue: null }],
+      ['rental_type',     { type: DataTypes.STRING(30), allowNull: true,  defaultValue: null }],
+    ];
+    for (const [col, spec] of USER_PREF_COLUMNS) {
+      if (usersTable && !usersTable[col]) {
+        await queryInterface.addColumn('users', col, spec);
+        console.log(`Database migration completed: added users.${col} column`);
+      }
+    }
+
+    // ⚠️ Default kolom SENDIRI tidak konsisten dengan aturan bisnis: trans_type
+    // default "Both" sedangkan payment_type default "Cash", padahal aturannya
+    // Both → payment_type WAJIB "Both". Setiap baris yang lahir dari default itu
+    // langsung melanggar invariant (terbukti: 6 baris agent di DB produksi).
+    //
+    // Dijalankan SETIAP BOOT, bukan hanya saat kolom baru dibuat: kolomnya bisa
+    // sudah ada lebih dulu (dibuat manual / sync sebelumnya) sehingga baris
+    // bermasalah tidak akan pernah tersentuh oleh cek "baru ditambahkan".
+    // Idempoten & murah — no-op begitu data sudah konsisten.
+    const [bothFixed] = await sequelize.query(
+      "UPDATE users SET payment_type = 'Both' WHERE trans_type = 'Both' AND payment_type <> 'Both'"
+    );
+    const [rentFixed] = await sequelize.query(
+      "UPDATE users SET payment_type = 'Cash' WHERE trans_type = 'Rent' AND payment_type <> 'Cash'"
+    );
+    // Sale boleh Cash/KPR/Both → tidak perlu dinormalisasi.
+    const fixedCount = (bothFixed?.affectedRows || 0) + (rentFixed?.affectedRows || 0);
+    if (fixedCount > 0) {
+      console.log(`Database migration completed: normalised users.payment_type against trans_type (${fixedCount} row(s))`);
+    }
   } catch (error) {
     if (!String(error.message || '').toLowerCase().includes('no description found')) {
       console.warn('Users schema check warning:', error.message);

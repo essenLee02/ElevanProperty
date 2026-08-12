@@ -12,6 +12,7 @@ const { HTTP } = require('../utils/httpStatus');
 const { sendSuccess, sendError } = require('../utils/responseFormat');
 const { safeLog } = require('../utils/safeLog');
 const { authLog } = require('../utils/authLogger');
+const { validateUserBusinessFields } = require('../utils/userBusinessRules');
 const GeneralController = require('./GeneralController');
 
 class RegisterController extends GeneralController {
@@ -22,7 +23,10 @@ class RegisterController extends GeneralController {
   }
 
   static async insertDataAgent(req, res) {
-    const { name, birthdate, phone, username, password, konfirmasi, privilege, createdBy, email } = req.body;
+    const {
+      name, birthdate, phone, username, password, konfirmasi, privilege, createdBy, email,
+      ai_primary, trans_type, payment_type, rental_duration, rental_type,
+    } = req.body;
 
     const requestInfo = {
       ip:    req.ip || req.connection?.remoteAddress || 'unknown',
@@ -70,6 +74,21 @@ class RegisterController extends GeneralController {
       return sendError(res, HTTP.BAD_REQUEST, null, 'Format email tidak valid');
     }
 
+    // trans_type / payment_type / rental_* / ai_primary — saling terikat, satu
+    // sumber kebenaran di utils/userBusinessRules.js. Divalidasi SEBELUM query
+    // apa pun supaya input tidak sah tidak menyentuh DB.
+    const business = validateUserBusinessFields({
+      ai_primary, trans_type, payment_type, rental_duration, rental_type,
+    });
+    if (!business.ok) {
+      authLog.registerFailed(business.error, {
+        ...requestInfo,
+        'HTTP Status':    HTTP.BAD_REQUEST,
+        'Username Input': username,
+      });
+      return sendError(res, HTTP.BAD_REQUEST, null, business.error);
+    }
+
     try {
       const existingUser = await User.findOne({ where: { username: String(username).trim() } });
       if (existingUser) {
@@ -103,6 +122,7 @@ class RegisterController extends GeneralController {
         password:      hashedPassword,
         email:         cleanEmail || null,
         catalog_summary: 'OFF', // default OFF saat register — bisa diubah di halaman profile
+        ...business.values,     // ai_primary, trans_type, payment_type, rental_duration, rental_type
         refresh_token: null,
         updated_date:  null,
         update_by:     null,
@@ -135,6 +155,11 @@ class RegisterController extends GeneralController {
         username:     newUser.username,
         email:        newUser.email,
         catalog_summary: newUser.catalog_summary,
+        ai_primary:      newUser.ai_primary,
+        trans_type:      newUser.trans_type,
+        payment_type:    newUser.payment_type,
+        rental_duration: newUser.rental_duration,
+        rental_type:     newUser.rental_type,
         status:       newUser.status,
         privilege:    newUser.privilege,
         created_date: newUser.created_date,

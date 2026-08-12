@@ -19,9 +19,21 @@ const {
 const chatbotPrivateController = require('./chatbotPrivateController');
 const { getSkillRegistryStatus } = require('../services/skillPromptService');
 const { hasPropertyKeyword } = require('../utils/propertyKeywordFilter');
+const {
+  extractQualificationState,
+  listMissingMandatory,
+} = require('../services/aiPromptBuilderService');
 
 // Matches all assistant/bot roles stored in chat history
 const QS_AI_ROLE = /^(assistant|ai|bot)$/i;
+
+// Jendela history untuk ekstraksi state kualifikasi — NILAI SAMA dengan
+// whatsappAIService (AI_HISTORY_WINDOW, default 60). Disamakan supaya chatbot
+// web dan terminal message berperilaku identik; lihat catatan di sendMessage().
+const CHAT_HISTORY_WINDOW = (() => {
+  const n = parseInt(process.env.AI_HISTORY_WINDOW || '', 10);
+  return Number.isFinite(n) && n >= 24 ? n : 60;
+})();
 
 class ChatbotController {
   static #cookieTtlMinutes() {
@@ -135,7 +147,15 @@ class ChatbotController {
       session = await findOrCreateSession(payload.name, payload.phone, payload.location, 'website_chatbot');
       await saveUserMessage(session.id, payload.message, 'website_chatbot', { location: payload.location });
 
-      history = await getConversationHistory(session.id, 12);
+      // ⚠️ JENDELA HISTORY — harus sama besar dengan jalur WhatsApp. Dulu 12,
+      // dan itu MEMOTONG input perhitungan QUALIFICATION STATE: pada percakapan
+      // panjang, pesan pembuka (tipe/transaksi/kota) keluar scope sehingga
+      // seluruh field kembali ❓ dan AI menanyakan ulang Q1 tanpa henti (bug
+      // M35/M64 di jalur WhatsApp — jangan diulang di sini). Pemangkasan token
+      // hanya boleh mengenai transkrip yang DITAMPILKAN, bukan input state;
+      // buildWhatsappReplyPrompt() sudah memangkasnya sendiri lewat
+      // AI_PROMPT_DISPLAY_TURNS.
+      history = await getConversationHistory(session.id, CHAT_HISTORY_WINDOW);
 
       // ── Q1 Non-Property Gate ──────────────────────────────────────────────
       // If this is the very first message in the session (no prior AI turns)
@@ -148,10 +168,39 @@ class ChatbotController {
         return res.json({ success: true, reply: deflect, sessionId: session.id, source: 'q1_gate' });
       }
 
+      // ── Katalog HANYA setelah kualifikasi lengkap ─────────────────────────
+      // Bug nyata: katalog disuntikkan ke prompt pada SETIAP pesan, sehingga
+      // pesan pertama "Saya mau booking rumah" langsung dibalas 8 listing acak
+      // lintas provinsi (customer belum menyebut kota sama sekali), lalu "Boleh"
+      // dibalas 8 listing yang PERSIS sama. Pelajaran yang sudah berulang di
+      // repo ini: apa pun yang ADA di prompt bisa disalin model — melarangnya
+      // lewat instruksi tidak cukup, MENGHILANGKANNYA yang menutup celah.
+      //
+      // Selama masih ada field wajib kosong, katalog tidak dibangun sama sekali:
+      // AI hanya punya satu hal yang bisa dilakukan — bertanya. Bonus: menghemat
+      // panggilan Apify/Rumah123 dan ribuan token pada tiap giliran tanya-jawab.
+      const qualState  = extractQualificationState(history, payload.message);
+      const stillMissing = listMissingMandatory(qualState || {});
+      const catalogReady = stillMissing.length === 0;
+
+      if (!catalogReady) {
+        console.log(`[Chatbot] Kualifikasi belum lengkap (${stillMissing.join(', ')}) — katalog TIDAK disuntikkan.`);
+      }
+
+      // ⚠️ Konteks rekomendasi TETAP dibangun walau katalog belum boleh tampil.
+      // Private Agent (fallback saat provider eksternal gagal) memakai OBJEK-nya
+      // — `alternatives`, `exactMatches`, `filters` — bukan teksnya. Sempat
+      // di-stub `{contextText:'',filters:{}}` di sini dan itu langsung membuat
+      // Private Agent crash ("Cannot read properties of undefined (reading
+      // 'length')"). Yang ditahan adalah TEKS yang masuk prompt LLM, bukan
+      // datanya (lihat combinedContextText di bawah).
       recommendationContext = await buildRecommendationContextForLLM(payload.message, history);
 
       let rumah123Block = '';
       try {
+        if (!catalogReady) {
+          // Belum saatnya menampilkan listing — lewati juga panggilan Apify.
+        } else {
         const filters = recommendationContext.filters;
         const apifyPropertyType = mapBuildingTypeToApify(filters.buildingType);
         const apifyListingType  = mapTransactionTypeToApify(filters.transactionType);
@@ -169,17 +218,23 @@ class ChatbotController {
             console.log(`[Chatbot] Injected ${rumah123Listings.length} Rumah123 listings into context.`);
           }
         }
+        }
       } catch (rumah123Err) {
         console.warn('[Chatbot] Rumah123 context fetch failed (non-fatal):', rumah123Err.message);
       }
 
-      let combinedContextText = recommendationContext.contextText;
+      // Inilah yang benar-benar masuk ke prompt LLM. Selama kualifikasi belum
+      // lengkap teksnya dikosongkan: tidak ada listing di depan model = tidak
+      // ada yang bisa dibuang sebelum waktunya.
+      let combinedContextText = catalogReady ? recommendationContext.contextText : '';
 
       if (rumah123Block) {
         combinedContextText = [combinedContextText, '', rumah123Block].join('\n');
       }
 
-      if (frontendPropertyContext) {
+      // Katalog kiriman frontend ikut ditahan — sumbernya berbeda, tapi efeknya
+      // sama: listing yang hadir di prompt bisa langsung dibuang model.
+      if (frontendPropertyContext && catalogReady) {
         const frontendBlock = ChatbotController.#formatPropertyContext(frontendPropertyContext);
         if (frontendBlock) {
           combinedContextText = [combinedContextText, '', frontendBlock].join('\n');
@@ -234,7 +289,7 @@ class ChatbotController {
             history,
             userMessage:           payload.message,
             recommendationContext,
-            externalError:         error
+            externalError:         error,
           });
 
           await saveAssistantMessage(session.id, privateResult.reply, 'website_chatbot_private', {

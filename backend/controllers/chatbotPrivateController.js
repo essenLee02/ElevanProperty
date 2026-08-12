@@ -4327,6 +4327,17 @@ class ChatbotPrivateService {
     // Resolve filters — use provided context or extract on the fly
     const filters = recommendationContext?.filters || extractPropertyFilters(userMessage, history);
 
+    // ⚠️ Widget web SUDAH meminta lokasi di form pembuka (name/phone/location),
+    // tapi nilainya hanya tersimpan di sesi — tidak pernah masuk `filters`,
+    // yang diekstrak dari teks pesan saja. Tanpa penyaluran ini, Q2 dianggap
+    // belum terjawab dan bot menanyakan "di kota mana?" kepada customer yang
+    // BARU SAJA mengetikkannya di form — persis kelas bug pertanyaan berulang
+    // yang paling cepat membuat customer pergi.
+    // Hanya untuk sesi web: di sana lokasi diketik customer untuk sesi ini juga.
+    if (!filters.location && session?.source === 'website_chatbot' && session?.location) {
+      filters.location = String(session.location).trim();
+    }
+
     // ⚠️ PENGECUALIAN SEBELUM SEMUA GUARD: bila pesan AI TERAKHIR adalah PERTANYAAN,
     // maka pesan customer ini adalah JAWABAN-nya — dan jawaban TIDAK PERNAH off-topic
     // maupun "intent tidak jelas", sependek atau seaneh apa pun kata-katanya.
@@ -4345,6 +4356,24 @@ class ChatbotPrivateService {
     // Guard: ask for clarification when intent is unclear
     if (!aiJustAskedQuestion && !LanguageDetector.hasPropertyIntent(userMessage, filters)) {
       return this.#wrap(builder.clarification(), { skillInfo, filters });
+    }
+
+    // ── KUALIFIKASI Q1–Q12 DULU, katalog belakangan ─────────────────────────
+    // ⚠️ Jalur web DULU melompat langsung dari guard ke rendering katalog —
+    // tanpa satu pun pertanyaan. Akibatnya (bug nyata 12 Agu 2026): pesan
+    // pembuka "Saya mau booking rumah" dibalas 8 listing acak lintas provinsi
+    // padahal customer belum menyebut kota/budget/tanggal apa pun, dan jawaban
+    // "Boleh" dibalas 8 listing yang PERSIS sama — percakapan tidak pernah maju.
+    //
+    // Jalur WhatsApp (generateResponseForTerminalMassege) sudah lama menjalankan
+    // Q1–Q12 lewat ConversationQualifier. Di sini dipakai qualifier YANG SAMA,
+    // sehingga web dan terminal message berperilaku identik. getNextQuestion()
+    // mengembalikan kalimat siap-kirim, dan null bila semua sudah cukup — null
+    // itulah izin menampilkan katalog.
+    const profile = ConversationQualifier.buildProfile(history, userMessage, filters);
+    const nextQuestion = ConversationQualifier.getNextQuestion(profile, lang, null, 'catalog');
+    if (nextQuestion) {
+      return this.#wrap(nextQuestion, { skillInfo, filters, qualifying: true });
     }
 
     // Fetch Rumah123 live data and build catalog context in parallel for speed

@@ -19,6 +19,7 @@ const { User } = require('../models');
 const { HTTP } = require('../utils/httpStatus');
 const { sendSuccess, sendError } = require('../utils/responseFormat');
 const { authLog } = require('../utils/authLogger');
+const { validateUserBusinessFields } = require('../utils/userBusinessRules');
 
 /* ─────────────────────────────────────────────
    Helper
@@ -52,7 +53,7 @@ exports.getCurrentProfile = async (req, res) => {
 
     const user = await User.findOne({
       where: { refresh_token: refreshTokenFromCookie },
-      attributes: ['user_id', 'name', 'username', 'phone', 'birthdate', 'status', 'email', 'catalog_summary', 'fonnte_token', 'kirimi_device_id']
+      attributes: ['user_id', 'name', 'username', 'phone', 'birthdate', 'status', 'email', 'catalog_summary', 'fonnte_token', 'kirimi_device_id', 'ai_primary', 'trans_type', 'payment_type', 'rental_duration', 'rental_type']
     });
 
     if (!user) {
@@ -78,7 +79,10 @@ exports.updateDataAgent = async (req, res) => {
   const refreshTokenFromCookie = req.cookies ? req.cookies[refreshCookieName] : null;
 
   // username sengaja TIDAK diambil dari body — tidak boleh diupdate
-  const { name, phone, birthdate, password, fonnte_token, kirimi_device_id, email, catalog_summary } = req.body;
+  const {
+    name, phone, birthdate, password, fonnte_token, kirimi_device_id, email, catalog_summary,
+    ai_primary, trans_type, payment_type, rental_duration, rental_type,
+  } = req.body;
 
   const requestInfo = {
     ip:    req.ip || req.connection?.remoteAddress || 'unknown',
@@ -174,6 +178,19 @@ exports.updateDataAgent = async (req, res) => {
     // Catalog Summary Status — boleh kosong / null (ON = Summary with catalog, OFF = Summary without catalog)
     updateFields.catalog_summary = cleanCatalogSummary || null;
 
+    // ai_primary / trans_type / payment_type / rental_* — saling terikat.
+    // `user` (baris tersimpan) diteruskan sebagai `current` supaya update PARSIAL
+    // tidak menghapus nilai lama: kirim trans_type saja → payment_type & rental_*
+    // disesuaikan otomatis mengikuti aturan, bukan di-null-kan diam-diam.
+    const business = validateUserBusinessFields(
+      { ai_primary, trans_type, payment_type, rental_duration, rental_type },
+      user,
+    );
+    if (!business.ok) {
+      return sendError(res, HTTP.BAD_REQUEST, null, business.error);
+    }
+    Object.assign(updateFields, business.values);
+
     // Metadata update
     updateFields.updated_date = new Date();
     updateFields.update_by    = user.username;
@@ -191,7 +208,7 @@ exports.updateDataAgent = async (req, res) => {
     /* 5. Kembalikan data terbaru (tanpa password) */
     const updatedUser = await User.findOne({
       where: { user_id: user.user_id },
-      attributes: ['user_id', 'name', 'username', 'phone', 'birthdate', 'email', 'catalog_summary', 'fonnte_token', 'kirimi_device_id']
+      attributes: ['user_id', 'name', 'username', 'phone', 'birthdate', 'email', 'catalog_summary', 'fonnte_token', 'kirimi_device_id', 'ai_primary', 'trans_type', 'payment_type', 'rental_duration', 'rental_type']
     });
 
     // Log ke terminal

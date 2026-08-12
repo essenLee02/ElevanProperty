@@ -39,8 +39,24 @@ function isClaudeEnabled() {
   return String(process.env.ENABLE_CLAUDE_FALLBACK || 'true').toLowerCase() !== 'false';
 }
 
-function getPrimaryAIProvider() {
-  const value = String(process.env.AI_PRIMARY_PROVIDER || 'chatgpt').toLowerCase().trim();
+/**
+ * Provider primary yang dipakai giliran ini.
+ *
+ * @param {string} [agentAiPrimary] nilai `users.ai_primary` milik agent pemilik
+ *   nomor WA. "Default" (atau kosong) → ikut `.env AI_PRIMARY_PROVIDER`, persis
+ *   perilaku lama. Nilai lain MENGALAHKAN env — tiap agent boleh memakai AI
+ *   berbeda pada terminal message-nya sendiri.
+ *
+ * ⚠️ Env tetap dibaca setiap panggilan (bukan di-cache saat modul dimuat) agar
+ * perubahan `.env` + restart selalu terpakai, dan agar override per-agent tidak
+ * pernah "menempel" untuk agent berikutnya di proses yang sama.
+ */
+function getPrimaryAIProvider(agentAiPrimary = '') {
+  // Normalisasi label UI ("Chat GPT", "Deepseek") ke kunci internal.
+  const perAgent = String(agentAiPrimary || '').toLowerCase().trim().replace(/\s+/g, '');
+  const fromAgent = perAgent && perAgent !== 'default' ? perAgent : '';
+
+  const value = fromAgent || String(process.env.AI_PRIMARY_PROVIDER || 'chatgpt').toLowerCase().trim();
 
   if (value === 'claude')    return 'claude';
   if (value === 'qwen')      return 'qwen';
@@ -147,8 +163,8 @@ function logProviderFallback(taskName, fromProvider, toProvider, reason) {
 // ═════════════════════════════════════════════════════════════════════════════
 // (PROVIDER_ORDER dipindahkan ke atas — lihat catatan di getAIProviderOrder)
 
-async function executeAIProviderWithFallback(taskName, chatGPTFn, claudeFn, qwenFn = null, deepseekFn = null, kimiFn = null) {
-  const primary = getPrimaryAIProvider();
+async function executeAIProviderWithFallback(taskName, chatGPTFn, claudeFn, qwenFn = null, deepseekFn = null, kimiFn = null, agentAiPrimary = '') {
+  const primary = getPrimaryAIProvider(agentAiPrimary);
 
   if (primary === 'private') {
     const err = new Error('AI_PRIMARY_PROVIDER=private: Private Agent is primary.');
@@ -277,7 +293,11 @@ async function generateWhatsappReplyWithProviderFallback(session, history, userM
     () => generateClaudeWhatsappReply(session, history, userMessage, propertyContext, extraContext),
     () => generateQwenWhatsappReply(session, history, userMessage, propertyContext, extraContext),
     () => generateDeepSeekWhatsappReply(session, history, userMessage, propertyContext, extraContext),
-    () => generateKimiWhatsappReply(session, history, userMessage, propertyContext, extraContext)
+    () => generateKimiWhatsappReply(session, history, userMessage, propertyContext, extraContext),
+    // Pilihan AI milik agent pemilik nomor WA (users.ai_primary). "Default" →
+    // ikut .env. Hanya jalur WhatsApp/terminal message yang per-agent; chatbot
+    // web & contact form tetap memakai setting global.
+    session?.agentAiPrimary || ''
   );
 }
 

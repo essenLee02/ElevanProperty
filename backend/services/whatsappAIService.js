@@ -312,7 +312,7 @@ function buildQualifyReply(filters, message, agentName, contextSource, history =
  * @returns {Promise<{ reply, provider, contextSource }>}
  */
 async function generateWhatsAppAIReply(params) {
-  const { session, agentName, agentUserId = null, options = {} } = params;
+  const { session, agentName, agentUserId = null, agentAiPrimary = null, options = {} } = params;
 
   // id-realestate-lazy-chat-normalizer skill (28 Jul 2026): expand SMS-speak/
   // abbreviations ONCE, here, before any detector (filter extraction, Q-flow
@@ -331,6 +331,9 @@ async function generateWhatsAppAIReply(params) {
   // user_id agent → scoping katalog per-agent (tiap nomor WA hanya rekomendasikan
   // listing miliknya sendiri). Disimpan di session agar ikut ke Private Agent fallback.
   if (session && agentUserId && !session.agentUserId) session.agentUserId = agentUserId;
+  // Pilihan AI provider milik agent (users.ai_primary). "Default" → ikut .env.
+  // Dibaca aiProviderService lewat session, sejalan dengan agentName/agentUserId.
+  if (session && agentAiPrimary && !session.agentAiPrimary) session.agentAiPrimary = agentAiPrimary;
 
   // ── Mode katalog PER-AGENT (users.catalog_summary) ─────────────────────────
   // Sumber kebenaran mode summary/katalog kini kolom users.catalog_summary

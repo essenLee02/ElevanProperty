@@ -2659,34 +2659,32 @@ Subject: ${subject}
 Message: ${message}`;
 }
 
+/**
+ * Prompt chatbot WEBSITE — kini IDENTIK dengan jalur WhatsApp/terminal message.
+ *
+ * ⚠️ DULU prompt terpisah & JAUH lebih tipis: tanpa QUALIFICATION STATE, tanpa
+ * DIREKTIF FINAL, tanpa gating summary — dan diakhiri instruksi
+ *   "Do not keep asking discovery questions before showing options…"
+ * Instruksi itu, digabung dengan katalog yang SELALU disuntikkan tiap pesan,
+ * membuat chatbot web membuang seluruh isi katalog pada pesan PERTAMA lalu
+ * mengulanginya persis sama di pesan berikutnya — tidak pernah bertanya
+ * kota/budget/tanggal, tidak pernah maju (bug nyata: "Saya mau booking rumah"
+ * → 8 listing acak lintas provinsi; "Boleh" → 8 listing yang sama lagi).
+ *
+ * Web dan WhatsApp melayani customer yang sama dengan kebutuhan yang sama, jadi
+ * keduanya sekarang memakai SATU pembangun prompt. Perbedaan yang tersisa hanya
+ * datang dari data sesi itu sendiri:
+ *   • `session.agentUserId` kosong pada web → getCachedCatalogMode() = "OFF"
+ *     → katalog hanya tampil SETELAH brief lengkap (persis yang diinginkan:
+ *       kualifikasi dulu, baru rekomendasi).
+ *   • `session.agentName` kosong pada web → tanda tangan memakai APP_NAME.
+ *
+ * Menyatukannya juga berarti setiap perbaikan alur (anti-halusinasi summary,
+ * label Beli/Sewa, fasilitas standar, dst.) otomatis berlaku di web — dulu
+ * setiap perbaikan harus ditulis dua kali dan pada praktiknya tidak pernah.
+ */
 function buildChatbotReplyPrompt(session, history, userMessage, propertyContext = '', provider = 'shared') {
-  const detectedLang = detectLanguage(userMessage, history);
-  const forcedLangInstruction = detectedLang === 'id'
-    ? `\n⚠️ FORCED REPLY LANGUAGE: Bahasa Indonesia\nCustomer ini berbicara dalam Bahasa Indonesia. SELALU balas dalam Bahasa Indonesia.\n`
-    : `\n⚠️ FORCED REPLY LANGUAGE: English\nThe customer is writing in English. Always reply in English.\n`;
-
-  return `${getProjectSkillInstruction(provider, _skillContext(history, userMessage))}
-${forcedLangInstruction}
-Customer profile:
-Name: ${session.name}
-Phone: ${session.normalizedPhone}
-Location: ${session.location || session.normalizedLocation || 'Not provided'}
-Source: ${session.source}
-
-Recent conversation history for context only. Use the customer profile identity (name, phone, and location) to continue the returning customer's context. Do not let old history override the latest customer message:
-${formatConversationHistory(history)}
-
-Backend property catalog context for this latest message:
-${propertyContext || 'No backend property catalog context is available.'}
-
-Latest customer message. This is the highest-priority instruction:
-${userMessage}
-
-Task:
-Create the final chatbot reply using only the backend property catalog context above.
-If exact matches are available, recommend exact matches directly.
-If no exact match is available, say that no exact match is available and then present only the backend alternatives.
-Do not keep asking discovery questions before showing options when the customer asks for suggestions or available properties.`;
+  return buildWhatsappReplyPrompt(session, history, userMessage, propertyContext, provider, {});
 }
 
 function buildWhatsappReplyPrompt(session, history, userMessage, propertyContext = '', provider = 'shared', extraContext = {}) {
@@ -2728,6 +2726,21 @@ function buildWhatsappReplyPrompt(session, history, userMessage, propertyContext
   // Q1 lagi; jawaban baru mendorong pesan lama makin jauh keluar window →
   // loop tak berujung (bug M35, terulang 3 Agu 2026).
   const qualState      = extractQualificationState(history, userMessage);
+
+  // ⚠️ Chatbot WEB meminta lokasi di form pembuka (name/phone/location), tapi
+  // nilainya hanya ada di sesi — extractQualificationState() memindai TEKS PESAN
+  // saja, sehingga Q2 tetap ❓ dan AI menanyakan "di kota mana?" kepada customer
+  // yang baru saja mengetikkannya di form.
+  //
+  // Sengaja DIBATASI pada sesi web: di sana lokasi diketik customer untuk sesi
+  // ini juga. Pada WhatsApp, `session.location` bisa berisi sisa pencarian lama,
+  // dan menyalurkannya akan menghidupkan kembali pencarian yang sudah
+  // ditinggalkan (kelas bug stabilitas konteks yang sudah pernah terjadi).
+  if (qualState && !qualState.city && session?.source === 'website_chatbot' && session?.location) {
+    const seeded = detectLocation(String(session.location)) || String(session.location).trim();
+    if (seeded) qualState.city = seeded;
+  }
+
   const qualStateBlock = qualState ? buildQualificationStateBlock(qualState) : '';
 
   // Transkrip yang ditampilkan dibatasi demi anggaran token — QUALIFICATION
@@ -3108,6 +3121,7 @@ module.exports = {
   buildPreferenceExtractionPrompt,
   extractQualificationState,
   buildQualificationStateBlock,
+  listMissingMandatory,
   findNextQuestion,
   buildFinalDirective,
   isConditionalFallbackMessage,

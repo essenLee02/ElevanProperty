@@ -23,6 +23,16 @@ const sequelize = require('../config/database');
  * - kirimi_device_id : Device ID Kirimi milik agent (mis. "D-3OCA6"; user_code & secret di .env, nullable)
  * - email          : alamat email user (nullable)
  * - catalog_summary : ON = Summary with catalog, OFF = Summary without catalog (nullable)
+ * - ai_primary      : AI provider pilihan agent untuk terminal message
+ *                     ("Default" = ikut backend/.env AI_PRIMARY_PROVIDER)
+ * - trans_type      : Sale | Rent | Both — jenis transaksi yang dilayani agent
+ * - payment_type    : Cash | KPR | Both — TERIKAT trans_type (lihat utils/userBusinessRules.js)
+ * - rental_duration : minimal durasi sewa (angka), hanya untuk Rent/Both
+ * - rental_type     : satuan durasi sewa (Day/Week/Month/Year/Night), hanya untuk Rent/Both
+ *
+ * ⚠️ trans_type ↔ payment_type ↔ rental_* SALING TERIKAT. Aturannya TIDAK
+ * di-hardcode di controller mana pun — satu sumber kebenaran ada di
+ * utils/userBusinessRules.js (dipakai register, profile, dan tes).
  */
 const User = sequelize.define('User', {
   user_id: {
@@ -76,6 +86,36 @@ const User = sequelize.define('User', {
     type: DataTypes.STRING(50),
     allowNull: true,
     defaultValue: null
+  },
+  ai_primary: {
+    type: DataTypes.STRING(30),
+    allowNull: false,
+    defaultValue: 'Default',
+    comment: 'Penggunaan API pada terminal massages: Deepseek, Kimi, Default (ikut backend/.env AI_PRIMARY_PROVIDER). Nilai lain (Qwen, Chat GPT, Claude, Private) tetap diterima bila di-set langsung di DB.'
+  },
+  trans_type: {
+    type: DataTypes.STRING(30),
+    allowNull: false,
+    defaultValue: 'Both',
+    comment: 'Transaction Type: Sale, Rent, Both (Sale and Rent)'
+  },
+  payment_type: {
+    type: DataTypes.STRING(30),
+    allowNull: false,
+    defaultValue: 'Cash',
+    comment: 'Payment Type: Cash, KPR, Both. TERIKAT trans_type — Rent→Cash saja; Both→Both saja; Sale→bebas (Cash/KPR/Both)'
+  },
+  rental_duration: {
+    type: DataTypes.INTEGER(5),
+    allowNull: true,
+    defaultValue: null,
+    comment: 'Minimal durasi sewa (angka). Hanya bila trans_type Rent/Both; untuk Sale WAJIB null'
+  },
+  rental_type: {
+    type: DataTypes.STRING(30),
+    allowNull: true,
+    defaultValue: null,
+    comment: 'Satuan periode durasi sewa: Day, Week, Month, Year, Night. Hanya bila trans_type Rent/Both; untuk Sale WAJIB null'
   },
   fonnte_token: {
     type: DataTypes.STRING(100),

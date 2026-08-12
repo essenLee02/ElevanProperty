@@ -206,7 +206,7 @@ function normalizePhoneFromJid(value) {
 async function getAllAgentsWithKirimi() {
   const agents = await User.findAll({
     where      : { privilege: 'agent', status: 1 },
-    attributes : ['id', 'user_id', 'name', 'phone', 'email', 'username', 'kirimi_device_id'],
+    attributes : ['id', 'user_id', 'name', 'phone', 'email', 'username', 'kirimi_device_id', 'ai_primary'],
     order      : [['created_date', 'ASC']]
   });
   return agents.filter(a => a.kirimi_device_id && String(a.kirimi_device_id).trim().length > 2);
@@ -623,6 +623,7 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
       session,
       message,
       agentName  : agent.name,
+      agentAiPrimary: agent.ai_primary,
       agentUserId: agent.user_id,   // scoping katalog per-agent (RESPOND_CATALOG_RUN=ON)
     });
     aiResult  = result;

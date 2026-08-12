@@ -148,6 +148,85 @@
             </div>
           </div>
 
+          <!-- AI Primary -->
+          <div class="form-group">
+            <label class="form-label col-form-label" for="aiPrimary">AI Primary</label>
+            <select
+              id="aiPrimary"
+              v-model="form.ai_primary"
+              class="form-control form-control-lg form-control-sm"
+              :disabled="isSubmitting"
+            >
+              <option value="Default">Default — ikut setting server</option>
+              <option value="Deepseek">Deepseek</option>
+              <option value="Kimi">Kimi</option>
+            </select>
+            <small class="text-muted">AI yang menjawab customer di terminal message.</small>
+          </div>
+
+          <!-- Transaction Type -->
+          <div class="form-group">
+            <label class="form-label col-form-label" for="transType">Transaction Type</label>
+            <select
+              id="transType"
+              v-model="form.trans_type"
+              class="form-control form-control-lg form-control-sm"
+              :disabled="isSubmitting"
+            >
+              <option value="Both">Both — Jual &amp; Sewa</option>
+              <option value="Sale">Sale — Jual saja</option>
+              <option value="Rent">Rent — Sewa saja</option>
+            </select>
+          </div>
+
+          <!-- Payment Type — pilihannya TERIKAT Transaction Type -->
+          <div class="form-group">
+            <label class="form-label col-form-label" for="paymentType">
+              Payment Type
+              <span v-if="paymentLocked" class="badge-locked">🔒 Mengikuti Transaction Type</span>
+            </label>
+            <select
+              id="paymentType"
+              v-model="form.payment_type"
+              class="form-control form-control-lg form-control-sm"
+              :disabled="isSubmitting || paymentLocked"
+            >
+              <option v-for="p in allowedPayments" :key="p" :value="p">{{ p }}</option>
+            </select>
+            <small class="text-muted">{{ paymentHint }}</small>
+          </div>
+
+          <!-- Minimal durasi sewa — hanya untuk Rent / Both -->
+          <div v-if="supportsRental" class="form-group">
+            <label class="form-label col-form-label" for="rentalDuration">Minimal Durasi Sewa</label>
+            <div class="d-flex gap-2">
+              <input
+                id="rentalDuration"
+                v-model="form.rental_duration"
+                type="number"
+                min="1"
+                step="1"
+                class="form-control form-control-lg form-control-sm"
+                placeholder="mis. 3"
+                :disabled="isSubmitting"
+              />
+              <select
+                id="rentalType"
+                v-model="form.rental_type"
+                class="form-control form-control-lg form-control-sm"
+                :disabled="isSubmitting"
+              >
+                <option value="">— satuan —</option>
+                <option value="Day">Day</option>
+                <option value="Week">Week</option>
+                <option value="Month">Month</option>
+                <option value="Year">Year</option>
+                <option value="Night">Night</option>
+              </select>
+            </div>
+            <small class="text-muted">Opsional. Isi keduanya atau kosongkan keduanya — mis. 3 Month.</small>
+          </div>
+
           <!-- Password -->
           <div class="form-group">
             <label class="form-label col-form-label" for="password">
@@ -233,7 +312,7 @@
 </template>
 
 <script setup>
-import { reactive, ref, computed } from 'vue';
+import { reactive, ref, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { toast } from 'vue3-toastify';
 import { registerUser } from '../services/authApi';
@@ -250,7 +329,38 @@ const PHONE_REGEX = /[^0-9+\-\s]/g;
 
 /* ── State ─────────────────────────────────────────────── */
 const router       = useRouter();
-const form         = reactive({ name: '', birthdate: '', phone: '', username: '', email: '', password: '', konfirmasi: '' });
+const form         = reactive({
+  name: '', birthdate: '', phone: '', username: '', email: '',
+  ai_primary: 'Default', trans_type: 'Both', payment_type: 'Both',
+  rental_duration: '', rental_type: '',
+  password: '', konfirmasi: '',
+});
+
+/* ── Aturan trans_type <-> payment_type <-> rental_* ────────────────────────
+   CERMIN dari backend/utils/userBusinessRules.js. UI mencegah kombinasi
+   mustahil lebih awal; backend tetap penentu akhir. */
+const PAYMENT_BY_TRANS = {
+  Rent: ['Cash'],          // sewa tidak dibiayai KPR
+  Both: ['Both'],
+  Sale: ['Cash', 'KPR', 'Both'],
+};
+const allowedPayments = computed(() => PAYMENT_BY_TRANS[form.trans_type] || ['Cash']);
+const paymentLocked   = computed(() => allowedPayments.value.length === 1);
+const supportsRental  = computed(() => form.trans_type === 'Rent' || form.trans_type === 'Both');
+const paymentHint     = computed(() => {
+  if (form.trans_type === 'Rent') return 'Transaksi Rent selalu Cash - sewa tidak dibiayai KPR.';
+  if (form.trans_type === 'Both') return 'Transaksi Both selalu Both (Cash dan KPR).';
+  return 'Untuk Sale, Anda bebas memilih Cash, KPR, atau Both.';
+});
+watch(() => form.trans_type, () => {
+  if (!allowedPayments.value.includes(form.payment_type)) {
+    form.payment_type = allowedPayments.value[0];
+  }
+  if (!supportsRental.value) {
+    form.rental_duration = '';
+    form.rental_type     = '';
+  }
+});
 const alert        = reactive({ type: '', message: '' });
 const isSubmitting = ref(false);
 const showPassword = ref(false);
@@ -300,6 +410,11 @@ const submitRegister = async () => {
       phone     : form.phone    || null,
       username  : form.username,
       email     : form.email    || null,
+      ai_primary  : form.ai_primary   || 'Default',
+      trans_type  : form.trans_type   || 'Both',
+      payment_type: form.payment_type || null,
+      rental_duration: form.rental_duration === '' || form.rental_duration === null ? null : Number(form.rental_duration),
+      rental_type : form.rental_type  || null,
       password  : form.password,
       konfirmasi: form.konfirmasi,
       privilege : null,

@@ -105,7 +105,7 @@ function detectEventType(body) {
 async function getAllAgentsWithFonnte() {
   const agents = await User.findAll({
     where      : { privilege: 'agent', status: 1 },
-    attributes : ['id', 'user_id', 'name', 'phone', 'email', 'username', 'fonnte_token'],
+    attributes : ['id', 'user_id', 'name', 'phone', 'email', 'username', 'fonnte_token', 'ai_primary'],
     order      : [['created_date', 'ASC']]
   });
 
@@ -495,6 +495,7 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
       session,
       message,
       agentName  : agent.name,
+      agentAiPrimary: agent.ai_primary,
       agentUserId: agent.user_id,   // scoping katalog per-agent (RESPOND_CATALOG_RUN=ON)
     });
     aiResult = result;
@@ -754,6 +755,7 @@ class FonnteChatController {
         session,
         message,
         agentName  : agent.name,
+      agentAiPrimary: agent.ai_primary,
         agentUserId: agent.user_id,   // scoping katalog per-agent (RESPOND_CATALOG_RUN=ON)
       });
       aiReply = result.reply;
@@ -957,7 +959,7 @@ class FonnteChatController {
     try {
       const allAgents = await User.findAll({
         where      : { privilege: 'agent', status: 1 },
-        attributes : ['user_id', 'name', 'phone', 'fonnte_token']
+        attributes : ['user_id', 'name', 'phone', 'fonnte_token', 'ai_primary']
       });
 
       const ready = allAgents.filter(a => a.fonnte_token && a.fonnte_token.trim().length > 5);
@@ -990,7 +992,7 @@ class FonnteChatController {
     try {
       const agents = await User.findAll({
         where      : { privilege: 'agent', status: 1 },
-        attributes : ['user_id', 'name', 'phone', 'fonnte_token']
+        attributes : ['user_id', 'name', 'phone', 'fonnte_token', 'ai_primary']
       });
 
       return res.json({

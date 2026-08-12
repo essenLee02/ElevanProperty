@@ -102,9 +102,94 @@
                 <p class="field-hint">Menentukan apakah ringkasan chatbot menyertakan daftar katalog properti.</p>
               </div>
 
+              <!-- AI Primary — provider yang dipakai di terminal message -->
+              <div class="form-group">
+                <label class="col-form-label" for="aiPrimary">AI Primary</label>
+                <select
+                  id="aiPrimary"
+                  v-model="form.ai_primary"
+                  :disabled="isSubmitting"
+                >
+                  <option value="Default">Default — ikut setting server</option>
+                  <option value="Deepseek">Deepseek</option>
+                  <option value="Kimi">Kimi</option>
+                </select>
+                <p class="field-hint">
+                  AI yang menjawab customer di terminal message.
+                  <strong>Default</strong> mengikuti setting server (AI_PRIMARY_PROVIDER).
+                </p>
+              </div>
+
               <!-- Divider -->
               <div class="section-divider">
-                <span>Keamanan & Integrasi</span>
+                <span>Transaksi & Pembayaran</span>
+              </div>
+
+              <!-- Transaction Type -->
+              <div class="form-group">
+                <label class="col-form-label" for="transType">Transaction Type</label>
+                <select
+                  id="transType"
+                  v-model="form.trans_type"
+                  :disabled="isSubmitting"
+                >
+                  <option value="Both">Both — Jual &amp; Sewa</option>
+                  <option value="Sale">Sale — Jual saja</option>
+                  <option value="Rent">Rent — Sewa saja</option>
+                </select>
+                <p class="field-hint">Jenis transaksi yang Anda layani.</p>
+              </div>
+
+              <!-- Payment Type — pilihannya TERIKAT Transaction Type -->
+              <div class="form-group">
+                <label class="col-form-label" for="paymentType">
+                  Payment Type
+                  <span v-if="paymentLocked" class="badge-locked">🔒 Mengikuti Transaction Type</span>
+                </label>
+                <select
+                  id="paymentType"
+                  v-model="form.payment_type"
+                  :disabled="isSubmitting || paymentLocked"
+                >
+                  <option v-for="p in allowedPayments" :key="p" :value="p">{{ p }}</option>
+                </select>
+                <p class="field-hint">{{ paymentHint }}</p>
+              </div>
+
+              <!-- Durasi sewa minimal — hanya untuk Rent / Both -->
+              <div v-if="supportsRental" class="form-group">
+                <label class="col-form-label" for="rentalDuration">Minimal Durasi Sewa</label>
+                <div class="d-flex gap-2">
+                  <input
+                    id="rentalDuration"
+                    v-model="form.rental_duration"
+                    type="number"
+                    min="1"
+                    step="1"
+                    placeholder="mis. 3"
+                    :disabled="isSubmitting"
+                  />
+                  <select
+                    id="rentalType"
+                    v-model="form.rental_type"
+                    :disabled="isSubmitting"
+                  >
+                    <option value="">— satuan —</option>
+                    <option value="Day">Day</option>
+                    <option value="Week">Week</option>
+                    <option value="Month">Month</option>
+                    <option value="Year">Year</option>
+                    <option value="Night">Night</option>
+                  </select>
+                </div>
+                <p class="field-hint">
+                  Opsional. Isi keduanya atau kosongkan keduanya — mis. <em>3 Month</em>.
+                </p>
+              </div>
+
+              <!-- Divider -->
+              <div class="section-divider">
+                <span>Keamanan &amp; Integrasi</span>
               </div>
 
               
@@ -200,7 +285,7 @@
 </template>
 
 <script setup>
-import { reactive, ref, computed, onMounted } from 'vue';
+import { reactive, ref, computed, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { toast } from 'vue3-toastify';
 import { getCurrentProfile, updateProfile } from '../services/profileApi';
@@ -216,6 +301,11 @@ const form = reactive({
   birthdate:      '',
   email:          '',
   catalog_summary: 'OFF',
+  ai_primary:      'Default',
+  trans_type:      'Both',
+  payment_type:    'Both',
+  rental_duration: '',
+  rental_type:     '',
   password:       '',
   fonnte_token:   '',
   kirimi_device_id: ''
@@ -228,6 +318,11 @@ const originalForm = reactive({
   birthdate:       '',
   email:           '',
   catalog_summary: 'OFF',
+  ai_primary:      'Default',
+  trans_type:      'Both',
+  payment_type:    'Both',
+  rental_duration: '',
+  rental_type:     '',
   fonnte_token:    '',
   kirimi_device_id: ''
 });
@@ -246,6 +341,41 @@ const alertClass = computed(() => {
   return 'alert-danger';
 });
 
+/* ── Aturan trans_type ↔ payment_type ↔ rental_* ──────────────────────────
+   CERMIN dari backend/utils/userBusinessRules.js. UI hanya mencegah pilihan
+   mustahil lebih awal — backend TETAP satu-satunya penentu (UI bisa dilewati). */
+const PAYMENT_BY_TRANS = {
+  Rent: ['Cash'],          // sewa tidak dibiayai KPR
+  Both: ['Both'],
+  Sale: ['Cash', 'KPR', 'Both'],
+};
+
+const allowedPayments = computed(() => PAYMENT_BY_TRANS[form.trans_type] || ['Cash']);
+
+// Rent & Both hanya punya SATU opsi sah → dikunci, biar jelas bahwa nilainya
+// mengikuti Transaction Type dan bukan sesuatu yang user lupa isi.
+const paymentLocked = computed(() => allowedPayments.value.length === 1);
+
+const supportsRental = computed(() => form.trans_type === 'Rent' || form.trans_type === 'Both');
+
+const paymentHint = computed(() => {
+  if (form.trans_type === 'Rent') return 'Transaksi Rent selalu Cash — sewa tidak dibiayai KPR.';
+  if (form.trans_type === 'Both') return 'Transaksi Both selalu Both (Cash dan KPR).';
+  return 'Untuk Sale, Anda bebas memilih Cash, KPR, atau Both.';
+});
+
+// Jaga agar form tidak pernah menampilkan kombinasi mustahil saat Transaction
+// Type diganti — mis. Sale/KPR lalu pindah ke Rent (KPR tidak lagi sah).
+watch(() => form.trans_type, () => {
+  if (!allowedPayments.value.includes(form.payment_type)) {
+    form.payment_type = allowedPayments.value[0];
+  }
+  if (!supportsRental.value) {
+    form.rental_duration = '';
+    form.rental_type     = '';
+  }
+});
+
 // Form dianggap "ada perubahan" jika:
 // - Salah satu field (name/phone/birthdate/email/catalog_summary/fonnte_token/...) berbeda dari original, ATAU
 // - Password sudah diisi
@@ -256,6 +386,11 @@ const hasChanges = computed(() => {
     form.birthdate       !== originalForm.birthdate       ||
     form.email           !== originalForm.email           ||
     form.catalog_summary !== originalForm.catalog_summary ||
+    form.ai_primary      !== originalForm.ai_primary      ||
+    form.trans_type      !== originalForm.trans_type      ||
+    form.payment_type    !== originalForm.payment_type    ||
+    String(form.rental_duration ?? '') !== String(originalForm.rental_duration ?? '') ||
+    String(form.rental_type ?? '')     !== String(originalForm.rental_type ?? '')     ||
     form.fonnte_token     !== originalForm.fonnte_token     ||
     form.kirimi_device_id !== originalForm.kirimi_device_id ||
     form.password.length > 0
@@ -287,6 +422,11 @@ const loadProfile = async () => {
       form.birthdate  = user.birthdate ? user.birthdate.split('T')[0] : '';
       form.email            = user.email            || '';
       form.catalog_summary  = user.catalog_summary  || 'OFF';
+      form.ai_primary       = user.ai_primary       || 'Default';
+      form.trans_type       = user.trans_type       || 'Both';
+      form.payment_type     = user.payment_type     || 'Both';
+      form.rental_duration  = user.rental_duration ?? '';
+      form.rental_type      = user.rental_type      || '';
       form.fonnte_token     = user.fonnte_token     || '';
       form.kirimi_device_id = user.kirimi_device_id || '';
       form.password         = '';
@@ -297,6 +437,11 @@ const loadProfile = async () => {
       originalForm.birthdate        = form.birthdate;
       originalForm.email            = form.email;
       originalForm.catalog_summary  = form.catalog_summary;
+      originalForm.ai_primary       = form.ai_primary;
+      originalForm.trans_type       = form.trans_type;
+      originalForm.payment_type     = form.payment_type;
+      originalForm.rental_duration  = form.rental_duration;
+      originalForm.rental_type      = form.rental_type;
       originalForm.fonnte_token     = form.fonnte_token;
       originalForm.kirimi_device_id = form.kirimi_device_id;
     } else {
@@ -352,6 +497,13 @@ const submitUpdate = async () => {
       password:   form.password,
       email:            form.email            || null,
       catalog_summary:  form.catalog_summary   || null,
+      ai_primary:       form.ai_primary       || 'Default',
+      trans_type:       form.trans_type       || 'Both',
+      payment_type:     form.payment_type     || null,
+      // Kosong dikirim sebagai null (bukan "") supaya backend membacanya sebagai
+      // "tidak diisi", bukan sebagai nilai kosong yang tidak valid.
+      rental_duration:  form.rental_duration === '' || form.rental_duration === null ? null : Number(form.rental_duration),
+      rental_type:      form.rental_type      || null,
       fonnte_token:     form.fonnte_token     || null,
       kirimi_device_id: form.kirimi_device_id || null
       // username TIDAK dikirim — backend mengabaikannya
@@ -363,12 +515,28 @@ const submitUpdate = async () => {
       setAlert('success', result?.data?.message || 'Profil berhasil diupdate');
       toast.success(result?.data?.message || 'Profil berhasil diupdate');
 
+      // Backend MENORMALKAN field yang saling terikat (mis. trans_type "Sale"
+      // mengosongkan rental_*, "Both" memaksa payment_type "Both"). Ambil hasil
+      // akhir dari respons, bukan dari form lokal — kalau tidak, layar bisa
+      // menampilkan nilai yang berbeda dari yang benar-benar tersimpan.
+      const saved = result.data.response.user;
+      form.trans_type      = saved.trans_type      || form.trans_type;
+      form.payment_type    = saved.payment_type    || form.payment_type;
+      form.ai_primary      = saved.ai_primary      || form.ai_primary;
+      form.rental_duration = saved.rental_duration ?? '';
+      form.rental_type     = saved.rental_type     || '';
+
       // Reset original values & kosongkan password
       originalForm.name            = form.name;
       originalForm.phone           = form.phone;
       originalForm.birthdate       = form.birthdate;
       originalForm.email           = form.email;
       originalForm.catalog_summary = form.catalog_summary;
+      originalForm.ai_primary      = form.ai_primary;
+      originalForm.trans_type      = form.trans_type;
+      originalForm.payment_type    = form.payment_type;
+      originalForm.rental_duration = form.rental_duration;
+      originalForm.rental_type     = form.rental_type;
       originalForm.fonnte_token     = form.fonnte_token;
       originalForm.kirimi_device_id = form.kirimi_device_id;
       form.password                 = '';
