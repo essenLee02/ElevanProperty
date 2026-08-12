@@ -359,6 +359,40 @@ function isConditionalFallbackMessage(text = '') {
  */
 const CORRECTION_RE = /\b(ralat|koreksi|revisi|ganti(?:\s+(?:jadi|ke))?|diganti|ubah(?:\s+(?:jadi|ke))?|diubah|rubah|dirubah|salah\s+(?:sebut|tulis|ketik|kirim|info)|maksud\s?(?:ku|saya|nya)|bukan\s+itu|yang\s+benar|yg\s+bener|harusnya|seharusnya|sebenarnya|eh\s+salah|maaf\s+salah|batal(?:kan)?\s+yang\s+tadi)\b/i;
 
+/**
+ * Penolakan JADWAL SURVEI (Q9b) — menolak survei adalah JAWABAN yang sah,
+ * dicatat sebagai "Minta listing", bukan slot kosong yang ditanya ulang.
+ *
+ * ⚠️ BUG PRODUKSI (12 Agu 2026, chatbot web): pola lama mensyaratkan kata
+ * `usah|perlu` SETELAH negasi —
+ *   `tidak\s*(usah|perlu)\s*survei`
+ * — sehingga "Saya **tdk mau** survei" dan "**Tdk mau** survei" TIDAK cocok:
+ * pemakainya memakai "mau" (bukan "usah/perlu") dan singkatan "tdk". Q9b tetap
+ * ❓, dan pertanyaan yang SAMA diulang TIGA KALI berturut-turut sampai customer
+ * berhenti membalas. Menolak jawaban customer atas pertanyaan sendiri adalah
+ * kegagalan yang paling cepat menghabiskan kesabaran.
+ *
+ * Karena itu negasi dan kata kerja ditangani terpisah & longgar:
+ *   negasi   : tidak/tdk/tak/ga/gak/ngga/nggak/enggak/engga/belum/blm/no
+ *   penghubung (opsional): usah/perlu/mau/ingin/pengen/berminat/minat/niat
+ *   kegiatan : survei/survey/viewing/lihat unit/liat unit/datang/kunjungan
+ * Ditambah jalur eksplisit "lihat listing saja"/"katalog saja"/"skip".
+ */
+const VIEWING_REFUSAL_RE = new RegExp(
+  '(' +
+    // "tidak/tdk/ga/belum ... (usah|perlu|mau|...) ... survei/viewing/lihat unit"
+    '\\b(?:tidak|tdk|tak|ga|gak|ngga|nggak|enggak|engga|belum|blm|no)\\b' +
+    '(?:\\s+(?:usah|perlu|mau|ingin|pengen|kepengen|berminat|minat|niat|akan|bisa|sempat))?' +
+    '\\s*(?:untuk\\s+)?' +
+    '(?:survei|survey|surver|viewing|visit|lihat\\s*unit|liat\\s*unit|datang|kunjungan|ketemu)' +
+  '|' +
+    // "lihat listing saja" / "kirim listing" / "katalog saja" / "skip"
+    '\\b(?:lihat|liat|kirim|minta|mau)?\\s*(?:listing|katalog|catalog)\\b' +
+  '|' +
+    '\\bskip\\b|\\bnanti\\s*(?:saja|aja|dulu)\\b' +
+  ')', 'i'
+);
+
 /** True bila pesan adalah ralat/koreksi atas jawaban sebelumnya. */
 function isCorrectionMessage(text = '') {
   return CORRECTION_RE.test(String(text || ''));
@@ -1179,7 +1213,7 @@ function extractQualificationState(history = [], currentMessage = '') {
       const lo = custResp.toLowerCase();
 
       if (aiAsksViewDate && !state.viewingDate) {
-        if (/\b(listing|katalog|lihat\s*listing|tidak\s*(usah|perlu)\s*survei|ga\s*(usah|perlu)\s*survei|belum\s*mau\s*survei|nanti\s*saja|skip)\b/i.test(lo)) {
+        if (VIEWING_REFUSAL_RE.test(lo)) {
           state.viewingDate = 'Minta listing';
         } else {
           // Pakai `formatted` ("20 Agustus 2026"), BUKAN `date` (ISO string) —

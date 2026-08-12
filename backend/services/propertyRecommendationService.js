@@ -245,13 +245,35 @@ async function initCityCache() {
   }
 }
 
+/**
+ * Frasa DESKRIPTIF pada judul/area listing yang BUKAN nama tempat.
+ *
+ * ⚠️ BUG PRODUKSI (12 Agu 2026): `getKnownLocations()` meratakan `district` /
+ * `location` dari katalog, dan data seed memakai label zona berbahasa Inggris
+ * ("Business District", "Near Airport", "Green Zone", …) di kolom itu. Label
+ * tersebut lalu diperlakukan sebagai NAMA KOTA oleh `detectLocation()`.
+ * Karena daftar diurut dari yang TERPANJANG, "Business District" (17 huruf)
+ * bahkan MENGALAHKAN kota aslinya "Bengkulu Tengah" (15 huruf) pada judul
+ * "Bengkulu Tengah Business District House" — sehingga chatbot bertanya
+ * "Di area atau kawasan mana di *Business District*?" kepada customer.
+ *
+ * Ini murni soal DETEKSI LOKASI dari teks bebas; nilainya tetap sah sebagai
+ * data `area` untuk filter katalog, jadi yang disaring hanya daftar ini.
+ */
+const GENERIC_ZONE_LABELS = new Set([
+  'business district', 'industrial area', 'heritage zone', 'near airport',
+  'city center', 'city centre', 'near beach', 'green zone', 'waterfront',
+  'near mall', 'downtown', 'near station', 'near hospital', 'near school',
+]);
+
 function getKnownLocations() {
   const dynamicLocations = loadJsonProperties().flatMap((property) => [
     property.province,
     property.city,
     property.district,
     property.location
-  ]).filter(Boolean);
+  ]).filter(Boolean)
+    .filter(loc => !GENERIC_ZONE_LABELS.has(String(loc).trim().toLowerCase()));
 
   // Prioritas: kota dari database (otoritatif) → JSON katalog fallback →
   // daftar hardcode statis (dipakai hanya sebelum initCityCache() berjalan).

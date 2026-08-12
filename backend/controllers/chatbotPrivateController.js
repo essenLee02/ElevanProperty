@@ -4353,8 +4353,21 @@ class ChatbotPrivateService {
       return this.#wrap(builder.offTopic(), { skillInfo, filters });
     }
 
-    // Guard: ask for clarification when intent is unclear
-    if (!aiJustAskedQuestion && !LanguageDetector.hasPropertyIntent(userMessage, filters)) {
+    // Guard: ask for clarification when intent is unclear.
+    //
+    // ⚠️ DISAMAKAN dengan guard jalur WhatsApp (generateResponseForTerminalMassege):
+    // `isPropertyContextContinuation()` WAJIB ikut dicek. Guard lama hanya memakai
+    // `hasPropertyIntent()`, yang menuntut pesan berdiri sendiri sebagai query
+    // properti — padahal di tengah percakapan customer menjawab dengan kalimat
+    // pendek/lanjutan yang tidak memuat tipe properti sama sekali.
+    // Bug nyata (12 Agu 2026, chatbot web): "Saya mau durasi booking selama 4
+    // hari" — jelas soal properti dan jelas lanjutan — dibalas "Maaf, saya hanya
+    // bisa membantu terkait pencarian properti." Menolak jawaban customer atas
+    // pertanyaan kita sendiri adalah kegagalan yang paling merusak kepercayaan.
+    if (!aiJustAskedQuestion
+        && !hasPropertyKeyword(userMessage)
+        && !isPropertyContextContinuation(userMessage, history)
+        && !LanguageDetector.hasPropertyIntent(userMessage, filters)) {
       return this.#wrap(builder.clarification(), { skillInfo, filters });
     }
 
@@ -4370,8 +4383,17 @@ class ChatbotPrivateService {
     // sehingga web dan terminal message berperilaku identik. getNextQuestion()
     // mengembalikan kalimat siap-kirim, dan null bila semua sudah cukup — null
     // itulah izin menampilkan katalog.
+    // ⚠️ MODE harus ditentukan sama persis seperti jalur WhatsApp. `catalog`
+    // berhenti bertanya setelah Q4 lalu langsung menampilkan listing; `summary`
+    // menjalankan Q5–Q12 penuh. Sempat di-hardcode 'catalog' di sini dan
+    // akibatnya alur berhenti terlalu dini: begitu Q4 lewat, setiap pesan
+    // berikutnya dibalas pesan katalog-kosong yang sama berulang-ulang —
+    // customer menjawab pertanyaan yang tidak pernah ditanyakan.
+    const showCatalogDirect = String(process.env.RESPOND_CATALOG_RUN || 'OFF').toUpperCase() === 'ON';
+    const qualMode = showCatalogDirect ? 'catalog' : 'summary';
+
     const profile = ConversationQualifier.buildProfile(history, userMessage, filters);
-    const nextQuestion = ConversationQualifier.getNextQuestion(profile, lang, null, 'catalog');
+    const nextQuestion = ConversationQualifier.getNextQuestion(profile, lang, null, qualMode);
     if (nextQuestion) {
       return this.#wrap(nextQuestion, { skillInfo, filters, qualifying: true });
     }
