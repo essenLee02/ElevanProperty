@@ -33,7 +33,6 @@
  */
 const FROZEN_NOW = new Date('2026-08-10T09:00:00+07:00').getTime();
 const _RealDate = Date;
-// eslint-disable-next-line no-global-assign
 Date = class extends _RealDate {
   constructor(...args) { return args.length ? new _RealDate(...args) : new _RealDate(FROZEN_NOW); }
   static now() { return FROZEN_NOW; }

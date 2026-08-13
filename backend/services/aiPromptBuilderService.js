@@ -2745,6 +2745,50 @@ function buildWhatsappReplyPrompt(session, history, userMessage, propertyContext
   const { getCachedCatalogMode } = require('./catalogModeService');
   const showCatalogAfterBrief = getCachedCatalogMode(session?.agentUserId) === 'ON';
 
+  // ── Batas layanan agent (users.trans_type/payment_type/rental_*) ──────────
+  // Penolakan yang EKSPLISIT sudah ditangani deterministik oleh
+  // utils/agentScopeGuard.js SEBELUM prompt ini dibuat. Blok di bawah untuk hal
+  // yang TIDAK bisa ditangani gerbang: mencegah AI MENAWARKAN sesuatu di luar
+  // layanan agent — mis. bertanya "sewa atau beli?" pada agent yang hanya
+  // menjual, atau menanyakan durasi sewa di bawah minimalnya (M90).
+  const _agentRules = (() => {
+    try { return require('./agentBusinessRulesService').getCachedAgentBusinessRules(session?.agentUserId); }
+    catch { return null; }
+  })();
+  const scopeBlock = (() => {
+    const t = String(_agentRules?.transType || '').toLowerCase();
+    if (!t) return '';                      // fail-open: tidak diketahui → diam
+    const lines = [];
+    if (t === 'sale') {
+      lines.push('Agent ini HANYA melayani JUAL BELI properti. ⛔ JANGAN menanyakan "sewa atau beli?" — transaksinya sudah pasti BELI. JANGAN menawarkan sewa/kos/kontrak/booking.');
+      const p = String(_agentRules.paymentType || '').toLowerCase();
+      if (p === 'cash') lines.push('Pembiayaan: HANYA cash. ⛔ JANGAN menawarkan KPR/kredit.');
+      else if (p === 'kpr') lines.push('Pembiayaan: bisa dibantu KPR (pembeli cash juga tetap diterima).');
+    } else if (t === 'rent') {
+      lines.push('Agent ini HANYA melayani SEWA/BOOKING properti. ⛔ JANGAN menanyakan "sewa atau beli?" — transaksinya sudah pasti SEWA. JANGAN menawarkan pembelian/KPR.');
+      const { minRentalDays } = require('../utils/agentScopeGuard');
+      const { formatDurationId } = require('../utils/durationConverter');
+      const md = minRentalDays(_agentRules);
+      if (md) {
+        const lbl = formatDurationId(_agentRules.rentalDuration, _agentRules.rentalType);
+        // Jangan menulis "4 hari (4 hari)" saat satuannya memang sudah hari.
+        const suffix = /hari/.test(lbl) ? '' : ` (= ${md} hari)`;
+        lines.push(`Minimal sewa: ${lbl}${suffix}. ⛔ JANGAN menyetujui durasi di bawah itu; sampaikan minimalnya dengan sopan.`);
+      }
+    } else {
+      lines.push('Agent ini melayani JUAL BELI maupun SEWA — tanyakan mana yang dimaksud bila belum jelas.');
+      const { minRentalDays } = require('../utils/agentScopeGuard');
+      const { formatDurationId } = require('../utils/durationConverter');
+      const md = minRentalDays(_agentRules);
+      if (md) {
+        const lbl = formatDurationId(_agentRules.rentalDuration, _agentRules.rentalType);
+        const suffix = /hari/.test(lbl) ? '' : ` (= ${md} hari)`;
+        lines.push(`Khusus sewa, minimal ${lbl}${suffix}.`);
+      }
+    }
+    return `\n🎯 BATAS LAYANAN AGENT (dari profil agent — WAJIB dipatuhi):\n${lines.map(l => `  • ${l}`).join('\n')}\n`;
+  })();
+
   // Apakah konteks katalog benar-benar BERISI listing? Dipakai untuk memilih
   // antara "tampilkan rekomendasi" dan "minta maaf, katalog belum ada yang
   // cocok" (M86). Tanpa pembedaan ini, katalog=ON + katalog kosong membuat AI
@@ -3063,7 +3107,7 @@ Nama aplikasi (APP_NAME): ${resolvedAppName}
 ⛔ Tanda tangan summary WAJIB memakai dua nilai di atas sebagai TEKS BIASA.
    Menulis "[Nama Agen]", "[Nama Aplikasi]", "\${agentName}", atau "\${appName}"
    adalah BUG yang pernah terkirim ke customer sungguhan — bukan keluaran sah.
-${summaryModeInstructions}
+${scopeBlock}${summaryModeInstructions}
 ${qualStateBlock ? `\n${qualStateBlock}\n` : ''}${liveLandmarkBlock}
 Customer profile (LAWAN BICARA — jangan dipakai sebagai tanda tangan):
 Name: ${session.name}   ← nama CUSTOMER

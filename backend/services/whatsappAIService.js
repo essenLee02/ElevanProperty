@@ -31,6 +31,8 @@ const { getConversationHistory }                    = require('./sessionService'
 const { loadAIContextBlocks }                       = require('./aiContextService');
 const { splitCatalogReply }                         = require('../utils/replySplitter');
 const { resolveCatalogMode, envFallbackMode }       = require('./catalogModeService');
+const { resolveAgentBusinessRules }                 = require('./agentBusinessRulesService');
+const { checkAgentScope }                           = require('../utils/agentScopeGuard');
 const { guardReplyIdentity }                        = require('../utils/replyIdentityGuard');
 const sessionAnchors                                = require('../utils/sessionAnchors');
 const { expandAbbreviations }                       = require('../utils/lazyChatNormalizer');
@@ -342,6 +344,12 @@ async function generateWhatsAppAIReply(params) {
   // (awal pipeline) supaya cache hangat untuk pembaca sync di prompt builder.
   const catalogMode = await resolveCatalogMode(agentUserId);   // 'ON' | 'OFF'
 
+  // ── Aturan bisnis PER-AGENT (trans_type/payment_type/rental_*) ─────────────
+  // Menentukan APA yang boleh dijawab AI. Dimuat di sini (awal pipeline) dengan
+  // pola yang sama seperti catalogMode, supaya cache-nya hangat untuk pembaca
+  // sync di gate bawah. Lihat utils/agentScopeGuard.js.
+  const agentRules = await resolveAgentBusinessRules(agentUserId);
+
   // ── Step 1: Get conversation history ───────────────────────────────────────
   // Diambil DULU (sebelum property context) supaya katalog DB (Property/
   // PropertyFacility/PropertyLocation) bisa memakai filter yang diekstrak dari
@@ -396,6 +404,37 @@ async function generateWhatsAppAIReply(params) {
     if (session?.id) sessionAnchors.reconcile(session.id, filters);
   } catch (anchErr) {
     console.warn('[WhatsAppAI] anchor reconcile failed (non-fatal):', anchErr.message);
+  }
+
+  // ── ★ GERBANG BATAS LAYANAN AGENT ★ ───────────────────────────────────────
+  // Ditempatkan SEBELUM qualification gate dan SEBELUM percabangan LLM/Private
+  // Agent — jadi SATU tempat melindungi KEDUA jalur. Menaruhnya di salah satu
+  // jalur saja adalah kesalahan yang sudah dua kali menyesatkan proyek ini
+  // (M52/M54: fitur dipasang di Private Agent, produksi jalan di jalur LLM).
+  //
+  // Tidak ada gunanya menanyakan budget/lokasi kepada customer yang transaksinya
+  // memang tidak dilayani agent — beri tahu sekarang, jangan setelah 12
+  // pertanyaan. Guard ini fail-open: bila aturan agent tidak diketahui, lolos.
+  try {
+    const scope = checkAgentScope(message, agentRules);
+    if (scope.blocked) {
+      console.log('[WhatsAppAI] 🚫 Di luar batas layanan agent:', {
+        reason: scope.reason,
+        transType: agentRules.transType,
+        paymentType: agentRules.paymentType,
+        minRental: agentRules.rentalDuration ? `${agentRules.rentalDuration} ${agentRules.rentalType}` : null,
+      });
+      const reply = scope.reply + agentSignature(agentName, isIndonesian(message, history));
+      return {
+        reply,
+        replyParts: [reply],
+        provider: 'agent_scope_guard',
+        contextSource,
+      };
+    }
+  } catch (scopeErr) {
+    // Fail-open: gerbang non-kritis tidak boleh menghentikan balasan.
+    console.warn('[WhatsAppAI] agent scope guard failed (non-fatal):', scopeErr.message);
   }
 
   const qualResponse = buildQualifyReply(filters, message, agentName, contextSource, history, catalogMode);

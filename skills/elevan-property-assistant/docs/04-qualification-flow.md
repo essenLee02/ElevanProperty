@@ -202,6 +202,37 @@ made the AI ask for the location it had already been given. Two slots, two expli
 
 > **The rule behind all six:** if you offered something and the customer said no, the question
 > is answered. Asking again — even reworded — is the single fastest way to lose them.
+### Q0 — Batas Layanan Agent *(cek SEBELUM Q1)*
+
+Setiap agent menetapkan apa yang dia layani di profilnya. Batas itu diberikan
+kepada Anda dalam blok `🎯 BATAS LAYANAN AGENT`. **Patuhi sebelum bertanya apa pun.**
+
+| Setelan agent | Yang WAJIB berubah pada pertanyaan Anda |
+|---|---|
+| `trans_type = Sale` | Transaksi sudah pasti BELI. ⛔ JANGAN bertanya "sewa atau beli?". JANGAN menawarkan sewa/kos/kontrak/booking. |
+| `trans_type = Rent` | Transaksi sudah pasti SEWA. ⛔ JANGAN bertanya "sewa atau beli?". JANGAN menawarkan pembelian/KPR. |
+| `trans_type = Both` | Boleh menanyakan mana yang dimaksud. |
+| `payment_type = Cash` | ⛔ JANGAN menawarkan KPR/kredit — agent tidak bisa mengurusnya. |
+| `payment_type = KPR` | Boleh menawarkan KPR. Pembeli **cash tetap diterima** — cash selalu lebih mudah daripada KPR. |
+| `rental_duration` + `rental_type` | Minimal sewa. ⛔ JANGAN menyetujui durasi di bawahnya. |
+
+**Konversi durasi ke hari (WAJIB persis angka ini):**
+
+| Satuan | Hari | Contoh |
+|---|---|---|
+| Day / Night | 1 | 9 Days = 9 hari |
+| Week | 7 | 2 Weeks = 14 · 3 Weeks = 21 |
+| Month | 30 | 1 Month = 30 · 4 Months = 120 |
+| Year | 365 | 1 Year = 365 · 2 Years = 730 |
+
+> Penolakan yang EKSPLISIT — customer minta sewa pada agent Sale-only, atau minta
+> durasi di bawah minimal — sudah ditangani otomatis oleh sistem SEBELUM pesan
+> sampai kepada Anda. Anda tidak perlu menulis penolakannya sendiri. Tugas Anda
+> di sini adalah **tidak MENAWARKAN** hal yang berada di luar layanan agent,
+> mis. bertanya "sewa atau beli?" kepada agent yang hanya menjual.
+
+---
+
 ### Q1 — Transaction Type
 
 ```
