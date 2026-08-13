@@ -1,4 +1,4 @@
-# 17. Recent Updates & Reconstruction Checklist (Juli 2026)
+# 17. Recent Updates & Reconstruction Checklist (Juli – Agustus 2026)
 
 > Dokumen ini mengonsolidasikan SEMUA perubahan besar dari sesi pengembangan
 > Juli 2026 dalam satu tempat, dan berfungsi sebagai **checklist rekonstruksi**
@@ -8,6 +8,54 @@
 > security, code). Detail teknis penuh tetap ada di masing-masing doc
 > bernomor (01–16) — dokumen ini adalah indeks + ringkasan yang bisa dibaca
 > berdiri sendiri.
+
+---
+
+## 0. Sesi Agustus 2026 — Perbaikan Perilaku AI (M78–M91)
+
+> Bagian ini ditambahkan setelah dokumen aslinya (Juli 2026). Semua poin di bawah
+> SUDAH ada di kode dan punya berkas tes regresinya sendiri. Nomor "M" merujuk
+> `ELEVAN_PROPERTY_CONTEXT_V7.txt` §5, tempat akar masalah + verifikasinya ditulis penuh.
+
+### Modul BARU yang lahir dari sesi ini
+
+| Berkas | Guna | M |
+|---|---|---|
+| `utils/replyIdentityGuard.js` | Ganti placeholder `[Nama Agen]` / `${agentName}` di balasan dengan nama asli, di sisi KIRIM (nol token prompt) | M85 |
+| `services/agentBusinessRulesService.js` | Cache TTL `users.trans_type/payment_type/rental_duration/rental_type` | M90 |
+| `utils/agentScopeGuard.js` | Tegakkan batas layanan agent sebelum AI dipanggil | M90 |
+| `utils/durationConverter.js` | Konversi satuan sewa → HARI (Day/Night=1 · Week=7 · Month=30 · Year=365) | M90 |
+| `services/kimiService.js` | Provider Moonshot AI (OpenAI-compatible) | M74 |
+| `services/catalogModeService.js` | Mode katalog per-agent (`users.catalog_summary`) | M86 |
+
+### Perubahan perilaku penting
+
+| Perubahan | Inti | M |
+|---|---|---|
+| Debounce anti-race | `utils/responseDebounce.js` DITULIS ULANG: mutex promise per-key (`_inFlight`), `_pending.delete` dipindah ke SESUDAH `onFire` selesai. Dulu dua panggilan AI paralel untuk sesi sama saling menyalip. | M78 |
+| Q2c untuk SEMUA kota | Dulu allowlist 8 kota; kota di luar itu (mis. Malang) tidak pernah ditanya areanya → Q7 MENGARANG nama area ("Ciputra"). Kini contoh area diambil dari `utils/locationLandmarks.js` (45 kota). | M84 |
+| Gerbang masuk mengenal "booking" | `ACTION_WORDS` tidak memuat `booking` — padahal Q1 punya TIGA transaksi (sewa/beli/**booking**). Seluruh alur booking tidak bisa dimulai secara alami. | M87 |
+| Jawaban Q2c bisa masuk | Kalimat Q2c ("area **atau kawasan** mana") tidak cocok pola pertanyaan properti mana pun → jawaban "Daerah Gubeng" dibuang 5× tanpa balasan. | M88 |
+| Katalog mengikuti `catalog_summary` | Kontrak 3 keadaan: ON+ada katalog → tampilkan; ON+kosong → minta maaf; OFF → summary saja. | M86 |
+| Batas layanan agent | `trans_type`/`payment_type`/`rental_*` kini membatasi jawaban AI. Cash SELALU diterima meski agent di-set KPR. | M90 |
+| Fasilitas "terserah/apapun" | Daftar frasa diperluas (23 bentuk); "bebas + item wajib" = daftar standar LENGKAP + item, bukan salah satunya. | M91 |
+
+### Pola yang berulang — baca sebelum menambah fitur
+
+1. **Gerbang masuk harus ikut diperbarui.** Menambah transaksi/tipe ke Q-flow tidak
+   ada gunanya bila pesan pembukanya tidak lolos `propertyKeywordFilter` (M87), dan
+   memperluas KAPAN sebuah pertanyaan diajukan menuntut JAWABANNYA juga bisa masuk (M88).
+2. **Satu gerbang untuk dua jalur.** Semua penjaga dipasang di `whatsappAIService`
+   SEBELUM percabangan LLM/Private Agent. Memasangnya di satu jalur saja = M52/M54.
+3. **Slot kosong mengundang karangan.** Pertanyaan yang tidak pernah diajukan tidak
+   membuat field kosong — model mengisinya sendiri dari korpus prompt (M84).
+4. **Aturan absolut perlu jalan keluar.** "Jangan pernah pakai X" tanpa alternatif yang
+   sah memaksa model mengarang. Nyatakan fallback-nya BENAR, bukan sekadar boleh (M84).
+5. **State bersih tapi model tetap salah → contoh konkret, bukan aturan baru.** Bila
+   server sudah benar dan model tetap memangkas/mengarang, tambahkan contoh
+   before/after dari kegagalan nyata (M83, M91).
+6. **Notasi placeholder bocor.** Template penuh `*[...]*` membuat model menulis nama
+   SLOT, bukan nilainya. Jaga deterministik di sisi kirim (M85).
 
 ---
 

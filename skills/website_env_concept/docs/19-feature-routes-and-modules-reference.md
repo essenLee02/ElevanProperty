@@ -88,6 +88,28 @@ city/location/facility management, profile, auth, chatbot, terminal message, con
 | **City/Location context** | `aiContextService` | `services/aiContextService.js` | city | landmark list + examples | 16 |
 | **LLM call** | `whatsappAIService` | `services/whatsappAIService.js` | prompt + state | LLM reply | 06 |
 | **Response formatting** | `ResponseBuilderWhatsApp` | `controllers/chatbotPrivateController.js` | state | WhatsApp text | 11 |
+| **Final directive** | `buildFinalDirective()` | `services/aiPromptBuilderService.js` | state + identity | blok akhir prompt (posisi 100%) | 06, 10 |
+| **Identitas agent → prompt** | blok `🪪 IDENTITAS ANDA` | `services/aiPromptBuilderService.js` | `users.name` + `APP_NAME` | nama tanda tangan | 06 |
+| **Guard tanda tangan** | `guardReplyIdentity()` | `utils/replyIdentityGuard.js` | balasan AI | placeholder `[Nama Agen]`/`${agentName}` → nama asli | 06 |
+| **Mode katalog per-agent** | `catalogModeService` | `services/catalogModeService.js` | `users.catalog_summary` | `ON`/`OFF` (cache TTL) | 06 |
+| **Aturan bisnis agent** | `agentBusinessRulesService` | `services/agentBusinessRulesService.js` | `users.trans_type/payment_type/rental_*` | rules (cache TTL) | 06 |
+| **Batas layanan agent** | `checkAgentScope()` | `utils/agentScopeGuard.js` | pesan + rules | blok/lolos + kalimat penolakan | 06 |
+| **Konversi durasi** | `toDays()`, `parseDurationFromText()` | `utils/durationConverter.js` | angka + satuan | jumlah HARI (Day=1, Week=7, Month=30, Year=365) | 06 |
+| **Debounce anti-race** | `debounceMessage()` | `utils/responseDebounce.js` | pesan beruntun | satu batch, mutex per-key | 09 |
+| **Provider Kimi** | `kimiService` | `services/kimiService.js` | prompt | balasan (OpenAI-compatible) | 06 |
+
+> **Gerbang berlapis sebelum AI dipanggil** — urutannya penting, semuanya di
+> `services/whatsappAIService.js` sehingga jalur LLM DAN Private Agent sama-sama
+> terlindungi (menaruhnya di salah satu jalur saja adalah kesalahan M52/M54):
+>
+> 1. `hasPropertyKeyword()` / `isPropertyContextContinuation()` — gerbang MASUK
+>    (`utils/propertyKeywordFilter.js`). Pesan non-properti berhenti di sini.
+> 2. `checkAgentScope()` — batas layanan agent. Transaksi/pembiayaan/durasi di luar
+>    setelan agent dijawab sopan, tanpa memanggil AI sama sekali.
+> 3. `buildQualifyReply()` — gerbang kualifikasi (4 info minimum).
+> 4. Baru kemudian provider AI / Private Agent.
+>
+> Ketiga gerbang **fail-open**: kegagalan internalnya tidak boleh membungkam balasan.
 
 ---
 

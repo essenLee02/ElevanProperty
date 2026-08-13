@@ -275,9 +275,24 @@ function getKnownLocations() {
   ]).filter(Boolean)
     .filter(loc => !GENERIC_ZONE_LABELS.has(String(loc).trim().toLowerCase()));
 
-  // Prioritas: kota dari database (otoritatif) → JSON katalog fallback →
-  // daftar hardcode statis (dipakai hanya sebelum initCityCache() berjalan).
-  const cityNames = _dbCities.length ? _dbCities : FALLBACK_LOCATION_KEYWORDS;
+  // Kota dari DATABASE bersifat OTORITATIF, tetapi MENAMBAH — tidak pernah
+  // MENGGANTIKAN daftar statis.
+  //
+  // ⚠️ BUG PRODUKSI (13 Agu 2026, M92). Dulu baris ini berbunyi
+  //     const cityNames = _dbCities.length ? _dbCities : FALLBACK_LOCATION_KEYWORDS;
+  // sehingga begitu tabel `cities` terisi APA PUN, seluruh daftar statis
+  // DIBUANG. Kota yang belum sempat dimasukkan ke master data jadi TIDAK
+  // DIKENALI sama sekali — customer mengetik "Di kota Jakarta" lima kali
+  // berturut-turut dan tiap kali dijawab pertanyaan kota yang sama, karena
+  // Jakarta tidak ada di tabel `cities` meski ADA di daftar statis.
+  // Gejalanya terlihat seperti AI "tidak mengerti Jakarta itu kota"; akarnya
+  // justru DB yang menutupi pengetahuan yang sudah dimiliki sistem.
+  //
+  // Modul saudaranya sudah benar sejak awal:
+  // `utils/propertyKeywordFilter.initLocationCache()` MENGGABUNG
+  // (`[...dbNames, ...extras]`). Dua modul untuk konsep yang sama dengan
+  // semantik merge BERLAWANAN — kelas desync yang sama dengan M87/M88.
+  const cityNames = [..._dbCities, ...FALLBACK_LOCATION_KEYWORDS];
 
   return [...new Set([...cityNames, ...dynamicLocations])]
     .sort((a, b) => String(b).length - String(a).length);
@@ -481,7 +496,28 @@ function stripMovingFromPhrases(text) {
  * which then flips the type mid-flow and resets the whole qualification state.
  */
 function stripAmbiguousRumah(text) {
-  return text.replace(/\brumah\s+(makan|sakit|tangga|ibadah|duka|produksi|tahanan|kos|kost|susun|potong)\b/gi, '');
+  let out = text.replace(/\brumah\s+(makan|sakit|tangga|ibadah|duka|produksi|tahanan|kos|kost|susun|potong)\b/gi, '');
+
+  // ── "rumah" DI DALAM JAWABAN RED FLAG bukan permintaan ganti tipe (M92) ──
+  // Bug produksi 13 Agu 2026: customer sedang mencari APARTEMEN, lalu menjawab
+  // Q5 dengan "Saya tidak ingin rumah hadap utara, gang sempit atau rumah tua".
+  // Kata "rumah" di situ menggambarkan hal yang DIHINDARI, tapi terbaca sebagai
+  // tipe properti → buildingType apartment→house → sessionAnchors.reconcile()
+  // menganggap customer ganti pencarian → clearAnchors() → transaksi & lokasi
+  // TERHAPUS → gerbang kualifikasi mengulang dari awal ("Untuk Rumah yang Anda
+  // cari — sewa atau beli? kota mana? harga?") padahal semua itu sudah dijawab.
+  // Seluruh konteks hilang di satu giliran.
+  //
+  // Dua bentuk yang dibuang:
+  //   (a) "rumah tua/lama/kuno/bekas/butut/jelek/kumuh" — sifat yang dihindari.
+  //   (b) "<negasi> … rumah" — "tidak ingin rumah …", "jangan rumah …".
+  // Keduanya SEMPIT: "mau beli rumah" / "cari rumah" tetap terdeteksi normal.
+  out = out.replace(/\brumah\s+(tua|lama|kuno|bekas|butut|jelek|kumuh|rusak|bobrok)\b/gi, '');
+  out = out.replace(
+    /\b(?:tidak|tdk|ga|gak|gk|nggak|ngga|enggak|engga|jangan|hindari|dihindari|anti|bukan|selain)\s+(?:\w+\s+){0,2}?rumah\b/gi,
+    ''
+  );
+  return out;
 }
 
 /**

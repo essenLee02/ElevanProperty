@@ -1,11 +1,21 @@
 # Elevan Property Platform — Documentation Index
 
-**Status**: current with codebase (updated 2026-07-07). WhatsApp terminal platforms
+**Status**: current with codebase (updated 2026-08-12). WhatsApp terminal platforms
 aktif: **Fonnte, Kirimi, TimelinesAI** (ChakraHQ/WATI/360dialog = legacy, di luar
 scope dok ini). Master data 6-modul: **Country, Province, City, Location, Facility,
 Property**. Panggil skill ini untuk merekonstruksi/mengembangkan ulang modul, API,
 environment, database, framework, komponen, atau security yang SAMA dengan kondisi
 project saat ini — terutama lihat doc **17** untuk ringkasan lengkap perubahan terbaru.
+
+> **Skala kode saat ini**: 25 controller · 25 service · 28 util · 17 model ·
+> 48 berkas tes. AI provider: 6 opsi (`kimi` default saat ini · deepseek ·
+> chatgpt · claude · qwen · private) — nilai default **berubah-ubah**, selalu
+> cek `AI_PRIMARY_PROVIDER` di `.env`, jangan diasumsikan dari dokumen mana pun.
+>
+> **Perilaku AI (Agustus 2026)**: rangkaian perbaikan M78–M91 menambahkan
+> gerbang batas-layanan agent, guard tanda tangan, mode katalog per-agent,
+> mutex debounce, dan konversi durasi sewa. Ringkasannya di doc **17 §0**;
+> pemetaan modul → berkas di doc **19**.
 
 > Ringkasan 1-file untuk upload cepat: `../WEBSITE_ENV_CONCEPT_BRIEF.txt` (bisa
 > tertinggal versi — untuk detail akurat & terbaru, rujuk `docs/*.md` di sini).
@@ -54,6 +64,11 @@ project saat ini — terutama lihat doc **17** untuk ringkasan lengkap perubahan
 - **ngrok auto-start?** → 15 → 02
 - **Tambah master data module baru (mengikuti pola Country/Property)?** → 03 → 05 → 07 → 17
 - **Merekonstruksi ulang seluruh sistem dari nol?** → 17 → 01 → 02 → 03 → semua lainnya
+- **Batas layanan agent (trans_type/payment_type/rental_*) membatasi jawaban AI?** → 19 (§AI & Prompting + gerbang berlapis) → 17 §0 → 06
+- **Summary tertanda `[Nama Agen]` / `${agentName}`?** → 19 (guard tanda tangan) → 17 §0 (M85)
+- **AI mengarang nama area / pertanyaan diulang / jawaban customer dibuang?** → 17 §0 (M84, M87, M88) → 10
+- **Fasilitas "terserah/standar/apapun" hilang dari summary?** → 17 §0 (M91) → 16
+- **Katalog tidak muncul setelah summary?** → 17 §0 (M86) → 06 → 12
 
 ---
 

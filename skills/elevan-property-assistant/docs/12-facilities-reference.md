@@ -73,9 +73,11 @@ value (see §"Fasilitas is answered or it isn't" below for the exact failure mod
 ## 4. Standard Facilities (the "terserah" fallback)
 
 When the customer answers **"standar" / "fasilitas standar" / "biasa" / "terserah" /
-"fasilitas terserah" / "semua fasilitas" / "semua fasilitas apapun" / "apa saja" /
-"apa aja" / "yang penting lengkap" / "tidak tahu" / "gak ada"**, they have no specific
-preference. **Never leave the field empty and never re-ask** — that IS their answer.
+"fasilitas terserah" / "apapun" / "apa pun" / "apa saja" / "apa aja" / "apa aja boleh" /
+"bebas" / "semua fasilitas" / "semua boleh" / "ikut aja" / "ngikut aja" / "nurut aja" /
+"ga ada preferensi" / "gak ada preferensi" / "yang penting lengkap" / "tidak tahu" /
+"gak ada"**, they have no specific preference. **Never leave the field empty and never
+re-ask** — that IS their answer.
 Auto-fill from the table below, matched to the property type they chose.
 
 > "Semua fasilitas" does **not** mean list every amenity that exists — it means the
@@ -111,7 +113,7 @@ same regardless of what the customer says about furnishing.
 
 ```
 ✓ Fasilitas: *AC, Gym, Kolam renang*                    ← customer named them
-✓ Fasilitas: *Standar*                                  ← customer said "terserah/standar saja" — still ✅, still answered
+✓ Fasilitas: *Kamar tidur, Kamar mandi, Ruang tamu, Pantry/Kitchen set, …*  ← customer said "terserah/standar/apapun": tulis DAFTAR STANDAR yang sebenarnya, LENGKAP. Kata "Standar" telanjang BUKAN jawaban yang berguna bagi agent.
 (the "Fasilitas" line does not exist at all)            ← ONLY when Q_FAC was never asked
 ```
 
@@ -124,6 +126,18 @@ facility list) — it is never equivalent to the question having gone unasked. N
 write `✗` in front of a Fasilitas line for this reason.
 
 ### ⚠️ Standard facilities are ALWAYS appended, never replaced
+
+> **⛔ Kegagalan nyata (8 Agu 2026) — aturan ini dilanggar persis di titik ini.**
+> Customer (apartemen): `"Fasilitas terserah saja, pokok ada AC dan gym"`.
+> ❌ Dikirim : `✓ Fasilitas: AC, Gym` — hanya 2 item yang customer sebut; 15 fasilitas
+>   standar apartemen dibuang seluruhnya.
+> ✅ Benar   : `✓ Fasilitas: Gym, AC, Kamar Tidur, Kamar Mandi, Ruang Tamu,
+>   Pantry/Kitchen Set, Water Heater, Listrik, Air, Wi-Fi, TV, Lift, Parkir, Lobby,
+>   Keamanan 24 Jam, CCTV, Akses Kartu`
+>
+> Transkrip lain dengan jawaban IDENTIK menuliskannya lengkap — jadi datanya memang
+> tersedia; yang terjadi adalah pemangkasan saat menyalin. Kata "terserah" MENAMBAH
+> cakupan fasilitas, tidak pernah menguranginya.
 
 Even when the customer names specific facilities, **append** the type's standard list
 (deduped) so the agent and catalog get the full picture. **Customer's specific items go

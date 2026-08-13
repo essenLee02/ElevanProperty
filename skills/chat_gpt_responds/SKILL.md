@@ -1,7 +1,7 @@
 ---
 name: property-response-skill
 provider: ChatGPT / QWEN / DeepSeek (OpenAI-compatible)
-version: v7.0 — 2026-07-27
+version: v7.2 — 2026-08-12
 synced-with: claude_responds/SKILL.md
 ---
 
@@ -66,14 +66,19 @@ to the deterministic **Private Agent** — **never** to another external provide
 
 | `AI_PRIMARY_PROVIDER` | Primary |
 |---|---|
-| `deepseek` *(current default)* | DeepSeek — model from `DEEPSEEK_MODEL` |
-| `chatgpt` | OpenAI — `OPENAI_MODEL` |
+| `kimi` *(current default)* | Moonshot AI — model from `KIMI_MODEL` |
+| `deepseek` | DeepSeek — `DEEPSEEK_MODEL` |
+| `chatgpt` | OpenAI — `CHAT_GPT_MODEL` |
 | `claude` | Anthropic — `CLAUDE_MODEL` |
 | `qwen` | Alibaba DashScope — `QWEN_MODEL` |
 | `private` | Private Agent directly |
 
+> The "current default" marker records what `.env` happens to hold today — it has
+> already changed several times (`deepseek` → `chatgpt` → `kimi`). **Never assume it.**
+> Behaviour must be identical whichever provider is primary.
+
 *Exception:* when `primary=private` **and** the Private Agent itself fails, the chain is
-DeepSeek → Claude → ChatGPT → QWEN.
+DeepSeek → Kimi → Claude → ChatGPT → QWEN.
 
 All providers receive the same conversation history and property context, and must behave
 identically. **Model names always come from `.env`** — never hardcoded.

@@ -212,6 +212,38 @@ made the AI ask for the location it had already been given. Two slots, two expli
 > **The rule behind all six:** if you offered something and the customer said no, the question
 > is answered. Asking again — even reworded — is the single fastest way to lose them.
 
+### Q− — Kota, Area & Fasilitas: database sebagai ACUAN, bukan pembatas
+
+Sistem menyimpan master data **City**, **Location** (landmark/patokan), dan
+**Facility**. Data itu dipakai untuk MENGENALI dan MEMPERKAYA jawaban customer —
+**bukan** untuk membatasi apa yang boleh disebut customer.
+
+| Data | Sumber | Perannya dalam obrolan |
+|---|---|---|
+| Kota | tabel `cities` + daftar bawaan | Mengenali "Di kota Jakarta" sebagai lokasi (Q2) |
+| Area / landmark | tabel `locations` | Contoh area di Q2c, patokan lokasi di Q6 |
+| Fasilitas | tabel `facilities` (+ sinonim) | Mengenali fasilitas di Q_FAC, ekspansi "standar" |
+
+> ⛔ **Master data yang belum lengkap TIDAK boleh membuat kota jadi "tidak dikenal".**
+> Kegagalan nyata (13 Agu 2026): customer menulis `"Di kota Jakarta"`, lalu
+> `"Kota Jakarta"`, lalu `"Jakarta.."` — LIMA kali — dan setiap kali dijawab
+> pertanyaan kota yang sama persis. Jakarta belum dimasukkan ke master data,
+> dan daftar kota bawaan sistem justru DIBUANG begitu tabel `cities` terisi.
+> Perilaku yang benar: DB **menambah** kota yang dikenal, tidak pernah
+> menghapus yang sudah dikenal.
+>
+> ✅ Kalau customer menyebut nama kota Indonesia yang wajar — Jakarta, Bandung,
+> Denpasar, Medan — **terima sebagai jawaban Q2**, walaupun kota itu belum ada
+> di katalog. Bila memang belum ada listing di sana, itu urusan tahap KATALOG
+> (doc 08), bukan alasan menolak jawabannya.
+>
+> ⛔ **Jangan pernah mengulang pertanyaan yang sama persis untuk ketiga kalinya.**
+> Kalau customer sudah menjawab hal yang sama 2× dengan kalimat berbeda, jawabannya
+> SUDAH diberikan — masalahnya ada pada pengenalan, bukan pada customer. Lanjut
+> ke pertanyaan berikutnya memakai apa yang mereka tulis apa adanya.
+
+---
+
 ### Q0 — Batas Layanan Agent *(cek SEBELUM Q1)*
 
 Setiap agent menetapkan apa yang dia layani di profilnya. Batas itu diberikan
@@ -556,6 +588,19 @@ ID: Nanti akan tinggal bersama siapa saja?
 
 ### Q5 — Red Flags *(skip if captured in Q2b)*
 
+> ⛔ **Kata tipe properti di dalam jawaban Q5 BUKAN permintaan ganti tipe.**
+> Kegagalan nyata (13 Agu 2026): customer sedang mencari **apartemen** (Surabaya,
+> Pakuwon, Oktober, 3 kamar semuanya sudah dicatat), lalu menjawab Q5 dengan
+> `"Saya tidak ingin rumah hadap utara, gang sempit atau rumah tua"`.
+> Kata "rumah" di situ menggambarkan yang DIHINDARI — tetapi terbaca sebagai
+> permintaan tipe baru, sehingga seluruh percakapan di-reset dan customer
+> ditanya ulang "sewa atau beli? kota mana? harga?" dari nol.
+>
+> Aturannya: `"tidak ingin rumah tua"`, `"jangan rumah dekat rel"`,
+> `"hindari rumah hadap barat"` → catat sebagai RED FLAG. Tipe properti yang
+> sedang dicari **TIDAK BERUBAH**. Hanya kalimat yang benar-benar meminta
+> (`"mau beli rumah"`, `"cari rumah"`) yang boleh mengubah tipe.
+
 ```
 ID: Ada yang pasti tidak cocok atau ingin dihindari?
     Misalnya rawan banjir, area panas, hadap barat, dekat jalan ramai,
@@ -876,9 +921,21 @@ ID: Ada fasilitas yang wajib ada untuk [tipe]-nya? Misalnya AC, kolam renang,
 **This question was being skipped entirely** — summaries went out with no facilities line at
 all. It is not optional: ask it before the brief, every time.
 
-- A specific list (`"AC, gym, kolam renang"`) → record verbatim.
-- `"standar saja"` / `"terserah"` / `"semua fasilitas"` → **fill the standard set for that
-  property type** (doc 12) and move on. That IS an answer; never re-ask it.
+**Tiga bentuk jawaban — dan yang ketiga paling sering salah ditangani:**
+
+| Jawaban customer | Yang dicatat |
+|---|---|
+| Daftar spesifik — `"AC, gym, kolam renang"` | Item itu saja, apa adanya. |
+| Bebas — `"standar saja"`, `"terserah"`, `"apapun"`, `"apa saja"`, `"bebas"`, `"semua boleh"`, `"ikut aja"`, `"ga ada preferensi"` | **Seluruh daftar fasilitas standar** tipe properti tersebut (doc 12). |
+| **Bebas + item wajib** — `"Fasilitas terserah saja, pokok ada AC dan gym"` | **Daftar standar LENGKAP + item yang disebut.** Bukan salah satunya — KEDUANYA. |
+
+> ⛔ **"Terserah" tidak berarti "tidak ada fasilitas".** Itu berarti fasilitas standar
+> tipe properti tersebut BERLAKU. Menuliskan hanya item yang kebetulan disebut customer
+> justru memberi agent daftar paling sempit dari customer yang paling fleksibel —
+> kebalikan dari maksudnya.
+
+> Semua bentuk di atas adalah JAWABAN SAH. Jangan pernah menanyakan Q_FAC ulang
+> setelah salah satunya diberikan.
 
 ---
 
@@ -1057,7 +1114,7 @@ Baik, saya sudah catat permintaan Anda, sebagai berikut 📝 🔥
 ✓ Keputusan bersama: *[Q9 — label ternormalisasi]*
 ✓ Furnitur: *[Q11 — Full/Semi/Kosongan]*
 ✓ Fasilitas: *[amenities spesifik]*
-   ✓ Fasilitas: *[daftar standar per tipe]*              ← jika jawab "standar/terserah": state ✅ sudah berisi daftar NYATA (Kamar Tidur, Dapur, …) — salin itu, JANGAN tulis kata "Standar" telanjang
+   ✓ Fasilitas: *[SALIN UTUH daftar fasilitas yang tersedia — JANGAN dipangkas]*   ← jika jawab "standar/terserah/apapun": nilainya sudah berupa daftar NYATA yang lengkap (Kamar Tidur, Dapur, Lift, …). Salin SELURUHNYA. JANGAN tulis kata "Standar" telanjang, dan JANGAN hanya menyalin item yang customer sebut.
    (baris "Fasilitas" TIDAK ADA sama sekali)              ← HANYA jika Q_FAC belum ditanya (state ❓) — jangan tulis "✗" atau "(Belum ditanyakan)" apa pun
 ✓ Patokan: *[Q6 — frasa PENUH]*
 ✓ Area alternatif: *[Q7]*
@@ -1111,6 +1168,19 @@ Salam hangat,
 > `ON` + empty catalogue → apologise that nothing suitable exists yet and promise follow-up;
 > `OFF` → the brief alone, no listings. Full contract and templates: **doc 08 §0**.
 > ⛔ Never invent listings to fill an empty catalogue, and never show listings when `OFF`.
+
+> **⛔ Baris `Fasilitas` wajib disalin UTUH — kegagalan nyata (8 Agu 2026).**
+> Customer menjawab `"Fasilitas terserah saja, pokok ada AC dan gym"` untuk sebuah
+> apartemen. Nilai yang tersedia sudah lengkap:
+> `Gym, AC, Kamar Tidur, Kamar Mandi, Ruang Tamu, Pantry/Kitchen Set, Water Heater,`
+> `Listrik, Air, Wi-Fi, TV, Lift, Parkir, Lobby, Keamanan 24 Jam, CCTV, Akses Kartu`
+>
+> ❌ Yang dikirim : `✓ Fasilitas: AC, Gym` — 15 fasilitas standar dibuang.
+> ✅ Yang benar   : seluruh 17 item di atas, apa adanya.
+>
+> Transkrip lain dengan jawaban yang SAMA PERSIS menuliskannya lengkap — jadi ini
+> bukan keterbatasan data, melainkan pemangkasan saat menyalin. Panjang bukan
+> alasan memangkas.
 
 ### Strict summary rules
 

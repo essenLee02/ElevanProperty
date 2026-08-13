@@ -1600,7 +1600,32 @@ function extractQualificationState(history = [], currentMessage = '') {
       // Treated same as explicit: marker keeps LATER specifics too (customer often
       // defers first, then adds "one gate system dan smart door" a few turns later —
       // the summary must show standar + specifics merged, not specifics only).
-      const noPreference = /\b(gak ada|tidak ada|apa saja|terserah|bebas|gapapa|ga pa pa|ngga ada|engga ada|standar apa? aja)\b|(?:tidak|gak|ga|ngga|enggak)\s+apa[\s-]?apa|semua\s+fasilitas\s+(?:boleh|oke|ok|tidak\s+apa|gak\s+apa)?/i.test(custLo);
+      // ⚠️ DAFTAR INI SENGAJA LUAS (M91). Sebelumnya hanya memuat segelintir
+      // bentuk, sehingga 13 dari 23 cara lazim menjawab "bebas" TIDAK menyalakan
+      // marker 'standar' — termasuk "apapun" (kata yang paling sering dipakai),
+      // "ga ada preferensi" (hanya "gak ada" yang terdaftar), "apa aja boleh",
+      // dan "ikut/ngikut/nurut aja". Akibatnya Q_FAC dianggap BELUM terjawab →
+      // ditanya ulang, atau baris Fasilitas hilang sama sekali dari summary.
+      // Kasus terburuk: "apapun asal ada gym" menyimpan Gym SAJA — customer
+      // yang justru bilang "bebas" malah dapat daftar fasilitas paling sempit.
+      const noPreference = new RegExp([
+        // apapun / apa pun / apa saja / apa aja (+ boleh/aja/saja)
+        '\\bapa\\s*(?:pun|saja|aja)\\b',
+        // tidak ada / gak ada / ga ada / nggak ada / engga ada …
+        '\\b(?:tidak|tdk|gak|ga|gk|nggak|ngga|enggak|engga)\\s+ada\\b',
+        // terserah / bebas / gapapa
+        '\\b(?:terserah|bebas|gapapa|ga\\s*pa\\s*pa)\\b',
+        // tidak apa-apa
+        '(?:tidak|gak|ga|ngga|enggak)\\s+apa[\\s-]?apa',
+        // semua boleh / semua fasilitas boleh / semua oke
+        '\\bsemua\\b(?:\\s+fasilitas)?\\s*(?:boleh|oke|ok|bagus)?\\b',
+        // ikut aja / ngikut aja / nurut aja / manut
+        '\\b(?:ngikut|ikut|nurut|manut)\\b',
+        // tanpa preferensi / tidak ada preferensi (varian apa pun)
+        '\\bpreferensi\\b',
+        // standar apa aja
+        'standar\\s+apa\\s*(?:saja|aja)',
+      ].join('|'), 'i').test(custLo);
       const prev = Array.isArray(state.facilities) ? state.facilities : [];
       const hasStdMarker = prev.some(f => String(f).toLowerCase() === 'standar');
 
@@ -3032,7 +3057,7 @@ Baik, saya sudah catat permintaan Anda, sebagai berikut 📝 🔥
 
 ✓ Furnitur: *[nilai dari Q11 — HANYA jika ✅]*
 
-✓ Fasilitas: *[nilai dari baris "Fasilitas" di QUALIFICATION STATE — HANYA jika ✅; gabung dengan koma, mis. "Kids zone, Gym"]*
+✓ Fasilitas: *[SALIN UTUH baris "Fasilitas" dari QUALIFICATION STATE — HANYA jika ✅. JANGAN dipangkas, JANGAN diringkas, JANGAN diambil sebagiannya saja.]*
 
 ✓ Red flags: *[nilai PERSIS dari Q5 di QUALIFICATION STATE — HANYA jika ✅]*
 
@@ -3080,6 +3105,10 @@ ${resolvedAppName}
 - **⛔ DILARANG KERAS: "Area" TIDAK BOLEH sama dengan/hanya mengulang nama Kota (Q2), dan TIDAK BOLEH berisi jawaban dari pertanyaan lain** (mis. tipe kamar, fasilitas). Area hanya nama area/kecamatan DI DALAM kota tersebut. Jika QUALIFICATION STATE Q2c ❓ → baris "Area" TIDAK ADA di summary sama sekali, meskipun nama kota disebut berkali-kali di riwayat chat.
 - **⛔ DILARANG KERAS: "Keputusan bersama" HANYA salinan PERSIS nilai Q9 di QUALIFICATION STATE.** JANGAN mengarang kutipan/dialog customer ("Iya, Kak... saya survei bersama istri") yang tidak muncul sebagai nilai Q9. Jika Q9 ❓ → baris ini TIDAK ADA.
 - **⛔ DILARANG KERAS: "Viewing" TIDAK BOLEH memakai kata relatif ("besok", "lusa", "minggu depan").** QUALIFICATION STATE Q9b sudah berisi tanggal ABSOLUT hasil normalisasi ("DD Bulan YYYY") — salin PERSIS itu. Jangan menebak atau mengganti dengan kata relatif apa pun.
+- **⛔ DILARANG KERAS: baris "Fasilitas" WAJIB disalin UTUH dari QUALIFICATION STATE — dilarang dipangkas.** Bug nyata (8 Agu 2026, dibandingkan dengan transkrip 9 Agu yang BENAR): customer menjawab "Fasilitas terserah saja, pokok ada AC dan gym". QUALIFICATION STATE sudah berisi daftar LENGKAP hasil ekspansi fasilitas standar apartemen — "Gym, AC, Kamar Tidur, Kamar Mandi, Ruang Tamu, Pantry/Kitchen Set, Water Heater, Listrik, Air, Wi-Fi, TV, Lift, Parkir, Lobby, Keamanan 24 Jam, CCTV, Akses Kartu" — tetapi brief hanya menulis "✓ Fasilitas: AC, Gym". Dua item yang customer sebut spesifik ditulis, 15 fasilitas standar sisanya DIBUANG.
+  ❌ SALAH  : "✓ Fasilitas: AC, Gym"  ← hanya menyalin yang customer sebut, sisanya dibuang
+  ✅ BENAR  : "✓ Fasilitas: Gym, AC, Kamar Tidur, Kamar Mandi, Ruang Tamu, Pantry/Kitchen Set, Water Heater, Listrik, Air, Wi-Fi, TV, Lift, Parkir, Lobby, Keamanan 24 Jam, CCTV, Akses Kartu"
+  Alasannya: "terserah/standar/apapun" BUKAN berarti tidak ada fasilitas — itu berarti fasilitas STANDAR tipe properti tersebut BERLAKU, ditambah item yang customer sebut. Server sudah menghitungnya; tugas Anda hanya MENYALIN. Panjang bukan alasan memangkas.
 - **⛔ DILARANG KERAS: "✓" TIDAK PERNAH berpasangan dengan "(Belum ditanyakan)".** Bug nyata (4 Agu 2026): Q_FAC sudah ditanya DAN dijawab ("Fasilitas terserah, Kak" → QUALIFICATION STATE menunjukkan ✅ Fasilitas: standar), tapi brief tetap menulis "✓ Fasilitas: (Belum ditanyakan)" — kontradiksi, dan mengarang nilai yang bertentangan dengan state ✅ yang sudah tersedia. Field ✅ SELALU pakai nilai ASLI dari QUALIFICATION STATE (mis. "Standar" untuk marker 'standar'); field ❓ TIDAK ADA barisnya sama sekali — tidak pernah "✓ ... (Belum ditanyakan)".
 - **⛔ DILARANG KERAS: tanda tangan HARUS berupa NAMA ASLI, JANGAN PERNAH literal \${agentName} atau \${appName}.** Bug nyata (4 Agu 2026): brief terkirim ke customer dengan teks harfiah "\${agentName}" dan "\${appName}" alih-alih nama sungguhan. Nama ASLI ada di blok "🪪 IDENTITAS ANDA (AGENT)" dan sudah terisi otomatis di baris "Salam hangat," pada template brief di atas — salin APA ADANYA sebagai teks biasa. JANGAN PERNAH mengetik karakter dolar, kurung kurawal buka, atau kurung kurawal tutup di baris tanda tangan.
 - **⛔ DILARANG KERAS: JANGAN menandatangani summary dengan NAMA CUSTOMER.** Bug nyata (6 Agu 2026): summary tertanda "Nigel 期凡努" (nama customer di blok "Customer profile") padahal agent-nya "Leo Felix" — customer seolah menerima surat dari dirinya sendiri. Blok "Customer profile" adalah LAWAN BICARA; tanda tangan SELALU dari blok "🪪 IDENTITAS ANDA (AGENT)". Kalau ragu: nama di "Salam hangat," pada template sudah benar — jangan diganti.
