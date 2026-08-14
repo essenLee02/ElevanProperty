@@ -60,10 +60,43 @@ async function startNgrok(port) {
   return new Promise((resolve, reject) => {
     const domain = (process.env.NGROK_DOMAIN || '').trim();
     const region = (process.env.NGROK_REGION || '').trim();
+    const authtoken = (process.env.NGROK_AUTHTOKEN || '').trim();
 
     const args = ['http', String(port), '--log=stdout', '--log-format=json'];
     if (domain) args.push(`--domain=${domain}`);
     if (region) args.push(`--region=${region}`);
+
+    // ── AUTHTOKEN DARI .env — SUMBER KEBENARAN (14 Agu 2026) ────────────────
+    // Sebelumnya service ini TIDAK pernah membaca NGROK_AUTHTOKEN sama sekali;
+    // tunnel hanya jalan karena kebetulan ada authtoken di config file MESIN
+    // (`%LOCALAPPDATA%\ngrok\ngrok.yml`) hasil `ngrok config add-authtoken`.
+    // Akibatnya .env terlihat mengatur token padahal tidak berpengaruh apa-apa,
+    // dan di mesin/server BARU (yang punya .env tapi belum pernah menjalankan
+    // add-authtoken) tunnel gagal dengan ERR_NGROK_105 — padahal tokennya jelas
+    // tertulis di .env.
+    //
+    // ⚠️ HARUS flag CLI, BUKAN environment variable. Diuji langsung pada ngrok
+    // v3.39.8: dengan NGROK_AUTHTOKEN sengaja diisi nilai SALAH lewat env child
+    // process, tunnel TETAP berhasil — artinya CONFIG FILE MENANG atas env var.
+    // Hanya flag baris perintah yang presedensinya di atas config file, jadi
+    // hanya itu yang benar-benar menjadikan .env otoritatif.
+    //
+    // ⚠️ KONSEKUENSI: token ikut terlihat di daftar proses OS (Task Manager /
+    // `ps`). Itu paparan LOKAL di mesin yang sama, dan diterima secara sadar
+    // sebagai harga agar .env benar-benar berlaku. Yang TIDAK boleh terjadi
+    // adalah token bocor ke LOG — karena log bisa ikut terkirim/tersimpan.
+    // Semua keluaran ngrok di bawah karenanya dilewatkan redact() dulu.
+    if (authtoken) {
+      args.push(`--authtoken=${authtoken}`);
+    } else {
+      console.warn('[NGROK] NGROK_AUTHTOKEN kosong di .env — memakai authtoken dari config file ngrok (bila ada). Di mesin baru ini akan gagal ERR_NGROK_105.');
+    }
+
+    /** Sensor token dari teks apa pun sebelum di-log. */
+    const redact = (text) => {
+      const s = String(text ?? '');
+      return authtoken ? s.split(authtoken).join('***REDACTED***') : s;
+    };
 
     ngrokProcess = spawn('ngrok', args);
 
@@ -93,14 +126,14 @@ async function startNgrok(port) {
       }
 
       if (entry.lvl === 'eror' || entry.err) {
-        const msg = entry.msg || entry.err;
+        const msg = redact(entry.msg || entry.err);
         console.error('[NGROK ERROR]', msg);
         lastError = msg; // catat, JANGAN langsung reject — lihat komentar di atas
       }
     });
 
     ngrokProcess.stderr.on('data', (data) => {
-      const text = data.toString().trim();
+      const text = redact(data.toString().trim());
       console.error('[NGROK STDERR]', text);
       // ngrok CLI kadang tulis error fatal (mis. ERR_NGROK_334) ke stderr sebagai
       // teks biasa, bukan JSON stdout — tangkap juga sebagai kandidat lastError.
