@@ -3,9 +3,9 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Aug 12, 2026 at 12:39 PM
--- Server version: 10.4.32-MariaDB
--- PHP Version: 8.1.25
+-- Waktu pembuatan: 14 Agu 2026 pada 16.28
+-- Versi server: 10.4.32-MariaDB
+-- Versi PHP: 8.1.25
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
@@ -24,7 +24,7 @@ SET time_zone = "+00:00";
 -- --------------------------------------------------------
 
 --
--- Table structure for table `chat_messages`
+-- Struktur dari tabel `chat_messages`
 --
 
 CREATE TABLE `chat_messages` (
@@ -42,7 +42,7 @@ CREATE TABLE `chat_messages` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `chat_messages`
+-- Dumping data untuk tabel `chat_messages`
 --
 
 INSERT INTO `chat_messages` (`id`, `chatSessionId`, `user_id`, `role`, `message`, `channel`, `metadata`, `createdAt`, `updatedAt`, `customer_phone`, `ai_responder`) VALUES
@@ -630,12 +630,68 @@ INSERT INTO `chat_messages` (`id`, `chatSessionId`, `user_id`, `role`, `message`
 (659, 78, NULL, 'user', 'Tidak perlu', 'website_chatbot', '{\"location\":\"Surabaya\"}', '2026-08-12 10:33:28', '2026-08-12 10:33:28', NULL, NULL),
 (660, 78, NULL, 'assistant', 'Maaf, saat ini belum ada properti yang sesuai dengan **Sewa Rumah Surabaya Rp 300.000 - Rp 400.000** di **Surabaya** di katalog maupun Rumah123. Apakah Anda ingin mencoba lokasi, tipe properti, atau range harga lain?', 'website_chatbot_private', '{\"source\":\"private_agent\",\"controller\":\"chatbotPrivateController\",\"fallbackUsed\":true,\"fallbackReason\":\"AI_PRIMARY_PROVIDER=private: Private Agent is primary.\",\"externalProviderErrors\":[],\"exactMatches\":0,\"alternatives\":0,\"filters\":{\"buildingType\":\"house\",\"transactionType\":\"rent\",\"location\":\"Surabaya\",\"budget\":{\"text\":\"Rp 300.000 - Rp 400.000\",\"min\":300000,\"max\":400000,\"period\":\"\"},\"facilities\":[],\"fallbackTypes\":[],\"landmark\":\"\",\"userId\":null},\"frontendContextReceived\":false}', '2026-08-12 10:33:29', '2026-08-12 10:33:29', NULL, NULL),
 (661, 78, NULL, 'user', 'Saya tdk mau survei', 'website_chatbot', '{\"location\":\"Surabaya\"}', '2026-08-12 10:33:29', '2026-08-12 10:33:29', NULL, NULL),
-(662, 78, NULL, 'assistant', 'Maaf, saat ini belum ada properti yang sesuai dengan **Sewa Rumah Surabaya Rp 300.000 - Rp 400.000** di **Surabaya** di katalog maupun Rumah123. Apakah Anda ingin mencoba lokasi, tipe properti, atau range harga lain?', 'website_chatbot_private', '{\"source\":\"private_agent\",\"controller\":\"chatbotPrivateController\",\"fallbackUsed\":true,\"fallbackReason\":\"AI_PRIMARY_PROVIDER=private: Private Agent is primary.\",\"externalProviderErrors\":[],\"exactMatches\":0,\"alternatives\":0,\"filters\":{\"buildingType\":\"house\",\"transactionType\":\"rent\",\"location\":\"Surabaya\",\"budget\":{\"text\":\"Rp 300.000 - Rp 400.000\",\"min\":300000,\"max\":400000,\"period\":\"\"},\"facilities\":[],\"fallbackTypes\":[],\"landmark\":\"\",\"userId\":null},\"frontendContextReceived\":false}', '2026-08-12 10:33:29', '2026-08-12 10:33:29', NULL, NULL);
+(662, 78, NULL, 'assistant', 'Maaf, saat ini belum ada properti yang sesuai dengan **Sewa Rumah Surabaya Rp 300.000 - Rp 400.000** di **Surabaya** di katalog maupun Rumah123. Apakah Anda ingin mencoba lokasi, tipe properti, atau range harga lain?', 'website_chatbot_private', '{\"source\":\"private_agent\",\"controller\":\"chatbotPrivateController\",\"fallbackUsed\":true,\"fallbackReason\":\"AI_PRIMARY_PROVIDER=private: Private Agent is primary.\",\"externalProviderErrors\":[],\"exactMatches\":0,\"alternatives\":0,\"filters\":{\"buildingType\":\"house\",\"transactionType\":\"rent\",\"location\":\"Surabaya\",\"budget\":{\"text\":\"Rp 300.000 - Rp 400.000\",\"min\":300000,\"max\":400000,\"period\":\"\"},\"facilities\":[],\"fallbackTypes\":[],\"landmark\":\"\",\"userId\":null},\"frontendContextReceived\":false}', '2026-08-12 10:33:29', '2026-08-12 10:33:29', NULL, NULL),
+(667, 1, 'LFGKT49002', 'customer', 'Hi cari book apartemen', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1786634238570\",\"platform\":\"kirimi\"}', '2026-08-13 15:17:30', '2026-08-13 15:17:30', '6282233556796', NULL),
+(668, 1, 'LFGKT49002', 'ai', 'Baik! Mau *sewa Apartemen*. 📍\n\nDi *kota* mana yang Anda inginkan?\n_(Contoh: Surabaya, Malang, Bali, Jakarta Selatan)_\nKalau sudah ada area/kecamatan tertentu, boleh sekalian disebut ya.\n\nDan kisaran harga yang Anda siapkan? _(Contoh: 5-10 juta/bulan, atau 500 juta - 1 miliar)_ 💰\n\nSalam hangat,\n*LEO FELIX*\n*Elevan Property*', 'whatsapp', '{\"aiProvider\":\"qualification\",\"contextSource\":\"db_catalog\"}', '2026-08-13 15:17:45', '2026-08-13 15:17:45', '6282233556796', NULL),
+(669, 1, 'LFGKT49002', 'customer', 'Cari 2-4 juta/minggu', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1786634286759\",\"platform\":\"kirimi\"}', '2026-08-13 15:18:18', '2026-08-13 15:18:18', '6282233556796', NULL),
+(670, 1, 'LFGKT49002', 'ai', 'Baik! Mau *sewa Apartemen*. 📍\n\nDi *kota* mana yang Anda inginkan?\n_(Contoh: Surabaya, Malang, Bali, Jakarta Selatan)_\nKalau sudah ada area/kecamatan tertentu, boleh sekalian disebut ya.\n\nSalam hangat,\n*LEO FELIX*\n*Elevan Property*', 'whatsapp', '{\"aiProvider\":\"qualification\",\"contextSource\":\"db_catalog\"}', '2026-08-13 15:18:20', '2026-08-13 15:18:20', '6282233556796', NULL),
+(671, 1, 'LFGKT49002', 'customer', 'Di kota Jakarta', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1786634323699\",\"platform\":\"kirimi\"}', '2026-08-13 15:18:55', '2026-08-13 15:18:55', '6282233556796', NULL),
+(672, 1, 'LFGKT49002', 'ai', 'Baik! Mau *sewa Apartemen*. 📍\n\nDi *kota* mana yang Anda inginkan?\n_(Contoh: Surabaya, Malang, Bali, Jakarta Selatan)_\nKalau sudah ada area/kecamatan tertentu, boleh sekalian disebut ya.\n\nSalam hangat,\n*LEO FELIX*\n*Elevan Property*', 'whatsapp', '{\"aiProvider\":\"qualification\",\"contextSource\":\"db_catalog\"}', '2026-08-13 15:18:56', '2026-08-13 15:18:56', '6282233556796', NULL),
+(673, 2, 'LFGKT49002', 'customer', 'Saya mau tanya tentang sewa apartemen', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1786634348217\",\"platform\":\"kirimi\"}', '2026-08-13 15:19:20', '2026-08-13 15:19:20', '6288805301123', NULL),
+(674, 2, 'LFGKT49002', 'ai', 'Baik! Mau *sewa Apartemen*. 📍\n\nDi *kota* mana yang Anda inginkan?\n_(Contoh: Surabaya, Malang, Bali, Jakarta Selatan)_\nKalau sudah ada area/kecamatan tertentu, boleh sekalian disebut ya.\n\nDan kisaran harga yang Anda siapkan? _(Contoh: 5-10 juta/bulan, atau 500 juta - 1 miliar)_ 💰\n\nSalam hangat,\n*LEO FELIX*\n*Elevan Property*', 'whatsapp', '{\"aiProvider\":\"qualification\",\"contextSource\":\"db_catalog\"}', '2026-08-13 15:19:20', '2026-08-13 15:19:20', '6288805301123', NULL),
+(675, 1, 'LFGKT49002', 'customer', 'Kota Jakarta', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1786634353679\",\"platform\":\"kirimi\"}', '2026-08-13 15:19:25', '2026-08-13 15:19:25', '6282233556796', NULL),
+(676, 1, 'LFGKT49002', 'ai', 'Baik! Mau *sewa Apartemen*. 📍\n\nDi *kota* mana yang Anda inginkan?\n_(Contoh: Surabaya, Malang, Bali, Jakarta Selatan)_\nKalau sudah ada area/kecamatan tertentu, boleh sekalian disebut ya.\n\nSalam hangat,\n*LEO FELIX*\n*Elevan Property*', 'whatsapp', '{\"aiProvider\":\"qualification\",\"contextSource\":\"db_catalog\"}', '2026-08-13 15:19:27', '2026-08-13 15:19:27', '6282233556796', NULL),
+(677, 2, 'LFGKT49002', 'customer', 'Kota surabaya, budget 5-10juta per bulan', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1786634398926\",\"platform\":\"kirimi\"}', '2026-08-13 15:20:10', '2026-08-13 15:20:10', '6288805301123', NULL),
+(678, 1, 'LFGKT49002', 'customer', 'Jakarta..', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1786634411111\",\"platform\":\"kirimi\"}', '2026-08-13 15:20:23', '2026-08-13 15:20:23', '6282233556796', NULL),
+(679, 1, 'LFGKT49002', 'ai', 'Baik! Mau *sewa Apartemen*. 📍\n\nDi *kota* mana yang Anda inginkan?\n_(Contoh: Surabaya, Malang, Bali, Jakarta Selatan)_\nKalau sudah ada area/kecamatan tertentu, boleh sekalian disebut ya.\n\nSalam hangat,\n*LEO FELIX*\n*Elevan Property*', 'whatsapp', '{\"aiProvider\":\"qualification\",\"contextSource\":\"db_catalog\"}', '2026-08-13 15:20:24', '2026-08-13 15:20:24', '6282233556796', NULL),
+(680, 1, 'LFGKT49002', 'customer', 'Area Saya sewa di kota Jakarta', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1786634447106\",\"platform\":\"kirimi\"}', '2026-08-13 15:20:59', '2026-08-13 15:20:59', '6282233556796', NULL),
+(681, 1, 'LFGKT49002', 'ai', 'Baik! Mau *sewa Apartemen*. 📍\n\nDi *kota* mana yang Anda inginkan?\n_(Contoh: Surabaya, Malang, Bali, Jakarta Selatan)_\nKalau sudah ada area/kecamatan tertentu, boleh sekalian disebut ya.\n\nSalam hangat,\n*LEO FELIX*\n*Elevan Property*', 'whatsapp', '{\"aiProvider\":\"qualification\",\"contextSource\":\"db_catalog\"}', '2026-08-13 15:20:59', '2026-08-13 15:20:59', '6282233556796', NULL),
+(682, 2, 'LFGKT49002', 'ai', 'Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-08-13 15:21:41', '2026-08-13 15:21:41', '6288805301123', 'private'),
+(683, 2, 'LFGKT49002', 'customer', 'Kawasan pakuwon', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1786634528382\",\"platform\":\"kirimi\"}', '2026-08-13 15:22:20', '2026-08-13 15:22:20', '6288805301123', NULL),
+(684, 1, 'LFGKT49002', 'customer', 'Booking di kota Jakarta', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1786634549717\",\"platform\":\"kirimi\"}', '2026-08-13 15:22:41', '2026-08-13 15:22:41', '6282233556796', NULL),
+(685, 1, 'LFGKT49002', 'ai', 'Baik! Mau *sewa Apartemen*. 📍\n\nDi *kota* mana yang Anda inginkan?\n_(Contoh: Surabaya, Malang, Bali, Jakarta Selatan)_\nKalau sudah ada area/kecamatan tertentu, boleh sekalian disebut ya.\n\nSalam hangat,\n*LEO FELIX*\n*Elevan Property*', 'whatsapp', '{\"aiProvider\":\"qualification\",\"contextSource\":\"db_catalog\"}', '2026-08-13 15:22:53', '2026-08-13 15:22:53', '6282233556796', NULL),
+(686, 2, 'LFGKT49002', 'ai', 'Sudah lihat berapa Apartemen di *Surabaya*? Apa yang membuat belum cocok dari yang sudah dilihat?', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-08-13 15:23:51', '2026-08-13 15:23:51', '6288805301123', 'private'),
+(687, 2, 'LFGKT49002', 'customer', 'Saya belum lihat beberapa apartemen surabaya, saya sedang baru ingin mencari tau', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1786634684853\",\"platform\":\"kirimi\"}', '2026-08-13 15:24:56', '2026-08-13 15:24:56', '6288805301123', NULL),
+(688, 2, 'LFGKT49002', 'ai', 'Oke, masih di tahap eksplorasi ya Kak 👌 Rencananya masuk atau pindah bulan apa? 📅', 'whatsapp', '{\"aiProvider\":\"kimi\",\"contextSource\":\"db_catalog\"}', '2026-08-13 15:26:06', '2026-08-13 15:26:06', '6288805301123', 'kimi'),
+(691, 2, 'LFGKT49002', 'customer', 'Bulan oktober', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1786634890068\",\"platform\":\"kirimi\"}', '2026-08-13 15:28:22', '2026-08-13 15:28:22', '6288805301123', NULL),
+(692, 2, 'LFGKT49002', 'ai', 'Oke, rencana masuk Oktober 2026 ya Kak 📅\n\nNanti akan tinggal bersama siapa saja? Biar saya bisa carikan yang pas jumlah kamarnya 🛏️', 'whatsapp', '{\"aiProvider\":\"kimi\",\"contextSource\":\"db_catalog\"}', '2026-08-13 15:29:28', '2026-08-13 15:29:28', '6288805301123', 'kimi'),
+(693, 2, 'LFGKT49002', 'customer', 'Tinggal sama orang tua.. carikan yg 3 kamar', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1786634994050\",\"platform\":\"kirimi\"}', '2026-08-13 15:30:06', '2026-08-13 15:30:06', '6288805301123', NULL),
+(694, 2, 'LFGKT49002', 'ai', 'Oke, berarti 3 kamar untuk tinggal bersama orang tua ya Kak 👌\n\nAda yang pasti tidak cocok? Misalnya yang hadap barat, dekat jalan ramai, gang sempit, atau rumah tua? 🚫', 'whatsapp', '{\"aiProvider\":\"kimi\",\"contextSource\":\"db_catalog\"}', '2026-08-13 15:30:55', '2026-08-13 15:30:55', '6288805301123', 'kimi'),
+(695, 2, 'LFGKT49002', 'customer', 'Saya tidak ingin rumah hadap utara, gang sempit atau rumah tua', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1786635105390\",\"platform\":\"kirimi\"}', '2026-08-13 15:31:57', '2026-08-13 15:31:57', '6288805301123', NULL),
+(696, 2, 'LFGKT49002', 'ai', 'Terima kasih! 😊 Untuk *Rumah* yang Anda cari, saya butuh beberapa informasi tambahan:\n\n1️⃣ Apakah rencananya untuk *sewa* atau *beli*?\n2️⃣ Di *kota* mana? _(Contoh: Surabaya, Malang, Bali)_\n3️⃣ Kisaran harga yang diinginkan? _(Contoh: 5-10 juta/bulan, atau di bawah 1 miliar)_\n\nSilakan ceritakan kebutuhannya, saya siap bantu! 🏡\n\nSalam hangat,\n*LEO FELIX*\n*Elevan Property*', 'whatsapp', '{\"aiProvider\":\"qualification\",\"contextSource\":\"db_catalog\"}', '2026-08-13 15:31:57', '2026-08-13 15:31:57', '6288805301123', NULL),
+(697, 2, 'LFGKT49002', 'customer', '1. Sewa\n2. Surabaya\n3. 5-10juta', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1786635153267\",\"platform\":\"kirimi\"}', '2026-08-13 15:32:45', '2026-08-13 15:32:45', '6288805301123', NULL),
+(698, 2, 'LFGKT49002', 'ai', 'Di area atau kawasan mana di *Surabaya* yang Anda pertimbangkan? 📍\nMisalnya Pakuwon, Darmo, Rungkut, Gubeng, atau area lainnya?', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-08-13 15:34:26', '2026-08-13 15:34:26', '6288805301123', 'private'),
+(703, 1, 'LFGKT49002', 'customer', 'Booking di kota Jakarta', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1786637419850\",\"platform\":\"kirimi\"}', '2026-08-13 16:10:31', '2026-08-13 16:10:31', '6282233556796', NULL),
+(704, 1, 'LFGKT49002', 'ai', 'Halo Kak! 😊 Mau sewa atau beli? Dan tipe properti apa yang Anda cari? Saya punya: rumah, apartemen, villa, hotel, kos-kosan, ruko, kantor, gudang, toko, mansion, kondotel, dan banyak lagi. 🏠', 'whatsapp', '{\"aiProvider\":\"chatgpt\",\"contextSource\":\"db_catalog\"}', '2026-08-13 16:10:53', '2026-08-13 16:10:53', '6282233556796', 'chatgpt'),
+(705, 1, 'LFGKT49002', 'customer', 'Saya cari booking apartemen', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1786637500292\",\"platform\":\"kirimi\"}', '2026-08-13 16:11:52', '2026-08-13 16:11:52', '6282233556796', NULL),
+(706, 1, 'LFGKT49002', 'ai', 'Baik Kak! Di area atau kawasan mana di *Jakarta* yang Anda pertimbangkan? 📍 Misalnya SCBD, Sudirman, Thamrin, Senayan, atau area lainnya?', 'whatsapp', '{\"aiProvider\":\"chatgpt\",\"contextSource\":\"db_catalog\"}', '2026-08-13 16:12:03', '2026-08-13 16:12:03', '6282233556796', 'chatgpt'),
+(707, 1, 'LFGKT49002', 'customer', 'Saya mau di Senayan', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1786637544778\",\"platform\":\"kirimi\"}', '2026-08-13 16:12:36', '2026-08-13 16:12:36', '6282233556796', NULL),
+(708, 1, 'LFGKT49002', 'ai', 'Oke, Kak! 😊\n\nUntuk Apartemen di *Jakarta*, saya akan tanyakan:\n\nSudah lihat berapa Apartemen di *Jakarta*? Apa yang membuat belum cocok dari yang sudah dilihat?', 'whatsapp', '{\"aiProvider\":\"chatgpt\",\"contextSource\":\"none\"}', '2026-08-13 16:12:49', '2026-08-13 16:12:49', '6282233556796', 'chatgpt'),
+(709, 1, 'LFGKT49002', 'customer', 'Saya cari jalan yang strategis dan dekat dengan Senayan dan rumah makan', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1786637651863\",\"platform\":\"kirimi\"}', '2026-08-13 16:14:23', '2026-08-13 16:14:23', '6282233556796', NULL),
+(710, 1, 'LFGKT49002', 'ai', 'Baik! 🏠\n\nDi *Jakarta* ada *apartemen* kisaran Rp [harga rendah] dan Rp [harga tinggi]. Kira-kira yang mana lebih sesuai? 💰', 'whatsapp', '{\"aiProvider\":\"chatgpt\",\"contextSource\":\"none\"}', '2026-08-13 16:14:36', '2026-08-13 16:14:36', '6282233556796', 'chatgpt'),
+(711, 1, 'LFGKT49002', 'customer', '1-3 juta/malam. Saya butuh sewa selama 1 minggu', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1786637707494\",\"platform\":\"kirimi\"}', '2026-08-13 16:15:19', '2026-08-13 16:15:19', '6282233556796', NULL),
+(712, 1, 'LFGKT49002', 'ai', 'Rencananya masuk atau pindah bulan apa? 📅', 'whatsapp', '{\"aiProvider\":\"chatgpt\",\"contextSource\":\"none\"}', '2026-08-13 16:15:30', '2026-08-13 16:15:30', '6282233556796', 'chatgpt'),
+(713, 1, 'LFGKT49002', 'customer', 'Minggu depan', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1786637746024\",\"platform\":\"kirimi\"}', '2026-08-13 16:15:58', '2026-08-13 16:15:58', '6282233556796', NULL),
+(714, 1, 'LFGKT49002', 'ai', 'Nanti akan tinggal bersama siapa saja? Biar saya bisa carikan yang pas jumlah kamarnya 🛏️', 'whatsapp', '{\"aiProvider\":\"chatgpt\",\"contextSource\":\"none\"}', '2026-08-13 16:16:22', '2026-08-13 16:16:22', '6282233556796', 'chatgpt'),
+(715, 1, 'LFGKT49002', 'customer', 'Saya booking sendirian saja', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1786637758696\",\"platform\":\"kirimi\"}', '2026-08-13 16:16:26', '2026-08-13 16:16:26', '6282233556796', NULL),
+(716, 1, 'LFGKT49002', 'ai', 'Oke, Kak! 😊 Sudah mencatat bahwa Anda booking sendirian saja. \n\nSekarang, ada yang pasti tidak cocok? Misalnya yang hadap barat, dekat jalan ramai, gang sempit, atau rumah tua? 🚫', 'whatsapp', '{\"aiProvider\":\"chatgpt\",\"contextSource\":\"none\"}', '2026-08-13 16:16:40', '2026-08-13 16:16:40', '6282233556796', 'chatgpt'),
+(717, 1, 'LFGKT49002', 'customer', 'Tinggal sendirian', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1786637796468\",\"platform\":\"kirimi\"}', '2026-08-13 16:16:48', '2026-08-13 16:16:48', '6282233556796', NULL),
+(718, 1, 'LFGKT49002', 'ai', 'Oke, Kak! 😊\n\nSelain area *Senayan*, apakah area sekitar masih oke? 🗺️', 'whatsapp', '{\"aiProvider\":\"chatgpt\",\"contextSource\":\"none\"}', '2026-08-13 16:17:00', '2026-08-13 16:17:00', '6282233556796', 'chatgpt'),
+(719, 1, 'LFGKT49002', 'customer', 'Cari yang akses jalan lancar, tidak banjir, tidak panas\nDekat alfamaret, Indomaret', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1786637883592\",\"platform\":\"kirimi\"}', '2026-08-13 16:18:15', '2026-08-13 16:18:15', '6282233556796', NULL),
+(720, 1, 'LFGKT49002', 'ai', 'Oke, Kak! 😊\n\nKalau nanti ada yang cocok, langsung bisa jadwalkan viewing atau perlu koordinasi dulu sama keluarga lain?', 'whatsapp', '{\"aiProvider\":\"chatgpt\",\"contextSource\":\"none\"}', '2026-08-13 16:18:30', '2026-08-13 16:18:30', '6282233556796', 'chatgpt'),
+(721, 1, 'LFGKT49002', 'customer', 'Minta listing saja', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1786637925742\",\"platform\":\"kirimi\"}', '2026-08-13 16:18:57', '2026-08-13 16:18:57', '6282233556796', NULL),
+(722, 1, 'LFGKT49002', 'ai', 'Oke, Kak! 😊\n\nKalau nanti ada yang cocok, langsung bisa jadwalkan viewing atau perlu koordinasi dulu sama keluarga lain?', 'whatsapp', '{\"aiProvider\":\"chatgpt\",\"contextSource\":\"none\"}', '2026-08-13 16:19:09', '2026-08-13 16:19:09', '6282233556796', 'chatgpt'),
+(723, 1, 'LFGKT49002', 'customer', 'Saya tidak mau survey, minta katalog', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1786637974913\",\"platform\":\"kirimi\"}', '2026-08-13 16:19:46', '2026-08-13 16:19:46', '6282233556796', NULL),
+(724, 1, 'LFGKT49002', 'ai', 'Oke, Kak! 😊\n\nUntuk furnitur, lebih prefer yang sudah *furnished*, *semi-furnished*, atau *kosongan* saja? 🛋️', 'whatsapp', '{\"aiProvider\":\"chatgpt\",\"contextSource\":\"none\"}', '2026-08-13 16:20:05', '2026-08-13 16:20:05', '6282233556796', 'chatgpt'),
+(725, 1, 'LFGKT49002', 'customer', 'Kosongan saja', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1786638020616\",\"platform\":\"kirimi\"}', '2026-08-13 16:20:32', '2026-08-13 16:20:32', '6282233556796', NULL),
+(726, 1, 'LFGKT49002', 'ai', 'Oke, Kak! 😊\n\nAda preferensi tower atau lantai tertentu? Misalnya hadap timur, lantai rendah/tengah/tinggi? 🏢', 'whatsapp', '{\"aiProvider\":\"chatgpt\",\"contextSource\":\"none\"}', '2026-08-13 16:20:50', '2026-08-13 16:20:50', '6282233556796', 'chatgpt'),
+(727, 1, 'LFGKT49002', 'customer', 'Pokok ada AC, fitness dan area parkir mobil', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1786638041983\",\"platform\":\"kirimi\"}', '2026-08-13 16:20:54', '2026-08-13 16:20:54', '6282233556796', NULL),
+(728, 1, 'LFGKT49002', 'ai', 'Baik, Kak! 😊 Berikut adalah ringkasan permintaan Anda:\n\n✓ Rencana: *Sewa*  \n✓ Tipe: *Apartemen*  \n✓ Kota: *Jakarta*  \n✓ Area: *Senayan*  \n✓ Budget: *Rp 1.000.000 - Rp 3.000.000/malam*  \n✓ Masuk: *20 Agustus 2026*  \n✓ Durasi: *1 minggu*  \n✓ Furnitur: *Kosongan*  \n✓ Fasilitas: *AC, Gym, Parkir*  \n✓ Patokan: *Dekat Senayan, rumah makan, alfamaret dan Indomaret*  \n✓ Area alternatif: *Akses jalan lancar, tidak banjir, tidak panas*  \n✓ Keputusan bersama: *Mandiri*  \n✓ Viewing: *Minta listing*  \n\nMohon maaf, Kak 🙏 untuk saat ini belum ada properti di katalog saya yang cocok dengan kriteria di atas. Permintaan Anda sudah saya catat, dan saya kabari begitu ada unit yang sesuai masuk.\n\nTerima kasih sudah menghubungi saya. 🙏\n\nSalam hangat,  \nLEO FELIX  \nElevan Property', 'whatsapp', '{\"aiProvider\":\"chatgpt\",\"contextSource\":\"none\"}', '2026-08-13 16:21:15', '2026-08-13 16:21:15', '6282233556796', 'chatgpt');
 
 -- --------------------------------------------------------
 
 --
--- Table structure for table `chat_sessions`
+-- Struktur dari tabel `chat_sessions`
 --
 
 CREATE TABLE `chat_sessions` (
@@ -653,7 +709,7 @@ CREATE TABLE `chat_sessions` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `chat_sessions`
+-- Dumping data untuk tabel `chat_sessions`
 --
 
 INSERT INTO `chat_sessions` (`id`, `name`, `normalizedName`, `phone`, `normalizedPhone`, `location`, `normalizedLocation`, `source`, `lastMessageAt`, `createdAt`, `updatedAt`) VALUES
@@ -694,7 +750,7 @@ INSERT INTO `chat_sessions` (`id`, `name`, `normalizedName`, `phone`, `normalize
 -- --------------------------------------------------------
 
 --
--- Table structure for table `cities`
+-- Struktur dari tabel `cities`
 --
 
 CREATE TABLE `cities` (
@@ -711,7 +767,7 @@ CREATE TABLE `cities` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `cities`
+-- Dumping data untuk tabel `cities`
 --
 
 INSERT INTO `cities` (`id`, `city_id`, `province_id`, `country_id`, `name`, `status`, `created_date`, `created_by`, `updated_date`, `updated_by`) VALUES
@@ -1364,12 +1420,13 @@ INSERT INTO `cities` (`id`, `city_id`, `province_id`, `country_id`, `name`, `sta
 (739, 'SANLV9C646', 'BALHWZ7003', 'INDZSF4001', 'SANUR', 1, '2026-06-30', 'LFGKT49002', NULL, NULL),
 (740, 'CAOBBDZ647', 'BALHWZ7003', 'INDZSF4001', 'CANGGU', 1, '2026-06-30', 'LFGKT49002', NULL, NULL),
 (741, 'NDPESHD648', 'BALHWZ7003', 'INDZSF4001', 'NUSA DUA', 1, '2026-06-30', 'LFGKT49002', NULL, NULL),
-(742, 'JIHPLDJ649', 'BALHWZ7003', 'INDZSF4001', 'JIMBARAN', 1, '2026-06-30', 'LFGKT49002', NULL, NULL);
+(742, 'JIHPLDJ649', 'BALHWZ7003', 'INDZSF4001', 'JIMBARAN', 1, '2026-06-30', 'LFGKT49002', NULL, NULL),
+(743, 'JAK8BBW650', 'DKIJKTM7029', 'INDZSF4001', 'JAKARTA', 1, '2026-08-13', 'SEEDER', NULL, NULL);
 
 -- --------------------------------------------------------
 
 --
--- Table structure for table `contacts`
+-- Struktur dari tabel `contacts`
 --
 
 CREATE TABLE `contacts` (
@@ -1384,7 +1441,7 @@ CREATE TABLE `contacts` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `contacts`
+-- Dumping data untuk tabel `contacts`
 --
 
 INSERT INTO `contacts` (`id`, `name`, `email`, `phone`, `subject`, `message`, `createdAt`, `updatedAt`) VALUES
@@ -1456,7 +1513,7 @@ INSERT INTO `contacts` (`id`, `name`, `email`, `phone`, `subject`, `message`, `c
 -- --------------------------------------------------------
 
 --
--- Table structure for table `countries`
+-- Struktur dari tabel `countries`
 --
 
 CREATE TABLE `countries` (
@@ -1471,7 +1528,7 @@ CREATE TABLE `countries` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `countries`
+-- Dumping data untuk tabel `countries`
 --
 
 INSERT INTO `countries` (`id`, `country_id`, `name`, `status`, `created_date`, `created_by`, `updated_date`, `updated_by`) VALUES
@@ -1499,7 +1556,7 @@ INSERT INTO `countries` (`id`, `country_id`, `name`, `status`, `created_date`, `
 -- --------------------------------------------------------
 
 --
--- Table structure for table `customers`
+-- Struktur dari tabel `customers`
 --
 
 CREATE TABLE `customers` (
@@ -1518,17 +1575,18 @@ CREATE TABLE `customers` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `customers`
+-- Dumping data untuk tabel `customers`
 --
 
 INSERT INTO `customers` (`id`, `user_id`, `customer_id`, `name`, `phone`, `email`, `ai_response`, `status`, `created_date`, `created_by`, `updated_date`, `updated_by`) VALUES
 (1, 'SA6EDRU001', 'CLCSZ3Q001', 'Clarence', '6282233556796', 'dokumen.nigel2@gmail.com', 'ON', 1, '2026-07-20', 'SA6EDRU001', '2026-07-20', 'SA6EDRU001'),
-(4, 'LFGKT49002', 'KEHTMLB002', 'Kezia', '6282233556796', NULL, 'ON', 1, '2026-07-27', 'LFGKT49002', '2026-08-04', 'LFGKT49002');
+(4, 'LFGKT49002', 'KEHTMLB002', 'Kezia', '6282233556796', NULL, 'ON', 1, '2026-07-27', 'LFGKT49002', '2026-08-04', 'LFGKT49002'),
+(64, 'LFGKT49002', 'XX4LQGZ003', '🌻', '6288805301123', NULL, 'ON', 1, '2026-08-13', 'LFGKT49002', NULL, NULL);
 
 -- --------------------------------------------------------
 
 --
--- Table structure for table `facilities`
+-- Struktur dari tabel `facilities`
 --
 
 CREATE TABLE `facilities` (
@@ -1546,7 +1604,7 @@ CREATE TABLE `facilities` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `facilities`
+-- Dumping data untuk tabel `facilities`
 --
 
 INSERT INTO `facilities` (`id`, `facility_id`, `name`, `description`, `icon`, `keywords`, `status`, `created_date`, `created_by`, `updated_date`, `updated_by`) VALUES
@@ -1831,7 +1889,7 @@ INSERT INTO `facilities` (`id`, `facility_id`, `name`, `description`, `icon`, `k
 -- --------------------------------------------------------
 
 --
--- Table structure for table `locations`
+-- Struktur dari tabel `locations`
 --
 
 CREATE TABLE `locations` (
@@ -1846,7 +1904,7 @@ CREATE TABLE `locations` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `locations`
+-- Dumping data untuk tabel `locations`
 --
 
 INSERT INTO `locations` (`id`, `location_id`, `name`, `status`, `created_date`, `created_by`, `updated_date`, `updated_by`) VALUES
@@ -2062,12 +2120,386 @@ INSERT INTO `locations` (`id`, `location_id`, `name`, `status`, `created_date`, 
 (210, 'WM6U2CD210', 'WISATA MANGROVE', 1, '2026-06-29', 'SA6EDRU001', NULL, NULL),
 (0, 'DRN03UI211', 'DEPOT BU RUDY', 1, '2026-07-06', 'LFGKT49002', NULL, NULL),
 (0, 'MGOGJPJ212', 'MIE GACOAN', 1, '2026-07-06', 'LFGKT49002', NULL, NULL),
-(0, 'ASIZUA9213', 'AYCE ALL YOU CAN EAT SURABAYA', 1, '2026-07-06', 'LFGKT49002', NULL, NULL);
+(0, 'ASIZUA9213', 'AYCE ALL YOU CAN EAT SURABAYA', 1, '2026-07-06', 'LFGKT49002', NULL, NULL),
+(0, 'PC2LMG0214', 'PAKUWON CITY', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'TPFJ08X215', 'TUNJUNGAN PLAZA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'GMFS1EO216', 'GALAXY MALL', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'CSUF49D217', 'CIPUTRA WORLD SURABAYA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'MCL10GC218', 'MARVELL CITY', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'LM3EFJ3219', 'LENMARC MALL', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'RPDO5PQ220', 'ROYAL PLAZA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'CM0LC78221', 'CITO MALL', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PSTDB1A222', 'PLAZA SURABAYA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PT0SOP7223', 'PASAR TURI', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PKOTV47224', 'PASAR KEMBANG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PGOZTK0225', 'PASAR GENTENG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KUDO0CF226', 'KAMPUS UBAYA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KIRYXDF227', 'KAMPUS ITS', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KU1OM2P228', 'KAMPUS UNAIR', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KUC0U5P229', 'KAMPUS UNESA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KP1I8QT230', 'KAMPUS PETRA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KUI4WRH231', 'KAMPUS UWK', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SG1YUXS232', 'STASIUN GUBENG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'STLOJ1G233', 'STASIUN PASAR TURI', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SW9MXX7234', 'STASIUN WONOKROMO', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'TB4BL39235', 'TERMINAL BUNGURASIH', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'TJS7MHA236', 'TERMINAL JOYOBOYO', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'BJYY1KZ237', 'BANDARA JUANDA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KS8ESOC238', 'KEBUN BINATANG SURABAYA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'TBGG90V239', 'TAMAN BUNGKUL', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'TF0248D240', 'TAMAN FLORA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'HKC41Q2241', 'HUTAN BAMBU KEPUTIH', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'WWCKP1F242', 'WISATA MANGROVE WONOREJO', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'JSMIDGO243', 'JEMBATAN SURAMADU', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'TP3896Q244', 'TUGU PAHLAWAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'HS849VB245', 'HOUSE OF SAMPOERNA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'MABDN0V246', 'MASJID AL AKBAR', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'RSXQFWQ247', 'RS DR SOETOMO', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'RSRH2NX248', 'RS PREMIER SURABAYA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'RSGZB57249', 'RS SILOAM SURABAYA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'GU6V9MA250', 'GUBENG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'WIVDJBR251', 'WIYUNG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'RUOJF6S252', 'RUNGKUT', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'DA2600L253', 'DARMO', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'MA6T8J2254', 'MANYAR', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KE0VHNH255', 'KERTAJAYA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'MEMO6IU256', 'MERR', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'CSM0670257', 'CITRALAND SURABAYA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'GFDQCKE258', 'GRAHA FAMILY', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'DHVTWSR259', 'DHARMAHUSADA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'NGMBCYU260', 'NGAGEL', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KES5LES261', 'KENJERAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SUBWG3F262', 'SUKOLILO', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'MUSFPL3263', 'MULYOREJO', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'GAH661G264', 'GAYUNGAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'JAAX6VF265', 'JAMBANGAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'TEON0VJ266', 'TENGGILIS', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'DPPRFH7267', 'DUKUH PAKIS', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SA1JNNO268', 'SAWAHAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'GEWXOLW269', 'GENTENG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'BUZ0U40270', 'BUBUTAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'CM5HQ5G271', 'CENTRAL PARK MALL', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PMSZSD7272', 'PACIFIC PLACE MALL', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'MCU0KW5273', 'MALL SENAYAN CITY', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'GIGLB5Y274', 'GRAND INDONESIA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PID2OUE275', 'PLAZA INDONESIA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PSPWOAM276', 'PLAZA SENAYAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KKPN8U6277', 'KOTA KASABLANKA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'MAGXCAG278', 'MALL TAMAN ANGGREK', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'GCRG0AW279', 'GANDARIA CITY', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PMI9CZE280', 'PONDOK INDAH MALL', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'LPZVHPV281', 'LIPPO MALL PURI', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'MG1L31C282', 'MALL KELAPA GADING', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'EMNKOZS283', 'EMPORIUM PLUIT MALL', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SILDQUR284', 'SEIBU GRAND INDONESIA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'DATMYPQ285', 'DUNIA FANTASI ANCOL', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SAZQLLY286', 'SEA WORLD ANCOL', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'AA1A1PY287', 'ATLANTIS WATER ADVENTURE', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KR9N0KL288', 'KEBUN BINATANG RAGUNAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'TITB88I289', 'TAMAN MINI INDONESIA INDAH', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'MNJDU02290', 'MONUMEN NASIONAL', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KJRNC0L291', 'KOTA TUA JAKARTA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'MF25Z3P292', 'MUSEUM FATAHILLAH', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PAXKIEK293', 'PANTAI ANCOL', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SGUWA94294', 'STASIUN GAMBIR', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SM556MQ295', 'STASIUN MANGGARAI', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SSR37CP296', 'STASIUN SUDIRMAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SA8ZX53297', 'STASIUN TANAH ABANG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SJSV01G298', 'STASIUN JATINEGARA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SSA8YTZ299', 'STASIUN PASAR SENEN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'BHS9YMJ300', 'BANDARA SOEKARNO HATTA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'BPQ657Q301', 'BANDARA HALIM PERDANAKUSUMA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'TRRAG1P302', 'TERMINAL KAMPUNG RAMBUTAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'TGXNBIJ303', 'TERMINAL PULO GEBANG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KDO13AX304', 'KAMPUS UI DEPOK', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KBHKTMA305', 'KAMPUS BINUS', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KTBKG78306', 'KAMPUS TRISAKTI', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KJKIA7N307', 'KAMPUS ATMA JAYA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'RMFBEGN308', 'RS CIPTO MANGUNKUSUMO', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'RIT01OH309', 'RS PONDOK INDAH', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'RSEQDI7310', 'RS SILOAM SEMANGGI', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SCNX3I4311', 'SCBD', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SU5WQ88312', 'SUDIRMAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'THG1GA9313', 'THAMRIN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KUDHNRW314', 'KUNINGAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'MEATO50315', 'MENTENG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KEH2P38316', 'KEMANG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KGR0DWI317', 'KELAPA GADING', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PKNMZYU318', 'PANTAI INDAH KAPUK', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'P24EZKR319', 'PIK 2', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'TEJDMAC320', 'TEBET', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SEQAKA3321', 'SENAYAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PI0EWEA322', 'PONDOK INDAH', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'CIG9X04323', 'CIPUTAT', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'FA8UHL1324', 'FATMAWATI', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'CID6TE3325', 'CILANDAK', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PL7BUM5326', 'PLUIT', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SU0YK36327', 'SUNTER', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PAJKYTT328', 'PASAR TANAH ABANG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PBVUYIJ329', 'PASAR BARU', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PS5IV5I330', 'PASAR SANTA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'BM1JXZG331', 'BLOK M', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PJ5IK9F332', 'PARIS VAN JAVA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'CWKUY21333', 'CIHAMPELAS WALK', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'TBB9U9T334', 'TRANS STUDIO MALL BANDUNG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'BPSGKNR335', 'BANDUNG INDAH PLAZA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, '2C3YAC4336', '23 PASKAL SHOPPING CENTER', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'FCKZQXT337', 'FESTIVAL CITYLINK', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'GSKHDLP338', 'GEDUNG SATE', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'JB6AMPO339', 'JALAN BRAGA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'AB4L027340', 'ALUN ALUN BANDUNG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KPQF51U341', 'KAWAH PUTIH', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'TP7ERPM342', 'TANGKUBAN PERAHU', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'FLI8KRY343', 'FARM HOUSE LEMBANG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'DBKUDCY344', 'DUSUN BAMBU', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'FMHK0XQ345', 'FLOATING MARKET', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SBT4PPY346', 'STASIUN BANDUNG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SKQLHGG347', 'STASIUN KIARACONDONG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'BSHSGU1348', 'BANDARA HUSEIN SASTRANEGARA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'TP7Q0GT349', 'TERMINAL LEUWI PANJANG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KIHDSTU350', 'KAMPUS ITB', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KUXMDD8351', 'KAMPUS UNPAD', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KTCR2S8352', 'KAMPUS TELKOM', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KMFKCLF353', 'KAMPUS MARANATHA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'RS3LXLH354', 'RS HASAN SADIKIN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'RBHP0CF355', 'RS BORROMEUS', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'DAR398X356', 'DAGO', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'BBAMQYL357', 'BUAH BATU', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'ANDYO8V358', 'ANTAPANI', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PAF3J3R359', 'PASTEUR', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SE5LEW6360', 'SETIABUDI', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'CINNKF4361', 'CIUMBULEUIT', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KO6DYW5362', 'KOPO', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'CIQTK3R363', 'CIBADUYUT', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PBGKMN1364', 'PASAR BARU BANDUNG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PC5VWJ3365', 'PASAR CIHAPIT', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'MSDQMT2366', 'MALANG TOWN SQUARE', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'MP1LCCK367', 'MALANG CITY POINT', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'MMHFKF2368', 'MOG MALL', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'AM01PK3369', 'ALUN ALUN MALANG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KUPQCUR370', 'KAMPUS UB', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KUQOZ0E371', 'KAMPUS UM', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KUOTES5372', 'KAMPUS UMM', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KPX33D8373', 'KAMPUS POLINEMA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SM3SKJX374', 'STASIUN MALANG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SK0X9NR375', 'STASIUN KOTALAMA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'TAR147B376', 'TERMINAL ARJOSARI', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'BS5UV60377', 'BANDARA ABDUL RACHMAN SALEH', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'RASY73K378', 'RS SAIFUL ANWAR', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'RL01FWB379', 'RS LAVALETTE', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KJNE559380', 'KAMPUNG WARNA WARNI JODIPAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'MAJHNYH381', 'MUSEUM ANGKUT', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'J1CLSSZ382', 'JATIM PARK 1', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'J25S51X383', 'JATIM PARK 2', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'J3D9ZTD384', 'JATIM PARK 3', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'BSLM8VX385', 'BATU NIGHT SPECTACULAR', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SECZ3EC386', 'SELECTA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'GBFQZIV387', 'GUNUNG BROMO', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'CR3BIPZ388', 'COBAN RONDO', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PB054AB389', 'PANTAI BALEKAMBANG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SM5OQFO390', 'SOEKARNO HATTA MALANG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'IJ0YB4K391', 'IJEN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'DIGO1G1392', 'DINOYO', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'LOFP08Y393', 'LOWOKWARU', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SU8L0JG394', 'SUHAT', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'BLSPPVG395', 'BLIMBING', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SAK9V2X396', 'SAWOJAJAR', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KLUS6BC397', 'KLOJEN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SUY5DRZ398', 'SUKUN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PM0JWQ4399', 'PASAR BESAR MALANG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PMWSZE3400', 'PASAR OLAHRAGA MALANG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'MAW8QLM401', 'MALIOBORO', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PBQT0VW402', 'PASAR BERINGHARJO', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'APMPXJT403', 'AMBARRUKMO PLAZA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'JM7A3CV404', 'JOGJA CITY MALL', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'HMJ13AR405', 'HARTONO MALL', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'GM1QY2T406', 'GALERIA MALL', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KY8FM8R407', 'KERATON YOGYAKARTA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'TSZUW3E408', 'TAMAN SARI', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'CP2QL4C409', 'CANDI PRAMBANAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'CBV5QN6410', 'CANDI BOROBUDUR', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'TJL3K5A411', 'TUGU JOGJA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'AK952G3412', 'ALUN ALUN KIDUL', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PPAMMZU413', 'PANTAI PARANGTRITIS', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'GPTM38F414', 'GOA PINDUL', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'HVSAXN9415', 'HEHA SKY VIEW', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'STOQDBV416', 'STASIUN TUGU', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SLWL5CS417', 'STASIUN LEMPUYANGAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'BY7XKF3418', 'BANDARA YIA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'TG7VCW0419', 'TERMINAL GIWANGAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KUZ7KKV420', 'KAMPUS UGM', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KUA330Z421', 'KAMPUS UNY', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KUXD1C5422', 'KAMPUS UII', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KDA8UKX423', 'KAMPUS SANATA DHARMA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'RSGM79R424', 'RS SARDJITO', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'RRGSQBM425', 'RS PANTI RAPIH', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SLG26YT426', 'SLEMAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'BA59X9N427', 'BANTUL', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KAG1YIV428', 'KALIURANG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'GEETDMX429', 'GEJAYAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SE74D0B430', 'SETURAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KO8Q152431', 'KOTAGEDE', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'DS4DR85432', 'DEPOK SLEMAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'CO37NCQ433', 'CONDONGCATUR', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PSRJQ6H434', 'PARAGON MALL SEMARANG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'CSMTE79435', 'CIPUTRA MALL SEMARANG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'DMUKTXD436', 'DP MALL', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'LS38B5U437', 'LAWANG SEWU', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KSXDSK7438', 'KOTA LAMA SEMARANG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SKM8D7Q439', 'SAM POO KONG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'MTQO1UP440', 'MASJID AGUNG JAWA TENGAH', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SLQXHN0441', 'SIMPANG LIMA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PJEORTT442', 'PASAR JOHAR', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PSGHE3F443', 'PASAR SEMAWIS', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'STAPF5Z444', 'STASIUN TAWANG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SPU9GSZ445', 'STASIUN PONCOL', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'BYSCY67446', 'BANDARA AHMAD YANI', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'TTAY1KA447', 'TERMINAL TERBOYO', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KUNGCZE448', 'KAMPUS UNDIP', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KUW8P0A449', 'KAMPUS UNNES', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KUN2EVE450', 'KAMPUS UDINUS', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'RKB9KNO451', 'RS KARIADI', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'BA0Y2U0452', 'BANYUMANIK', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'TE5H0B6453', 'TEMBALANG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'GA4926M454', 'GAJAHMUNGKUR', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'CSRS9HI455', 'CANDI SEMARANG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PK1ATJO456', 'PANTAI KUTA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PS3QXTM457', 'PANTAI SEMINYAK', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PCR807C458', 'PANTAI CANGGU', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PSQGM3F459', 'PANTAI SANUR', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PJX74RN460', 'PANTAI JIMBARAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PDPEJ9B461', 'PANTAI NUSA DUA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PP2CPDQ462', 'PANTAI PANDAWA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PUZ9AVX463', 'PANTAI ULUWATU', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PLFV272464', 'PURA TANAH LOT', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PUIPZR0465', 'PURA ULUWATU', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PBQ14KO466', 'PURA BESAKIH', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PB812YR467', 'PURA ULUN DANU BERATAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'BMQ324M468', 'BEACHWALK MALL', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'DM2O39M469', 'DISCOVERY SHOPPING MALL', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'LMHQPZK470', 'LEVEL 21 MALL', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'MGCCCCV471', 'MAL BALI GALERIA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'BRF4Y9E472', 'BANDARA NGURAH RAI', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'TUOYW2I473', 'TERMINAL UBUNG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PSGE8TJ474', 'PASAR SENI SUKAWATI', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PB8LFR6475', 'PASAR BADUNG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'UB8ROYH476', 'UBUD', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'MU6MO28477', 'MONKEY FOREST UBUD', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'TTV1HFO478', 'TEGALALANG RICE TERRACE', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'GKYE0RX479', 'GARUDA WISNU KENCANA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'WBH3W7G480', 'WATERBOM BALI', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'BPO2VX4481', 'BALI SAFARI PARK', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KUTFQPF482', 'KAMPUS UDAYANA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'RE18RUQ483', 'RENON', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SREI4MG484', 'SUNSET ROAD', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'LE2RKPP485', 'LEGIAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'DS2SQIR486', 'DENPASAR SELATAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PAN1KI4487', 'PANJER', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SMH9L94488', 'SUN PLAZA MEDAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'CMK7YIU489', 'CENTRE POINT MEDAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'MPMP533490', 'MEDAN FAIR PLAZA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'IMGP127491', 'ISTANA MAIMUN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'MML6ZUA492', 'MASJID RAYA MEDAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'TM5LKLC493', 'TJONG A FIE MANSION', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'DT61KRZ494', 'DANAU TOBA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'BL7NUFM495', 'BUKIT LAWANG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'BEVM5WF496', 'BERASTAGI', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SM9EGLJ497', 'STASIUN MEDAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'BKTXQW4498', 'BANDARA KUALANAMU', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KUPW72D499', 'KAMPUS USU', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'MB88POI500', 'MEDAN BARU', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'MPSCFVQ501', 'MEDAN PETISAH', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PO32LRM502', 'POLONIA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SMHG8HY503', 'SETIABUDI MEDAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'JA4HHUT504', 'JEMBATAN AMPERA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PIN04GD505', 'PALEMBANG ICON', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PIPK0AH506', 'PASAR 16 ILIR', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PK9P2EA507', 'PULAU KEMARO', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'JBFEY12508', 'JAM GADANG BUKITTINGGI', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PP43KQK509', 'PANTAI PADANG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'JN9KE9G510', 'JEMBATAN SITI NURBAYA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'BPZ0WCW511', 'BALIKPAPAN PLAZA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'EBQ8F0D512', 'E WALK BALIKPAPAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PK1DPEL513', 'PANTAI KEMALA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SP2P2EZ514', 'SAMARINDA CENTRAL PLAZA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'IS026JZ515', 'ISLAMIC CENTER SAMARINDA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'DBE4SX2516', 'DUTA MALL BANJARMASIN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PBWUQU4517', 'PASAR TERAPUNG LOK BAINTAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'AP1PREQ518', 'AYANI MEGA MALL PONTIANAK', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'TKIX1Y1519', 'TUGU KHATULISTIWA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'TMORVL9520', 'TRANS STUDIO MAKASSAR', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PLS71NC521', 'PANTAI LOSARI', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'FR25P4B522', 'FORT ROTTERDAM', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'MP8ZIKL523', 'MALL PANAKKUKANG', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'BH0BCPP524', 'BANDARA SULTAN HASANUDDIN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KU9FV7Y525', 'KAMPUS UNHAS', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'MS8LFDR526', 'MANADO TOWN SQUARE', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'BUA7NH5527', 'BUNAKEN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KU0IJG4528', 'KAMPUS UNSRAT', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'STF4CRG529', 'STARBUCKS', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'JJXSJDS530', 'JANJI JIWA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KKJF9VT531', 'KOPI KENANGAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'FC7WJZS532', 'FORE COFFEE', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'TCDOSSK533', 'TOMORO COFFEE', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PCHD64Y534', 'POINT COFFEE', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'EX9MM0T535', 'EXCELSO', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'NDD3VB6536', 'NGOPI DOELOE', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KS745DY537', 'KOPI SOE', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'TKMNL1H538', 'TUKU KOPI', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'MCGZ1Y1539', 'MCDONALDS', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KFWPXBB540', 'KFC', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'BKX3MWY541', 'BURGER KING', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PHCFJUQ542', 'PIZZA HUT', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SOQ7F9E543', 'SOLARIA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'HOID3S8544', 'HOKBEN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'ALGQATQ545', 'ALFAMART', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'ALKF1UP546', 'ALFAMIDI', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SUBSA0C547', 'SUPERINDO', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'LMZE5BG548', 'LOTTE MART', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'RM1XW6N549', 'RANCH MARKET', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'GL94SQ6550', 'GRAND LUCKY', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'DSH66UD551', 'D.I.Y SHOP', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'AHV2N48552', 'ACE HARDWARE', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'IN6BK4W553', 'INFORMA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'IKBC38B554', 'IKEA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'MIT4VFW555', 'MITRA10', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'GR184CY556', 'GRAMEDIA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PE2J7JR557', 'PERIPLUS', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'AFWYZMV558', 'APOTEK KIMIA FARMA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'AKAXSLO559', 'APOTEK K24', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'GUMBJLP560', 'GUARDIAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'BBPBZF9561', 'BANK BRI', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'BNAHJ37562', 'BANK CIMB NIAGA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SP0S3Q8563', 'SPBU PERTAMINA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PGGUKJV564', 'PLANET GYM', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'CFO8L43565', 'CELEBRITY FITNESS', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'GGUCCEM566', 'GOLDS GYM', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SN4BVG6567', 'SEKOLAH SD NEGERI', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SNQ91KR568', 'SEKOLAH SMP NEGERI', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SNGCQ5L569', 'SEKOLAH SMA NEGERI', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PPD6W6U570', 'PONDOK PESANTREN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KPA5NAM571', 'KLINIK PRATAMA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KK1ZM1V572', 'KANTOR KECAMATAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KKNY37P573', 'KANTOR KELURAHAN', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'KPQ9OUD574', 'KANTOR POLISI', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PS7LEIF575', 'PASAR TRADISIONAL SETEMPAT', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'TSORKQ7576', 'TERMINAL BUS SETEMPAT', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'SSBYMIB577', 'STASIUN KERETA SETEMPAT', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'HTCRRN7578', 'HALTE TRANSJAKARTA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'HBDV6PZ579', 'HALTE BRT', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'GTSJOE4580', 'GERBANG TOL', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'RTBAELR581', 'REST AREA TOL', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'MS00X1X582', 'MASJID SETEMPAT', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'GSA5KN7583', 'GEREJA SETEMPAT', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'VSEURQR584', 'VIHARA SETEMPAT', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'PS0SITC585', 'PURA SETEMPAT', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'AKJ1SZW586', 'ALUN ALUN KOTA', 1, '2026-08-13', 'SEEDER', NULL, NULL),
+(0, 'CD4YKEI587', 'CAR FREE DAY', 1, '2026-08-13', 'SEEDER', NULL, NULL);
 
 -- --------------------------------------------------------
 
 --
--- Table structure for table `logs`
+-- Struktur dari tabel `logs`
 --
 
 CREATE TABLE `logs` (
@@ -2080,7 +2512,7 @@ CREATE TABLE `logs` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `logs`
+-- Dumping data untuk tabel `logs`
 --
 
 INSERT INTO `logs` (`id`, `action`, `details`, `level`, `createdAt`, `updatedAt`) VALUES
@@ -2618,7 +3050,7 @@ INSERT INTO `logs` (`id`, `action`, `details`, `level`, `createdAt`, `updatedAt`
 -- --------------------------------------------------------
 
 --
--- Table structure for table `properties`
+-- Struktur dari tabel `properties`
 --
 
 CREATE TABLE `properties` (
@@ -2655,7 +3087,7 @@ CREATE TABLE `properties` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `properties`
+-- Dumping data untuk tabel `properties`
 --
 
 INSERT INTO `properties` (`id`, `property_id`, `city_id`, `province_id`, `country_id`, `user_id`, `title`, `description`, `price`, `price_type`, `address`, `area`, `district`, `postal_code`, `furnished_status`, `bed_rooms`, `bath_rooms`, `electricity_capacity`, `building_area`, `land_area`, `floor_location`, `floor_quantity`, `kpr_status`, `building_type`, `transaction_type`, `status`, `created_date`, `created_by`, `updated_date`, `updated_by`) VALUES
@@ -11914,7 +12346,7 @@ INSERT INTO `properties` (`id`, `property_id`, `city_id`, `province_id`, `countr
 -- --------------------------------------------------------
 
 --
--- Table structure for table `property_facilities`
+-- Struktur dari tabel `property_facilities`
 --
 
 CREATE TABLE `property_facilities` (
@@ -11929,7 +12361,7 @@ CREATE TABLE `property_facilities` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `property_facilities`
+-- Dumping data untuk tabel `property_facilities`
 --
 
 INSERT INTO `property_facilities` (`id`, `property_id`, `facility_id`, `facility_qty`, `created_date`, `created_by`, `updated_date`, `updated_by`) VALUES
@@ -70799,7 +71231,7 @@ INSERT INTO `property_facilities` (`id`, `property_id`, `facility_id`, `facility
 -- --------------------------------------------------------
 
 --
--- Table structure for table `property_images`
+-- Struktur dari tabel `property_images`
 --
 
 CREATE TABLE `property_images` (
@@ -70810,7 +71242,7 @@ CREATE TABLE `property_images` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `property_images`
+-- Dumping data untuk tabel `property_images`
 --
 
 INSERT INTO `property_images` (`id`, `property_id`, `name`, `url`) VALUES
@@ -80002,7 +80434,7 @@ INSERT INTO `property_images` (`id`, `property_id`, `name`, `url`) VALUES
 -- --------------------------------------------------------
 
 --
--- Table structure for table `property_locations`
+-- Struktur dari tabel `property_locations`
 --
 
 CREATE TABLE `property_locations` (
@@ -80016,7 +80448,7 @@ CREATE TABLE `property_locations` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `property_locations`
+-- Dumping data untuk tabel `property_locations`
 --
 
 INSERT INTO `property_locations` (`id`, `property_id`, `location_id`, `created_date`, `created_by`, `updated_date`, `updated_by`) VALUES
@@ -104123,7 +104555,7 @@ INSERT INTO `property_locations` (`id`, `property_id`, `location_id`, `created_d
 -- --------------------------------------------------------
 
 --
--- Table structure for table `provinces`
+-- Struktur dari tabel `provinces`
 --
 
 CREATE TABLE `provinces` (
@@ -104139,7 +104571,7 @@ CREATE TABLE `provinces` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `provinces`
+-- Dumping data untuk tabel `provinces`
 --
 
 INSERT INTO `provinces` (`id`, `province_id`, `country_id`, `name`, `status`, `created_date`, `created_by`, `updated_date`, `updated_by`) VALUES
@@ -104199,7 +104631,7 @@ INSERT INTO `provinces` (`id`, `province_id`, `country_id`, `name`, `status`, `c
 -- --------------------------------------------------------
 
 --
--- Table structure for table `users`
+-- Struktur dari tabel `users`
 --
 
 CREATE TABLE `users` (
@@ -104229,11 +104661,11 @@ CREATE TABLE `users` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
--- Dumping data for table `users`
+-- Dumping data untuk tabel `users`
 --
 
 INSERT INTO `users` (`id`, `user_id`, `name`, `birthdate`, `phone`, `username`, `password`, `email`, `catalog_summary`, `refresh_token`, `status`, `privilege`, `fonnte_token`, `kirimi_device_id`, `created_date`, `created_by`, `updated_date`, `update_by`, `ai_primary`, `trans_type`, `payment_type`, `rental_duration`, `rental_type`) VALUES
-(1, 'SA6EDRU001', 'NIGEL KUNCORO', '1998-05-04', '628213311936', 'nigel123', '$2b$10$Rld5zga/CswkKyQPgPi6GO./sa5.OuVwgApiGxbZmCRudUD9TNHD2', 'stefanus.nigel.anggriawan12345@gmail.com', 'ON', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJTQTZFRFJVMDAxIiwidXNlck5hbWUiOiJOSUdFTCBLVU5DT1JPIiwidXNlcm5hbWUiOiJuaWdlbDEyMyIsInByaXZpbGVnZSI6ImFnZW50IiwiaWF0IjoxNzg1MTQ3MTg1LCJleHAiOjE3ODUyMzM1ODV9.q-xgGJoZlzCKXhcLTDxBayJa_r6IaPM0CSFGmaQRSRk', 1, 'agent', 'm5HDmV4hAYRFBgTdkfDR', 'D-F3PQ5', '2026-05-22 03:26:55', 'Self-Register', '2026-07-27 10:13:05', 'nigel123', 'Default', 'Both', 'Both', NULL, NULL),
+(1, 'SA6EDRU001', 'NIGEL KUNCORO', '1998-05-04', '628213311936', 'nigel123', '$2b$10$Rld5zga/CswkKyQPgPi6GO./sa5.OuVwgApiGxbZmCRudUD9TNHD2', 'stefanus.nigel.anggriawan12345@gmail.com', 'ON', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJTQTZFRFJVMDAxIiwidXNlck5hbWUiOiJOSUdFTCBLVU5DT1JPIiwidXNlcm5hbWUiOiJuaWdlbDEyMyIsInByaXZpbGVnZSI6ImFnZW50IiwiaWF0IjoxNzg1MTQ3MTg1LCJleHAiOjE3ODUyMzM1ODV9.q-xgGJoZlzCKXhcLTDxBayJa_r6IaPM0CSFGmaQRSRk', 1, 'agent', 'm5HDmV4hAYRFBgTdkfDR', 'D-F3PQ5', '2026-05-22 03:26:55', 'Self-Register', '2026-07-27 10:13:05', 'nigel123', 'Default', 'Both', 'Both', 1, 'Week'),
 (2, 'LFGKT49002', 'LEO FELIX', '2000-05-25', '0881036588874', 'leon123', '$2b$10$fMaJoam0ON3K47vFTz46NOSWYm28122h9OygO4K1I04e96oPG3wXW', 'dokumen.nigel2@gmail.com', 'ON', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJMRkdLVDQ5MDAyIiwidXNlck5hbWUiOiJMRU8gRkVMSVgiLCJ1c2VybmFtZSI6Imxlb24xMjMiLCJwcml2aWxlZ2UiOiJhZ2VudCIsImlhdCI6MTc4NjUxMDQ3OCwiZXhwIjoxNzg2NTk2ODc4fQ.pIByHMWo0uOFLZA39H17hPHspM1rBxcIYRO6V0xTX1M', 1, 'agent', 'PiBSZQXu6HKWhKkEDu9e', 'D-3OCA6', '2026-05-25 10:05:33', 'Self-Register', '2026-08-12 04:54:38', 'leon123', 'Default', 'Both', 'Both', 3, 'Day'),
 (3, 'CEMPL3Z003', 'CLARENCE MARIO', '1993-03-24', '0821-1136-7154', 'clarence123', '$2b$10$jvnn536K239gxQRcOqNIauJxZxTq9iBcJYLWDstvTItZGkAIsA07e', NULL, 'ON', NULL, 1, 'agent', NULL, NULL, '2026-05-26 01:56:29', 'Self-Register', '2026-06-29 06:22:00', 'clarence123', 'Default', 'Both', 'Both', NULL, NULL),
 (4, 'DTDE8RX004', 'DESY TALIM', '1995-08-27', '0821-1331-8191', 'desy54321', '$2b$10$PoQCO4FZRc.KNTJt/iZ8s.Qk5J.Ek7V.5ylhqFLQNQmr6YTWYrvoW', 'dokumen.nigel3@gmail.com', 'OFF', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJEVERFOFJYMDA0IiwidXNlck5hbWUiOiJERVNZIFRBTElNIiwidXNlcm5hbWUiOiJkZXN5NTQzMjEiLCJwcml2aWxlZ2UiOiJhZ2VudCIsImlhdCI6MTc4MzQxNDUxMiwiZXhwIjoxNzgzNTAwOTEyfQ.STbq1WLKVc3__zFeEh-P_iUKZHruQQYS98k78auqt0s', 1, 'agent', NULL, NULL, '2026-05-26 01:57:21', 'Self-Register', '2026-07-07 08:55:12', 'desy54321', 'Default', 'Both', 'Both', NULL, NULL),
@@ -104243,7 +104675,7 @@ INSERT INTO `users` (`id`, `user_id`, `name`, `birthdate`, `phone`, `username`, 
 -- --------------------------------------------------------
 
 --
--- Table structure for table `whatsapp_inbound_messages`
+-- Struktur dari tabel `whatsapp_inbound_messages`
 --
 
 CREATE TABLE `whatsapp_inbound_messages` (
@@ -104270,20 +104702,20 @@ CREATE TABLE `whatsapp_inbound_messages` (
 --
 
 --
--- Indexes for table `chat_messages`
+-- Indeks untuk tabel `chat_messages`
 --
 ALTER TABLE `chat_messages`
   ADD PRIMARY KEY (`id`),
   ADD KEY `chatSessionId` (`chatSessionId`);
 
 --
--- Indexes for table `chat_sessions`
+-- Indeks untuk tabel `chat_sessions`
 --
 ALTER TABLE `chat_sessions`
   ADD PRIMARY KEY (`id`);
 
 --
--- Indexes for table `cities`
+-- Indeks untuk tabel `cities`
 --
 ALTER TABLE `cities`
   ADD PRIMARY KEY (`id`),
@@ -104298,13 +104730,13 @@ ALTER TABLE `cities`
   ADD KEY `cities_name` (`name`);
 
 --
--- Indexes for table `contacts`
+-- Indeks untuk tabel `contacts`
 --
 ALTER TABLE `contacts`
   ADD PRIMARY KEY (`id`);
 
 --
--- Indexes for table `countries`
+-- Indeks untuk tabel `countries`
 --
 ALTER TABLE `countries`
   ADD PRIMARY KEY (`id`),
@@ -104317,7 +104749,7 @@ ALTER TABLE `countries`
   ADD KEY `countries_name` (`name`);
 
 --
--- Indexes for table `customers`
+-- Indeks untuk tabel `customers`
 --
 ALTER TABLE `customers`
   ADD PRIMARY KEY (`id`),
@@ -104330,7 +104762,7 @@ ALTER TABLE `customers`
   ADD KEY `customers_name` (`name`);
 
 --
--- Indexes for table `facilities`
+-- Indeks untuk tabel `facilities`
 --
 ALTER TABLE `facilities`
   ADD PRIMARY KEY (`id`),
@@ -104343,7 +104775,7 @@ ALTER TABLE `facilities`
   ADD KEY `facilities_name` (`name`);
 
 --
--- Indexes for table `locations`
+-- Indeks untuk tabel `locations`
 --
 ALTER TABLE `locations`
   ADD KEY `locations_location_id` (`location_id`),
@@ -104351,13 +104783,13 @@ ALTER TABLE `locations`
   ADD KEY `locations_name` (`name`);
 
 --
--- Indexes for table `logs`
+-- Indeks untuk tabel `logs`
 --
 ALTER TABLE `logs`
   ADD PRIMARY KEY (`id`);
 
 --
--- Indexes for table `properties`
+-- Indeks untuk tabel `properties`
 --
 ALTER TABLE `properties`
   ADD PRIMARY KEY (`id`),
@@ -104374,7 +104806,7 @@ ALTER TABLE `properties`
   ADD KEY `properties_user_id` (`user_id`);
 
 --
--- Indexes for table `property_facilities`
+-- Indeks untuk tabel `property_facilities`
 --
 ALTER TABLE `property_facilities`
   ADD PRIMARY KEY (`id`),
@@ -104382,14 +104814,14 @@ ALTER TABLE `property_facilities`
   ADD KEY `property_facilities_facility_id` (`facility_id`);
 
 --
--- Indexes for table `property_images`
+-- Indeks untuk tabel `property_images`
 --
 ALTER TABLE `property_images`
   ADD PRIMARY KEY (`id`),
   ADD KEY `property_images_property_id` (`property_id`);
 
 --
--- Indexes for table `property_locations`
+-- Indeks untuk tabel `property_locations`
 --
 ALTER TABLE `property_locations`
   ADD PRIMARY KEY (`id`),
@@ -104398,7 +104830,7 @@ ALTER TABLE `property_locations`
   ADD KEY `property_locations_location_id` (`location_id`);
 
 --
--- Indexes for table `provinces`
+-- Indeks untuk tabel `provinces`
 --
 ALTER TABLE `provinces`
   ADD PRIMARY KEY (`id`),
@@ -104412,7 +104844,7 @@ ALTER TABLE `provinces`
   ADD KEY `provinces_name` (`name`);
 
 --
--- Indexes for table `users`
+-- Indeks untuk tabel `users`
 --
 ALTER TABLE `users`
   ADD PRIMARY KEY (`id`),
@@ -104433,7 +104865,7 @@ ALTER TABLE `users`
   ADD KEY `users_phone` (`phone`);
 
 --
--- Indexes for table `whatsapp_inbound_messages`
+-- Indeks untuk tabel `whatsapp_inbound_messages`
 --
 ALTER TABLE `whatsapp_inbound_messages`
   ADD PRIMARY KEY (`id`),
@@ -104443,111 +104875,111 @@ ALTER TABLE `whatsapp_inbound_messages`
   ADD KEY `whatsapp_inbound_messages_created_at` (`createdAt`);
 
 --
--- AUTO_INCREMENT for dumped tables
+-- AUTO_INCREMENT untuk tabel yang dibuang
 --
 
 --
--- AUTO_INCREMENT for table `chat_messages`
+-- AUTO_INCREMENT untuk tabel `chat_messages`
 --
 ALTER TABLE `chat_messages`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=665;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=729;
 
 --
--- AUTO_INCREMENT for table `chat_sessions`
+-- AUTO_INCREMENT untuk tabel `chat_sessions`
 --
 ALTER TABLE `chat_sessions`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=80;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=84;
 
 --
--- AUTO_INCREMENT for table `cities`
+-- AUTO_INCREMENT untuk tabel `cities`
 --
 ALTER TABLE `cities`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=743;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=744;
 
 --
--- AUTO_INCREMENT for table `contacts`
+-- AUTO_INCREMENT untuk tabel `contacts`
 --
 ALTER TABLE `contacts`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=65;
 
 --
--- AUTO_INCREMENT for table `countries`
+-- AUTO_INCREMENT untuk tabel `countries`
 --
 ALTER TABLE `countries`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=21;
 
 --
--- AUTO_INCREMENT for table `customers`
+-- AUTO_INCREMENT untuk tabel `customers`
 --
 ALTER TABLE `customers`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=63;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=68;
 
 --
--- AUTO_INCREMENT for table `facilities`
+-- AUTO_INCREMENT untuk tabel `facilities`
 --
 ALTER TABLE `facilities`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=278;
 
 --
--- AUTO_INCREMENT for table `logs`
+-- AUTO_INCREMENT untuk tabel `logs`
 --
 ALTER TABLE `logs`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=530;
 
 --
--- AUTO_INCREMENT for table `properties`
+-- AUTO_INCREMENT untuk tabel `properties`
 --
 ALTER TABLE `properties`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9168;
 
 --
--- AUTO_INCREMENT for table `property_facilities`
+-- AUTO_INCREMENT untuk tabel `property_facilities`
 --
 ALTER TABLE `property_facilities`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=58903;
 
 --
--- AUTO_INCREMENT for table `property_images`
+-- AUTO_INCREMENT untuk tabel `property_images`
 --
 ALTER TABLE `property_images`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9172;
 
 --
--- AUTO_INCREMENT for table `property_locations`
+-- AUTO_INCREMENT untuk tabel `property_locations`
 --
 ALTER TABLE `property_locations`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=24062;
 
 --
--- AUTO_INCREMENT for table `provinces`
+-- AUTO_INCREMENT untuk tabel `provinces`
 --
 ALTER TABLE `provinces`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=53;
 
 --
--- AUTO_INCREMENT for table `users`
+-- AUTO_INCREMENT untuk tabel `users`
 --
 ALTER TABLE `users`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
 
 --
--- AUTO_INCREMENT for table `whatsapp_inbound_messages`
+-- AUTO_INCREMENT untuk tabel `whatsapp_inbound_messages`
 --
 ALTER TABLE `whatsapp_inbound_messages`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
--- Constraints for dumped tables
+-- Ketidakleluasaan untuk tabel pelimpahan (Dumped Tables)
 --
 
 --
--- Constraints for table `chat_messages`
+-- Ketidakleluasaan untuk tabel `chat_messages`
 --
 ALTER TABLE `chat_messages`
   ADD CONSTRAINT `chat_messages_ibfk_1` FOREIGN KEY (`chatSessionId`) REFERENCES `chat_sessions` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
--- Constraints for table `property_locations`
+-- Ketidakleluasaan untuk tabel `property_locations`
 --
 ALTER TABLE `property_locations`
   ADD CONSTRAINT `property_locations_ibfk_1` FOREIGN KEY (`property_id`) REFERENCES `properties` (`property_id`) ON DELETE CASCADE,
