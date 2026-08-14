@@ -251,7 +251,17 @@ async function findAgentByDevice(deviceId) {
  * @param {string} message     - Isi pesan
  * @param {string} deviceId    - users.kirimi_device_id milik agent
  */
-async function sendViaKirimi(targetPhone, message, deviceId) {
+/**
+ * @param {string} targetPhone
+ * @param {string} message
+ * @param {string} deviceId
+ * @param {string} [mediaUrl]  URL ABSOLUT gambar (mis. dari propertyImageService).
+ *   Kirimi API mendukung field `media_url` opsional pada `/v1/send-message`
+ *   (lihat dokumentasi di kepala berkas ini). `message` pada kiriman gambar
+ *   berperan sebagai CAPTION-nya. ⚠️ Kirimi butuh URL yang bisa diakses dari
+ *   INTERNET, bukan localhost — lihat propertyImageService.getPublicBaseUrl().
+ */
+async function sendViaKirimi(targetPhone, message, deviceId, mediaUrl = null) {
   const userCode = String(process.env.KIRIMI_USER_CODE || '').trim();
   const secret   = String(process.env.KIRIMI_SECRET    || '').trim();
   if (!userCode || !secret) throw new Error('KIRIMI_USER_CODE / KIRIMI_SECRET belum di-set di .env');
@@ -270,10 +280,14 @@ async function sendViaKirimi(targetPhone, message, deviceId) {
     secret,
     device_id : String(deviceId).trim(),
     phone,
-    message   : appendSentViaTag(String(message).trim())
+    // Pesan gambar TIDAK mendapat tag "sent via" — caption gambar properti
+    // yang diakhiri kalimat "(dikirim via ...)" terasa aneh; tag itu hanya
+    // relevan untuk balasan teks penuh.
+    message   : mediaUrl ? String(message || '').trim() : appendSentViaTag(String(message).trim())
   };
+  if (mediaUrl) payload.media_url = String(mediaUrl).trim();
 
-  console.log(`[KIRIMI SEND] → ${maskPhone(phone)} | device: ${payload.device_id} | len: ${payload.message.length}`);
+  console.log(`[KIRIMI SEND] → ${maskPhone(phone)} | device: ${payload.device_id} | len: ${payload.message.length}${mediaUrl ? ' | +media' : ''}`);
 
   let lastError;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -688,6 +702,30 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
       await sendViaKirimi(sender, part, agent.kirimi_device_id);
     }
     sent = true;
+
+    // ── Gambar properti (opsional, OFF secara default) ──────────────────
+    // Dikirim SETELAH seluruh teks terkirim sukses — customer melihat brief/
+    // katalog lengkap dulu, baru foto menyusul. Korelasi kartu↔gambar lewat
+    // NAMA properti yang benar-benar ada di teks yang SUDAH terkirim (lihat
+    // catatan fail-closed di propertyImageService.js) — tidak pernah menebak
+    // dari urutan. Non-fatal sepenuhnya: kegagalan di sini TIDAK PERNAH
+    // membuat status "✅ Terkirim" balasan teks berubah jadi gagal.
+    if (String(process.env.PROPERTY_IMAGE_SEND_ENABLED || 'OFF').toUpperCase() === 'ON') {
+      try {
+        const { getImagesForMentionedProperties } = require('../services/propertyImageService');
+        const fullReplyText = replyParts.join('\n\n');
+        const images = await getImagesForMentionedProperties(fullReplyText, agent.user_id);
+        for (const img of images) {
+          await sendViaKirimi(sender, `📷 ${img.title}`, agent.kirimi_device_id, img.absoluteUrl);
+        }
+        if (images.length) {
+          safeLog('KIRIMI_PROPERTY_IMAGES_SENT', { sessionId: session.id, count: images.length });
+        }
+      } catch (imgErr) {
+        safeLog('KIRIMI_PROPERTY_IMAGE_SEND_FAILED', { sessionId: session.id, error: imgErr.message }, 'error');
+      }
+    }
+
     safeLog('KIRIMI_REPLY_SENT', {
       sessionId  : session.id,
       agent      : agent.name,

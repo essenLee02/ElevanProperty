@@ -194,6 +194,70 @@ async function retrieveAgentCatalog(queryText, agentUserId, options = {}) {
 }
 
 /**
+ * Jawaban EKSTRAKTIF langsung untuk customer — dipakai oleh Private Agent
+ * (chatbotPrivateController.js), yang deterministik dan TIDAK memanggil LLM.
+ *
+ * BERBEDA dari retrievePropertyKnowledge(): fungsi itu menghasilkan blok
+ * konteks untuk DIBACA model bahasa. Fungsi ini menghasilkan TEKS SIAP KIRIM
+ * ke customer — kutipan verbatim dari korpus, tanpa satu kata pun dikarang
+ * Private Agent sendiri (yang memang tidak punya kemampuan generasi bahasa
+ * bebas). Ini caranya Private Agent bisa "menjawab" "beda SHM sama HGB apa?"
+ * tanpa melanggar sifat deterministiknya: ia MENGUTIP, tidak MENULIS.
+ *
+ * Ambang skor sengaja lebih TINGGI daripada retrievePropertyKnowledge (yang
+ * hanya melengkapi prompt LLM) — di sini false positive berarti Private Agent
+ * mengirim jawaban yang salah topik langsung ke customer tanpa filter model
+ * bahasa apa pun sesudahnya, jadi presisi harus diutamakan di atas recall.
+ *
+ * @param {string} customerMessage
+ * @returns {Promise<{text:string, source:string}|null>} null bila tidak ada
+ *          kecocokan yang cukup yakin — pemanggil WAJIB jatuh ke perilaku lama
+ *          (redirect off-topic biasa), bukan menganggap ini jawaban kosong.
+ */
+async function answerKnowledgeQuestion(customerMessage) {
+  if (!isEnabled()) return null;
+  if (!vectorStore.isReady(NAMESPACE.PROPERTY_KNOWLEDGE)) return null;
+
+  try {
+    vectorStore.ensureLoaded();
+
+    const queryText = String(customerMessage || '').trim();
+    if (!queryText) return null;
+
+    const { vector } = await embeddingService.embedText(queryText);
+    const hits = vectorStore.search(NAMESPACE.PROPERTY_KNOWLEDGE, vector, {
+      // topK > 1 sengaja: chunk TERATAS kadang cuma judul bagian tanpa isi
+      // (mis. heading "## Jenis Sertifikat" yang badannya langsung mulai di
+      // sub-heading "### SHM" berikutnya). Ambil beberapa kandidat, lalu pilih
+      // yang PERTAMA dengan isi cukup panjang untuk jadi jawaban yang berdiri
+      // sendiri — bukan otomatis kandidat rangking #1.
+      topK: 5,
+      minScore: Number(process.env.RAG_ANSWER_MIN_SCORE || 0.30),
+      mmrLambda: 1
+    });
+
+    const MIN_ANSWER_CHARS = Number(process.env.RAG_ANSWER_MIN_BODY_CHARS || 150);
+    const hit = hits.find((h) => h.text.length >= MIN_ANSWER_CHARS);
+    if (!hit) return null;
+
+    const heading = (hit.metadata?.breadcrumb || '').split(' > ').pop() || 'Info';
+
+    const text = [
+      `ℹ️ *${heading}*`,
+      '',
+      hit.text,
+      '',
+      '_Untuk kepastian angka/syarat yang berlaku saat ini, tim kami akan bantu konfirmasi lebih lanjut._'
+    ].join('\n');
+
+    return { text, source: hit.metadata?.source || 'knowledge' };
+  } catch (error) {
+    console.warn('[RAG] answerKnowledgeQuestion gagal, dilewati:', error.message);
+    return null;
+  }
+}
+
+/**
  * Titik masuk utama — dipanggil dari pembangun prompt.
  *
  * @param {object} params
@@ -203,6 +267,7 @@ async function retrieveAgentCatalog(queryText, agentUserId, options = {}) {
  * @param {string} [params.buildingType]
  * @param {string} [params.transactionType]
  * @param {boolean}[params.includeSkillReference=false]
+ * @param {boolean}[params.includeAgentCatalog=false]  ⚠️ lihat catatan di bawah
  * @returns {Promise<string>} blok prompt siap tempel — '' bila mati/gagal/kosong
  */
 async function buildRagContext(params = {}) {
@@ -214,13 +279,24 @@ async function buildRagContext(params = {}) {
     const queryText = buildQueryText(params.customerMessage, params.history);
     if (!queryText.trim()) return '';
 
+    // ⚠️ Blok katalog SENGAJA opt-in (default false), BUKAN otomatis menyertai
+    // pengetahuan properti. Aturan operasional proyek ini (SKILL.md §4) mutlak:
+    // "❌ Never show listings mid-interview" — berlaku bahkan saat
+    // RESPOND_CATALOG_RUN=ON. buildRagContext() dipanggil pada SETIAP giliran,
+    // termasuk saat Q1–Q12 masih berjalan, jadi menyalakannya tanpa syarat akan
+    // membocorkan rekomendasi semantik sebelum brief tampil — pelanggaran nyata
+    // terhadap aturan itu, bukan sekadar risiko teoretis. Pemanggil WAJIB
+    // mengaktifkannya hanya pada giliran setelah brief (mis. showCatalogAfterBrief
+    // && summary sudah tampil), bukan pada setiap pesan.
     const blocks = await Promise.all([
       params.includeSkillReference ? retrieveSkillReference(queryText) : Promise.resolve(''),
       retrievePropertyKnowledge(queryText),
-      retrieveAgentCatalog(queryText, params.agentUserId, {
-        buildingType: params.buildingType,
-        transactionType: params.transactionType
-      })
+      params.includeAgentCatalog
+        ? retrieveAgentCatalog(queryText, params.agentUserId, {
+          buildingType: params.buildingType,
+          transactionType: params.transactionType
+        })
+        : Promise.resolve('')
     ]);
 
     const combined = blocks.filter(Boolean).join('\n\n');
@@ -249,6 +325,7 @@ module.exports = {
   retrieveSkillReference,
   retrievePropertyKnowledge,
   retrieveAgentCatalog,
+  answerKnowledgeQuestion,
   isEnabled,
   NAMESPACE
 };

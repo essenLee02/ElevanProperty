@@ -173,6 +173,22 @@ console.log('\n[4] Fail-open — RAG tidak boleh pernah memutus percakapan');
   ok('blok katalog memuat larangan mengarang listing',
     withAgent.includes('Jangan pernah mengarang'));
 
+  // ⚠️ Kontrol paling kritis di seluruh berkas ini: buildRagContext() dipanggil
+  // pada SETIAP giliran termasuk selama Q1–Q12 masih berjalan. Bila katalog
+  // ikut tanpa diminta eksplisit, semantic search bisa membocorkan rekomendasi
+  // SEBELUM brief tampil — pelanggaran langsung "❌ Never show listings
+  // mid-interview" (SKILL.md §4). includeAgentCatalog HARUS default false.
+  const withoutFlag = await ragRetrieval.buildRagContext({
+    customerMessage: 'rumah surabaya dekat pakuwon', history: [], agentUserId: 'AGENT_A'
+  });
+  ok('KONTROL NEGATIF: agentUserId diisi TAPI includeAgentCatalog tidak di-set → katalog TIDAK ikut',
+    !withoutFlag.includes('LISTING KATALOG'));
+
+  const withFlag = await ragRetrieval.buildRagContext({
+    customerMessage: 'rumah surabaya dekat pakuwon', history: [], agentUserId: 'AGENT_A', includeAgentCatalog: true
+  });
+  ok('includeAgentCatalog:true secara eksplisit → katalog ikut', withFlag.includes('LISTING KATALOG'));
+
   process.env.RAG_ENABLED = originalFlag;
 
   // ─── Group 5: kueri & MMR ───────────────────────────────────────────────────

@@ -36,6 +36,7 @@ const { checkAgentScope }                           = require('../utils/agentSco
 const { guardReplyIdentity }                        = require('../utils/replyIdentityGuard');
 const sessionAnchors                                = require('../utils/sessionAnchors');
 const { expandAbbreviations }                       = require('../utils/lazyChatNormalizer');
+const { buildRagContext }                           = require('./ragRetrievalService');
 
 // Jendela history untuk ekstraksi filter & state kualifikasi. Cukup besar agar
 // pesan pembuka (tipe/transaksi/lokasi) tidak keluar scope di alur panjang, tapi
@@ -475,6 +476,27 @@ async function generateWhatsAppAIReply(params) {
   // Append facility + city + landmark context to propertyCtx so it reaches all AI providers
   const enrichedPropertyCtx = [propertyCtx, facilityContext, cityContext, locationContext].filter(Boolean).join('\n\n');
 
+  // ── Step 3.6: RAG CONTEXT (opsional, RAG_ENABLED=OFF secara default) ──────
+  // Melengkapi prompt dengan (a) pengetahuan jual-beli properti Indonesia yang
+  // TERVERIFIKASI (legalitas/pajak/KPR — mencegah LLM mengarang angka pajak/
+  // syarat bank) dan (b) listing katalog agent ini yang cocok SECARA MAKNA,
+  // di luar filter SQL biasa (mis. "yang cocok buat keluarga muda").
+  // ⚠️ Ini TIDAK PERNAH menggantikan aturan inti — hanya melengkapi. Lihat
+  // ragRetrievalService.js untuk kenapa aturan perilaku TIDAK lewat RAG.
+  // Fail-open MUTLAK di dalam buildRagContext(): kegagalan apa pun → ''.
+  let ragContext = '';
+  try {
+    ragContext = await buildRagContext({
+      customerMessage : message,
+      history,
+      agentUserId,
+      buildingType    : filters?.buildingType,
+      transactionType : filters?.transactionType,
+    });
+  } catch (err) {
+    console.warn('[WhatsAppAI] RAG context gagal, dilewati:', err.message);
+  }
+
   // ── Step 3.5: CHECK AI_PRIMARY_PROVIDER ───────────────────────────────────
   //
   // AI_PRIMARY_PROVIDER: 'chatgpt' | 'claude' | 'qwen' | 'deepseek' | 'kimi' | 'private'
@@ -513,7 +535,7 @@ async function generateWhatsAppAIReply(params) {
         history,
         message,
         propertyCtx,
-        { facilityContext, cityContext, locationContext }
+        { facilityContext, cityContext, locationContext, ragContext }
       );
       // Jaring pengaman DETERMINISTIK: model kadang tetap menulis "[Nama Agen]"
       // / "${agentName}" alih-alih nama sungguhan, meski nama itu sudah tertulis
@@ -573,7 +595,7 @@ async function generateWhatsAppAIReply(params) {
       try {
         console.warn('[WhatsAppAI] primary=private & Private Agent failed → trying external AI fallback');
         const aiResult = await generateWhatsappExternalAIFallback(
-          session, history, message, enrichedPropertyCtx, { facilityContext, cityContext }
+          session, history, message, enrichedPropertyCtx, { facilityContext, cityContext, ragContext }
         );
         // Guard identitas yang sama (M85) — jalur fallback eksternal juga
         // dilayani provider LLM, jadi punya kelas bug yang persis sama.

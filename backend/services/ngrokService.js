@@ -4,6 +4,17 @@ const axios = require('axios');
 
 let ngrokProcess = null;
 
+// Cache modul-level dari URL publik ngrok TERAKHIR yang diketahui — dibaca oleh
+// propertyImageService (dan pemanggil lain yang butuh basis URL publik untuk
+// dev tanpa domain sungguhan). Diisi dari KEDUA jalur resolusi URL (tunnel yang
+// sudah ada MAUPUN tunnel baru) supaya konsisten dari sisi manapun ngrok start.
+let cachedPublicUrl = null;
+
+/** URL publik ngrok terakhir yang diketahui, atau null bila belum ada tunnel. */
+function getCachedNgrokUrl() {
+  return cachedPublicUrl;
+}
+
 // ngrok local inspector API — selalu di 127.0.0.1:4040 kecuali di-override user
 // lewat --inspect (tidak dipakai proyek ini). Dipakai untuk cek apakah SUDAH ada
 // tunnel ngrok yang jalan (mis. proses lama yang orphan setelah nodemon restart)
@@ -42,6 +53,7 @@ async function startNgrok(port) {
   const existing = await findExistingTunnel(port);
   if (existing) {
     console.log('[NGROK] Tunnel sudah aktif, pakai yang ada:', existing);
+    cachedPublicUrl = existing;
     return existing;
   }
 
@@ -75,6 +87,7 @@ async function startNgrok(port) {
       if (entry.msg === 'started tunnel' && entry.url) {
         if (!resolved) {
           resolved = true;
+          cachedPublicUrl = entry.url;
           resolve(entry.url);
         }
       }
@@ -130,4 +143,4 @@ function stopNgrok() {
   }
 }
 
-module.exports = { startNgrok, stopNgrok };
+module.exports = { startNgrok, stopNgrok, getCachedNgrokUrl };

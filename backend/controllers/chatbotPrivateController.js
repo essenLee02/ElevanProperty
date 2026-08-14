@@ -4481,6 +4481,8 @@ class ChatbotPrivateService {
 
     // ── Guard: off-topic pesan (bukan properti sama sekali) ──────────────────
     if (!aiAskedLast && LanguageDetector.isOffTopic(userMessage)) {
+      const knowledgeReply = await this.#tryKnowledgeAnswer(userMessage);
+      if (knowledgeReply) return this.#wrap(knowledgeReply, { skillInfo });
       return this.#wrap(builder.offTopic(), { skillInfo });
     }
 
@@ -4491,6 +4493,12 @@ class ChatbotPrivateService {
     // lolos isOffTopic() langsung masuk ke Q1–Q12 qualification karena loc/type
     // sudah tersimpan dari percakapan sebelumnya.
     if (!aiAskedLast && !hasPropertyKeyword(userMessage) && !isPropertyContextContinuation(userMessage, history)) {
+      // Sebelum menolak sebagai off-topic: apakah ini pertanyaan PENGETAHUAN properti
+      // (SHM/HGB, BPHTB, KPR, dll.) yang tidak mengandung kata kunci tipe/tindakan
+      // properti biasa? RAG_ENABLED=OFF (default) membuat #tryKnowledgeAnswer
+      // langsung null — jalur lama tidak berubah sama sekali.
+      const knowledgeReply = await this.#tryKnowledgeAnswer(userMessage);
+      if (knowledgeReply) return this.#wrap(knowledgeReply, { skillInfo });
       return this.#wrap(builder.offTopic(), { skillInfo });
     }
 
@@ -4714,6 +4722,31 @@ class ChatbotPrivateService {
       alternatives:     meta.alternatives     ?? 0,
       ...meta,
     };
+  }
+
+  /**
+   * Mencoba menjawab pertanyaan PENGETAHUAN properti (SHM/HGB, BPHTB, KPR, dst.)
+   * lewat RAG — HANYA sebelum jatuh ke redirect off-topic generik.
+   *
+   * Private Agent tidak punya kemampuan generasi bahasa bebas (deterministik,
+   * berbasis template), jadi ini murni EKSTRAKTIF — mengutip korpus verbatim,
+   * tidak pernah menyusun kalimat baru. Itulah kenapa aman dipakai di jalur
+   * deterministik: tidak ada ruang untuk "mengarang" seperti pada LLM.
+   *
+   * Fail-open MUTLAK: RAG_ENABLED=OFF (default) atau kegagalan apa pun → null,
+   * pemanggil jatuh ke `builder.offTopic()` seperti sebelum fitur ini ada.
+   *
+   * @param {string} userMessage
+   * @returns {Promise<string|null>}
+   */
+  static async #tryKnowledgeAnswer(userMessage) {
+    try {
+      const { answerKnowledgeQuestion } = require('../services/ragRetrievalService');
+      const hit = await answerKnowledgeQuestion(userMessage);
+      return hit?.text || null;
+    } catch (_err) {
+      return null; // fail-open — jangan pernah biarkan RAG memutus balasan
+    }
   }
 
   /**

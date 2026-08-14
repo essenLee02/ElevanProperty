@@ -210,6 +210,18 @@ function chunkMarkdown(markdown, options = {}) {
     const sectionText = section.lines.join('\n').trim();
     if (!sectionText) return;
 
+    // Bagian yang HANYA berisi baris heading (heading H2 langsung diikuti
+    // heading H3, tanpa paragraf pembuka di antaranya) tidak boleh jadi chunk
+    // sendiri — isinya cuma judul, tidak bermakna berdiri sendiri sebagai
+    // jawaban maupun sebagai konteks retrieval. Headingnya SUDAH ikut
+    // breadcrumb bagian anak (headingStack bersifat kumulatif), jadi tidak ada
+    // informasi yang hilang dengan melewatkan bagian ini.
+    const bodyOnly = section.lines
+      .filter((line) => !parseHeading(line))
+      .join('\n')
+      .trim();
+    if (!bodyOnly) return;
+
     const pieces = sectionText.length <= maxChars
       ? [sectionText]
       : splitOnParagraphBoundaries(section.lines, section.guarded, maxChars);
