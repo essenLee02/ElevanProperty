@@ -898,7 +898,28 @@ function isPropertyContextContinuation(message, history = []) {
   // Jawaban KATEGORI budget (Q3): terjangkau / menengah / eksklusif / mahal / murah /
   // kompetitif. Customer boleh jawab kategori daripada angka. Sinyal properti yang KUAT.
   const hasBudgetCategory   = /\b(terjangkau|ekonomis|murah|termurah|hemat|menengah|sedang|standar|eksklusif|ekslusif|mewah|premium|luxur(y|ious)|mahal|kompetitif|competitive|low\s*budget|affordable|mid[\s-]*range|budget[\s-]*friendly|exclusive)\b/i.test(lower);
-  const hasStrongAnswerCue  = hasBudgetAnswer || hasNegotiationCue || hasFurnishingAnswer || hasBudgetCategory || hasConditionAnswer;
+  // Jawaban PENGHUNI / KAPASITAS (Q4) — "tinggal bersama siapa?" / "berapa orang?".
+  // ⚠️ Sebelumnya TIDAK ADA detektor untuk ini sama sekali, padahal Q4 adalah
+  // pertanyaan WAJIB. Jawaban Q4 yang panjang otomatis jatuh ke gate 70-char lalu
+  // dibalas "saya asisten khusus properti" — customer melihat jawabannya yang
+  // BENAR ditolak sebagai off-topic. Kasus produksi 18 Agu 2026 (booking villa
+  // Malang): "Rencana checkin 2 minggu lagi. Saya stay bersama keluarga besar,
+  // butuh 5 kamar" = 78 char, ditolak DUA KALI berturut-turut.
+  // Tiga kelas sinyal, masing-masing cukup sendiri:
+  //   (a) jumlah kamar     — "butuh 5 kamar", "3 kt", "2 bedroom"
+  //   (b) komposisi rumah  — "keluarga besar", "sama istri", "bertiga", "4 orang"
+  //   (c) tanggal check-in — "checkin 2 minggu lagi" (booking; sepadan dgn M87)
+  const hasOccupancyAnswer  = /\b\d+\s*(kamar|kt\b|bedroom|bed\s*room|br\b)/i.test(lower)
+                              || /\b(kamar|bedroom)\s*\d+/i.test(lower)
+                              || /\b(keluarga\s+(besar|kecil|inti)|sekeluarga|serumah|rombongan)\b/i.test(lower)
+                              // Verba HUNIAN saja (stay/tinggal/menginap/ditempati) — sengaja
+                              // TIDAK memakai "bareng/sama/dengan" telanjang: "makan bareng
+                              // keluarga" bukan jawaban Q4. Verba huniannya yang membedakan.
+                              || /\b(stay|tinggal|menetap|nginap|menginap|ditempati|dihuni|huni|nempatin|ditinggali)\b.{0,25}\b(istri|suami|pasangan|anak|anak-anak|orang\s*tua|ortu|mertua|keluarga|teman|temen|kawan|rekan|saudara|adik|kakak|art|asisten)\b/i.test(lower)
+                              || /\b(ber(dua|tiga|empat|lima|enam|tujuh|delapan)|sendiri|sendirian|solo)\b/i.test(lower)
+                              || /\b\d+\s*(orang|pax|tamu|guest|dewasa|anak)\b/i.test(lower)
+                              || /\bcheck-?\s?in\b/i.test(lower);
+  const hasStrongAnswerCue  = hasBudgetAnswer || hasNegotiationCue || hasFurnishingAnswer || hasBudgetCategory || hasConditionAnswer || hasOccupancyAnswer;
 
   // Pesan pendek (≤ 70 karakter) → proses normal
   // Pesan medium (71–200) dengan konten properti / sinyal budget-nego-furnishing → jawaban Q2b/Q3/Q5/Q6/Q11

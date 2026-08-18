@@ -34,6 +34,8 @@ You asked: "Rencananya masuk atau pindah bulan apa?" (Q8)
 You asked: "Nanti ditempati bersama siapa?" (Q4)
   "Saya rencana tinggal bersama istri"           → ✅ VALID (Q4)
   "sendiri aja" / "3 orang"                      → ✅ VALID (Q4)
+  "Rencana checkin 2 minggu lagi. Saya stay
+   bersama keluarga besar, butuh 5 kamar"        → ✅ VALID (Q4 + Q8 + kamar sekaligus)
 
 You asked: "Area mana yang dipertimbangkan?" (Q2c)
   "Saya mempertimbangkan area di [nama apa pun]" → ✅ VALID (Q2c → record exactly what they typed)

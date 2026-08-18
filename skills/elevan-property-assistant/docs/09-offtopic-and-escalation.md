@@ -25,6 +25,12 @@ You asked: "Ada yang pasti tidak cocok?" (Q5)
 
 You asked: "Furnished atau kosong?" (Q11)
   "Semi furnished, pokok ada dapur dan kasur"    → ✅ VALID (furnishing)
+
+You asked: "Nanti ditempati bersama siapa?" (Q4)
+  "Saya rencana tinggal bersama istri"           → ✅ VALID (Q4)
+  "sendiri aja" / "3 orang"                      → ✅ VALID (Q4)
+  "Rencana checkin 2 minggu lagi. Saya stay
+   bersama keluarga besar, butuh 5 kamar"        → ✅ VALID (Q4 + Q8 + kamar sekaligus)
 ```
 
 **Redirect only when the customer clearly opens a non-property topic themselves:**
