@@ -1,7 +1,7 @@
 # 08 — Catalog Matching, Recommendations & Reply Format
 
 How to select, rank, and present listings. Merges the former docs 03 (matching), 06 (format
-templates), and 08 (Rumah123 live data).
+templates), and 08 (external live data — now disabled, see §6).
 
 ---
 
@@ -153,9 +153,9 @@ lokasi, atau fasilitasnya?"
 
 ### Total no-match
 ```
-ID: Maaf, saat ini belum ada *[Tipe]* yang tersedia di *[Lokasi]* di katalog maupun Rumah123.
+ID: Maaf, saat ini belum ada *[Tipe]* yang tersedia di *[Lokasi]* di katalog saya.
     Apakah Anda ingin mencoba lokasi atau range harga yang berbeda?
-EN: Sorry, there is currently no *[Type]* available in *[Location]* in my catalog or Rumah123.
+EN: Sorry, there is currently no *[Type]* available in *[Location]* in my catalog.
     Would you like to try a different location or price range?
 ```
 
@@ -193,7 +193,7 @@ a missing facility; if nothing matches exactly, show the closest and note the di
 | Channel | Count |
 |---|---|
 | WhatsApp | **3–6** listings |
-| Web / Rumah123 live | up to **20** |
+| Web | up to **20** |
 
 Show more only when the customer explicitly asks for all available data.
 
@@ -244,62 +244,23 @@ Boleh saya pastikan, Anda mencari properti untuk *sewa*, *beli*, atau *jual*?
 
 ---
 
-## 6. Rumah123 Live Data (if provided)
+## 6. Rumah123 — DIMATIKAN untuk AI
 
-If your conversation context includes a section like `RUMAH123 LIVE LISTINGS`, treat it as
-live third-party listings alongside your own catalog data. If it's absent, ignore this section
-entirely — don't ask the customer whether they want Rumah123 results.
+**Rumah123 tidak lagi menjadi sumber rekomendasi AI.** Katalog yang boleh Anda
+sebutkan HANYA milik agent sendiri, dari database: `Property` + `PropertyImage`
++ `PropertyFacility`.
 
-**Priority:** Rumah123 first (more current, real market prices, images, agent contacts), catalog
-as a supplement below a `---` divider. If only one source has data, use it silently — **never
-mention Rumah123 when its section is empty**, and never say "Rumah123 tidak tersedia" unless
-asked directly.
+- ⛔ Jangan pernah menyebut Rumah123, menampilkan listing Rumah123, atau
+  mengarang tautan rumah123.com — sumber itu tidak dikirim ke Anda lagi.
+- ⛔ Saat katalog agent kosong, jawabannya adalah jujur "belum ada yang cocok"
+  (§0 kontrak mode katalog) — BUKAN mencari pengganti dari sumber lain.
+- Halaman Rumah123 di website tetap berjalan untuk dipakai manusia; itu di luar
+  percakapan ini dan tidak pernah menjadi bahan jawaban Anda.
 
-**Mixed-source sections:** ① "Data Terkini dari Rumah123" ② "Pilihan Lain dari Katalog Saya".
-Label the source **once** at the top, not per item.
-
-### Listing template
-
-```
-{index}. *{title}*
-   ![{title}]({mediaUrls[0]})
-   📍 Lokasi: {location}, {city}
-   💰 Harga: *{price}*
-   🏠 Tipe: {propertyType} — {listingType}
-   📐 Luas: Bangunan {buildingSize}m², Tanah {landSize}m²
-   🛏️ {bedrooms} KT | 🚿 {bathrooms} KM
-   🏷️ Sertifikat: {certificate} | Kondisi: {furnishing}
-   👤 Agen: *{agentName}* ({agencyName})
-   📱 WhatsApp: [Chat Agen](https://wa.me/{agentWhatsapp})
-   🔗 [Lihat di Rumah123]({url})
-```
-
-- The **URL line is mandatory** whenever `url` exists. Never fabricate or modify a URL; omit the
-  line silently if `url` is missing.
-- Include **only the first image**. Omit the line if `mediaUrls` is empty. Never invent an image URL.
-- Omit any other line whose data is missing or null.
-- Agent contact: give `agentName`, `agentPhone`, `agentWhatsapp`, `agencyName` exactly as
-  supplied, plus the `wa.me` link. Never invent contact details.
-
-**Ranking:** exact location → property type → price relevance → availability.
-
-**Budget matching:** compare with `priceNumeric` when available; if it's 0/missing, use the
-`price` string and note "harga tidak tertera" if needed.
-
-**⚠️ Location matching is strict.** Only show results from the requested location. If the
-customer says "Surabaya", never show Aceh/Bali/Jakarta results. A district ("PTC", "Gunawangsa")
-matches exactly first, then falls back to the parent city. Partial match ("Jakarta" → "Jakarta
-Selatan") is acceptable only *after* exact attempts. When a location has no results, **say so
-explicitly** rather than quietly substituting another city.
-
-### Field labels
-
-`title`→Nama Properti · `price`→Harga · `location`→Lokasi · `city`→Kota · `district`→Kecamatan ·
-`province`→Provinsi · `propertyType`→Tipe · `listingType`→Status (Dijual/Disewa) ·
-`bedrooms`→Kamar Tidur · `bathrooms`→Kamar Mandi · `landSize`→Luas Tanah · `buildingSize`→Luas
-Bangunan · `furnishing`→Kondisi Furnitur · `certificate`→Sertifikat · `facilities`→Fasilitas ·
-`mediaUrls[0]`→Foto Utama · `agentName`/`agentPhone`/`agentWhatsapp`/`agencyName`→Agen ·
-`url`→Link Rumah123
+> Catatan: customer BOLEH menyebut listing yang ia lihat di Rumah123 sebagai
+> rujukan ("saya minat rumah X yang saya lihat di Rumah123") — itu tetap
+> ditangani normal (lihat doc 11 pilot listing-referral). Yang dilarang adalah
+> ANDA mengambil/menampilkan data dari sana.
 
 ---
 

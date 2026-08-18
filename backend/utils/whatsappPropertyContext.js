@@ -27,6 +27,7 @@ const {
   formatRumah123ContextForLLM,
   mapBuildingTypeToApify,
   mapTransactionTypeToApify,
+  isRumah123EnabledForAI,
 } = require('../services/rumah123ContextService');
 
 const { buildRecommendationContextForLLM } = require('../services/propertyRecommendationService');
@@ -190,7 +191,8 @@ async function getWhatsappPropertyContext(customerMessage, history = [], agentUs
   // ── 1. Coba Rumah123 live data ────────────────────────────────────────────
   const apifyToken         = process.env.APIFY_API_TOKEN;
   const apifyReady         = apifyToken && apifyToken !== 'isi_apify_token_anda';
-  const rumah123DataEnabled = String(process.env.RUMAH123_DATA || 'ON').toUpperCase() === 'ON';
+  // Satu sumber kebenaran, default OFF — lihat rumah123ContextService.isRumah123EnabledForAI
+  const rumah123DataEnabled = isRumah123EnabledForAI();
 
   if (apifyReady && rumah123DataEnabled) {
     try {

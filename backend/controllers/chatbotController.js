@@ -15,6 +15,7 @@ const {
   formatRumah123ContextForLLM,
   mapBuildingTypeToApify,
   mapTransactionTypeToApify,
+  isRumah123EnabledForAI,
 } = require('../services/rumah123ContextService');
 const chatbotPrivateController = require('./chatbotPrivateController');
 const { getSkillRegistryStatus } = require('../services/skillPromptService');
@@ -198,7 +199,13 @@ class ChatbotController {
 
       let rumah123Block = '';
       try {
-        if (!catalogReady) {
+        if (!isRumah123EnabledForAI()) {
+          // ⚠️ Jalur ini DULU tidak punya pengecekan sama sekali: RUMAH123_DATA=OFF
+          // tetap memanggil Apify dan menyuntikkan listing Rumah123 ke prompt LLM
+          // chatbot web. Gerbang yang dikira sudah menutup, ternyata bocor di sini.
+          // AI hanya boleh merekomendasikan katalog agent sendiri (Property +
+          // PropertyImage + PropertyFacility).
+        } else if (!catalogReady) {
           // Belum saatnya menampilkan listing — lewati juga panggilan Apify.
         } else {
         const filters = recommendationContext.filters;

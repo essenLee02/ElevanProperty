@@ -380,9 +380,9 @@ sequelize.sync()
       // Apify tersedia, jadi warmup tetap jalan (membakar kuota Apify) meski
       // fitur live-fetch sudah dimatikan lewat toggle. Konsisten dengan gate
       // yang sama di whatsappPropertyContext.js.
-      const rumah123Enabled = String(process.env.RUMAH123_DATA || 'ON').toUpperCase() === 'ON';
+      const { isRumah123EnabledForAI, warmupCache } = require('./services/rumah123ContextService');
+      const rumah123Enabled = isRumah123EnabledForAI();
       if (rumah123Enabled && process.env.APIFY_API_TOKEN && process.env.APIFY_API_TOKEN !== 'isi_apify_token_anda') {
-        const { warmupCache } = require('./services/rumah123ContextService');
         const warmupLocations = (process.env.RUMAH123_WARMUP_LOCATIONS || 'Jakarta Selatan,Surabaya,Bandung,Bali').split(',').map(s => s.trim());
         setTimeout(() => {
           console.log('[Rumah123] Starting background cache warmup...');

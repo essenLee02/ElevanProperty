@@ -1663,6 +1663,20 @@ function extractQualificationState(history = [], currentMessage = '') {
         // Q5 SUDAH ditanya & dijawab → JANGAN diulang; tapi nilainya jujur:
         // customer tidak menyebut satu pun hal yang dihindari.
         state.redFlags = 'Tidak ada';
+        // ⚠️ TAPI PREFERENSINYA JANGAN DIBUANG (bug produksi villa Malang,
+        // 18 Agu 2026). Komentar M89 di atas berasumsi "kalimat yang sama sudah
+        // ditangkap sebagai patokan lokasi (Q6/anchorPoint) lewat 'dekat …'" —
+        // asumsi itu GAGAL bila jawaban Q5 tidak memakai kata "dekat", atau bila
+        // anchorPoint kemudian ditimpa jawaban Q6 yang sesungguhnya.
+        // Kasus nyata: Q5 dijawab "Saya mau tempat yang dingin, udaranya bersih,
+        // tempat sejuk, akses jalan strategis dengan tempat makanan" → redFlags
+        // jadi "Tidak ada", anchorPoint lalu diisi jawaban Q6 ("Dekat Ijen"),
+        // sehingga SELURUH preferensi customer lenyap dari summary: tidak ada
+        // baris Hindari, tidak ada baris Prefer. Padahal itu satu-satunya
+        // kalimat yang menjelaskan suasana yang ia inginkan.
+        // Simpan mentahnya di slot sendiri supaya LLM bisa merender baris Prefer
+        // (dan menurunkan lawan-negatifnya ke Hindari, lihat doc 04 §Q5).
+        if (!state.preferences) state.preferences = custResp;
       } else {
         state.redFlags = custResp;
       }
@@ -2440,6 +2454,10 @@ function buildQualificationStateBlock(state) {
         : (state.useCase === 'investasi' && !state.rentOutIntent) ? 'N/A — investasi/didiamkan (jangan tanya penghuni)'
         : null)),
     row('Red flags         [Q5]', state.redFlags),
+    // Preferensi POSITIF dari jawaban Q5 (mis. "mau yang sejuk, udara bersih").
+    // Baris terpisah supaya tidak tertukar dengan Hindari — arah maknanya
+    // berlawanan, dan pernah tertukar di produksi (M89b).
+    row('Prefer/suasana     [Q5]', state.preferences),
     row('Patokan lokasi    [Q6]', state.anchorPoint),
     row('Area alternatif   [Q7]', state.alternativeAreas),
     state.moveInDate === WAITING_THE_UPDATE

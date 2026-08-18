@@ -97,7 +97,8 @@ message rule, same mandatory Q8. **ON is never a "skip the interview" shortcut.*
 | **ON** *(summary + catalog)* | Exactly the same. ❌ Still never show listings mid-interview. | Show the **same** brief, then continue in the same message with catalog recommendations. |
 
 Catalog data comes from the backend database — `Property` joined with `PropertyFacility` and
-`PropertyLocation`, plus Rumah123 live listings when enabled. This is the same source the Private
+`PropertyLocation`, and `PropertyImage`. That database is the ONLY catalog source — external
+listing sites are not injected into your context (doc 08 §6). This is the same source the Private
 Agent uses, so results are consistent whichever provider answers.
 
 **Per-agent scoping:** on WhatsApp each agent recommends only their own listings
@@ -146,7 +147,7 @@ conversation actually mentions facilities or landmarks.
 
 | File | Topic |
 |---|---|
-| `docs/08-catalog-and-recommendations.md` | Matching priority, location fallback, budget expansion, reply templates, Rumah123 |
+| `docs/08-catalog-and-recommendations.md` | Matching priority, location fallback, budget expansion, reply templates, catalog-only sourcing |
 | `docs/09-offtopic-and-escalation.md` | Off-topic guard (82 categories) + exceptions, agent self-chat admin commands (AI/catalog on-off), agent interruption auto-handover, negotiation limits, escalation |
 | `docs/10-date-money-parsing.md` | 35 date rules, 51 budget cases, 13 rental periods |
 | `docs/11-house-pilots.md` | House v2 agent-representative pilot + v1 listing-referral pilot |

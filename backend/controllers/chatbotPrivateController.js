@@ -32,7 +32,8 @@ const { buildRecommendationContextForLLM,
         searchProperties }                    = require('../services/propertyRecommendationService');
 const { getRumah123Listings,
         mapBuildingTypeToApify,
-        mapTransactionTypeToApify }           = require('../services/rumah123ContextService');
+        mapTransactionTypeToApify,
+        isRumah123EnabledForAI }              = require('../services/rumah123ContextService');
 const { loadResponseSkillPrompt,
         getSkillRegistryStatus }              = require('../services/skillPromptService');
 const { hasPropertyKeyword,
@@ -4235,7 +4236,7 @@ class ChatbotPrivateService {
    */
   static async fetchRumah123Listings(filters = {}, sessionLocation = '') {
     // Check if Rumah123 data is enabled
-    const rumah123DataEnabled = String(process.env.RUMAH123_DATA || 'ON').toUpperCase() === 'ON';
+    const rumah123DataEnabled = isRumah123EnabledForAI();
     if (!rumah123DataEnabled) {
       console.log('[PrivateController] Rumah123 data disabled (RUMAH123_DATA=OFF) — using catalog only');
       return [];
@@ -4854,7 +4855,7 @@ exports.privateAgentStatus = (_req, res) => {
   const skillInfo  = ChatbotPrivateService.loadSkillInfo();
   const enabled    = String(process.env.ENABLE_CHATBOT_PRIVATE_CONTROLLER || 'true').toLowerCase() !== 'false';
   const apifyReady = Boolean(process.env.APIFY_API_TOKEN && process.env.APIFY_API_TOKEN !== 'isi_apify_token_anda');
-  const rumah123DataEnabled = String(process.env.RUMAH123_DATA || 'ON').toUpperCase() === 'ON';
+  const rumah123DataEnabled = isRumah123EnabledForAI();
 
   return res.json({
     success: true,

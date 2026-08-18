@@ -1189,11 +1189,44 @@ function detectBudget(message = '') {
   // "1.4 - 3.5 juta" which parses as a proper range.
   const text = normalizeText(message).replace(/\b(?:rp|idr)\s*(?=\d)/gi, '');
 
-  const period = /tahun|year|annual|per tahun|\/tahun/.test(text) ? 'year'
-    : /bulan|month|monthly|per bulan|\/bulan/.test(text) ? 'month'
-    : /malam|night|daily|hari|harian|\/malam/.test(text) ? 'night'
-    : /minggu|week|weekly|per minggu|\/minggu|seminggu/.test(text) ? 'week'
-    : '';
+  // ── PERIODE HARGA: utamakan satuan yang MENEMPEL pada angkanya ────────────
+  // Bug produksi (booking villa Malang, 18 Agu 2026): pesan
+  //   "saya book selama 7 hari. Saya cari yang harga 2-3 juta/minggu"
+  // menghasilkan periode 'night', bukan 'week'. Penyebabnya pemindaian LONGGAR
+  // di bawah: ia mencari kata periode DI MANA SAJA dalam kalimat, dan cabang
+  // 'night' (yang juga cocok dengan kata "hari") diperiksa SEBELUM 'week'.
+  // Akibatnya kata "hari" milik DURASI MENGINAP mengalahkan "/minggu" yang
+  // benar-benar menempel pada HARGA. Summary lalu mencetak
+  // "Rp 2.000.000 - Rp 3.000.000/malam" padahal customer dua kali menulis
+  // "/minggu" — angkanya benar, satuannya salah, dan agent membaca tarif
+  // mingguan sebagai tarif per malam (selisihnya 7×).
+  //
+  // Satuan yang menempel langsung pada angka ("2-3 juta/minggu", "800rb per
+  // malam") adalah pernyataan periode HARGA yang paling tegas — dipakai lebih
+  // dulu. Pemindaian longgar tetap dipertahankan sebagai fallback untuk kalimat
+  // tanpa satuan menempel ("budgetnya 5 juta, per bulan ya").
+  const attachedPeriod = text.match(
+    /\d[\d.,]*\s*(?:juta|jutaan|jt|ribu|rb|miliar|milyar)?\s*(?:\/|per\s+)\s*(tahun|year|bulan|month|minggu|week|malam|night|hari|harian|day)\b/i
+  );
+
+  const mapPeriodWord = (word) => {
+    const w = String(word || '').toLowerCase();
+    if (/^(tahun|year)/.test(w))            return 'year';
+    if (/^(bulan|month)/.test(w))           return 'month';
+    if (/^(minggu|week)/.test(w))           return 'week';
+    if (/^(malam|night|hari|harian|day)/.test(w)) return 'night';
+    return '';
+  };
+
+  const period = attachedPeriod
+    ? mapPeriodWord(attachedPeriod[1])
+    : (/tahun|year|annual|per tahun|\/tahun/.test(text) ? 'year'
+      : /bulan|month|monthly|per bulan|\/bulan/.test(text) ? 'month'
+      // "seminggu"/"per minggu" diperiksa SEBELUM cabang malam/hari: kata "hari"
+      // sangat sering datang dari durasi menginap, bukan dari satuan harga.
+      : /minggu|week|weekly|per minggu|\/minggu|seminggu/.test(text) ? 'week'
+      : /malam|night|daily|hari|harian|\/malam/.test(text) ? 'night'
+      : '');
 
   // Buang konteks LANTAI/TOWER sebelum parsing angka budget. Tanpa ini, jawaban Q12
   // "Antara lantai 15-20 aja" ATAU "Lantai antara 12-15 aja" salah terbaca sebagai

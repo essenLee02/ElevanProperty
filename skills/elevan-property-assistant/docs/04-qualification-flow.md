@@ -660,6 +660,9 @@ glued to it.
 | aman | Lingkungan rawan | Lingkungan aman |
 | jalan lebar | Gang sempit | Jalan lebar |
 | strategis | *(no natural opposite — Prefer only)* | Lokasi strategis |
+| **dingin / sejuk (hawa)** | **Tempat panas** | **Tempat yang sejuk/dingin** |
+| **udara bersih / segar** | **Udara kotor / berpolusi** | **Udara bersih** |
+| **dekat tempat makan / kuliner** | *(no natural opposite — Prefer only)* | **Dekat tempat makan** |
 
 ```
 ❌ ✓ Hindari: 1. Tempat yang sejuk : Hindari tempat yang panas
@@ -670,6 +673,39 @@ glued to it.
 Already-avoidance-framed statements (banjir, hadap barat, gang sempit, bising, rumah tua, rel
 kereta) go straight into `Hindari` **as-is**, with no Prefer counterpart.
 
+> **⛔ An all-positive Q5 answer still produces BOTH lines — never zero lines.**
+> Real production failure (booking villa Malang, 18 Agu 2026). Q5 was answered
+> *"Saya mau tempat yang dingin, udaranya bersih, tempat sejuk, akses jalan
+> strategis dengan tempat makanan"* — every clause a WISH, no avoidance word at
+> all. The brief shipped with **no `Hindari` line and no `Prefer` line**: the
+> customer's only description of the atmosphere they wanted vanished entirely.
+>
+> The state block hands you this as **two separate rows** — use both:
+>
+> ```
+> ✅ Red flags         [Q5]: Tidak ada
+> ✅ Prefer/suasana     [Q5]: Saya mau tempat yang dingin, udaranya bersih, …
+> ```
+>
+> `Red flags: Tidak ada` means the customer named nothing to avoid — it does
+> **not** mean they said nothing. Derive `Hindari` from the opposites table
+> above, and copy the wishes into `Prefer`:
+>
+> ```
+> ✅ ✓ Hindari:
+>    1. Tempat panas
+>    2. Udara kotor / berpolusi
+>    ✓ Prefer:
+>    1. Tempat sejuk
+>    2. Udara bersih
+>    3. Lokasi strategis dekat tempat makan
+>
+> ❌ (baris Hindari & Prefer tidak ada sama sekali)   ← preferensi customer hilang
+> ```
+>
+> ⚠️ If `Prefer/suasana [Q5]` is ✅ in the state block, a summary with **no**
+> `Prefer` line is wrong — that row exists precisely because this data was
+> being lost.
 > **⚠️ "mau ramai" is a POSITIVE wish, not a red flag.** → `Hindari: Tempat yang sepi`
 > + `Prefer: Tempat yang ramai`. Only treat "ramai" as avoidance when explicitly negated
 > ("jangan ramai", "jalan terlalu ramai", "bising").
@@ -1296,6 +1332,24 @@ the date **and** the hour before the line may appear.
 ❌ ✓ Viewing: *Besok*                          ← date without hour → ask the hour
 ```
 
+**7b. The budget PERIOD is the unit attached to the price — never the stay length.**
+Real production failure (booking villa Malang, 18 Agu 2026): the customer wrote
+*"saya book selama 7 **hari**. Saya cari yang harga 2-3 juta**/minggu**"* and repeated
+*"Yang sekitar 2-3 juta/minggu"*. The brief printed `Rp 2.000.000 - Rp 3.000.000`
+**/malam** — the *duration* word ("7 hari") had overwritten the *price* unit
+("/minggu"). The number was right; the unit was off by 7×, so the agent read a
+weekly budget as a nightly one.
+
+```
+❌ ✓ Budget: *Rp 2.000.000 - Rp 3.000.000/malam*     ← stay length hijacked the unit
+✅ ✓ Budget: *Rp 2.000.000 - Rp 3.000.000/minggu*    ← unit attached to the price
+   ✓ Durasi menginap: *7 hari*                      ← stay length is its OWN line
+```
+
+Two different facts, two different lines: **`/periode` on Budget** comes from what
+the customer attached to the money ("juta**/minggu**", "800rb **per malam**);
+**`Durasi`** comes from how long they stay ("book **selama 7 hari**"). Copy the
+period from the state block verbatim — never re-derive it from a duration phrase.
 **7. Sanity-check the budget against the property type before printing it.** A tier
 label must match the number beside it. Rp 100 juta–500 juta **per bulan** for a hotel
 room is not "Terjangkau" — it is a mis-mapped tier. If the range looks impossible for

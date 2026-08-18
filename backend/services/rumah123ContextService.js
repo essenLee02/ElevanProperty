@@ -368,6 +368,35 @@ class Rumah123ContextService {
 
 // ─── Exports (backward-compatible wrappers) ───────────────────────────────────
 
+/**
+ * Apakah data Rumah123 boleh masuk ke KONTEKS AI (prompt LLM & Private Agent)?
+ *
+ * SATU-SATUNYA sumber kebenaran untuk keputusan ini. Sebelumnya tiap pemanggil
+ * menuliskan sendiri `String(process.env.RUMAH123_DATA || 'ON') === 'ON'`, dengan
+ * dua akibat buruk:
+ *   1. `chatbotController.js` (chatbot WEB) TIDAK PERNAH mengeceknya sama sekali —
+ *      jadi RUMAH123_DATA=OFF pun, chatbot web tetap memanggil Apify dan
+ *      menyuntikkan listing Rumah123 ke prompt. Gerbang yang dikira menutup,
+ *      ternyata bocor di satu jalur.
+ *   2. Default-nya 'ON' (fail-OPEN). Menghapus satu baris di .env diam-diam
+ *      menyalakan kembali Rumah123 di SEMUA jalur AI.
+ *
+ * ⚠️ DEFAULT SENGAJA 'OFF' (fail-CLOSED). Keputusan bisnis: terminal message &
+ * AI hanya boleh merekomendasikan katalog milik agent sendiri (Property +
+ * PropertyImage + PropertyFacility). Listing pihak ketiga yang bukan milik agent
+ * tidak boleh muncul sebagai rekomendasi AI. Bila env hilang, yang aman adalah
+ * TIDAK menampilkan data eksternal — bukan sebaliknya.
+ *
+ * ⚠️ INI TIDAK MEMATIKAN HALAMAN RUMAH123. Route /api/rumah123/* (rumah123
+ * Controller.js) sengaja TIDAK memanggil fungsi ini — halaman Rumah123 tetap
+ * berfungsi penuh seperti biasa. Yang dimatikan hanya injeksi ke konteks AI.
+ *
+ * @returns {boolean}
+ */
+function isRumah123EnabledForAI() {
+  return String(process.env.RUMAH123_DATA || 'OFF').toUpperCase() === 'ON';
+}
+
 module.exports = {
   getRumah123Listings:      (params)    => Rumah123ContextService.getListings(params),
   formatRumah123ContextForLLM:(listings)=> Rumah123ContextService.formatForLLM(listings),
@@ -375,4 +404,5 @@ module.exports = {
   mapTransactionTypeToApify:(type)      => Rumah123ContextService.mapTransactionType(type),
   warmupCache:              (locations) => Rumah123ContextService.warmupCache(locations),
   getCacheStatus:           ()          => Rumah123ContextService.getCacheStatus(),
+  isRumah123EnabledForAI,
 };
