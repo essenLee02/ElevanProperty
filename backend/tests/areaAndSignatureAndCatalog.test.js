@@ -114,7 +114,15 @@ console.log('\n── M84 Group 5: Q7 tanpa area TIDAK boleh berbentuk "area *X*
   const d = buildFinalDirective(s, { agentName: 'LEO FELIX', appName: 'Elevan Property' });
   ok('direktif final memuat larangan mengarang area', /DILARANG menulis nama area/i.test(d));
   ok('larangan menyebut kota sebagai jangkar pengganti', /Selain \*Malang\*/i.test(d), d.slice(-400));
-  ok('⛔ direktif TIDAK memuat "Ciputra"', !/ciputra/i.test(d));
+  // ⚠️ M92 (18 Agu 2026) mengubah asersi ini SENGAJA. Larangan generik saja
+  // ("jangan mengarang area") terbukti TIDAK cukup — "Sidotopo" tetap dikarang
+  // dari contoh dokumen skill sendiri di produksi (kelas M83/M91: state bersih,
+  // model tidak patuh → obatnya CONTOH KONKRET, bukan aturan abstrak). Direktif
+  // kini SENGAJA menyebut "Ciputra"/"Sidotopo" secara eksplisit sebagai token
+  // TERLARANG — jadi kemunculan kata itu di direktif sekarang BENAR, bukan bug.
+  // Lihat tests/warehouseAreaInventionAndCompoundAvoid.test.js untuk kasusnya.
+  ok('direktif menamai "Ciputra" secara eksplisit sebagai token TERLARANG (M92)',
+    /ciputra.{0,30}(contoh dokumen|bukan customer)/i.test(d), d.slice(-400));
 
   // Kontrol negatif: saat area DIKETAHUI, larangan itu tidak boleh muncul
   // (kalau muncul, AI akan menolak memakai area yang sah).

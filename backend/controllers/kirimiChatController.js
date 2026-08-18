@@ -1091,7 +1091,7 @@ class KirimiChatController {
       return res.json({
         success: true,
         data   : {
-          server: { port: process.env.PORT || 5005, webhookUrl: 'POST /api/kirimi/webhook' },
+          server: { port: process.env.APP_PORT || 5005, webhookUrl: 'POST /api/kirimi/webhook' },
           api   : {
             base               : apiBase(),
             send_path          : sendPath(),

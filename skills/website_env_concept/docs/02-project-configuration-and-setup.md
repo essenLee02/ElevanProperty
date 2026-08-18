@@ -4,8 +4,8 @@
 
 ### Server
 ```env
-PORT=5055
-FRONTEND_PORT=5173
+APP_PORT=5055
+APP_FRONTEND_PORT=5173
 ```
 
 ### WhatsApp Terminal Selector
@@ -18,7 +18,7 @@ MASSEGE_TERMINAL=KIRIMI            # FONNTE,KIRIMI,TIMELINESAI
 
 ### ngrok (auto-start tunnel dari terminal backend)
 ```env
-ENABLE_NGROK=true                 # true = backend jalankan `ngrok http <PORT>` sbg child process
+ENABLE_NGROK=true                 # true = backend jalankan `ngrok http <APP_PORT>` sbg child process
 # NGROK_DOMAIN=your-reserved.ngrok-free.app   # opsional (paid plan)
 # NGROK_REGION=ap                             # opsional
 ```
@@ -146,7 +146,7 @@ PAGINATION_ROWS=8                # default page size — GeneralController.pageS
 ### Frontend (frontend/.env)
 ```env
 VITE_BACKEND_URL=http://localhost
-VITE_BACKEND_PORT=5055            # HARUS cocok dengan backend PORT (dulu keliru 5005)
+VITE_BACKEND_PORT=5055            # HARUS cocok dengan backend APP_PORT (dulu keliru 5005)
 VITE_DEV_SERVER_PORT=5173
 ```
 
@@ -176,7 +176,7 @@ npm run dev           # data properti diambil dari backend API, bukan file JSON
 | bcrypt | password hashing |
 | jsonwebtoken | JWT access/refresh tokens |
 | cookie-parser | read HttpOnly cookies |
-| axios | Claude/QWEN/DeepSeek + Fonnte/Kirimi/TimelinesAI HTTP calls |
+| axios | Private (chatbotPrivateController.js)/QWEN/DeepSeek/Kimi/Chat GPT/Claude + Fonnte/Kirimi/TimelinesAI HTTP calls |
 | google-spreadsheet | Google Sheets integration |
 | apify-client | Rumah123 live property data |
 | express-rate-limit | rate limiting (contact form: 5/15min) |

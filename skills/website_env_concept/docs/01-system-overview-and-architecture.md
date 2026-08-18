@@ -229,7 +229,7 @@ RUMAH123_DATA=OFF                  # ON=Apify live; OFF=DB/JSON extended_v3
 APIFY_API_TOKEN=apify_api_...
 
 # Server / Dev
-PORT=5055                          # frontend VITE_BACKEND_PORT harus 5055
+APP_PORT=5055                      # frontend VITE_BACKEND_PORT harus 5055
 ENABLE_NGROK=true                  # auto-start tunnel dari terminal backend
 FRONTEND_URL=http://localhost:5173
 ```

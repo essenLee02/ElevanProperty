@@ -106,7 +106,7 @@ console.log('\n── (c) nada Q10 mengikuti konteks menginap vs sewa ──');
 
   const book = [U('Saya ingin booking apartemen di Surabaya'), A('Di area mana?'), U('Daerah Gubeng'),
                 A('Sudah lihat berapa?'), U('Belum'), A(Q3), U('800 ribu'),
-                A('masuk bulan apa?'), U('checkin 15 agustus 2026'),
+                A('masuk bulan apa?'), U('checkin 2 bulan lagi'),
                 A('tinggal bersama siapa?'), U('teman kerja'), ...tail];
 
   const rent = [U('Saya mau sewa rumah di Surabaya'), A('Di area mana?'), U('Gubeng'),

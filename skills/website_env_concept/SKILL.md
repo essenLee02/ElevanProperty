@@ -153,7 +153,7 @@ GOOGLE_OAUTH_CLIENT_JSON_PATH / GOOGLE_OAUTH_REFRESH_TOKEN   # ⚠️ REFRESH_TO
 GOOGLE_CALENDAR_TIMEZONE=Asia/Jakarta
 
 # ngrok / Server
-ENABLE_NGROK=true                  PORT=5055   (frontend VITE_BACKEND_PORT=5055)
+ENABLE_NGROK=true                  APP_PORT=5055   (frontend VITE_BACKEND_PORT=5055)
 
 # Master data / Auth tambahan
 PAGINATION_ROWS=8                  # default page size, semua master data list

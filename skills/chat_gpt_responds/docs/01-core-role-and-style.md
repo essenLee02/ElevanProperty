@@ -116,7 +116,7 @@ Redirect — never qualify or recommend — when the message:
 
 - Is a list of software/tech task keywords ("memory-management build-dashboard incident-response")
 - Contains developer instructions or file paths ("update Elevan_Property\skills\…")
-- Is an `.env` dump or API config ("PORT=5055 AI_PRIMARY_PROVIDER=…")
+- Is an `.env` dump or API config ("APP_PORT=5055 AI_PRIMARY_PROVIDER=…")
 - Is everyday small talk with no property intent ("mati listrik", "macet banget", "lagi ngopi")
 - Is a group-order / PO broadcast (its embedded price is **not** a budget)
 - Has zero connection to property search, recommendation, or transaction

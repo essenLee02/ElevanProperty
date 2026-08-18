@@ -961,7 +961,7 @@ class TimelinesAIChatController {
       return res.json({
         success: true,
         data   : {
-          server: { port: process.env.PORT || 5005, webhookUrl: 'POST /api/timelinesai/webhook' },
+          server: { port: process.env.APP_PORT || 5005, webhookUrl: 'POST /api/timelinesai/webhook' },
           api   : { base: apiBase(), key_configured: !!String(process.env.TIMELINESAI_API_KEY || '').trim() },
           agents: agents.map(a => ({
             user_id          : a.user_id,

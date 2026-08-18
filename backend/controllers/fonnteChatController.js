@@ -998,7 +998,7 @@ class FonnteChatController {
       return res.json({
         success: true,
         data   : {
-          server: { port: process.env.PORT || 5005, webhookUrl: 'POST /api/fonnte-chat/webhook' },
+          server: { port: process.env.APP_PORT || 5005, webhookUrl: 'POST /api/fonnte-chat/webhook' },
           agents: agents.map(a => ({
             user_id          : a.user_id,
             name             : a.name,

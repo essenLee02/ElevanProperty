@@ -172,11 +172,20 @@ function buildFinalDirective(state, identity = {}) {
   // DeepSeek menghasilkan karangan yang SAMA, bukti ini priming korpus, bukan
   // kebetulan. Nilai itu lalu tersalin ke summary ("Area: Ciputra masih ok").
   // Satu baris di posisi 100% (M62) jauh lebih patuh daripada aturan di tengah.
+  // ── M92 — token spesifik yang TERBUKTI dikarang dari contoh dokumen sendiri ──
+  // Bug produksi 18 Agu 2026: customer beli gudang di JAKARTA, tidak pernah
+  // menyebut nama area apa pun (district null sepanjang chat, terverifikasi lewat
+  // simulasi extractQualificationState). Summary tetap menampilkan
+  // "✓ Area: Sidotopo" — kata itu HANYA ada di skill doc sendiri sebagai contoh
+  // ilustrasi ("Customer: 'Area Sidotopo' → ✓ Area: Sidotopo"). Larangan generik
+  // (paragraf di atas) TERBUKTI tidak cukup kuat melawan token yang sudah
+  // ter-prime di prompt yang sama — perlu larangan bernama, pola yang sama
+  // dengan kenapa M83/M91 butuh CONTOH KONKRET, bukan aturan abstrak lagi.
   const noAreaLine = state.district ? '' : `
-⛔ AREA (Q2c) BELUM DIKETAHUI. DILARANG menulis nama area/kawasan apa pun —
-   termasuk di pertanyaan Q7 dan di baris "Area" summary. Gunakan nama KOTA
-   sebagai jangkar ("Selain *${state.city || 'kota ini'}*, apakah area sekitar
-   masih oke?"). Nama area yang tidak pernah diketik CUSTOMER adalah karangan.`;
+⛔ AREA (Q2c) BELUM DIKETAHUI. DILARANG menulis nama area apa pun di Q7 atau
+   baris "Area" summary — termasuk "Sidotopo"/"Ciputra" (contoh dokumen,
+   BUKAN customer). Jangkar KOTA saja ("Selain *${state.city || 'kota ini'}*,
+   area sekitar masih oke?"). Area yang tidak diketik CUSTOMER = karangan.`;
 
   // ── Tanda tangan: nama SUDAH di-resolve, jangan tulis placeholder (M85) ───
   const sigLine = (identity.agentName && identity.appName) ? `

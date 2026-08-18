@@ -10,11 +10,11 @@ require('./models');
 const routes = require('./routes/index');
 
 const app = express();
-const port = process.env.PORT || 5000;
-const frontendPort = process.env.FRONTEND_PORT || 5173;
+const port = process.env.APP_PORT || 5000;
+const frontendPort = process.env.APP_FRONTEND_PORT || 5173;
 
 // CORS dengan credentials supaya cookie refresh_token bisa dibaca frontend
-// Hanya izinkan origin dari localhost:FRONTEND_PORT dan 127.0.0.1:FRONTEND_PORT
+// Hanya izinkan origin dari localhost:APP_FRONTEND_PORT dan 127.0.0.1:APP_FRONTEND_PORT
 const allowedOrigins = [
   `http://localhost:${frontendPort}`,
   `http://127.0.0.1:${frontendPort}`,
