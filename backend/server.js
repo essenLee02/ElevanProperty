@@ -10,16 +10,49 @@ require('./models');
 const routes = require('./routes/index');
 
 const app = express();
-const port = process.env.APP_PORT || 5000;
+// ⚠️ URUTAN INI PENTING UNTUK HOSTING (Hostinger/Passenger, Railway, Heroku, dll).
+// Platform hosting MENYUNTIKKAN port lewat `process.env.PORT` dan mem-proxy
+// trafik domain ke port itu. Aplikasi WAJIB mendengarkan port pemberian platform;
+// bila kita memaksa port sendiri (5055), proxy menembak port yang tidak ada
+// pendengarnya → domain membalas **503 Service Unavailable** walau prosesnya hidup.
+//
+// APP_PORT tetap dipakai untuk DEV lokal (nama sengaja di-prefix APP_ agar tidak
+// bentrok dengan variabel sistem). Jangan balik urutannya.
+const port = process.env.PORT || process.env.APP_PORT || 5000;
 const frontendPort = process.env.APP_FRONTEND_PORT || 5173;
 
-// CORS dengan credentials supaya cookie refresh_token bisa dibaca frontend
-// Hanya izinkan origin dari localhost:APP_FRONTEND_PORT dan 127.0.0.1:APP_FRONTEND_PORT
+// CORS dengan credentials supaya cookie refresh_token bisa dibaca frontend.
+// DEV: localhost:APP_FRONTEND_PORT. PRODUKSI: domain nyata dari APP_URL —
+// tanpa ini, frontend di https://propmatches.fun ditolak CORS meski backend hidup.
 const allowedOrigins = [
   `http://localhost:${frontendPort}`,
   `http://127.0.0.1:${frontendPort}`,
   `http://0.0.0.0:${frontendPort}`
 ];
+
+// APP_URL = origin publik aplikasi (mis. https://propmatches.fun).
+// Varian www ikut didaftarkan supaya pengunjung yang mengetik www tidak tertolak.
+(function registerProductionOrigins() {
+  const raw = String(process.env.APP_URL || '').trim().replace(/\/+$/, '');
+  if (!raw || /^https?:\/\/localhost/i.test(raw)) return;
+
+  const add = (o) => { if (o && !allowedOrigins.includes(o)) allowedOrigins.push(o); };
+  add(raw);
+
+  try {
+    const u = new URL(raw);
+    const host = u.host.replace(/^www\./i, '');
+    add(`${u.protocol}//${host}`);
+    add(`${u.protocol}//www.${host}`);
+  } catch { /* APP_URL bukan URL valid — cukup pakai bentuk mentahnya */ }
+}());
+
+// Origin tambahan (opsional, pisah koma) — mis. domain staging atau panel terpisah.
+String(process.env.CORS_EXTRA_ORIGINS || '')
+  .split(',')
+  .map((s) => s.trim().replace(/\/+$/, ''))
+  .filter(Boolean)
+  .forEach((o) => { if (!allowedOrigins.includes(o)) allowedOrigins.push(o); });
 
 app.use(cors({
   origin: function(origin, callback) {

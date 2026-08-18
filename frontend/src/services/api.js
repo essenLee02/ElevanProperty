@@ -1,10 +1,11 @@
 import axios from 'axios';
 import { refreshAccessToken, getCachedToken, clearCachedToken } from './authApi';
+import { BACKEND_BASE_URL } from './backendBaseUrl';
 
 // Construct API base URL from env variables
-const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost';
-const backendPort = import.meta.env.VITE_BACKEND_PORT || 5005;
-const baseURL = `${backendUrl}:${backendPort}/api`;
+// baseURL disusun oleh helper bersama supaya bentuk PRODUKSI (tanpa port,
+// mis. https://propmatches.fun/api) bisa dinyatakan — lihat backendBaseUrl.js.
+const baseURL = BACKEND_BASE_URL;
 
 const api = axios.create({
   baseURL,
