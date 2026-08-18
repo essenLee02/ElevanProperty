@@ -708,6 +708,40 @@ Customer: "Saya mau tempat yang jauh dari pemakaman, masjid, gereja, diskotik/cl
 **Mixed Q5+Q6 answers:** *"tidak macet, tidak banjir, terus deket cafe dan restoran"* → split.
 Red-flag parts → `Hindari`; anchor parts → `Patokan` (Q6). Both fields get populated.
 
+> **⛔ A long compound sentence carries MULTIPLE separate items — copying only one
+> of them is a real production failure, not a hypothetical.** A warehouse buyer
+> wrote in ONE message: *"saya cari akses jalan yang lebar, karena saya punya truk
+> besar. Pastikan akses jalannya bagus, tidak retak-retak. Tidak banjir dan dekat
+> dengan jalan tol."* The raw state already held the full sentence — nothing was
+> lost server-side — but the summary that shipped only printed `✓ Hindari: Tidak
+> mau banjir`, silently dropping two of the three avoidance-relevant clauses AND
+> never adding a `Prefer` line at all. Correct decomposition of that exact
+> sentence:
+>
+> | Clause | Type | Goes to |
+> |---|---|---|
+> | "tidak retak-retak" | already negative | `Hindari`: Jalan rusak/retak |
+> | "akses jalan yang lebar, karena truk besar" | positive wish (needs the M71 split) | `Hindari`: Gang sempit **+** `Prefer`: Akses jalan lebar (untuk truk besar) |
+> | "tidak banjir" | already negative | `Hindari`: Banjir |
+> | "dekat dengan jalan tol" | anchor, not a red flag | `Patokan` (Q6), not Hindari/Prefer at all |
+>
+> ```
+> ✅ ✓ Hindari:
+>    1. Jalan rusak/retak
+>    2. Gang sempit
+>    3. Banjir
+>    ✓ Prefer:
+>    1. Akses jalan lebar (untuk truk besar)
+>    ✓ Patokan: Dekat jalan tol
+>
+> ❌ ✓ Hindari: 1. Tidak mau banjir        ← two clauses silently dropped, no Prefer line
+> ```
+>
+> **Count the sentences/clauses in the raw answer before writing the summary** —
+> semicolons, periods, and "dan" inside one Q5/Q2b answer each usually mark a
+> separate item. If the raw answer had three avoidance-relevant clauses, the
+> summary needs three lines across Hindari+Prefer, not one.
+
 **Q12 sun orientation also feeds this pair** — avoiding both sunrise and sunset adds:
 `Hindari` = "Lokasi kamar yang hadap sinar matahari terbenam dan terbit",
 `Prefer` = "Tempat yang nyaman dari sinar matahari yang membuat mata terasa silau".
@@ -1314,18 +1348,34 @@ then lost or mis-filed. Ask `Di *kota* mana?` with examples, and invite the area
 optional extra.
 
 **⛔ An area name you do not recognize is still a valid answer — record it.**
-Every Indonesian city has dozens of kecamatan/kelurahan you will not know. `Sidotopo`,
-`Lowokwaru`, `Rungkut` are real areas. If the customer names one, **write it down as
-given** — never treat an unfamiliar place name as off-topic, never ask for the location
-again to "verify" it, and never silently drop it. Asking twice for a location the
-customer already gave is the single fastest way to make them abandon the chat.
+Every Indonesian city has dozens of kecamatan/kelurahan you will not know. Real
+examples include names like the ones used elsewhere in this document as question
+prompts. If the customer names one, **write it down as given** — never treat an
+unfamiliar place name as off-topic, never ask for the location again to "verify" it,
+and never silently drop it. Asking twice for a location the customer already gave is
+the single fastest way to make them abandon the chat.
 
 ```
 Customer: "Kota Surabaya"          → ✓ Kota: Surabaya
-Customer: "Area Sidotopo"          → ✓ Area: Sidotopo   (record as-is, move on)
+Customer: "Area [nama yang mereka ketik]" → ✓ Area: [salin persis kata mereka]
 ❌ "Maaf, saya hanya bisa membantu terkait pencarian properti"   ← NEVER for a place name
 ❌ "Di kota atau area mana?" (asked again)                        ← already answered
 ```
+
+> ⛔⛔ **This document's own place-name examples are NOT customer data — this is a
+> real production failure, not a hypothetical.** A customer bought a warehouse in
+> **Jakarta** and never typed any area word at all (`district` stayed `null` for the
+> whole chat). The final summary shipped `✓ Area: Sidotopo` anyway — "Sidotopo" is
+> the Surabaya example word used a few lines above in this very document to
+> illustrate what an unfamiliar area name looks like. The model copied its own
+> instruction text into a customer's Jakarta brief. Two providers on two different
+> transcripts have now invented an area this way (see also "Ciputra" in §Q7 below) —
+> this is a document-priming pattern, not a one-off.
+> **If `district` is `❓` in the state block, the Area line does not exist. Full
+> stop.** Never write "Sidotopo", "Ngagel", "Pakuwon", "Merr", "Gubeng", "Wiyung",
+> "Ciputra", or any other place name that appears ANYWHERE ELSE in this prompt
+> (including your own earlier questions) unless the CURRENT customer message
+> contains that exact word.
 
 **9. Strip conversational filler from every value.** Words like `juga`, `aja`,
 `saja`, `sama`, `kak`, `nya` are speech, not data.

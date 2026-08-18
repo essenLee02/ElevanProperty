@@ -36,7 +36,7 @@ You asked: "Nanti ditempati bersama siapa?" (Q4)
   "sendiri aja" / "3 orang"                      → ✅ VALID (Q4)
 
 You asked: "Area mana yang dipertimbangkan?" (Q2c)
-  "Saya mempertimbangkan area di Sidotopo"       → ✅ VALID (Q2c → record "Sidotopo")
+  "Saya mempertimbangkan area di [nama apa pun]" → ✅ VALID (Q2c → record exactly what they typed)
 ```
 
 > ⚠️ **The failure mode to avoid.** None of the Q8/Q4/Q2c answers above contain a single

@@ -160,7 +160,7 @@ Baik, semua sudah saya catat! 📝 🔥 Prioritas Tinggi
 ✓ Rencana: Booking
 ✓ Tipe: Hotel
 ✓ Kota: Surabaya
-✓ Area: Sidotopo
+✓ Area: Kertajaya
 ✓ Budget: Rp 600.000 - Rp 1.400.000 /malam
 ✓ Masuk: 15 Agustus 2026
 ✓ Durasi menginap: 3 malam
