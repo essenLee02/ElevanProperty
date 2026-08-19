@@ -1,0 +1,1788 @@
+================================================================================
+  ELEVAN PROPERTY — COMPREHENSIVE PROJECT CONTEXT (V8)
+  Dibuat  : 15 Juni 2026
+  Update  : 18 Agustus 2026 (M94–M100: ngrok authtoken, gerbang Q4/off-topic,
+            karangan area dari contoh dokumen sendiri, parser tanggal "checkin",
+            Rumah123 dimatikan total untuk AI, periode budget vs durasi menginap,
+            deploy Hostinger produksi)
+  Tujuan  : SATU file konteks lengkap untuk di-upload ke Claude Code
+  Isi     : Overview · Instrument · Review · Pengembangan · Solusi ·
+            Environments · Informasi · Skills · Tujuan · Roadmap ·
+            Struktur Project · Workflow · Troubleshoot Summary
+  Riwayat : CONTEXT.txt (17 Jun) → _PROJECT_CONTEXT.txt (25 Jun) → V3 (07 Jul)
+            → V4 (20 Jul) → V5 (31 Jul) → V6 (3 Agu) → V7 (4→12 Agu)
+            → V8 (14→18 Agu, file ini = TERBARU)
+  Pendamping: skills/website_env_concept/ (docs 00–19) untuk detail teknis
+            per-topik bila perlu me-reproduksi/mengembangkan ulang modul.
+================================================================================
+
+
+>> BACA INI DULU — EMPAT HAL YANG PALING SERING MENYESATKAN <<
+
+  1. CEK JALUR PRODUKSI SEBELUM MENDIAGNOSIS APA PUN.
+     Ada DUA basis kode qualification yang MIRIP tapi TERPISAH:
+       • services/aiPromptBuilderService.js   → jalur LLM (Claude/ChatGPT/…)
+       • controllers/chatbotPrivateController.js → Private Agent (FALLBACK)
+     `AI_PRIMARY_PROVIDER=chatgpt` (nilai AKTUAL per 14 Agu 2026 — SELALU cek
+     .env, JANGAN asumsikan dari dokumen mana pun, nilainya berubah antar sesi).
+     Memperbaiki Private Agent tidak akan mengubah apa pun yang dilihat
+     customer bila primary bukan 'private'. Sudah berkali-kali diagnosis salah
+     arah karena ini (M52, M54). Verifikasi: `grep AI_PRIMARY_PROVIDER
+     backend/.env` + log runtime `[WhatsAppAI] Calling AI provider: {…}`.
+
+  2. STATE SELALU DARI HISTORY PENUH — JANGAN PERNAH DIPOTONG.
+     `extractQualificationState()` dipanggil DI DALAM buildWhatsappReplyPrompt.
+     Memotong `history` sebelum memanggil builder = memotong input state =
+     seluruh field jadi null pada percakapan panjang = loop tanya-ulang tanpa
+     akhir (M64, pengulangan M35). Pemotongan token HANYA boleh mengenai
+     transkrip yang DITAMPILKAN (`AI_PROMPT_DISPLAY_TURNS`, default 20).
+
+  3. MENAMBAH ATURAN PROMPT ADA HARGANYA — PAKAI EKSTRAKTOR KODE SEBALIKNYA.
+     Prompt WhatsApp per pesan ±67K token (lihat §8 UKURAN PROMPT — SUDAH
+     melampaui plafon TPM gpt-4o-mini 60.000/menit). Tiap aturan baru
+     memperburuk rasio sinyal:derau dan menurunkan kepatuhan model secara
+     global (M62). Bila sebuah loop bertahan MESKIPUN DIREKTIF FINAL sudah
+     benar → yang kurang adalah EKSTRAKTOR (kode), bukan aturan prompt.
+     ⚠️ PENGECUALIAN (M83): bila server state SUDAH null/clean tapi LLM tetap
+     MENGARANG nilai di summary, itu BUKAN bug ekstraksi — model mengabaikan
+     "never invent". Obatnya CONTOH KONKRET before/after, bukan aturan abstrak.
+
+  4. ⭐ BARU (V8) — RAG ADA DI KODE TAPI MATI SECARA DEFAULT (RAG_ENABLED=OFF).
+     Lapisan RAG (services/ragRetrievalService.js dkk.) SUDAH ditulis, DIUJI
+     (52/52 tes baru), dan DI-WIRE ke kedua jalur (LLM via whatsappAIService.js
+     + Private Agent via chatbotPrivateController.js) — tapi TIDAK AKTIF
+     sampai seseorang men-set `RAG_ENABLED=ON` dan menjalankan
+     `node scripts/build-rag-index.js`. Jangan asumsikan RAG sedang membantu
+     jawaban AI hanya karena kodenya ada. Cek `RAG_ENABLED` di .env dan
+     `backend/data/rag-index.json` ada/tidak sebelum mendiagnosis apa pun
+     terkait "kenapa AI tidak tahu soal SHM/HGB/KPR". Detail lengkap → §5 M92.
+
+
+>> PERUBAHAN BESAR V7 → V8 (12 Agu → 14 Agu 2026): RAG + GAMBAR PROPERTI <<
+
+  Sesi ini fokus pada DUA permintaan besar pemilik proyek: (1) upgrade AI agar
+  bisa "belajar" dari data/dokumen tambahan (RAG) untuk topik jual-beli
+  properti Indonesia yang lebih luas dari sekadar Q1–Q14, dan (2) AI bisa
+  mengirim satu gambar acak milik properti saat merekomendasikan.
+
+  1. LAPISAN RAG — NODE-NATIVE, TANPA VECTOR DATABASE, TANPA DEPENDENCY BARU.
+     Dibangun dari nol: `utils/ragChunker.js` (chunking Markdown sadar-heading,
+     tabel/kode TIDAK PERNAH dipotong), `services/embeddingService.js` (mode
+     `openai` via CHAT_GPT_API_KEY yang sudah ada, ATAU mode `local` hashing-
+     trick offline untuk tes/fallback), `services/vectorStoreService.js`
+     (cosine in-memory + MMR, persist ke JSON — BUKAN tabel MySQL baru, demi
+     menghindari urutan boot rapuh ensureRequiredDatabaseColumns→sequelize.sync),
+     `services/ragRetrievalService.js` (3 namespace: skill_docs, property_
+     knowledge, agent_catalog), `scripts/build-rag-index.js` (indexer offline).
+     ⚠️ Vector database (Chroma/Pinecone/dst) SENGAJA TIDAK dipakai — korpus
+     proyek ini ±1.500 vektor, cosine JS atas itu <2ms; menambah vector DB
+     hanya menambah dependency + mode kegagalan baru untuk skala yang tidak
+     membutuhkannya.
+     ⚠️ LangChain.js SENGAJA TIDAK dipakai meski diminta sebagai referensi
+     arsitektur (repo Python WorldBank WhatsApp-RAG-Example). Proyek ini SUDAH
+     punya abstraksi 6-provider LLM sendiri (aiProviderService), ingestion
+     dokumen sendiri, dan sekarang retrieval sendiri — LangChain.js akan
+     menambah ~50+ dependency transitif yang MENDUPLIKASI kode yang sudah
+     jalan, bertentangan dengan package.json proyek ini yang sengaja hanya
+     berisi 15 dependency yang benar-benar dipakai.
+
+  2. KEPUTUSAN ARSITEKTUR PALING PENTING — ATURAN INTI TIDAK PERNAH LEWAT RAG.
+     Hanya dokumen REFERENSI (doc 07 property playbooks, 08 catalog, 10 date/
+     money, 11 house pilots, 12 facilities, 13 locations) yang boleh diambil
+     lewat RAG. Aturan PERILAKU inti — never-invent, satu-pertanyaan-per-pesan,
+     state block sumber kebenaran, DIREKTIF FINAL, identitas agent, kontrak
+     3-keadaan katalog — SELALU dimuat penuh, TIDAK PERNAH via retrieval.
+     Alasan TERUKUR: mode embedding lokal (fallback wajib saat API mati) sering
+     menaruh chunk yang BENAR di peringkat 2–3, bukan 1 (dibuktikan lewat tes
+     manual — lihat §5 M92 detail). Bila aturan "jangan pernah mengarang nama
+     area" (M84) bergantung pada satu kali retrieval yang tepat, satu kali
+     meleset = regresi bug yang sudah susah payah diperbaiki bulan lalu.
+
+  3. KORPUS PENGETAHUAN JUAL-BELI PROPERTI INDONESIA (BARU).
+     `knowledge/property-id/*.md` (3 berkas, ~390 baris total): legalitas &
+     sertifikat (SHM/HGB/SHMSRS/girik, AJB/PPJB/balik nama/roya, PBG/SLF, due
+     diligence), proses transaksi & pajak (alur beli second vs developer,
+     BPHTB/PPh/PPN, siapa menanggung apa, istilah umum), KPR & pembiayaan
+     (jenis kredit termasuk syariah & subsidi FLPP, DP/SLIK/appraisal, over
+     kredit resmi vs bawah tangan). Setiap berkas membawa PERINGATAN AKURASI
+     eksplisit: angka pajak/bank BERUBAH antar tahun & daerah, AI WAJIB
+     mengarahkan ke tim untuk kepastian, TIDAK PERNAH menghitung cicilan/
+     menilai kelayakan kredit customer.
+     ⚠️ SENGAJA di `knowledge/`, BUKAN di `skills/*/docs/` — menaruhnya di
+     folder skill akan membuatnya ikut ALWAYS-LOADED ke setiap prompt (lawan
+     dari tujuan RAG: hanya diambil saat relevan).
+
+  4. WIRING KE KEDUA JALUR PRODUKSI (pelajaran M52/M54 dipatuhi — kedua jalur
+     harus sama-sama dapat manfaat, bukan cuma satu).
+     (a) Jalur LLM: `whatsappAIService.js` menghitung `ragContext` (fail-open,
+         await buildRagContext()) lalu mengalirkannya lewat `extraContext`
+         yang SUDAH ada (pola sama dengan facilityContext/cityContext) ke
+         `aiPromptBuilderService.buildWhatsappReplyPrompt()` — fungsi itu
+         SENGAJA TETAP SINKRON (tidak diubah jadi async), menghindari ripple
+         ke 5 provider services (claude/deepseek/kimi/openai/qwen) yang
+         semuanya memanggilnya.
+     (b) Jalur Private Agent (DETERMINISTIK, tanpa generasi bahasa bebas):
+         `chatbotPrivateController.js` mendapat `#tryKnowledgeAnswer()` yang
+         dipanggil TEPAT SEBELUM kedua guard off-topic mengembalikan redirect
+         generik. Berbeda dari jalur LLM, ini murni EKSTRAKTIF — mengutip
+         verbatim potongan korpus dengan ambang skor lebih TINGGI (0.30 vs
+         0.12 di jalur LLM) karena tidak ada model bahasa di belakangnya untuk
+         menyaring false positive.
+     ⚠️ BUG DITEMUKAN & DIPERBAIKI SAAT VERIFIKASI: chunker sempat menghasilkan
+     chunk "yatim" (heading H2 tanpa isi karena badannya langsung mulai di H3
+     berikutnya, mis. "## Jenis Sertifikat Tanah & Bangunan" tanpa paragraf
+     pembuka) — bila chunk itu yang terambil, Private Agent mengutip HANYA
+     judul tanpa isi. Diperbaiki di DUA lapis: (1) ragChunker.js tidak lagi
+     menghasilkan chunk badan-kosong sama sekali, (2) answerKnowledgeQuestion()
+     mengambil top-5 kandidat dan memilih yang PERTAMA dengan isi ≥150 karakter,
+     bukan otomatis peringkat #1.
+
+  5. ⛔ BUG DITEMUKAN & DIPERBAIKI SAAT VERIFIKASI — KATALOG SEMANTIK BISA
+     BOCOR MID-INTERVIEW. Desain awal `buildRagContext()` menyertakan blok
+     katalog (`retrieveAgentCatalog`) secara OTOMATIS setiap kali agentUserId
+     tersedia. Tapi `buildRagContext()` dipanggil pada SETIAP giliran WhatsApp,
+     TERMASUK selama Q1–Q12 masih berjalan — menyalakannya tanpa syarat berarti
+     rekomendasi properti semantik bisa muncul SEBELUM brief tampil, melanggar
+     langsung "❌ Never show listings mid-interview" (SKILL.md §4, berlaku
+     bahkan saat RESPOND_CATALOG_RUN=ON). Fix: `includeAgentCatalog` dibuat
+     opt-in (default **false**) — pemanggil harus SENGAJA mengaktifkannya.
+     Saat ini TIDAK ADA pemanggil produksi yang mengaktifkannya (infrastruktur
+     siap, belum dipakai) — lihat §10 ROADMAP untuk kapan ini perlu diaktifkan.
+     Regresi: tests/ragRetrieval.test.js kontrol negatif eksplisit untuk kasus
+     ini (agentUserId diisi TAPI includeAgentCatalog tidak di-set → katalog
+     TIDAK ikut).
+
+  6. PENGIRIMAN GAMBAR PROPERTI (BARU, OFF secara default).
+     `services/propertyImageService.js` — memilih SATU gambar ACAK per
+     properti dari `PropertyImage.js` (kolom `url` berisi path RELATIF, mis.
+     `/assets/image_data/P001/foto1.jpg`) dan meresolusinya jadi URL ABSOLUT
+     yang bisa diakses WhatsApp (Kirimi butuh URL publik, bukan localhost).
+     Prioritas basis URL: `PROPERTY_IMAGE_PUBLIC_BASE_URL` (WAJIB diisi domain
+     sungguhan di produksi) → fallback tunnel ngrok aktif (dev, lewat
+     `ngrokService.getCachedNgrokUrl()`, BARU — sebelumnya URL ngrok hanya
+     di-log, tidak pernah disimpan untuk dipakai ulang) → null (fail-open,
+     TIDAK mengirim URL rusak/localhost ke WhatsApp).
+     `kirimiChatController.sendViaKirimi()` diberi parameter ke-4 opsional
+     `mediaUrl` yang memetakan ke field `media_url` yang SUDAH terdokumentasi
+     di komentar kepala berkas itu (API Kirimi mendukungnya) tapi belum
+     pernah diimplementasikan — SATU fungsi yang sama dipakai (retry/error-
+     handling TIDAK diduplikasi, menghindari kelas bug M27/M77 "salinan
+     fungsi kirim antar-terminal berbeda perilaku").
+
+  7. ⛔ KORELASI KARTU↔GAMBAR — KEPUTUSAN DESAIN FAIL-CLOSED, BUKAN BY-INDEX.
+     Balasan katalog dibentuk LLM dari teks bebas; TIDAK membawa property_id
+     terstruktur yang bisa dilacak balik dengan pasti, dan urutan/jumlah
+     kartu bisa berbeda dari array asal (LLM bisa menyingkat/menata ulang).
+     Mencocokkan gambar ke kartu berdasarkan URUTAN berisiko mengirim gambar
+     properti yang SALAH — kesalahan lebih buruk daripada tidak mengirim sama
+     sekali. Keputusan: `getImagesForMentionedProperties()` hanya mengirim
+     gambar untuk properti yang JUDULNYA benar-benar muncul (substring, case-
+     insensitive) di teks balasan yang SUDAH terkirim ke customer. Gagal-aman:
+     ketidakcocokan berarti NOL gambar terkirim, bukan gambar yang salah.
+     Dibatasi `PROPERTY_IMAGE_MAX_PER_REPLY` (default 3) agar satu balasan
+     tidak memicu banjir pesan gambar.
+
+  8. WIRING SATU CALL-SITE (Kirimi — satu-satunya terminal AKTIF; lihat
+     MESSAGE_TERMINAL=KIRIMI di .env). Fonnte/TimelinesAI TIDAK disentuh —
+     tidak aktif di produksi saat ini, jadi tidak diberi kapabilitas media
+     untuk menghindari perubahan tak teruji di jalur yang tidak dipakai.
+     Gambar dikirim SETELAH seluruh teks balasan sukses terkirim, sepenuhnya
+     non-fatal (kegagalan kirim gambar TIDAK PERNAH mengubah status "✅
+     Terkirim" balasan teks). Gate: `PROPERTY_IMAGE_SEND_ENABLED=OFF` default.
+
+  9. BELUM DIKERJAKAN (jujur, per permintaan pemilik proyek yang lebih luas
+     dari yang sempat diselesaikan sesi ini — lihat §10 ROADMAP untuk detail):
+       - Mode embedding HuggingFace (diminta eksplisit, BELUM diimplementasi —
+         baru `openai` dan `local` yang ada di embeddingService.js)
+       - Update skill docs KETIGA folder AI-facing (claude_responds,
+         chat_gpt_responds, elevan-property-assistant) agar menyebutkan
+         kapabilitas RAG & pengiriman gambar — kode SUDAH jalan, dokumentasi
+         skill BELUM disentuh sesi ini
+       - Verifikasi kualitas retrieval dengan embedding OpenAI ASLI (mode
+         `local` terbukti kadang salah rangking pada query pendek — lihat
+         §5 M92 detail pengujian)
+       - "Chat lebih manusiawi memperhatikan emosi customer" — SEBAGIAN BESAR
+         SUDAH ADA sejak V6/V7 (doc 06 §3 C1–C9, terutama C5 tabel 16-baris
+         trigger keluhan spesifik per tipe properti); TIDAK ada penambahan
+         baru sesi ini untuk poin ini secara spesifik
+       - "AI harus tau kota+tipe transaksi+tipe properti+harga sebelum
+         rekomendasi" & "pertanyaan yang bisa ditolak" — SUDAH terimplementasi
+         sejak V6/V7 (Pre-Qualification Gate §1 doc04; REFUSABLE questions
+         §3.1 doc04); bukan fitur baru sesi ini
+
+  10. BASELINE TES — SUDAH DIVERIFIKASI ULANG SETIAP LANGKAH SESI INI.
+      V7 akhir: 1353/1374 (48 berkas). +RAG core (chunker/embedding/store):
+      1383/1404 (+30, tests/ragRetrieval.test.js awal). +wiring ke prompt
+      builder + Private Agent: 1385/1406 (+2, kontrol negatif katalog mid-
+      interview). +chunker fix (orphan heading) + picker fix (skip badan
+      kosong): tetap 1385/1406 (tidak ada tes baru, perbaikan kualitas murni).
+      +propertyImageService: **1405/1426** (+20, tests/propertyImageService.
+      test.js). 21 kegagalan pre-existing SAMA PERSIS sepanjang sesi ini:
+      customerDateParser 54/69 · extractFilters 109/112 · housePilot 66/69.
+      Nol crash, nol berkas gagal baru di luar ketiganya, di SETIAP checkpoint.
+
+
+================================================================================
+  1. OVERVIEW
+================================================================================
+
+Elevan Property = platform manajemen properti berbasis web + AI chatbot WhatsApp
+multi-agent untuk pasar Indonesia. Menghubungkan agen properti dengan calon
+pembeli/penyewa lewat WhatsApp, memakai AI untuk mengkualifikasi kebutuhan
+customer secara otomatis (Q1–Q14), lalu menghasilkan brief/rekomendasi —
+kini BISA DILENGKAPI (opsional, OFF default) pengetahuan jual-beli properti
+Indonesia lewat RAG dan gambar properti acak lewat WhatsApp.
+
+Konsep inti:
+  - Website + floating chatbot pencarian properti (publik, tanpa login)
+  - WhatsApp chatbot multi-agent: tiap agent punya nomor/device sendiri
+  - AI 6-opsi: satu PRIMARY (via env, saat ini `chatgpt`) → Private Agent
+    (deterministik, selalu ada sebagai fallback)
+  - Qualification flow Q1–Q14 SELALU jalan; RESPOND_CATALOG_RUN hanya
+    mengontrol apakah katalog ditampilkan SETELAH summary
+  - Data properti: DB (per-agent) + JSON fallback + Rumah123 live (opsional)
+  - Landmark: peta kurasi 45 kota + Google Places live (dorman, billing off)
+  - ⭐ BARU: RAG (retrieval-augmented generation) — pengetahuan jual-beli
+    properti Indonesia (legalitas/pajak/KPR) + referensi skill docs besar,
+    diambil hanya saat relevan, TIDAK menggantikan aturan perilaku inti
+  - ⭐ BARU: pengiriman gambar properti acak via WhatsApp saat rekomendasi
+  - Admin dashboard: CRUD Country/Province/City/Location/Facility/Property/
+    Customer (7 modul)
+
+Pengguna:
+  - AGENT   : kelola katalog & percakapan sendiri; bisa takeover AI per-customer
+  - CUSTOMER: chat via WhatsApp, dikualifikasi AI, terdaftar otomatis
+  - ADMIN   : master data & monitoring
+
+Deployment:
+  - Frontend : https://propmatches.fun (Hostinger, sejak M100/18 Agu — pindah
+               dari Netlify; panduan lengkap → DEPLOY_HOSTINGER.md)
+  - Backend  : Node.js — APP_PORT=5055 dev, process.env.PORT (platform) di
+               produksi (M100) · ngrok auto-start untuk dev webhook
+  - Database : MySQL `db_property` (Sequelize ORM v6) — produksi memakai DB
+               Hostinger, kredensial lokal masih di .env (lihat M100/§2 belum
+               diisi — perlu password Hostinger milik user)
+
+Developer:
+  - Owner : Nigel (nigel@iil.co.id)
+  - Stack : Windows 10/11, VS Code + Claude Code, PowerShell + Bash
+  - Lokasi: C:\Users\nigel\Documents\Elevan_Property
+
+
+================================================================================
+  2. INSTRUMENT / TEKNOLOGI
+================================================================================
+
+BACKEND
+  Runtime      : Node.js (CommonJS, BUKAN ESM), v25.9.0 di mesin dev
+  Framework    : Express 4.x           Port: APP_PORT=5055 (dev) — produksi
+                                        dengar process.env.PORT platform (M100)
+  ORM          : Sequelize 6.x + mysql2 3.x     DB: MySQL db_property
+  Auth         : JWT (access pendek + refresh HttpOnly cookie) + bcrypt
+  Rate Limit   : express-rate-limit
+  AI APIs      : axios (Claude/QWEN/DeepSeek/Kimi raw HTTP + ⭐ OpenAI
+                 embeddings /v1/embeddings untuk RAG); openai-style REST
+                 langsung (BUKAN paket `openai` SDK — tidak ada di
+                 package.json, semua panggilan API pakai axios manual)
+  Scraping     : apify-client (Rumah123)
+  Google       : google-auth-library + google-spreadsheet (Contact → Sheets)
+                 Google Places (landmark — DORMAN, billing off)
+                 Google Calendar (OAuth 2.0 — refresh token belum diisi)
+  ⭐ RAG       : TANPA dependency baru. utils/ragChunker.js (chunking Markdown
+                 murni Node), services/embeddingService.js (axios ke OpenAI
+                 ATAU hashing-trick lokal — nol dependency ML), services/
+                 vectorStoreService.js (cosine in-memory murni JS, TANPA
+                 vector database — lihat §5 M92 untuk alasan skala)
+  Dev Tool     : nodemon        Tunnel: ngrok (services/ngrokService.js,
+                 ⭐ kini men-cache URL publik untuk dipakai ulang oleh
+                 propertyImageService)
+  Skala kode   : 17 model · 25 controller · 26 service (+propertyImageService,
+                 +embeddingService, +vectorStoreService, +ragRetrievalService)
+                 · 29 util (+ragChunker) · 50 file test (+ragRetrieval,
+                 +propertyImageService)
+
+FRONTEND
+  Framework    : Vue 3 (Composition API, <script setup>)
+  Bundler      : Vite 8 (ESM)   Router: vue-router 5   HTTP: axios (silent refresh)
+  Notifikasi   : vue3-toastify
+  CSS          : Bootstrap 5.3.8 + 12 file elevan-*.css kustom
+  Icons        : Font Awesome 7.2.0      JS Lib: jQuery 4.0.0 (Function_Path)
+  Table Engine : CookieFast (window.tableModal / loadModalPagination)
+
+AI PROVIDERS (satu PRIMARY via env → Private Agent; TANPA cross-AI di jalur
+normal — cross-AI hanya di fallback chain saat primary='private' gagal)
+  chatgpt  → OpenAI gpt-4o-mini            ← NILAI AKTUAL saat ini (14 Agu 2026)
+             ⚠️ TPM org 60.000/menit. Prompt per pesan ±67K token (LEBIH BESAR
+             dari plafon — lihat §8 UKURAN PROMPT). Lihat §5 M62/M64 sebelum
+             menambah apa pun ke prompt LANGSUNG (di luar RAG opt-in).
+  claude   → Anthropic claude-3-haiku      (CLAUDE_MODEL)
+  qwen     → Alibaba DashScope             (QWEN_MODEL)
+  deepseek → DeepSeek deepseek-v4-flash    ⚠️ WAJIB v4 (v4-flash|v4-pro)
+  kimi     → Moonshot AI kimi-k3           (KIMI_MODEL) ⚠️ top_p WAJIB 0.95
+  private  → Private Agent deterministik langsung — ⭐ kini punya jawaban
+             EKSTRAKTIF untuk pertanyaan pengetahuan properti via RAG
+             (lihat §5 M92 poin 4b), tanpa melanggar sifat deterministiknya
+  Fallback: PRIMARY gagal → Private Agent (BUKAN provider eksternal lain di
+  jalur normal). Eksepsi: primary='private' gagal sendiri → chain eksternal
+  (lihat skillPromptService.js untuk urutan aktual).
+  ⭐ EMBEDDING (RAG, TERPISAH dari provider chat di atas):
+    openai → text-embedding-3-small via CHAT_GPT_API_KEY (kualitas semantik
+             penuh; sama kredensial dengan provider `chatgpt`)
+    local  → hashing-trick deterministik, TANPA jaringan (fallback otomatis
+             saat OpenAI gagal, DAN dipakai wajib oleh seluruh 56 berkas tes
+             — disiplin proyek: suite tes 100% offline)
+    ⛔ huggingface → BELUM diimplementasikan meski diminta eksplisit. Lihat
+             §10 ROADMAP.
+  ⚠️ Nama model TIDAK BOLEH hardcode — selalu dari .env (*_MODEL).
+  ⚠️ SELALU cek AI_PRIMARY_PROVIDER aktual di .env — jangan asumsikan dari
+  dokumen mana pun nilai defaultnya, karena berubah antar sesi pengembangan.
+
+WHATSAPP TERMINALS (MVP 3, pipeline identik)
+  FONNTE      : token per-agent (users.fonnte_token). Webhook + polling.
+                Belum diberi kapabilitas kirim gambar (tidak aktif produksi).
+  KIRIMI      : kredensial AKUN di .env (KIRIMI_USER_CODE + KIRIMI_SECRET),
+                device per-AGENT di DB (users.kirimi_device_id).
+                Webhook: POST /api/kirimi/webhook
+                ⭐ SATU-SATUNYA terminal AKTIF (MESSAGE_TERMINAL=KIRIMI di
+                .env) — satu-satunya yang diberi kapabilitas kirim gambar
+                (sendViaKirimi() param ke-4 opsional `mediaUrl` → field
+                `media_url` API Kirimi yang sudah lama terdokumentasi tapi
+                baru diimplementasikan sesi ini).
+  TIMELINESAI : shared API key. Agent dikenali dari nomor WA terhubung.
+                Belum diberi kapabilitas kirim gambar (tidak aktif produksi).
+  >> WATI, 360dialog, ChakraHQ SUDAH DIHAPUS (bukan MVP). <<
+  >> LangChain.js DIPERTIMBANGKAN, DITOLAK SENGAJA — lihat §PERUBAHAN BESAR
+     poin 1 untuk alasan lengkap. <<
+
+
+================================================================================
+  3. REVIEW — STATUS FITUR (14 Agustus 2026)
+================================================================================
+
+SUDAH JALAN ✅
+
+  Auth & Keamanan
+    - Register (+email) / Login / Logout (JWT + HttpOnly cookie)
+    - JWT SILENT REFRESH single-flight (anti auto-logout)
+    - Protected routes (verifyToken + requirePrivilege)
+    - SECRET REDACTION: hook ChatMessage → API key tidak pernah masuk DB
+
+  WhatsApp AI Chatbot (3 terminal, pipeline identik; Kirimi satu-satunya aktif)
+    - Webhook Fonnte / Kirimi / TimelinesAI + Fonnte polling
+    - Q1–Q14 Qualification Flow + House Pilot v2 + Listing-Referral Pilot
+    - Provider chain PRIMARY (via env, 6 opsi termasuk kimi) → Private Agent
+    - DIREKTIF FINAL di ujung prompt (anti lost-in-the-middle)
+    - Dedup 2-layer · fromMe guard · filter grup · off-topic guard
+    - COOKIE RESPONSE TIMER (debounce pesan beruntun, default 12s) dengan
+      mutex per-key anti-race (M78)
+    - stripOwnEcho · STICKY ANCHORS + window 60 (anti reset-ke-Q1)
+    - lazyChatNormalizer: ekspansi singkatan SMS-speak (152+ entri)
+    - Ralat/koreksi jawaban (budget/viewing/tanggal/anchorPoint) + ack
+      "✏️ diperbarui"
+    - HTTP 5xx/429 retry di keempat jalur kirim WA (M77)
+    - Batas layanan agent (trans_type/payment_type/rental_*) ditegakkan
+      deterministik SEBELUM AI dipanggil (M90)
+    - Google Calendar auto-schedule (⚠️ refresh token belum diisi)
+    - ⭐ BARU (opt-in, OFF default): RAG grounding untuk pengetahuan jual-beli
+      properti Indonesia — jalur LLM DAN Private Agent
+    - ⭐ BARU (opt-in, OFF default): pengiriman gambar properti acak via Kirimi
+
+  Qualification — ekstraktor yang sudah tahan jawaban pendek/singkat/sukarela
+    - Q3 : angka, tier, MENERIMA tawaran ("sesuai"), MENOLAK ("kemahalan")
+    - Q4 : "N orang", "N teman"→N+1, "bertiga", "sama teman kerja"
+    - Q6 : anchorPoint overwrite guard (M80) + district "Di X" routing (M81)
+    - Q7 : jangkar AREA jika diketahui, KOTA jika tidak (M76 diperbaiki M84 —
+      aturan area-mutlak lama justru memicu AI mengarang nama area "Ciputra")
+    - Q9 : penolakan telanjang / survei sendiri = Mandiri (M75)
+    - Q9b/Q9c : tanggal survei lalu jam; fallback tanggal dari kalimat AI
+      sendiri saat deklaratif (M79); penolakan → "Minta listing"
+    - Q10 : durasi sewa sukarela + booking jangka pendek (M82, M89)
+    - Q11: satu kata tier ("semi") cukup
+    - Q_FAC: wajib; 23 variasi "terserah/standar/apapun" dikenali (M91),
+      daftar standar SELALU ditambahkan (tidak pernah dipangkas LLM, M91)
+    - Q5 : Hindari (negatif) ↔ Prefer (positif) terpisah; preferensi bukan
+      red flag (M89); red flag sukarela di giliran mana pun (M75)
+    - Summary: contoh konkret anti-halusinasi per field (M83)
+    - Q0: batas layanan agent dicek sebelum semua pertanyaan lain (M90)
+
+  Customer Management
+    - Registrasi OTOMATIS saat Q1+Q2 terjawab
+    - ai_response ON/OFF per-customer + GATE AI diam saat OFF
+    - Perintah agent via chat (NOMOR WA saja, bisa banyak sekaligus)
+
+  Property Recommendation & Catalog
+    - Katalog DB per-agent (Property.user_id)
+    - Ranking fasilitas (LIKE OR + EXISTS — boost, bukan filter keras)
+    - Budget expansion bertahap + batas wajar
+    - Fallback fasilitas standar 11 tipe + tier premium
+    - Booking (transaksi ketiga selain sewa/beli) dikenali gate masuk sejak
+      M87 — sebelumnya pesan pembuka booking murni ("Saya booking hotel di
+      Surabaya") DIBUANG sebagai non-property
+
+  RAG & Pengetahuan Tambahan (⭐ BARU, opt-in)
+    - Korpus legalitas/sertifikat, pajak & biaya, KPR & pembiayaan
+      (knowledge/property-id/*.md, 3 berkas)
+    - Jalur LLM: pengetahuan disuntik ke prompt sebagai konteks pelengkap
+    - Jalur Private Agent: jawaban ekstraktif verbatim (bukan generasi bebas)
+    - Katalog semantik (agent_catalog namespace) SIAP tapi TIDAK diaktifkan
+      di produksi (includeAgentCatalog opt-in, default false — cegah bocor
+      listing mid-interview)
+
+  Admin Dashboard / Master Data (7 modul, pola identik)
+  Contact Form → Google Sheets
+  Skill System (3 folder AI-facing + website_env_concept + design guidelines
+    + ⭐ knowledge/ BARU untuk korpus RAG — TERPISAH dari skill docs, lihat
+    §PERUBAHAN BESAR poin 3 untuk alasannya)
+
+BELUM / SEDANG DIKEMBANGKAN ⏳
+  - ⚠️ PRIORITAS LAMA: pantau/naikkan limit TPM provider aktif (billing) —
+    prompt sudah ±67K token, MELAMPAUI plafon gpt-4o-mini 60K
+  - ⭐ PRIORITAS BARU: update skill docs KETIGA folder AI-facing dengan
+    kesadaran RAG & pengiriman gambar (kode jalan, dokumentasi skill belum)
+  - ⭐ Mode embedding HuggingFace (diminta, belum diimplementasi)
+  - ⭐ Verifikasi kualitas retrieval dengan embedding OpenAI ASLI di produksi
+    (baru diverifikasi dengan mode `local` yang diketahui kadang salah rangking)
+  - Enable billing Google Cloud → Places API live (landmark segar)
+  - Isi GOOGLE_OAUTH_REFRESH_TOKEN → Calendar auto-schedule live
+  - Push notification ke agent saat lead baru
+  - Lead scoring dari kelengkapan Q-flow
+  - Dashboard analytics (funnel Q1→brief)
+  - Follow-up otomatis lead dorman
+
+
+================================================================================
+  4. PENGEMBANGAN — DEVELOPMENT GUIDE
+================================================================================
+
+SETUP LOKAL
+  Backend  : cd backend && npm install && npm run dev      (port 5055)
+  Frontend : cd frontend && npm install && npm run dev     (port 5173)
+  Build FE : cd frontend && npm run build                  (→ dist/)
+
+SYNC / MIGRASI DATABASE
+  cd backend && node scripts/sync-db.js
+  ⚠️ ensureRequiredDatabaseColumns() HARUS jalan SEBELUM sequelize.sync().
+
+⭐ SETUP / REBUILD INDEKS RAG (BARU — hanya perlu bila RAG_ENABLED=ON)
+  cd backend && node scripts/build-rag-index.js
+    --skip-db         : lewati katalog properti (hanya knowledge/ + skill docs)
+    --only=knowledge   : hanya korpus pengetahuan
+    --only=skills       : hanya referensi skill docs
+    --only=catalog      : hanya katalog properti per-agent
+  RAG_EMBEDDING_MODE=local node scripts/build-rag-index.js   (tanpa jaringan)
+  ⚠️ WAJIB dijalankan ulang setiap kali: knowledge/*.md berubah, skill docs
+  referensi (07/08/10/11/12/13) berubah, katalog properti berubah signifikan,
+  atau RAG_EMBEDDING_MODE/model diganti (ruang vektor berbeda — vectorStore
+  akan MEMBUANG indeks lama otomatis bila model tidak cocok, bukan mencampur).
+  Hasil tersimpan di `backend/data/rag-index.json`, dimuat SEKALI saat start
+  (BUKAN dibangun ulang di jalur permintaan customer).
+
+MENAMBAH / MENGUBAH PERTANYAAN KUALIFIKASI (pola wajib)
+  1. Tambah field di state (aiPromptBuilderService.js, blok inisialisasi)
+  2. Tambah EKSTRAKTOR:
+       - Phase 1 bila jawabannya berdiri sendiri (tak butuh konteks AI)
+       - Phase 2 (loop pasangan) bila butuh tahu AI baru bertanya apa
+       - Sukarela (volunteered): tangkap SEBELUM ekstraktor AI-gated bila
+         customer sering menjawab lebih cepat dari urutan pertanyaan (M75, M82)
+  3. Tambah pertanyaan di findNextQuestion() pada POSISI yang benar
+     ⚠️ Menyisipkan sebelum Q14 memotong alur BELI — taruh sebelum
+        `return null` bila pertanyaan berlaku untuk semua tipe (M69)
+  4. Tambah baris ke buildQualificationStateBlock()
+  5. Tambah baris ke template summary (prompt + doc 04) — sertakan CONTOH
+     KONKRET before/after bila kelas kesalahannya berupa halusinasi LLM,
+     bukan sekadar aturan abstrak (M83)
+  6. Update skill docs KETIGA folder (byte-identical untuk 2 folder runtime)
+  7. Tulis tes regresi dengan TRANSKRIP NYATA, termasuk kontrol NEGATIF
+  8. Jalankan SELURUH suite — bandingkan dengan baseline, bukan hanya file baru
+
+⭐ MENAMBAH KONTEN KE KORPUS RAG (pola baru)
+  1. Tambah/ubah berkas .md di `knowledge/property-id/` (atau namespace baru
+     bila topiknya bukan legalitas/pajak/KPR)
+  2. WAJIB sertakan peringatan akurasi di kepala berkas bila menyangkut angka
+     yang berubah antar waktu/daerah (pajak, suku bunga, syarat bank)
+  3. Jalankan ulang `node scripts/build-rag-index.js`
+  4. JANGAN taruh di `skills/*/docs/` — itu akan membuatnya always-loaded
+  5. Bila menambah dokumen REFERENSI skill baru yang layak di-RAG-kan (bukan
+     aturan inti), tambahkan nama berkasnya ke `RAG_ELIGIBLE_SKILL_DOCS` di
+     scripts/build-rag-index.js — JANGAN pernah menambah doc 01/03/04/05/09
+     (aturan inti) ke daftar itu
+
+ATURAN SYNC SKILL DOCS (WAJIB)
+  skills/claude_responds/docs/*.md ≡ skills/chat_gpt_responds/docs/*.md
+  (byte-identical, per-file). skills/elevan-property-assistant/ adalah
+  edisi STANDALONE — sudah menyimpang, TIDAK di-load kode, tapi tetap perlu
+  diperbarui karena di-upload manual ke OpenAI platform skills (boleh versi
+  LEBIH LENGKAP/adaptif daripada dua folder runtime, mis. M83).
+  ⚠️ KETIGA folder BELUM diperbarui untuk menyebutkan RAG/gambar properti per
+  14 Agu 2026 — kode jalan duluan, dokumentasi skill menyusul (lihat §10).
+
+DISIPLIN TOKEN (WAJIB — lihat §5 M62)
+  Ukur dampak setiap penambahan ke prompt. Pola aman: emit STRING KOSONG saat
+  data tak tersedia (0 token tambahan) — RAG mengikuti pola ini PERSIS
+  (RAG_ENABLED=OFF atau kegagalan apa pun → '', nol token). Bila sebuah loop
+  bertahan meski DIREKTIF FINAL benar → tambahkan EKSTRAKTOR, bukan aturan
+  prompt. Namun bila state SUDAH bersih dan LLM tetap mengarang → tambahkan
+  CONTOH KONKRET before/after, bukan lebih banyak aturan abstrak (M83).
+
+KONVENSI KODE
+  - Komentar Bahasa Indonesia untuk logika bisnis; JSDoc untuk fungsi publik
+  - Semua nilai konfigurasi dari .env — TIDAK ADA hardcode
+  - Nama agent & app dinamis (${agentName} dari DB, ${appName} dari env)
+  - Perubahan alur chat WAJIB diuji lewat simulasi node -e dengan call site
+    yang IDENTIK dengan produksi (parameter/mode sama persis)
+  - ⭐ Fitur baru yang BISA gagal tanpa mengganggu customer (RAG, pengiriman
+    gambar) WAJIB fail-open: try/catch di titik integrasi, kegagalan → '' /
+    null / lewati, TIDAK PERNAH melempar error yang memutus balasan utama
+
+
+================================================================================
+  5. SOLUSI — MASALAH YANG SUDAH DISELESAIKAN (jangan ulangi solusi lama)
+================================================================================
+
+[M1–M48: lihat V4. M49–M61: lihat V5. Highlight yang paling sering relevan:]
+  M35 Loop repetitif → sticky anchor + history window 60
+  M46 AI jatuh ke private_agent diam-diam → DeepSeek V4 model name
+  M52 Loop Q7 → deteksi berbasis MAKNA + "penolakan = jawaban"
+  M54 Google Places hanya menjangkau Private Agent, bukan produksi
+  M55 429 "Request too large" → skill docs 39–51K dari plafon 60K
+  M60 Pertanyaan gabungan "kota atau area" meracuni slot district
+
+[M62–M77: lihat V7 untuk detail lengkap — ringkasan tetap relevan:]
+  M62 LOST IN THE MIDDLE → buildFinalDirective() ±235 token di posisi 100%
+  M63 Q3 terima/tolak harga yang ditawarkan → detectBudgetAnchorResponse()
+  M64 ⛔ Pemotongan history merusak state → state SELALU dari history penuh
+  M65 Q4 "N teman" tidak dikenali → N+1 orang, bertiga/berempat
+  M66 Q2 kosong padahal AI menyebut kotanya → pindai balik pesan AI
+  M67 Q9 penolakan telanjang → Mandiri (pilihan, bukan pertanyaan terbuka)
+  M68 Q11 satu kata tier cukup ("semi" tanpa "furnished")
+  M69 Q_FAC tidak ada di antrean → wajib, setelah Q14
+  M70 Jadwal survei tidak ada di antrean → Q9b tanggal → Q9c jam
+  M71 Hindari/Prefer arah terbalik → FAR_RE, pasangan negatif/positif terpisah
+  M72 Q_FAC/Q9b/Q9c + jawaban pendek dikunci bersama di satu tes regresi
+  M73 Singkatan dilupakan 1 giliran + patokan lokasi meracuni tipe properti
+  M74 Provider baru: Kimi (Moonshot AI), kimi-k3, top_p wajib 0.95
+  M75 Jawaban sukarela dibuang (Q9c jam, Q9 decision maker, Q5 red flags)
+  M76 Q7 salah sasaran (menawarkan pindah kota, bukan area lain)
+  M77 HTTP 5xx tidak pernah di-retry → balasan customer hilang permanen
+
+[M78–M91: lihat V7 untuk detail lengkap]
+  M78 Debounce race condition → mutex per-key, root cause storm Q6/Q7 berulang
+  M79 viewingDate dari kalimat AI sendiri (fallback kasus deklaratif)
+  M80 anchorPoint (Q6) overwrite guard
+  M81 district dari "Di X" routing (dead code akibat nested guard)
+  M82 Durasi sukarela dua unit tercampur (offset tanggal vs durasi sewa)
+  M83 ⭐ Summary anti-halusinasi → CONTOH KONKRET, bukan aturan abstrak lagi
+  M84 ⭐ AI mengarang nama area ("Ciputra" untuk Malang) → Q2c semua kota
+  M85 ⭐ Tanda tangan summary berisi placeholder literal → replyIdentityGuard.js
+  M86 ⭐ Katalog tidak pernah menyusul summary di jalur LLM → kontrak 3-keadaan
+  M87 ⭐ Seluruh alur booking tidak bisa dimulai → "booking" tidak ada di
+      ACTION_WORDS gate masuk
+  M88 ⭐ AI mengajukan pertanyaan lalu membuang jawabannya sendiri (Q2c gate
+      tidak mengenali pertanyaannya sendiri)
+  M89 ⭐ Booking jangka pendek diperlakukan seperti sewa tahunan ("Versi 2")
+  M90 ⭐ Batas layanan agent (trans_type/payment_type/rental_*) tidak pernah
+      dibaca jalur chat meski sudah divalidasi saat simpan profil
+  M91 ⭐ Fasilitas "terserah/standar/apapun" — daftar standar hilang dari
+      summary (ekstraktor sempit + LLM memangkas saat menyalin state bersih)
+
+[BARU — sesi 14 Agu 2026 (V8): RAG + gambar properti]
+
+  M92 ⭐⭐ LAPISAN RAG DIBANGUN, DIUJI, DI-WIRE — TAPI SENGAJA MATI DEFAULT.
+      Permintaan pemilik proyek: AI perlu "belajar" dari dokumen tambahan
+      (RAG) agar bisa menjawab topik jual-beli properti Indonesia yang lebih
+      luas dari Q1–Q14 murni, terinspirasi arsitektur repo Python WorldBank
+      WhatsApp-RAG-Example (LangChain + OpenAI + FastAPI + Twilio).
+
+      KEPUTUSAN ARSITEKTUR (semua terukur, bukan preferensi):
+      (a) LangChain.js DITOLAK — proyek ini sudah punya abstraksi 6-provider
+          LLM sendiri (aiProviderService), ingestion dokumen sendiri, dan kini
+          retrieval sendiri; LangChain.js akan menambah ~50+ dependency
+          transitif yang MENDUPLIKASI kode yang sudah bekerja, melanggar
+          semangat package.json 15-dependency proyek ini.
+      (b) Vector database (Chroma/Pinecone/dst) DITOLAK — korpus proyek
+          (±336 properti + ratusan chunk dokumen) ≈ 1.000–1.500 vektor;
+          cosine similarity murni JavaScript atas itu <2ms. Menambah vector
+          DB = dependency baru + proses baru + mode kegagalan baru untuk
+          skala yang sama sekali tidak membutuhkannya.
+      (c) Persistensi indeks = berkas JSON (`backend/data/rag-index.json`),
+          BUKAN tabel MySQL baru — menghindari urutan boot rapuh
+          (ensureRequiredDatabaseColumns() HARUS sebelum sequelize.sync());
+          indeks bisa dibangun ulang kapan saja dari sumbernya.
+      (d) Embedding: DUA mode — `openai` (text-embedding-3-small via
+          CHAT_GPT_API_KEY yang SUDAH ada, nol kredensial baru) dan `local`
+          (hashing-trick deterministik, nol dependency ML, WAJIB dipakai oleh
+          seluruh suite tes agar tetap 100% offline — disiplin proyek ini
+          sejak awal). Mode HuggingFace DIMINTA tapi BELUM diimplementasikan.
+
+      BAGIAN PALING PENTING — ATURAN INTI TIDAK PERNAH LEWAT RAG:
+      Hanya dokumen REFERENSI (doc 07/08/10/11/12/13) yang boleh di-index dan
+      diambil lewat retrieval. Aturan PERILAKU inti (never-invent, satu-
+      pertanyaan-per-pesan, state block, DIREKTIF FINAL, identitas agent,
+      kontrak katalog 3-keadaan) SELALU dimuat penuh — TIDAK PERNAH via RAG.
+      Diukur langsung: pada mode `local`, chunk yang BENAR untuk suatu query
+      sering berada di peringkat 2–3, bukan 1 (lihat tabel pengujian di bawah).
+      Bila aturan sekritis "jangan pernah mengarang nama area" (M84) bergantung
+      pada satu kali retrieval yang tepat, satu kali meleset = regresi bug
+      yang baru selesai diperbaiki bulan lalu.
+
+      KORPUS BARU: knowledge/property-id/{01-legalitas-dan-sertifikat,
+      02-proses-pajak-dan-biaya, 03-kpr-dan-pembiayaan}.md (~390 baris).
+      Setiap berkas membawa peringatan akurasi eksplisit (angka pajak/bank
+      berubah antar tahun & daerah) dan batas peran AI eksplisit (tidak
+      menghitung cicilan, tidak menilai kelayakan kredit, tidak menanyakan
+      penghasilan/SLIK lewat chat — konsisten dengan aturan pilot house yang
+      sudah ada "KPR sub-flow bukan underwriting").
+      ⚠️ SENGAJA di `knowledge/`, BUKAN `skills/*/docs/` — kalau ditaruh di
+      skills/, otomatis always-loaded ke SETIAP prompt, bertentangan dengan
+      seluruh alasan RAG dibuat (hemat token, ambil hanya yang relevan).
+
+      WIRING — DUA JALUR PRODUKSI, PELAJARAN M52/M54 DIPATUHI:
+      (a) LLM: whatsappAIService.js menghitung `ragContext` (await, fail-open
+          total) lalu mengalir lewat `extraContext` yang SUDAH ada (pola sama
+          dengan facilityContext/cityContext) ke buildWhatsappReplyPrompt().
+          Fungsi itu SENGAJA TETAP SINKRON — tidak diubah jadi async, supaya
+          tidak ada ripple ke 5 provider services (claude/deepseek/kimi/
+          openai/qwen) yang semuanya memanggilnya langsung.
+      (b) Private Agent (chatbotPrivateController.js) — DETERMINISTIK, tanpa
+          generasi bahasa bebas. Diberi `#tryKnowledgeAnswer()`, dipanggil
+          TEPAT SEBELUM kedua guard off-topic mengembalikan redirect generik.
+          Berbeda dari (a): ini EKSTRAKTIF MURNI (kutip verbatim, tidak pernah
+          menyusun kalimat baru — cocok untuk mesin deterministik), dengan
+          ambang skor lebih TINGGI (0.30 vs 0.12 di jalur LLM) karena tidak
+          ada model bahasa di belakangnya untuk menyaring hasil yang meleset.
+
+      ⛔ DUA BUG DITEMUKAN & DIPERBAIKI SAAT VERIFIKASI SENDIRI (bukan
+      dilaporkan user — ditemukan lewat simulasi node -e per disiplin proyek):
+
+      (1) KATALOG SEMANTIK BISA BOCOR MID-INTERVIEW. Desain awal
+          buildRagContext() menyertakan blok katalog OTOMATIS setiap kali
+          agentUserId tersedia. Tapi fungsi ini dipanggil pada SETIAP giliran
+          WhatsApp, TERMASUK selama Q1–Q12 masih berjalan — menyalakannya
+          tanpa syarat berarti rekomendasi semantik bisa muncul SEBELUM brief
+          tampil, melanggar langsung "❌ Never show listings mid-interview"
+          (SKILL.md §4, berlaku bahkan saat RESPOND_CATALOG_RUN=ON).
+          Fix: `includeAgentCatalog` dibuat opt-in, default **false**. TIDAK
+          ADA pemanggil produksi yang mengaktifkannya saat ini (infrastruktur
+          siap, sengaja belum dipakai — lihat §10 ROADMAP).
+
+      (2) CHUNK "YATIM" (heading tanpa isi). Heading H2 yang langsung diikuti
+          H3 tanpa paragraf pembuka (mis. "## Jenis Sertifikat Tanah &
+          Bangunan" → langsung "### SHM") menghasilkan chunk yang isinya HANYA
+          judul. Bila chunk itu yang terambil, Private Agent mengutip judul
+          tanpa isi apa pun — jawaban kosong yang terlihat seperti jawaban.
+          Fix DUA lapis: (i) ragChunker.js tidak lagi menghasilkan chunk
+          badan-kosong SAMA SEKALI (headingnya tetap ikut breadcrumb bagian
+          anak — tidak ada informasi hilang); (ii) answerKnowledgeQuestion()
+          mengambil top-5 kandidat dan memilih yang PERTAMA dengan isi ≥150
+          karakter, bukan otomatis peringkat #1.
+
+      VERIFIKASI KUALITAS RETRIEVAL (mode `local`, jujur dicatat — BUKAN
+      kualitas produksi karena produksi akan pakai mode `openai`):
+        "jadwal survei jam berapa"              → skor 0.315, benar #1
+        "fasilitas terserah standar saja"       → skor 0.335, benar #1
+        "customer bilang kemahalan…"            → skor 0.285, benar #2 (bukan #1)
+        "beda SHM sama HGB apa ya?"             → skor 0.195, DI BAWAH ambang
+                                                    produksi 0.30 — Private
+                                                    Agent akan redirect off-
+                                                    topic biasa, BUKAN menjawab
+        Kesimpulan: mode `local` cukup untuk jalur LLM (yang menyaring lewat
+        model bahasa di atasnya) tapi BELUM cukup andal untuk ambang jawaban
+        langsung Private Agent pada query pendek/gaul. Produksi WAJIB
+        RAG_EMBEDDING_MODE=openai (atau kosong = auto-detect dari
+        CHAT_GPT_API_KEY) untuk kualitas yang layak — §10 ROADMAP.
+
+      Regresi: tests/ragRetrieval.test.js (32 assertion — chunker/tabel utuh,
+      embedding deterministik, ISOLASI ANTAR-AGENT dengan A/B terbukti tidak
+      vacuous, fail-open, MMR keberagaman, kontrol negatif katalog mid-
+      interview). Baseline: 1353/1374 → 1385/1406 (+32). 21 kegagalan
+      pre-existing SAMA PERSIS (customerDateParser/extractFilters/housePilot).
+      Nol crash. `npm test` TIDAK ADA di package.json — dijalankan manual:
+      `for f in tests/*.test.js; do node $f; done`, jumlahkan baris
+      `RESULT: p/t`. `npm run lint` GAGAL karena eslint tidak terpasang di
+      node_modules (pre-existing, bukan disebabkan sesi ini).
+
+  M93 ⭐ PENGIRIMAN GAMBAR PROPERTI ACAK VIA WHATSAPP (BARU, opt-in OFF default).
+      Permintaan: summary/rekomendasi bisa mengirim SATU gambar ACAK milik
+      properti (dari beberapa yang terdaftar di PropertyImage.js), memakai
+      data yang SUDAH ada di Property.js + PropertyImage.js — tidak ada
+      perubahan skema/model.
+
+      MASALAH INTI: `PropertyImage.url` menyimpan path RELATIF (mis.
+      `/assets/image_data/P001/foto1.jpg`), dilayani statis oleh backend
+      sendiri di path itu. WhatsApp (Kirimi `media_url`) butuh URL ABSOLUT
+      yang bisa diakses dari INTERNET — path relatif/localhost tidak berguna.
+
+      FIX — services/propertyImageService.js (BARU):
+      - `getRandomImageForProperty(propertyId)`: query PropertyImage, pilih
+        SATU baris acak, resolusi ke URL absolut.
+      - `resolveAbsoluteImageUrl()`: gabung basis URL publik + path relatif;
+        MENOLAK (null) ekstensi bukan gambar dikenal (png/jpg/jpeg/webp/gif/
+        avif) — mis. .pdf; MENOLAK bila basis URL publik tidak diketahui
+        (fail-open — URL rusak/localhost lebih buruk daripada tidak mengirim).
+      - Basis URL publik, urutan prioritas: `PROPERTY_IMAGE_PUBLIC_BASE_URL`
+        (WAJIB diisi domain sungguhan di PRODUKSI) → tunnel ngrok AKTIF (dev)
+        → null. services/ngrokService.js diberi `getCachedNgrokUrl()` (BARU —
+        sebelumnya URL ngrok hanya di-log ke console, TIDAK PERNAH disimpan
+        untuk dipakai ulang oleh modul lain).
+
+      ⛔ KEPUTUSAN DESAIN PALING PENTING — KORELASI KARTU↔GAMBAR FAIL-CLOSED,
+      BUKAN BY-INDEX. Balasan katalog dibentuk LLM dari teks bebas (propertyCtx
+      dirangkai jadi prosa), TIDAK membawa property_id terstruktur yang bisa
+      dilacak balik dengan pasti — dan urutan/jumlah kartu di balasan BISA
+      berbeda dari array asal (LLM bebas menyingkat/menata ulang). Mencocokkan
+      gambar ke kartu berdasarkan URUTAN/INDEX berisiko mengirim gambar
+      properti yang SALAH ke customer — kesalahan yang jauh lebih buruk
+      daripada tidak mengirim gambar sama sekali (nama file salah tidak
+      kelihatan; foto rumah yang salah SANGAT kelihatan).
+      Fix: `getImagesForMentionedProperties(replyText, agentUserId)` HANYA
+      mengirim gambar untuk properti yang JUDULNYA benar-benar muncul
+      (substring, case-insensitive) di teks balasan yang SUDAH terkirim ke
+      customer. Ketidakcocokan → NOL gambar terkirim (gagal-aman), bukan
+      gambar yang salah. Dibatasi `PROPERTY_IMAGE_MAX_PER_REPLY` (default 3).
+
+      WIRING — kirimiChatController.js SAJA (satu-satunya terminal AKTIF;
+      MESSAGE_TERMINAL=KIRIMI). Fonnte/TimelinesAI TIDAK disentuh — tidak
+      aktif produksi, menghindari perubahan tak teruji di jalur tak terpakai.
+      `sendViaKirimi()` diberi parameter ke-4 opsional `mediaUrl` yang mengisi
+      field `media_url` yang SUDAH terdokumentasi di komentar kepala berkas
+      controller ini sejak lama (API Kirimi mendukungnya) tapi baru
+      diimplementasikan sesi ini. SATU fungsi yang sama dipakai untuk teks
+      maupun gambar (retry/error-handling TIDAK diduplikasi) — menghindari
+      kelas bug "salinan fungsi kirim antar-terminal berbeda perilaku" (M27,
+      M77 sudah pernah kena ini). Gambar dikirim SETELAH seluruh teks sukses
+      terkirim, sepenuhnya non-fatal: kegagalan kirim gambar TIDAK PERNAH
+      mengubah status "✅ Terkirim" balasan teks.
+      Gate: `PROPERTY_IMAGE_SEND_ENABLED=OFF` default.
+
+      Regresi: tests/propertyImageService.test.js (20 assertion) — HANYA
+      fungsi PURE tanpa DB (resolveAbsoluteImageUrl, getPublicBaseUrl,
+      getImageUrlBase); mencakup kontrol negatif PALING PENTING: path relatif
+      tanpa basis URL diketahui → null, bukan URL rusak yang dikirim ke
+      WhatsApp. Fungsi yang menyentuh DB (getRandomImageForProperty,
+      getImagesForMentionedProperties) diverifikasi manual lewat simulasi,
+      BUKAN tes otomatis — dicatat sebagai keterbatasan cakupan, bukan
+      diklaim teruji penuh. Baseline: 1385/1406 → **1405/1426** (+20).
+
+
+[V9 — sesi 18 Agustus 2026, "Malang villa & Jakarta gudang batch" + deploy
+ Hostinger. Dipicu transkrip customer NYATA (booking villa Malang, beli gudang
+ Jakarta) dan permintaan deploy produksi ke propmatches.fun.]
+
+  M94 ⭐ NGROK_AUTHTOKEN DI .env TIDAK PERNAH DIBACA SAMA SEKALI.
+      services/ngrokService.js men-spawn proses `ngrok` TANPA pernah membaca
+      `process.env.NGROK_AUTHTOKEN`. Tunnel selama ini berhasil HANYA karena
+      kebetulan ada authtoken di config file MESIN
+      (`%LOCALAPPDATA%\ngrok\ngrok.yml`, hasil `ngrok config add-authtoken`
+      yang pernah dijalankan manual bertahun lalu) — .env TERLIHAT mengatur
+      token, padahal nol pengaruh. Di mesin/server BARU (Hostinger, mesin dev
+      lain) yang punya .env tapi belum pernah `add-authtoken`, tunnel gagal
+      `ERR_NGROK_105` walau tokennya jelas tertulis di .env.
+      DIUJI LANGSUNG ke ngrok v3.39.8 (bukan diasumsikan dari dokumentasi):
+      env var salah + config file benar → tunnel TETAP JALAN ⇒ CONFIG FILE
+      MENANG atas env var. Satu-satunya cara menjadikan .env otoritatif adalah
+      FLAG CLI (`--authtoken=…`), presedensinya di atas config file.
+      Fix: `ngrokService.js` menambahkan `--authtoken=${NGROK_AUTHTOKEN}` ke
+      argumen spawn saat env terisi; token DIREDAKSI dari log (tidak pernah
+      tercetak apa adanya). Kosong → peringatan eksplisit + fallback ke config
+      file mesin (fail-open, tunnel tidak mati).
+      Regresi: tests/ngrokAuthtoken.test.js (21/21) — HANYA menguji pembentukan
+      ARGUMEN + REDAKSI log (murni, tanpa memanggil ngrok sungguhan — suite
+      tetap 100% offline).
+
+  M95 ⭐ JAWABAN Q4 (PENGHUNI) DIBUANG GERBANG OFF-TOPIC — AKAR "Hehe, maaf Kak"
+      DUA KALI BERTURUT-TURUT. Transkrip produksi (booking villa Malang,
+      terminal Kirimi): AI bertanya "Nanti akan tinggal bersama siapa saja?",
+      customer menjawab LENGKAP DAN BENAR — "Rencana checkin 2 minggu lagi.
+      Saya stay bersama keluarga besar, butuh 5 kamar" (78 karakter) — dan
+      DITOLAK sebagai off-topic, dua kali berturut-turut, termasuk saat
+      customer mengetik ulang memperbaiki typo ("checking"→"checkin").
+      AKAR: `isPropertyContextContinuation` (propertyKeywordFilter.js) punya
+      gerbang panjang 70 karakter — pesan >70 char WAJIB punya salah satu
+      sinyal konten properti untuk lolos. Ada detektor untuk budget (Q3),
+      furnishing (Q11), kondisi (Q_COND), fasilitas, landmark, motivasi,
+      tower/lantai — TAPI TIDAK ADA SATU PUN untuk PENGHUNI (Q4), padahal Q4
+      pertanyaan WAJIB. Jawaban Q4 yang panjang (karena customer menjawab
+      banyak hal sekaligus) otomatis jatuh ke off-topic.
+      Kelas bug SAMA dengan M87 (booking tidak ada di ACTION_WORDS) dan M88
+      (jawaban Q2c tidak ada polanya): fitur lengkap di findNextQuestion tapi
+      GERBANG MASUK-nya tidak ikut diperluas. Pelajaran berulang untuk KE-3
+      KALINYA — saat menambah/mewajibkan sebuah pertanyaan, WAJIB periksa juga
+      apakah JAWABANNYA bisa lolos gerbang masuk.
+      Fix: detektor baru untuk pola komposisi keluarga/rumah tangga (Q4) di
+      propertyKeywordFilter.js — verba hunian ("tinggal", "stay", "menginap")
+      dipasangkan dengan penanda kapasitas ("keluarga besar", "N kamar", "N
+      orang") membedakan jawaban Q4 asli dari kalimat kebetulan menyebut
+      "keluarga" tanpa konteks hunian.
+      Regresi: tests/occupancyAnswerGateDrop.test.js (20/20), termasuk kontrol
+      negatif riwayat kosong/non-properti tetap ditolak.
+
+  M96 ⭐⭐ AREA DIKARANG DARI CONTOH SKILL DOC SENDIRI — SUMBER PRIMING BARU.
+      Transkrip produksi (beli gudang Jakarta): customer tidak PERNAH menyebut
+      nama area apa pun sepanjang chat (`district` null, dibuktikan replay
+      transkrip lewat `extractQualificationState()` sungguhan). Summary yang
+      terkirim tetap menampilkan "✓ Area: Sidotopo" — kata itu HANYA ada di
+      doc 04 SEBAGAI CONTOH ILUSTRASI ("Customer: 'Area Sidotopo' → ✓ Area:
+      Sidotopo"). Model menyalin contoh dari instruksinya SENDIRI, bukan dari
+      pesan customer manapun. Kelas SAMA dengan M84 ("Ciputra" dari
+      Real-Estate/*.md), sumber priming BARU: skill doc itu sendiri, bukan
+      korpus eksternal — pelajaran M84 ("aturan generik tidak cukup melawan
+      token yang sudah ter-prime") berlaku lagi, kali ini terhadap teks
+      instruksi kita sendiri.
+      Fix (doc-level + satu baris DIREKTIF FINAL, KETIGA folder skill):
+      - doc 04: contoh literal "✓ Area: Sidotopo" diganti notasi placeholder
+        + peringatan eksplisit "contoh dokumen ini BUKAN data customer"
+      - doc 09 (2 folder runtime): contoh Q2c serupa diganti bentuk generik
+      - `buildFinalDirective()`: `noAreaLine` (guard M84) kini SECARA KHUSUS
+        menyebut "Sidotopo"/"Ciputra" sebagai token terlarang saat district
+        null — dibatasi HANYA dua token ini (bukan daftar penuh) karena
+        anggaran token baris ini SANGAT tipis (ekor direktif sudah 385/400
+        token SEBELUM sesi ini, hanya ~15 token ruang tersisa)
+
+      KEDUA — SATU KALIMAT MAJEMUK Q5, DUA DARI TIGA KLAUSA HILANG.
+      Kalimat yang sama: "saya cari akses jalan yang lebar, karena saya punya
+      truk besar. Pastikan akses jalannya bagus, tidak retak-retak. Tidak
+      banjir dan dekat dengan jalan tol." State server menyimpan kalimat PENUH
+      — summary hanya mencetak SATU dari tiga klausa relevan-penghindaran
+      ("Tidak mau banjir") dan tidak pernah menambah baris Prefer. Kelas
+      M83/M91 (state bersih, LLM memangkas saat menyalin).
+      Fix: worked example dekomposisi 3-klausa (kata-kata transkrip persis,
+      format tabel) ditambahkan di doc 04 tepat setelah contoh "Mixed Q5+Q6".
+
+      Regresi: tests/warehouseAreaInventionAndCompoundAvoid.test.js (21/21,
+      A/B-terbukti tidak vacuous). Satu asersi lama di
+      areaAndSignatureAndCatalog.test.js DIPERBARUI dengan alasan tertulis
+      ("direktif TIDAK memuat Ciputra" → sekarang justru HARUS memuatnya,
+      karena fix-nya persis "sebut tokennya secara eksplisit" — presedensi
+      sama dengan dua pembaruan tes M86).
+
+  M97 PARSER TANGGAL Q8 TIDAK MENGENALI "checkin" TANPA STRIP/SPASI.
+      Bug terpisah, ditemukan saat menelusuri transkrip yang sama: pesan
+      "checkin 15 agustus 2026" (tanpa tanda hubung, tanpa spasi) tidak
+      dikenali sebagai jawaban Q8 → `moveInDate` tetap null → findNextQuestion
+      terus mengulang Q8 alih-alih maju ke Q10, membuang tanggal yang sudah
+      diberikan customer.
+      Fix: pola pengenal tanggal (`hasMoveInCue` dan sejenisnya) diperluas
+      untuk mencakup `checkin` sebagai varian `check[\s-]?in` — konsisten
+      dengan pola booking-intent yang sudah menerima kedua bentuk sejak M87.
+      Regresi: tests/bookingShortStayVersi2.test.js kembali ke 26/26 (dari
+      24/26 — kegagalan ini SEMPAT jadi kegagalan pre-existing "ke-4" di luar
+      trio customerDateParser/extractFilters/housePilot selama fix belum
+      dikerjakan; kini tertutup, trio pre-existing kembali jadi HANYA 3).
+
+  M98 ⭐⭐ RUMAH123 DIMATIKAN TOTAL DARI KONTEKS AI (permintaan eksplisit user).
+      Keputusan bisnis: terminal message & AI HANYA boleh merekomendasikan
+      katalog milik agent sendiri (`Property` + `PropertyImage` +
+      `PropertyFacility`, database). Rumah123 hanya boleh diakses lewat
+      halaman Rumah123 di website — tidak masuk konteks AI sama sekali.
+
+      DUA CACAT DITEMUKAN saat mengerjakan (bukan sekadar flip env):
+      (a) `chatbotController.js` (chatbot WEB) TIDAK PERNAH mengecek
+          `RUMAH123_DATA` SAMA SEKALI — panggilan `getRumah123Listings()`
+          hanya digerbangi `catalogReady`. Jadi selama ini, dengan
+          RUMAH123_DATA=OFF sekalipun, chatbot web TETAP memanggil Apify dan
+          menyuntikkan listing Rumah123 ke prompt LLM. Toggle yang dikira
+          menutup, bocor di satu jalur PENUH.
+      (b) Default fail-OPEN. Tiap pemanggil menulis sendiri
+          `process.env.RUMAH123_DATA || 'ON'` — menghapus satu baris .env
+          diam-diam MENYALAKAN KEMBALI Rumah123 di semua jalur AI.
+
+      Fix: satu gerbang `rumah123ContextService.isRumah123EnabledForAI()`,
+      default `'OFF'` (FAIL-CLOSED), dipakai KEEMPAT jalur AI:
+      whatsappPropertyContext.js, chatbotPrivateController.js (2 tempat),
+      chatbotController.js (BARU — sebelumnya tidak ada), server.js (warmup,
+      sekaligus hemat kuota Apify). `rumah123Controller.js` (halaman
+      /api/rumah123/*) SENGAJA TIDAK memakainya — halaman tetap hidup penuh;
+      ada kontrol negatif di tes yang memastikan file itu tidak pernah ikut
+      memakai gerbang AI.
+      Skill docs (KETIGA folder): doc 08 §6 diganti total — dulu "Priority:
+      Rumah123 first", sekarang "DIMATIKAN untuk AI". Hemat ~455–479 token per
+      set skill docs (bonus kecil untuk masalah TPM §8). ⚠️ Doc 11 (pilot
+      listing-referral) SENGAJA TIDAK diubah — customer MENYEBUT listing yang
+      ia lihat di Rumah123 ("saya minat rumah X di Rumah123") tetap trigger
+      sah Pilot B; yang dilarang adalah AI MENGAMBIL data dari sana, bukan
+      customer merujuknya. Catatan penjelas ditambahkan di doc 08 §6 supaya
+      tidak salah tafsir di sesi berikutnya.
+      Regresi: tests/rumah123DisabledForAI.test.js (22/22) — 6 varian env
+      fail-closed, 4 berkas jalur AI diverifikasi, kontrol negatif halaman
+      Rumah123 tetap hidup.
+      ⚠️ BELUM DIKERJAKAN / perlu keputusan user: `getSourceProperties()` di
+      propertyRecommendationService masih menggabung katalog JSON
+      `extended_v3.json` (9.120 properti) via `mergePropertyCatalog()` — AI
+      masih bisa merekomendasikan properti yang BUKAN milik agent dan bukan
+      dari tabel `properties`. Sengaja TIDAK disentuh tanpa konfirmasi
+      eksplisit (mematikannya = agent berkatalog tipis kehilangan banyak hasil).
+
+  M99 ⭐ SATUAN PERIODE BUDGET DIREBUT KATA DURASI MENGINAP.
+      Transkrip villa Malang (sama dengan M95/M96): "saya book selama 7 hari.
+      Saya cari yang harga 2-3 juta/minggu" (diulang customer: "Yang sekitar
+      2-3 juta/minggu"). Summary mencetak "Rp 2.000.000 - Rp 3.000.000/malam"
+      — angka BENAR, satuan SALAH, selisih 7×.
+      AKAR: `detectBudget()` memindai kata periode DI MANA SAJA dalam
+      kalimat, dan cabang `night` (yang juga cocok kata "hari") diperiksa
+      SEBELUM `week`. Kata "hari" milik DURASI MENGINAP mengalahkan "/minggu"
+      yang benar-benar menempel pada HARGA.
+      Fix: satuan yang MENEMPEL LANGSUNG pada angka
+      (`\d…(?:/|per\s+)\s*(unit)`) diperiksa DULU dan menang; pemindaian
+      longgar lama jadi fallback saja, urutannya diperbaiki (week sebelum
+      night). Diuji 11 kasus termasuk 6 kontrol negatif (periode lain tidak
+      ikut berubah, alur beli tanpa periode tetap kosong).
+
+      KEDUA — SELURUH PREFERENSI CUSTOMER HILANG DARI SUMMARY (transkrip
+      sama). Q5 dijawab SEMUA-POSITIF: "Saya mau tempat yang dingin, udaranya
+      bersih, tempat sejuk, akses jalan strategis dengan tempat makanan" —
+      tanpa satu pun penanda penghindaran. M89(b) BENAR men-set
+      `redFlags='Tidak ada'`, tapi komentarnya berasumsi "preferensinya tidak
+      hilang, sudah tertangkap sebagai anchorPoint lewat 'dekat …'" — asumsi
+      itu GAGAL di sini: jawaban Q5 tidak memakai kata "dekat", dan
+      anchorPoint kemudian ditimpa jawaban Q6 ("Dekat Ijen"). Hasil: summary
+      TANPA baris Hindari DAN TANPA baris Prefer — satu-satunya kalimat yang
+      menjelaskan suasana yang diinginkan customer lenyap total.
+      Fix: slot state BARU `state.preferences` + baris `Prefer/suasana [Q5]`
+      terpisah di state block, plus aturan doc: **"Red flags: Tidak ada" ≠
+      customer tidak bilang apa-apa** — turunkan Hindari dari tabel
+      lawan-kata, salin wish-nya ke Prefer. Tabel lawan-kata doc 04 diperluas:
+      dingin/sejuk→Tempat panas, udara bersih→Udara kotor/berpolusi, dekat
+      tempat makan→(Prefer only, tanpa lawan alami).
+
+      Regresi: tests/villaBudgetPeriodAndPreferences.test.js (30/30, A/B →
+      8 assertion gagal saat kedua fix dimatikan bersamaan — tidak vacuous).
+      Baseline sesi M94–M99: **1519/1540**.
+
+  M100 ⭐⭐ DEPLOY PRODUKSI KE HOSTINGER (propmatches.fun) — TIGA PENYEBAB 503
+      DITEMUKAN, DUA DIPERBAIKI DI KODE, SATU BUTUH KREDENSIAL USER.
+      Gejala: https://propmatches.fun/ membalas 503 Service Unavailable
+      setelah domain terhubung ke Hostinger paket Business.
+
+      (a) REGRESI SESI INI SENDIRI — RENAME PORT/FRONTEND_PORT→APP_PORT/
+          APP_FRONTEND_PORT (dikerjakan LEBIH AWAL di sesi yang sama) TERNYATA
+          MEMATIKAN HOSTING PLATFORM. Hostinger (Passenger) menyuntikkan port
+          lewat `process.env.PORT` dan mem-proxy domain ke situ — aplikasi
+          yang hanya membaca `APP_PORT` selalu bind 5055, proxy menembak port
+          kosong → 503. Fix: `const port = process.env.PORT ||
+          process.env.APP_PORT || 5000` — PORT (platform) diprioritaskan,
+          APP_PORT tetap dipakai dev lokal. Pelajaran: rename env var yang
+          terlihat "internal" (nama proyek sendiri) bisa diam-diam bentrok
+          dengan konvensi PaaS pihak ketiga — SELALU cek nama variabel umum
+          (PORT, DATABASE_URL, dst.) sebelum me-rename.
+      (b) CORS HANYA MENGIZINKAN localhost. Origin produksi kini diturunkan
+          otomatis dari `APP_URL` (termasuk varian www) + `CORS_EXTRA_ORIGINS`
+          opsional. Origin dev tetap selalu diizinkan apa pun nilai APP_URL.
+      (c) KREDENSIAL DATABASE MASIH LOKAL (`root`/`db_property`) — dan ini
+          penyebab paling mematikan: kegagalan `sequelize.sync()` masuk ke
+          `.catch(() => process.exit(1))`, PROSES BERHENTI TOTAL (bukan
+          sekadar error), sehingga tidak ada apa pun mendengarkan port BERAPA
+          PUN nilainya. SENGAJA TIDAK diisi otomatis (butuh password Hostinger
+          milik user) — didokumentasikan di DEPLOY_HOSTINGER.md §2.
+
+      (d) BUG TERPISAH DI FRONTEND — bentuk URL PRODUKSI MUSTAHIL DINYATAKAN.
+          Tiga berkas (api.js, authApi.js, profileApi.js) masing-masing
+          menyusun sendiri backticked template `${backendUrl}:${backendPort}/api`
+          dengan titik dua HARDCODED dan fallback `|| 5005`. Mengosongkan
+          VITE_BACKEND_PORT untuk produksi (backend di balik proxy HTTPS
+          standar, tanpa port) tetap jatuh ke `:5005` →
+          `https://propmatches.fun:5005/api` — semua panggilan API dari
+          browser pengunjung gagal.
+          Fix: satu helper `frontend/src/services/backendBaseUrl.js` —
+          URL https:// tanpa port eksplisit di .env → TANPA port ditempel;
+          URL yang sudah membawa port sendiri → dipakai apa adanya. Ketiga
+          berkas konsumen disatukan ke helper ini. Diverifikasi dengan
+          `npm run build` lalu di-grep LANGSUNG isi bundle: baseURL akhir
+          persis `https://propmatches.fun/api`, nol port menempel.
+
+      `backend/.env` & `frontend/.env` disetel ke nilai produksi (nilai lokal
+      disimpan sebagai baris ter-komentar tepat di atasnya untuk kembali
+      mudah): `APP_URL=https://propmatches.fun`,
+      `AI_PRIMARY_TAG=propmatches.fun` (sebelumnya salah menunjuk
+      propmatches.netlify.app — frontend lama), `VITE_BACKEND_URL=
+      https://propmatches.fun`, `VITE_BACKEND_PORT=` (kosong sengaja).
+
+      Panduan lengkap ditulis ke **DEPLOY_HOSTINGER.md** (root project) —
+      checklist §0 ringkasan penyebab, §2–§5 langkah database/Node
+      app/frontend/routing .htaccess, §6 KEAMANAN (peringatan .env berisi
+      ±10 API key aktif TIDAK BOLEH ter-upload ke public_html — uji
+      `https://propmatches.fun/.env` harus 404), §7 urutan verifikasi.
+      ⚠️ Kunci yang sempat tertempel di chat (NGROK_AUTHTOKEN) DISARANKAN
+      di-rotate — chat bukan penyimpanan rahasia yang aman.
+
+      Tidak ada tes otomatis baru (perubahan konfigurasi + routing, bukan
+      logika bisnis) — diverifikasi lewat simulasi node -e (6 kasus baseURL,
+      resolusi CORS origin dev vs produksi) + `npm run build` sungguhan +
+      grep isi bundle. Suite backend tidak berubah: **1519/1540**.
+
+  ⭐ REKONSILIASI PENOMORAN M — PENTING UNTUK SESI BERIKUTNYA. Dua rangkaian
+     kerja PARALEL pada tanggal yang sama (18 Agu 2026) SEMPAT memakai ulang
+     M92–M95 (bentrok dengan M92/M93 yang sudah dipakai lapisan RAG/gambar di
+     §5 atas). Sudah DIREKONSILIASI DI SINI menjadi M94–M100 secara
+     kronologis. Bila menemukan referensi "M92" untuk Sidotopo atau "M94"
+     untuk villa budget di catatan/tes lama, itu adalah PENOMORAN SEMENTARA
+     yang SUDAH digantikan angka final di atas — isi teknisnya identik, hanya
+     labelnya yang berubah. Nomor M berikutnya: **M101**.
+
+
+================================================================================
+  6. ENVIRONMENTS — KONFIGURASI .env
+================================================================================
+
+FILE: backend/.env (copy dari .env.example; JANGAN commit .env asli)
+
+CORE      APP_PORT=5055 · APP_FRONTEND_PORT=5173 · APP_NAME=Elevan Property
+          ⚠️ DI-RENAME dari PORT/FRONTEND_PORT (18 Agu, M100) — tapi
+          server.js membaca `process.env.PORT` LEBIH DULU (fallback ke
+          APP_PORT) karena Hostinger/Passenger & PaaS lain menyuntikkan port
+          lewat nama generik `PORT`. JANGAN hapus prioritas ini.
+DATABASE  DB_HOST · DB_USER · DB_PASSWORD · DB_NAME=db_property · DB_DIALECT=mysql
+          ⚠️ PRODUKSI Hostinger: DB_HOST tetap `localhost` (DB satu server
+          dengan app), DB_USER/DB_NAME memakai prefix akun (mis.
+          u310807636_propmatches / u310807636_db_property) — lihat
+          DEPLOY_HOSTINGER.md §2
+APP_URL   origin publik backend (mis. https://propmatches.fun) — dipakai
+          server.js untuk menurunkan CORS allowed origins produksi (M100)
+NGROK     NGROK_ENABLE=true                 ⚠️ NGROK_AUTHTOKEN kini BENAR-BENAR
+          dibaca & dipakai (M94) — sebelumnya nol pengaruh, tunnel jalan
+          hanya karena config file mesin kebetulan sudah punya token
+
+AI PROVIDERS
+  AI_PRIMARY_PROVIDER=chatgpt      # NILAI AKTUAL 14 Agu 2026 — SELALU cek ulang
+                                    # chatgpt|claude|qwen|deepseek|kimi|private
+  ENABLE_CLAUDE_FALLBACK=true
+  ENABLE_CHATBOT_PRIVATE_CONTROLLER=true
+  CHAT_GPT_API_KEY / CHAT_GPT_MODEL=gpt-4o-mini / CHAT_GPT_MAX_OUTPUT_TOKENS=4096
+    ⚠️ TPM org 60.000/menit. Prompt per pesan ±67K. JANGAN memotong history
+       sebagai mitigasi (M64) — naikkan limit lewat billing OpenAI, ATAU
+       kurangi doc selalu-aktif (§8), ATAU pindah primary ke provider lain.
+    ⭐ Kunci ini JUGA dipakai embeddingService.js mode `openai` (RAG) — satu
+       kredensial, dua kegunaan, nol biaya setup tambahan.
+  ANTHROPIC_API_KEY / CLAUDE_MODEL / CLAUDE_MAX_TOKENS
+  QWEN_BASE_URL / QWEN_API_KEY / QWEN_MODEL
+  DEEPSEEK_API_KEY / DEEPSEEK_MODEL=deepseek-v4-flash  ⚠️ WAJIB v4
+  KIMI_API_KEY / KIMI_MODEL=kimi-k3 / KIMI_BASE_URL=https://api.moonshot.ai/v1
+    ⚠️ KIMI_TOP_P WAJIB 0.95 — kimi-k3 menolak nilai lain (M74).
+
+CHATBOT MODE & MEMORI
+  RESPOND_CATALOG_RUN=ON           # ON=brief+katalog | OFF=brief saja
+  CHATBOT_COOKIE_TTL_MINUTES=90
+  AI_COOKIE_RESPONSE_TIMER=12000   # ms debounce; mutex per-key anti-race (M78)
+  AI_HISTORY_WINDOW=60             # jendela history (min 24)
+  AI_PROMPT_DISPLAY_TURNS=20       # hanya TAMPILAN transkrip; state SELALU
+                                    # dari history penuh (M64)
+
+⭐ RAG (BARU — Retrieval-Augmented Generation, lihat §5 M92)
+  RAG_ENABLED=OFF                  # ON = aktifkan; OFF = perilaku persis
+                                    # pra-RAG, nol token tambahan (default)
+  RAG_EMBEDDING_MODE=              # openai|local|kosong(auto-detect dari
+                                    # CHAT_GPT_API_KEY). PRODUKSI: pakai openai
+                                    # — mode local terbukti kurang akurat pada
+                                    # query pendek (lihat tabel di §5 M92)
+  RAG_EMBEDDING_MODEL=text-embedding-3-small
+  RAG_LOCAL_EMBEDDING_DIMS=512
+  RAG_EMBEDDING_BATCH=64           RAG_EMBEDDING_TIMEOUT_MS=20000
+  RAG_CHUNK_MAX_CHARS=1800         RAG_CHUNK_MIN_CHARS=120
+  RAG_MIN_SCORE=0.12               RAG_MMR_LAMBDA=0.7
+  RAG_KNOWLEDGE_TOP_K=3            RAG_KNOWLEDGE_MAX_CHARS=3500
+  RAG_CATALOG_TOP_K=5              RAG_CATALOG_MAX_CHARS=3000
+  RAG_SKILL_TOP_K=4                RAG_SKILL_MAX_CHARS=5000
+  RAG_ANSWER_MIN_SCORE=0.30        # ambang jawaban EKSTRAKTIF Private Agent
+                                    # (lebih tinggi dari RAG_MIN_SCORE — tidak
+                                    # ada model bahasa di belakangnya)
+  RAG_ANSWER_MIN_BODY_CHARS=150    # tolak chunk "yatim" (heading tanpa isi)
+
+⭐ GAMBAR PROPERTI (BARU — lihat §5 M93)
+  PROPERTY_IMAGE_SEND_ENABLED=OFF  # ON untuk aktifkan pengiriman gambar
+  PROPERTY_IMAGE_PUBLIC_BASE_URL=  # WAJIB domain sungguhan di PRODUKSI.
+                                    # Kosong = fallback tunnel ngrok aktif
+                                    # (dev only, TIDAK cocok untuk produksi)
+  PROPERTY_IMAGE_MAX_PER_REPLY=3   # batas gambar per balasan
+
+AI FOOTER      AI_PRIMARY_TAG=propmatches.fun  (⚠️ M100: sebelumnya salah
+               menunjuk propmatches.netlify.app — frontend LAMA. Dipakai
+               isOwnEcho() juga, bukan cuma footer kosmetik — lihat M100)
+SKILL LIMITS   SKILL_MAX_RESPONSE_CHARACTERS=330000
+               SKILL_MAX_PROJECT_CHARACTERS=345000
+PAGINATION     PAGINATION_ROWS=8
+
+WHATSAPP — FONNTE       FONNTE_TOKEN · FONNTE_POLLING_ENABLED · retry/timeout
+WHATSAPP — TIMELINESAI  TIMELINESAI_API_KEY
+WHATSAPP — KIRIMI       KIRIMI_USER_CODE · KIRIMI_SECRET (level AKUN)
+                        + users.kirimi_device_id (per-agent, di DB)
+                        ⚠️ retry mencakup HTTP 5xx/429 (M77)
+                        ⭐ kini juga bisa kirim gambar via media_url (M93)
+TERMINAL       MESSAGE_TERMINAL=KIRIMI · MASSEGE_TERMINAL=KIRIMI
+PROPERTY DATA  RUMAH123_DATA=OFF · APIFY_API_TOKEN
+               ⚠️ M100: default FAIL-CLOSED sekarang ('OFF' bila env hilang,
+               dulu fail-open ke 'ON'). SATU gerbang
+               rumah123ContextService.isRumah123EnabledForAI() dipakai
+               KEEMPAT jalur AI — chatbot WEB sebelumnya TIDAK PERNAH
+               mengeceknya sama sekali (bocor). Halaman /api/rumah123/*
+               TIDAK memakai gerbang ini, tetap hidup penuh apa pun nilainya.
+
+GAMBAR PROPERTI (upload master — SUDAH ADA sejak sebelum V8, dipakai M93)
+  PROPERTY_IMAGE_DIR=../frontend/public/assets/image_data
+  PROPERTY_IMAGE_URL_BASE=/assets/image_data
+  PROPERTY_IMAGE_DEFAULT_DIR=properties
+  PROPERTY_IMAGE_MAX_MB=5          PROPERTY_IMAGE_MAX_FILES=10
+
+GOOGLE
+  GOOGLE_SHEET_ID · GOOGLE_SERVICE_ACCOUNT_JSON_PATH
+  GOOGLE_API_KEY (Places) ⚠️ BLOCKED: billing Google Cloud project belum enable
+  GOOGLE_OAUTH_CLIENT_JSON_PATH / GOOGLE_OAUTH_REFRESH_TOKEN
+    ⚠️ REFRESH_TOKEN MASIH KOSONG — Calendar auto-schedule belum live
+  GOOGLE_CALENDAR_TIMEZONE=Asia/Jakarta
+
+AUTH  ACCESS_TOKEN_SECRET · REFRESH_TOKEN_SECRET · expiry · BCRYPT_SALT_ROUNDS
+
+FILE: frontend/.env
+  VITE_BACKEND_URL · VITE_BACKEND_PORT=5055 · VITE_DEV_SERVER_PORT=5173
+
+CATATAN PENTING
+  - Kirimi butuh kredensial AKUN (.env) DAN device per-agent (DB).
+  - Google Places & Calendar sudah di-wire tapi punya prasyarat eksternal
+    yang belum tuntas — jangan dikira bug kode.
+  - Perubahan .env BARU BERLAKU SETELAH BACKEND DI-RESTART.
+  - ⭐ RAG_ENABLED=OFF dan PROPERTY_IMAGE_SEND_ENABLED=OFF adalah DEFAULT —
+    fitur di §5 M92/M93 TIDAK aktif sampai keduanya di-set ON secara sengaja.
+
+
+================================================================================
+  7. INFORMASI — ARSITEKTUR, AGENT & DATA
+================================================================================
+
+AGENT
+  1 agent = 1 record `users` (privilege='agent'): user_id, name, phone,
+  email, catalog_summary, fonnte_token, kirimi_device_id, trans_type,
+  payment_type, rental_duration, rental_type (M90).
+  Identifikasi webhook: Fonnte→users.phone · Kirimi→users.kirimi_device_id ·
+  TimelinesAI→users.phone. Katalog di-scope ke Property.user_id.
+
+DB TABLES (db_property)
+  users · customers · properties · property_images · property_facilities ·
+  property_locations · chat_sessions · chat_messages · facilities (+keywords
+  JSON) · contacts · locations · countries · provinces · cities · logs ·
+  whatsapp_inbound_messages (legacy)
+  ⭐ TIDAK ADA tabel baru untuk RAG — indeks vektor persist ke berkas JSON
+  (backend/data/rag-index.json), BUKAN MySQL. Gambar properti memakai
+  property_images.url yang SUDAH ADA (kolom relatif, diresolusi ke absolut
+  saat kirim, tidak diubah skemanya).
+
+MODEL Customer (inti sejak V4)
+  { user_id (FK agent), customer_id UNIQUE, name, phone (62xxx), email,
+    ai_response 'ON'|'OFF', status, audit }
+  INDEX UNIQUE (user_id, phone) — 1 nomor bisa terdaftar di banyak agent.
+
+ALUR PESAN WHATSAPP (identik di 3 controller; ⭐ = baru V8, Kirimi saja)
+  1. Webhook → log raw → detectEventType
+  2. Bukan 'incoming' → return 200
+  3. 'incoming' → RETURN 200 DULU → proses background:
+     a. extract sender/name/message/messageId
+     b. lazyChatNormalizer.expandAbbreviations()
+     c. fromMe guard → filter grup → isOwnEcho/stripOwnEcho
+     d. dedup L1 (messageId) + L2 (DB)
+     e. PERINTAH AGENT (toggle catalog_summary / ai_response)
+     f. session findOrCreate → GATE ai_response=OFF
+     g. property gate → checkAgentScope (M90) → dorman pasca-summary
+     h. COOKIE RESPONSE TIMER (debounce, mutex per-key — M78)
+     i. simpan pesan RAW → generateWhatsAppAIReply (⭐ kini menghitung
+        ragContext fail-open sebelum memanggil provider AI) → simpan balasan
+     j. syncCustomerFromChat → viewingScheduleTrigger
+     k. kirim balasan (retry 5xx/429 + deteksi duplicate) → ⭐ kirim gambar
+        properti (opt-in, non-fatal, SETELAH teks sukses) → log terminal
+
+QUALIFICATION FLOW — URUTAN AKTUAL findNextQuestion() (tidak berubah dari V7)
+  Q0  Batas layanan agent (M90, cek sebelum semua pertanyaan lain)
+  Q1  Tipe transaksi (sewa/beli/booking)
+  Q2  Kota            ← Q1+Q2 terjawab = TRIGGER REGISTRASI CUSTOMER
+  Q2c Area/kecamatan (SEMUA kota sejak M84)   · Q2b Riwayat pencarian
+  Q3  Budget (2 harga kontras; terima/tolak/angka sendiri)
+  Q8  Tanggal masuk (WAJIB)
+  Q4  Penghuni · Q5 Red flags (Hindari↔Prefer, preferensi≠red flag M89) ·
+  Q6  Patokan lokasi (anchorPoint overwrite guard + district "Di X" routing)
+  Q7  Area alternatif (jangkar area bila diketahui, kota bila tidak — M76/M84)
+  Q9  Decision maker (penolakan telanjang / survei sendiri = Mandiri)
+  Q10 Durasi sewa/menginap (sukarela + booking jangka pendek — M82/M89) ·
+  Q_KPR/Q_KPR-a/Q_COND (beli) · Q11 Furnitur
+  Q12 Tower/lantai (apartemen) · Q14 slot per-tipe
+  Q_FAC  Fasilitas (WAJIB — 23 variasi "terserah" dikenali, M91)
+  Q9b Tanggal survei (fallback dari kalimat AI sendiri) → Q9c Jam survei
+  → SUMMARY (contoh konkret anti-halusinasi per field, M83/M91)
+    ⭐ + katalog (RESPOND_CATALOG_RUN=ON) + ⭐ gambar properti (opt-in, M93)
+    + ⭐ pengetahuan RAG bila customer bertanya di luar Q-flow (opt-in, M92)
+
+  Mandatory sebelum brief: transaksi, tipe, kota, budget, tanggal,
+  red flags, patokan, area alternatif, fasilitas, jadwal survei.
+
+
+================================================================================
+  8. SKILLS — AI SKILL SYSTEM
+================================================================================
+
+LOKASI (6 folder — ⭐ knowledge/ BARU, BUKAN skill doc)
+  skills/claude_responds/           → system prompt Claude (SKILL.md + docs 01–13)
+  skills/chat_gpt_responds/         → ChatGPT/QWEN/DeepSeek/Kimi (docs BYTE-IDENTICAL)
+  skills/elevan-property-assistant/ → edisi STANDALONE untuk upload ke
+                                      platform.openai.com/storage/skills
+                                      ⚠️ TIDAK di-load kode backend
+  skills/website_env_concept/       → arsitektur teknis (docs 00–19)
+  skills/website_design_guidelines/ → panduan desain UI
+  ⭐ knowledge/property-id/          → korpus RAG (BARU, 3 berkas). BUKAN skill
+                                      doc — tidak dimuat penuh ke prompt,
+                                      hanya diambil per-chunk saat relevan.
+                                      Lihat §5 M92 untuk alasan pemisahan ini.
+  Real-Estate/                      → 26 file: 12 playbook tipe + *_CHAT.md
+                                      + MASTER QFLOW + ANSWER COMPLETENESS
+
+  ⚠️ KETIGA folder AI-facing (claude_responds, chat_gpt_responds, elevan-
+  property-assistant) BELUM diperbarui sesi ini untuk menyebutkan kapabilitas
+  RAG & pengiriman gambar — kode SUDAH berfungsi dan teruji, tapi AI TIDAK
+  TAHU dari prompt-nya sendiri bahwa kapabilitas ini ada (RAG bekerja secara
+  transparan lewat konteks yang disuntik, jadi ini tidak fatal, tapi doc 08
+  §0 idealnya diperbarui agar AI paham kontrak "gambar mungkin menyusul
+  balasan" saat menjelaskan proses ke customer). Lihat §10 ROADMAP.
+
+SKILL DOCS (claude_responds/docs — struktur 01–13, jangan pakai nomor lama)
+  01 Core role, scope, style          08 Catalog & recommendations
+  02 Language & intent detection      09 Off-topic & escalation
+  03 Conversation memory & stability  10 Date & money parsing
+  04 Qualification flow Q1–Q14 ★      11 House pilots            [KONDISIONAL]
+  05 Answer completeness & re-ask     12 Facilities reference    [KONDISIONAL]
+  06 Customer conditions              13 Locations & landmarks   [KONDISIONAL]
+  07 Property type playbooks
+  ⭐ Doc 07/08/10/11/12/13 adalah yang DIINDEKS oleh RAG (RAG_ELIGIBLE_SKILL_
+  DOCS di scripts/build-rag-index.js) sebagai referensi PELENGKAP — bukan
+  pengganti. Doc 01/02/03/04/05/06/09 (aturan inti + flow) TIDAK PERNAH
+  di-index untuk RAG — selalu dimuat penuh seperti sebelumnya.
+
+  CONDITIONAL_FILE_TRIGGERS (skillPromptService.js): hanya 3 doc bersyarat
+  (11/12/13); 10 doc lainnya SELALU dimuat penuh — TIDAK berubah oleh RAG.
+  ⚠️ Mekanisme ini TERPISAH dari RAG: CONDITIONAL_FILE_TRIGGERS adalah regex
+  per-BERKAS (kasar, sudah ada sejak v7.0 konsolidasi); RAG adalah retrieval
+  semantik per-CHUNK (baru, lebih presisi, tapi hanya untuk 6 doc referensi
+  di atas dan HANYA aktif bila RAG_ENABLED=ON).
+
+UKURAN PROMPT (diukur terakhir 3 Agu 2026, BELUM diukur ulang pasca-M84–M91
+  — §PERUBAHAN BESAR V7→V8 mencatat estimasi 269.504 char ≈ 67.400 token dari
+  laporan perbandingan model 10 Agu 2026, SUDAH melampaui plafon 60K)
+  10 doc selalu-aktif : 173.418 chars ≈ 43.400 token  (angka V6, kemungkinan
+                                                        naik pasca M84–M91)
+  +3 doc kondisional  : 223.218 chars ≈ 55.800 token  (idem)
+  Plafon acuan gpt-4o-mini : 60.000 token/menit (provider lain bervariasi)
+  ⚠️ RAG TIDAK menambah beban prompt permanen — ia MENGGANTIKAN potensi
+  "muat semua doc referensi selalu" dengan "ambil beberapa chunk relevan saja"
+  — tapi manfaat pengurangan token INI BARU TERWUJUD setelah doc 07/08/10/
+  11/12/13 berhenti always-loaded di skillPromptService.loadSkillGroupPrompt
+  (BELUM dilakukan sesi ini — RAG baru MENAMBAH kemampuan, belum MENGURANGI
+  beban lama). Lihat §10 ROADMAP.
+  Setiap aturan yang ditambahkan LANGSUNG ke prompt (bukan lewat RAG opt-in)
+  tetap memperkecil ruang tersisa DAN menurunkan kepatuhan model (M62).
+  Prioritaskan ekstraktor kode daripada aturan prosa — KECUALI kelas
+  kesalahannya "LLM mengabaikan never-invent" (M83), yang butuh CONTOH
+  KONKRET, bukan ekstraktor maupun aturan abstrak baru.
+
+GAYA AI (wajib)
+  Ramah/hangat · sopan · responsif · adaptif · informatif · pakai "Kak" ·
+  1 pertanyaan per pesan · mirror bahasa customer · JANGAN bocorkan AI chain ·
+  nama agent & app SELALU dinamis · PENOLAKAN CUSTOMER = JAWABAN ·
+  landmark: jangan pernah mengarang nama/status buka/jam operasional ·
+  JANGAN pernah menulis kode slot internal (Q1, Q9, Q_FAC, dst) ke customer ·
+  ⭐ pengetahuan dari RAG: kutip apa adanya, JANGAN mengarang angka pajak/bank
+  di luar yang tertera, SELALU arahkan ke tim untuk kepastian angka.
+
+
+================================================================================
+  9. TUJUAN
+================================================================================
+
+TUJUAN BISNIS
+  1. Otomasi kualifikasi lead WhatsApp — agent menerima brief siap-tindak
+     (target ≤ 12 pesan AI per lead).
+  2. Tidak ada lead hilang — Q1+Q2 terjawab = tercatat.
+  3. Multi-agent scalable — katalog/customer/nomor terpisah per agent.
+  4. Kontrol penuh agent — takeover kapan pun (ai_response=OFF).
+  5. Customer merasa DIDENGAR — penolakan dihormati sebagai jawaban final;
+     jawaban sukarela TIDAK dibuang hanya karena antrean pertanyaan belum
+     sampai; tidak ada pengulangan pertanyaan yang memicu kemarahan.
+  6. ⭐ Customer mendapat jawaban AKURAT untuk pertanyaan jual-beli properti
+     di luar Q1–Q14 murni (legalitas, pajak, KPR) tanpa AI mengarang angka —
+     dan bisa "melihat" properti lewat gambar, bukan hanya teks.
+
+TUJUAN TEKNIS
+  1. Percakapan TIDAK repetitif/overlap/redundan — state stabil sepanjang
+     percakapan sepanjang apa pun.
+  2. Status pengiriman JUJUR di terminal, dengan retry yang benar-benar
+     menutupi gangguan sesaat (5xx/429), bukan hanya error jaringan.
+  3. Summary AKURAT — nilai konkret, tanpa placeholder, tanpa karangan,
+     dijaga dengan CONTOH KONKRET before/after saat model cenderung halusinasi.
+  4. Satu sumber kebenaran per konsep.
+  5. Fail-open pada gate non-kritis; gate ketat HANYA untuk state integrity.
+  6. Verifikasi di JALUR YANG MELAYANI PRODUKSI, bukan fallback.
+  7. Disiplin token — ukur dampak sebelum menambah apa pun ke prompt.
+  8. Setiap perbaikan perilaku WAJIB punya tes regresi dengan transkrip nyata
+     DAN kontrol negatif.
+  9. Concurrency per-session-key aman — satu sesi tidak pernah diproses AI
+     dua kali secara paralel (M78).
+  10. ⭐ Fitur pelengkap (RAG, pengiriman gambar) TIDAK PERNAH boleh memutus
+      atau memperlambat balasan utama — fail-open mutlak, opt-in eksplisit,
+      diverifikasi dengan kontrol negatif yang SAMA ketatnya dengan fitur inti.
+  11. ⭐ Aturan perilaku inti TIDAK PERNAH bergantung pada hasil retrieval
+      yang bisa meleset — hanya materi referensi besar yang boleh diambil
+      lewat RAG, bukan aturan yang sudah terbukti rapuh bila tidak dipatuhi
+      (M62, M83, M84).
+
+
+================================================================================
+  10. ROADMAP
+================================================================================
+
+JANGKA PENDEK (1–2 minggu)
+  [ ] ⭐ Update skill docs KETIGA folder AI-facing (claude_responds,
+      chat_gpt_responds, elevan-property-assistant) agar menyebutkan RAG &
+      pengiriman gambar — SKILL.md §3/§8 dan doc 08 §0 adalah kandidat utama
+  [ ] ⭐ Implementasi mode embedding HuggingFace di embeddingService.js
+      (diminta eksplisit, belum dikerjakan — API gratis, cocok sebagai
+      alternatif tanpa biaya untuk RAG_EMBEDDING_MODE)
+  [ ] ⭐ Set RAG_EMBEDDING_MODE=openai (bukan local) sebelum RAG_ENABLED=ON
+      di produksi — mode local terbukti kurang akurat pada query pendek,
+      TIDAK layak untuk ambang jawaban Private Agent yang ketat
+  [ ] ⭐ Jalankan `node scripts/build-rag-index.js` dengan DB live untuk
+      membangun namespace agent_catalog yang sesungguhnya (belum pernah
+      dijalankan dengan koneksi DB produksi)
+  [ ] ⭐ Ukur ulang UKURAN PROMPT (§8) pasca-M84–M91 — angka §8 masih dari
+      3 Agu 2026 (V6), sedangkan laporan 10 Agu (V7) sudah mencatat 67.400
+      token; perlu angka pasti terbaru sebelum memutuskan langkah pengurangan
+  [ ] ⚠️ PRIORITAS LAMA: pantau/naikkan limit TPM provider aktif (billing)
+  [ ] Enable billing Google Cloud → Places API live
+  [ ] Isi GOOGLE_OAUTH_REFRESH_TOKEN → Calendar auto-schedule live
+
+JANGKA MENENGAH (1–2 bulan)
+  [ ] ⭐ Kurangi doc selalu-aktif dengan MEMANFAATKAN RAG yang sudah ada —
+      doc 07/08/10/11/12/13 SUDAH bisa diambil lewat retrieval; langkah
+      berikutnya adalah BENAR-BENAR menghentikan always-loading-nya di
+      skillPromptService.js supaya token benar-benar berkurang (RAG saat ini
+      MENAMBAH kemampuan tapi belum MENGURANGI beban prompt lama)
+  [ ] ⭐ Pertimbangkan mengaktifkan `includeAgentCatalog` di jalur LLM SETELAH
+      brief tampil (perlu sinyal "summary sudah ditampilkan giliran ini" yang
+      andal — bukan sekadar showCatalogAfterBrief, yang benar sepanjang sesi)
+  [ ] ⭐ Tes otomatis untuk fungsi propertyImageService yang menyentuh DB
+      (getRandomImageForProperty, getImagesForMentionedProperties) — saat ini
+      hanya diverifikasi manual, bukan tes regresi otomatis
+  [ ] ⭐ Uji pengiriman gambar dengan Kirimi API SUNGGUHAN (media_url) — baru
+      diverifikasi lewat pembacaan dokumentasi & pola kode, belum panggilan
+      nyata ke endpoint Kirimi dengan media_url terisi
+  [ ] Dashboard analytics: funnel Q1→brief, konversi per tipe/agent/lokasi
+  [ ] Follow-up otomatis lead dorman
+  [ ] Riwayat percakapan per customer di Customer Master
+  [ ] Export lead ke CSV/Sheets
+
+JANGKA PANJANG
+  [ ] Multi-bahasa penuh (Mandarin/Jepang/Korea) untuk pasar wisata Bali —
+      ⭐ korpus RAG saat ini HANYA Bahasa Indonesia; perlu korpus terjemahan
+      atau strategi retrieval lintas-bahasa bila diperluas
+  [ ] Rekomendasi berbasis embedding (semantic match) — ⭐ INFRASTRUKTURNYA
+      SUDAH ADA (namespace agent_catalog di ragRetrievalService.js) tapi
+      belum diaktifkan di jalur produksi (lihat §5 M92 poin bug #1)
+  [ ] Mobile app agent
+  [ ] A/B testing skrip kualifikasi
+  [ ] Sistem komisi & tracking closing per agent
+
+DENGAN SENGAJA TIDAK AKAN DIKERJAKAN (keputusan tercatat, jangan diusulkan ulang
+tanpa alasan baru yang kuat)
+  [x] LangChain.js — duplikasi abstraksi yang sudah ada, ~50+ dependency
+      transitif tidak sepadan manfaatnya untuk skala proyek ini (§5 M92)
+  [x] Vector database (Chroma/Pinecone/Qdrant/dst) — skala data (±1.500
+      vektor) tidak membutuhkannya; cosine JS in-memory sudah <2ms (§5 M92).
+      Ambang batas untuk mempertimbangkan ulang: ~100k vektor.
+  [x] Tabel MySQL baru untuk indeks RAG — berkas JSON lebih sederhana dan
+      tidak menyentuh urutan boot yang rapuh (§5 M92)
+
+
+================================================================================
+  11. STRUKTUR PROJECT
+================================================================================
+
+Elevan_Property/
+├── backend/
+│   ├── server.js                    ← Entry; ensureRequiredDatabaseColumns()
+│   │                                   SEBELUM sequelize.sync(); ngrok
+│   ├── data/                        ← ⭐ BARU: rag-index.json (indeks vektor,
+│   │                                   dibangun offline, TIDAK di-commit git
+│   │                                   biasanya — cek .gitignore)
+│   ├── models/                      (17, TIDAK berubah — RAG & gambar
+│   │                                   properti memakai model yang sudah ada)
+│   ├── controllers/                 (25)
+│   │   ├── GeneralController.js     ← base CRUD helpers
+│   │   ├── chatbotPrivateController.js ← Private Agent (FALLBACK), Q1–Q14,
+│   │   │                               buildAgentBrief, #buildAvoidPreferPairs,
+│   │   │                               #dedupeAnchorLandmarks,
+│   │   │                               ⭐ #tryKnowledgeAnswer (RAG ekstraktif)
+│   │   ├── kirimiChatController.js  ← ⭐ sendViaKirimi() param ke-4 `mediaUrl`
+│   │   │                               (BARU) + wiring kirim gambar properti
+│   │   │                               setelah teks (opt-in)
+│   │   ├── fonnte/timelinesAI ChatController.js ← TIDAK disentuh sesi ini
+│   │   └── *MasterController.js (7 modul)
+│   ├── services/                    (30 — ⭐ 5 baru sesi ini)
+│   │   ├── whatsappAIService.js     ← orchestrator + LETAK SEMUA GERBANG,
+│   │   │                               ⭐ kini juga menghitung ragContext
+│   │   │                               (fail-open) sebelum panggil provider
+│   │   ├── aiPromptBuilderService.js ← ★ JALUR PRODUKSI: extractQualification
+│   │   │                               State, findNextQuestion,
+│   │   │                               buildQualificationStateBlock,
+│   │   │                               buildFinalDirective ★, ⭐ menyisipkan
+│   │   │                               extraContext.ragContext ke prompt
+│   │   │                               (fungsi TETAP SINKRON, tidak diubah)
+│   │   ├── ⭐ ragRetrievalService.js  ← BARU: orkestrasi retrieval, 3
+│   │   │                               namespace, buildRagContext(),
+│   │   │                               answerKnowledgeQuestion() (ekstraktif)
+│   │   ├── ⭐ embeddingService.js     ← BARU: mode openai/local, cosine,
+│   │   │                               fail-open openai→local otomatis
+│   │   ├── ⭐ vectorStoreService.js   ← BARU: cosine in-memory + MMR, JSON
+│   │   │                               persist, isolasi per-agent (filter)
+│   │   ├── ⭐ propertyImageService.js ← BARU: pilih gambar acak, resolusi
+│   │   │                               URL absolut, korelasi fail-closed
+│   │   ├── kimiService.js           ← Moonshot AI, KIMI_MODEL
+│   │   ├── catalogModeService.js    ← users.catalog_summary (cache TTL, M86)
+│   │   ├── agentBusinessRulesService.js ← users.trans_type/payment_type/
+│   │   │                               rental_* (cache TTL, M90)
+│   │   ├── ngrokService.js          ← ⭐ getCachedNgrokUrl() (BARU) — dipakai
+│   │   │                               propertyImageService untuk basis URL
+│   │   │                               publik saat dev tanpa domain sungguhan
+│   │   ├── openaiService.js         ← ⛔ JANGAN potong history di sini (M64)
+│   │   │                               ⚠️ env-nya CHAT_GPT_MODEL, bukan OPENAI_MODEL
+│   │   ├── propertyRecommendationService.js ← ⭐ detectBudget() satuan periode
+│   │   │                               MENEMPEL pada angka menang atas
+│   │   │                               pemindaian longgar (M99)
+│   │   ├── ⭐ rumah123ContextService.js ← isRumah123EnabledForAI() (M98) —
+│   │   │                               SATU-SATUNYA sumber kebenaran, default
+│   │   │                               FAIL-CLOSED, dipakai 4 jalur AI (BUKAN
+│   │   │                               oleh rumah123Controller.js/halaman)
+│   │   ├── customerRegistrationService.js · customerAiToggleService.js
+│   │   ├── viewingScheduleTrigger.js · googleCalendarService.js
+│   │   └── googlePlacesService.js · skillPromptService.js
+│   ├── controllers/rumah123Controller.js ← halaman /api/rumah123/* — SENGAJA
+│   │   │                               TIDAK memakai isRumah123EnabledForAI(),
+│   │   │                               tetap hidup penuh (M98)
+│   ├── utils/                       (29)
+│   │   ├── ragChunker.js            ← chunking Markdown sadar-heading,
+│   │   │                               tabel/kode TIDAK PERNAH dipotong
+│   │   ├── propertyKeywordFilter.js ← GERBANG MASUK (M87/M88/⭐M95 — detektor
+│   │   │                               Q4 penghuni BARU, gerbang 70-char) ·
+│   │   │                               sessionAnchors.js
+│   │   ├── agentScopeGuard.js       ← batas trans_type/payment_type/rental_*
+│   │   │                               (M90) · durationConverter.js (M90)
+│   │   ├── replyIdentityGuard.js    ← ganti placeholder tanda tangan (M85)
+│   │   ├── whatsappUtils.js · standardFacilities.js (11 tipe + premium)
+│   │   ├── customerDateParser.js (clamping/leap/reject_past)
+│   │   ├── lazyChatNormalizer.js (SMS-speak, 152+ entri; ⛔ jangan tambah "jl")
+│   │   ├── responseDebounce.js  ← mutex per-key (M78)
+│   │   ├── propertyImageStorage.js  ← storage upload gambar (SUDAH ADA,
+│   │   │                               TIDAK diubah — propertyImageService
+│   │   │                               HANYA membaca, tidak menulis)
+│   │   └── locationLandmarks.js (45 kota) · houseListingPilot.js
+│   ├── tests/                       (56 file — ⭐ 5 baru sesi 18 Agu:
+│   │   │                               ngrokAuthtoken, occupancyAnswerGateDrop,
+│   │   │                               warehouseAreaInventionAndCompoundAvoid,
+│   │   │                               rumah123DisabledForAI,
+│   │   │                               villaBudgetPeriodAndPreferences)
+│   └── scripts/
+│       ├── sync-db.js
+│       └── build-rag-index.js       ← indexer offline, 3 namespace
+│
+├── frontend/  (Vue 3, 7 modul *_Master, ConfirmModal, router guards)
+│   └── src/services/
+│       ├── ⭐ backendBaseUrl.js      ← BARU (M100): SATU sumber kebenaran
+│       │                               baseURL API — https:// tanpa port di
+│       │                               .env → TANPA port ditempel (produksi
+│       │                               di balik proxy). Dipakai api.js,
+│       │                               authApi.js, profileApi.js (dulu
+│       │                               masing-masing menyusun sendiri dengan
+│       │                               titik dua HARDCODED + fallback |5005,
+│       │                               membuat bentuk produksi mustahil)
+│
+├── ⭐ DEPLOY_HOSTINGER.md            ← BARU (M100): panduan deploy produksi
+│                                       propmatches.fun — 3 penyebab 503,
+│                                       checklist DB/Node app/frontend/routing,
+│                                       peringatan keamanan .env
+│
+├── ⭐ knowledge/                     ← BARU — korpus RAG, BUKAN skill doc
+│   └── property-id/
+│       ├── 01-legalitas-dan-sertifikat.md
+│       ├── 02-proses-pajak-dan-biaya.md
+│       └── 03-kpr-dan-pembiayaan.md
+│
+├── skills/
+│   ├── claude_responds/     (SKILL.md + docs 01–13) ⚠️ BELUM update RAG-aware
+│   ├── chat_gpt_responds/   (byte-identical docs)   ⚠️ BELUM update RAG-aware
+│   ├── elevan-property-assistant/ (standalone)       ⚠️ BELUM update RAG-aware
+│   ├── website_env_concept/ (docs 00–19)
+│   └── website_design_guidelines/
+│
+├── Real-Estate/             (26 file playbook + CHAT + MASTER QFLOW)
+├── database/                (SQL seed, termasuk 336 properti LEO FELIX)
+├── ELEVAN_PROPERTY_CONTEXT_V5.txt   ← arsip
+├── ELEVAN_PROPERTY_CONTEXT_V6.txt   ← arsip
+├── ELEVAN_PROPERTY_CONTEXT_V7.txt   ← arsip
+└── ELEVAN_PROPERTY_CONTEXT_V8.txt   ← FILE INI
+
+
+================================================================================
+  12. WORKFLOW
+================================================================================
+
+A. WORKFLOW CUSTOMER (end-to-end; ⭐ = baru V8, hanya bila opt-in ON)
+   1. Chat WA ke nomor agent → webhook
+   2. Normalisasi singkatan → guard (fromMe/grup/echo/dedup)
+   3. Cek ai_response → OFF? AI diam
+   4. Batas layanan agent (M90) → Gate properti → debounce 12s (mutex, M78)
+   5. Q0 (batas layanan bila relevan) → Q1 → Q2 (Q1+Q2 = CUSTOMER TERDAFTAR)
+   6. Q2c → Q3 (terima/tolak harga) → Q8 → Q4 → Q5 → Q6 → Q7 → Q9
+      ⤷ ⭐ Bila customer bertanya di luar Q-flow (legalitas/pajak/KPR) dan
+        RAG_ENABLED=ON: jalur LLM dapat konteks tambahan; Private Agent bisa
+        menjawab ekstraktif langsung bila skor kecocokan cukup tinggi
+   7. Q10 → Q11 → Q12 → Q14 → Q_FAC → Q9b (tanggal) → Q9c (jam)
+      ⤷ Penolakan di titik mana pun = JAWABAN, bukan slot kosong
+      ⤷ Jawaban sukarela (di luar urutan) = TETAP DICATAT, bukan dibuang
+   8. Customer BARU? tanya nama/email. Customer LAMA? lewati.
+   9. SUMMARY brief (contoh konkret anti-halusinasi, M83/M91) (+ katalog bila
+      RESPOND_CATALOG_RUN=ON) → ⭐ + gambar properti (opt-in, M93, hanya
+      untuk properti yang namanya benar-benar disebut di balasan)
+  10. Sticky anchor di-clear → siap pencarian berikutnya
+
+B. WORKFLOW AGENT (kontrol via chat)
+   - "matikan/nyalakan summary"          → users.catalog_summary
+   - "matikan AI untuk 628xxx"           → customers.ai_response=OFF
+   ⚠️ WAJIB NOMOR WHATSAPP; hanya berlaku dari nomor agent sendiri.
+
+C. WORKFLOW AGENT (dashboard)
+   Login → Master Data (Country→Province→City→Location→Facility→Property)
+   → Customer Master → Chat history
+
+D. WORKFLOW DEVELOPER (menambah/ubah fitur chat)
+   1. CEK AI_PRIMARY_PROVIDER + log runtime — jalur mana yang melayani produksi
+   2. Baca skill docs terkait (04 flow, 05 completeness, 06 kondisi customer)
+   3. Ubah kode DI JALUR YANG BENAR
+   4. node --check <file>
+   5. Simulasi node -e dengan TRANSKRIP NYATA + call site identik produksi
+   6. Ukur dampak token bila menyentuh prompt LANGSUNG (bukan lewat RAG)
+   7. Tulis tes regresi (termasuk kontrol NEGATIF)
+   8. Jalankan SELURUH suite (`for f in tests/*.test.js; do node $f; done`,
+      jumlahkan `RESULT: p/t` — TIDAK ADA `npm test`), bandingkan dgn baseline
+   9. Update skill docs KETIGA folder
+  10. ⭐ Bila menyentuh knowledge/ atau doc referensi RAG-eligible (07/08/10/
+      11/12/13): jalankan ulang `node scripts/build-rag-index.js`
+  11. Restart backend
+  12. Catat solusinya di §5 (nomor M berikutnya)
+
+
+================================================================================
+  13. TROUBLESHOOT SUMMARY
+================================================================================
+
+GEJALA → PENYEBAB → SOLUSI
+
+[CHAT / AI]
+
+  AI mengulang pertanyaan yang SUDAH dijawab
+    → LANGKAH 1: dump state block. Bila state BENAR tapi AI tetap mengulang →
+      masalah ukuran/posisi prompt (M62), bukan ekstraksi. Pastikan DIREKTIF
+      FINAL ada di posisi 100%.
+    → LANGKAH 2: bila state SALAH (field null padahal customer sudah jawab) →
+      ekstraktornya yang kurang. Cek apakah jawabannya berbentuk singkat/
+      penolakan/singkatan/SUKARELA-di-luar-urutan (M63, M65, M67, M68, M75, M82).
+    → LANGKAH 3: bila SEMUA field null pada percakapan panjang → ada yang
+      memotong history sebelum builder (M64). Jangan pernah.
+    → LANGKAH 4: bila pertanyaan yang SUDAH dijawab dengan BAIK berubah lagi
+      jadi kosong secara acak → cek race condition di debounce (M78).
+      Tambahkan overwrite guard di ekstraktor terkait (M80/M81).
+
+  AI me-reset ke "pencarian baru" di tengah alur
+    → Sama dengan di atas: state kosong. Cek M64 dulu.
+
+  AI menolak jawaban sah sebagai "non-properti"
+    → Rule 0 di prompt LLM. DIREKTIF FINAL memuat larangan eksplisit; pastikan
+      terpasang. hasPropertyKeyword() sering FALSE untuk jawaban pendek —
+      itu normal, gerbang sesungguhnya isPropertyContextContinuation().
+    → ⚠️ Bila pesan PEMBUKA (bukan lanjutan) berisi transaksi/tipe BARU yang
+      baru saja ditambahkan ke sistem (mis. booking, kondotel) tapi tetap
+      dibuang → cek ACTION_WORDS/PROPERTY_TYPES di propertyKeywordFilter.js
+      (M87 — fitur lengkap di findNextQuestion tidak berarti apa-apa bila
+      gerbang masuk tidak diperbarui bersamaan).
+    → ⚠️ Bila pertanyaan yang DIKIRIM AI SENDIRI lalu jawabannya dibuang →
+      cek apakah pola kalimat pertanyaan itu dikenali gate-nya sendiri (M88 —
+      kelas desync yang sama dengan M85: skill doc/gate merujuk sesuatu yang
+      tidak benar-benar cocok dengan apa yang sesungguhnya di-emit/ditanya).
+
+  Fasilitas / jadwal survei tidak pernah ditanya
+    → Pastikan Q_FAC dan Q9b/Q9c ada di findNextQuestion() (M69, M70).
+
+  Summary memuat nilai karangan / arah terbalik (Hindari↔Prefer)
+    → LANGKAH 1: dump state SEBELUM prompt dikirim. Bila state = null/❓ →
+      ekstraktor kurang, tambahkan (M71).
+    → LANGKAH 2: bila state SUDAH bersih/benar tapi LLM TETAP mengarang →
+      BUKAN bug ekstraksi. Tambahkan CONTOH KONKRET before/after per field ke
+      buildFinalDirective() + skill doc, bukan aturan abstrak lagi (M83, M91).
+
+  Pesan AI ganda / terpotong / balasan berbeda dalam <2 menit untuk sesi sama
+    → Race condition di debounce (M78). Cek apakah responseDebounce.js
+      menghapus _pending[key] SEBELUM (salah) atau SESUDAH (benar) onFire
+      async selesai. Symptomnya sering muncul sebagai bug lain (Q6 overwritten,
+      Q7 diulang) — selalu cek debounce dulu bila polanya "muncul acak".
+
+  Agent melayani transaksi/durasi di luar batas yang di-set di profilnya
+    → Cek agentBusinessRulesService cache TTL sudah hangat, dan gerbang
+      checkAgentScope() benar-benar dipanggil SEBELUM qualification gate di
+      whatsappAIService.js (M90). Ingat asimetri payment_type: cash SELALU
+      diterima meski profil di-set KPR — itu keputusan bisnis sengaja,
+      bukan bug.
+
+  ⭐ AI tidak menjawab pertanyaan legalitas/pajak/KPR meski korpus ada
+    → LANGKAH 1: cek RAG_ENABLED=ON di .env (default OFF).
+    → LANGKAH 2: cek backend/data/rag-index.json ADA (jalankan
+      `node scripts/build-rag-index.js` bila belum/basi).
+    → LANGKAH 3: untuk Private Agent, ambangnya SENGAJA tinggi
+      (RAG_ANSWER_MIN_SCORE=0.30) — pertanyaan pendek/gaul mungkin di bawah
+      ambang pada mode `local`. Set RAG_EMBEDDING_MODE=openai untuk akurasi
+      produksi (lihat tabel pengujian di §5 M92).
+    → LANGKAH 4: untuk jalur LLM, cek log `[WhatsAppAI] RAG context gagal` —
+      RAG fail-open, jadi kegagalan TIDAK menghentikan balasan tapi juga
+      tidak menambah konteks; periksa penyebabnya di log bukan di perilaku
+      customer-facing.
+
+  ⭐ Gambar properti tidak pernah terkirim
+    → LANGKAH 1: cek PROPERTY_IMAGE_SEND_ENABLED=ON di .env (default OFF).
+    → LANGKAH 2: cek PROPERTY_IMAGE_PUBLIC_BASE_URL terisi (produksi) ATAU
+      ngrok tunnel sedang aktif (dev) — tanpa basis URL publik, fungsi
+      SENGAJA fail-open (tidak mengirim, bukan mengirim URL rusak).
+    → LANGKAH 3: cek judul properti (Property.title) benar-benar MUNCUL kata-
+      demi-kata di teks balasan yang terkirim — korelasi kartu↔gambar
+      SENGAJA fail-closed by-title, bukan by-index (lihat §5 M93). Bila LLM
+      menyingkat/mengubah nama properti di balasannya, gambar tidak akan
+      cocok dan sengaja TIDAK dikirim.
+    → LANGKAH 4: cek PropertyImage punya baris untuk property_id tersebut
+      DAN url-nya berekstensi gambar dikenal (png/jpg/jpeg/webp/gif/avif).
+
+  ChatGPT/provider error 429 "Request too large"
+    → Skill docs + prompt lebih besar dari plafon TPM provider aktif. Naikkan
+      limit lewat billing provider terkait. ⛔ JANGAN memotong history sebagai
+      mitigasi (M64). Pertimbangkan memanfaatkan RAG (§10 ROADMAP jangka
+      menengah) untuk benar-benar mengurangi doc selalu-aktif.
+
+  Landmark terasa basi
+    → Google Places BLOCKED (billing project Google Cloud belum enable).
+
+  Viewing tidak masuk Google Calendar
+    → GOOGLE_OAUTH_REFRESH_TOKEN kosong.
+
+[PENGIRIMAN WHATSAPP]
+  "✅ Terkirim" tapi customer tidak menerima
+    → (a) Kirimi duplicate (cek log "⚠️ Duplikat")
+      (b) Device disconnect / kredensial kurang
+  Balasan hilang total, log menunjukkan HTTP 5xx sekali lalu berhenti
+    → Pastikan keempat jalur kirim retry pada httpStatus 500–599 dan 429
+      (M77). Replay payload PERSIS yang gagal ke API sungguhan dulu untuk
+      memastikan itu gangguan sesaat, bukan config.
+  Webhook tidak masuk → ngrok URL berubah, update di dashboard.
+
+[DATABASE]
+  Boot gagal "Key column 'user_id' doesn't exist"
+    → ensureRequiredDatabaseColumns() harus SEBELUM sequelize.sync().
+  Customer tidak masuk tabel → Q1/Q2 belum terjawab (memang ditahan).
+
+[NODE]
+  EADDRINUSE :::5055
+    → Get-NetTCPConnection -LocalPort 5055 | %{ Stop-Process -Id $_.OwningProcess -Force }
+
+[SKILL DOCS]
+  Perilaku beda antar provider → diff seluruh 13 docs.
+  Aturan baru tidak dipatuhi → cek apakah docnya KONDISIONAL (11/12/13) dan
+  kata pemicunya benar-benar muncul. Bila sudah termuat tapi tetap diabaikan →
+  M62 (prompt terlalu panjang) — tambahkan ekstraktor, bukan aturan; KECUALI
+  bila state sudah bersih dan LLM tetap mengarang → tambahkan contoh konkret
+  (M83, M91), bukan ekstraktor (tidak ada apa pun untuk diekstrak).
+
+PRINSIP DEBUG
+  1. Cek jalur produksi AKTUAL dulu (AI_PRIMARY_PROVIDER + log runtime).
+  2. Dump state block sebelum menebak — pisahkan "ekstraktor kurang" vs
+     "prompt terlalu panjang" vs "LLM mengabaikan never-invent meski state
+     bersih".
+  3. Reproduksi dengan transkrip NYATA dan call site identik produksi.
+  4. A/B test saat menyisipkan pertanyaan ke findNextQuestion() ATAU saat
+     menambah ekstraktor — jalankan `node -e 'extractQualificationState(H,
+     custResp)'` dengan fix dimatikan vs dinyalakan.
+  5. Untuk masalah output LLM (bukan state): cek state = null/clean DULU
+     sebelum berasumsi ini masalah prompt.
+  6. Perubahan kode WAJIB restart backend.
+  7. Gate non-kritis harus fail-open; gate ketat HANYA untuk state integrity
+     (mis. mutex debounce, anchorPoint overwrite guard).
+  8. ⭐ Untuk fitur RAG/gambar: SELALU cek flag ON/OFF dulu (RAG_ENABLED,
+     PROPERTY_IMAGE_SEND_ENABLED) sebelum mendiagnosis "kenapa tidak bekerja"
+     — keduanya OFF secara default dan TIDAK PERNAH aktif diam-diam.
+  9. ⭐ Untuk RAG: skor rendah pada mode `local` BUKAN berarti kode rusak —
+     itu batas kualitas embedding hashing-trick. Uji ulang dengan
+     RAG_EMBEDDING_MODE=openai sebelum menyimpulkan ada bug.
+
+
+================================================================================
+  CATATAN AKHIR UNTUK CLAUDE CODE
+================================================================================
+
+  - File ini SATU-SATUNYA konteks yang perlu di-upload. Detail teknis
+    per-topik ada di skills/website_env_concept/docs/ (00–19).
+  - SELALU cek AI_PRIMARY_PROVIDER sebelum mendiagnosis bug perilaku AI —
+    jalur produksi mungkin BUKAN Private Agent, dan nilai defaultnya
+    BERUBAH antar sesi (jangan asumsikan dari contoh di file ini).
+  - JANGAN memotong input extractQualificationState() dalam kondisi apa pun.
+  - Setiap penambahan ke prompt LLM WAJIB diukur dampak tokennya; utamakan
+    ekstraktor kode daripada aturan prosa — KECUALI kelas kesalahannya "LLM
+    mengabaikan never-invent meski state bersih", yang butuh CONTOH KONKRET
+    before/after, bukan ekstraktor maupun aturan abstrak (M83, M91).
+  - Struktur skill doc claude_responds/chat_gpt_responds tetap 01–13 — jangan
+    rujuk nomor dari V4 atau lebih lama. website_env_concept memakai
+    penomoran TERPISAH 00–19.
+  - Setiap perbaikan baru: tambahkan nomor M berikutnya di §5 (lanjutkan dari
+    M93; JANGAN menomori ulang entri lama).
+  - JANGAN hardcode: nama model AI, nama agent, nama aplikasi, nomor telepon,
+    atau kredensial apa pun.
+  - ⭐ BARU (V8): RAG dan pengiriman gambar SELALU fail-open dan opt-in
+    (default OFF/false). Jangan mengaktifkannya secara default tanpa
+    persetujuan eksplisit pemilik proyek — keduanya belum diverifikasi penuh
+    dengan API/DB produksi sungguhan (lihat §10 ROADMAP untuk daftar
+    verifikasi yang masih tertunda).
+  - ⭐ BARU (V8): skill docs KETIGA folder AI-facing BELUM diperbarui untuk
+    RAG/gambar — jangan berasumsi AI "tahu" tentang kapabilitas ini dari
+    system prompt-nya sendiri. RAG bekerja transparan lewat konteks yang
+    disuntik (AI tidak perlu "tahu" secara eksplisit untuk memakainya dengan
+    benar), tapi doc 08 §0 sebaiknya tetap diperbarui agar AI bisa menjelaskan
+    proses "gambar mungkin menyusul" ke customer dengan wajar.
+  - ⭐ BARU (V8): LangChain.js dan vector database SENGAJA DITOLAK dengan
+    alasan terukur (lihat §10 "DENGAN SENGAJA TIDAK AKAN DIKERJAKAN") — bila
+    diminta lagi di sesi mendatang, rujuk bagian itu alih-alih membangun ulang
+    dari nol; hanya bangun ulang alasannya bila ada perubahan skala/kebutuhan
+    nyata (mis. korpus menembus ~100k vektor).
+
+  ✅ BASELINE TES BERLAKU: **1519/1540** (56 berkas tes, per 18 Agu 2026,
+  sesi M94–M100). Riwayat baseline sesi ini: 1405/1426 (14 Agu, akhir sesi
+  M92/M93) → 1519/1540 (18 Agu, akhir sesi M94–M100).
+  21 kegagalan pre-existing, SELALU di tiga berkas yang sama, TIDAK PERNAH
+  berubah sejak V7 (SEMPAT ada "kegagalan ke-4" sementara di
+  bookingShortStayVersi2 selama M97 belum dikerjakan — sudah tertutup, lihat
+  §5 M97):
+    customerDateParser 54/69 · extractFilters 109/112 · housePilot 66/69
+  Cara membaca hasil suite di sesi berikutnya (`npm test` TIDAK ADA):
+    for f in tests/*.test.js; do node "$f"; done   # lalu jumlahkan RESULT: p/t
+    • Total turun ATAU ada nama berkas gagal DI LUAR ketiganya → REGRESI sesi
+      berjalan. Cari penyebabnya sebelum melanjutkan.
+    • Total naik dengan tiga berkas itu tetap gagal → normal (tes baru ditambah).
+    • qualifierCharacterization: jamnya DIBEKUKAN (FROZEN_NOW 10 Agu 2026),
+      tidak lagi gagal hanya karena dijalankan di hari berbeda.
+  `npm run lint` GAGAL — eslint tidak terpasang di node_modules (pre-existing,
+  dikonfirmasi BUKAN disebabkan sesi V8/V9; belum pernah berjalan sejak
+  sebelum V7 juga per catatan itu).
+
+  ⭐ DEPLOY PRODUKSI (BARU, M100): propmatches.fun di-hosting di Hostinger
+  (paket Business). Panduan lengkap → **DEPLOY_HOSTINGER.md** (root project).
+  Tiga penyebab 503 diketahui: (1) rename PORT→APP_PORT sempat mematikan
+  platform hosting, SUDAH diperbaiki (server.js baca process.env.PORT dulu);
+  (2) CORS produksi SUDAH diturunkan dari APP_URL; (3) kredensial database
+  Hostinger BELUM diisi — SATU-SATUNYA langkah tersisa milik user (butuh
+  password Hostinger). Nomor M berikutnya untuk sesi mendatang: **M101**.
+
+================================================================================
+  END OF FILE — ELEVAN_PROPERTY_CONTEXT_V8.txt
+================================================================================

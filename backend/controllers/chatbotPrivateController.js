@@ -53,6 +53,7 @@ const _languageKeywords = require('../utils/languageKeywords');
 // Google Places API to close that gap. See services/googlePlacesService.js for the
 // cache-then-async-refresh design (never blocks the synchronous qualification flow).
 const { getCachedCityLandmarks, warmCityLandmarksCache } = require('../services/googlePlacesService');
+const { HTTP } = require('../config/httpStatus');
 
 /**
  * Landmark examples for a city, preferring the curated static map (fast, hand-picked)
@@ -4900,7 +4901,7 @@ exports.sendPrivateMessage = async (req, res) => {
 
   const validation = validateChatbotMessage(payload);
   if (!validation.valid) {
-    return res.status(process.env.HTTP_BAD_REQUEST).json({ success: false, message: validation.message });
+    return res.status(HTTP.BAD_REQUEST).json({ success: false, message: validation.message });
   }
 
   try {
@@ -4945,7 +4946,7 @@ exports.sendPrivateMessage = async (req, res) => {
     });
   } catch (error) {
     console.error('[CHATBOT PRIVATE CONTROLLER ERROR]', { message: error.message, stack: error.stack });
-    return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({
+    return res.status(HTTP.INTERNAL_SERVER_ERROR).json({
       success:    false,
       source:     'private_agent',
       controller: 'chatbotPrivateController',
@@ -4996,7 +4997,7 @@ exports.debugTestRumah123 = async (req, res) => {
     });
   } catch (err) {
     console.error(`[DEBUG] Error:`, err.message);
-    return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({
+    return res.status(HTTP.INTERNAL_SERVER_ERROR).json({
       success: false,
       error: err.message,
       hint: 'Check server logs for detailed debug output'

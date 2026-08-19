@@ -8,6 +8,7 @@ const { generateWhatsappReplyWithProviderFallback } = require('../services/aiPro
 const { sendWhatsAppMessage } = require('../services/fonnteService');
 const { buildRecommendationContextForLLM } = require('../services/propertyRecommendationService');
 const chatbotPrivateController = require('./chatbotPrivateController');
+const { HTTP } = require('../config/httpStatus');
 
 class FonnteWebhookController {
   static #parsePayload(body = {}) {
@@ -25,7 +26,7 @@ class FonnteWebhookController {
     const incoming = FonnteWebhookController.#parsePayload(req.body);
 
     if (!incoming.sender || !incoming.message) {
-      return res.status(process.env.HTTP_BAD_REQUEST).json({
+      return res.status(HTTP.BAD_REQUEST).json({
         success: false,
         message: 'Webhook payload must include sender and message.'
       });
@@ -110,7 +111,7 @@ class FonnteWebhookController {
 
         } catch (privateError) {
           console.error('[FONNTE WEBHOOK] Private agent fallback also failed:', privateError.message);
-          return res.status(process.env.HTTP_BAD_GATEWAY).json({
+          return res.status(HTTP.BAD_GATEWAY).json({
             success:             false,
             message:             'All AI providers failed to process webhook.',
             externalProviderError: error.message,
@@ -119,7 +120,7 @@ class FonnteWebhookController {
         }
       }
 
-      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({
+      return res.status(HTTP.INTERNAL_SERVER_ERROR).json({
         success: false,
         message: error.message || 'Failed to process Fonnte webhook through AI provider.'
       });

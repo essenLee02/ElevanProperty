@@ -52,6 +52,7 @@ const { hasPropertyKeyword,
 const { generateWhatsAppAIReply, normalizeAiResponderLabel } = require('../services/whatsappAIService');
 const { getConversationHistory }        = require('../services/sessionService');
 const { sanitizeLog, maskPhone, maskName, appendSentViaTag, isOwnEcho, stripOwnEcho, buildOffTopicRedirect } = require('../utils/whatsappUtils');
+const { HTTP } = require('../config/httpStatus');
 
 /* ══════════════════════════════════════════════════════════════════════════════
    BAGIAN 0 — MESSAGE-ID DEDUP CACHE
@@ -802,22 +803,22 @@ class KirimiChatController {
 
     // ── Handle status update (koneksi device) ──────────────────────
     if (eventType === 'message_status') {
-      return res.status(process.env.HTTP_OK).json({ status: true, type: 'message_status', message: 'Status diterima' });
+      return res.status(HTTP.OK).json({ status: true, type: 'message_status', message: 'Status diterima' });
     }
 
     // ── Handle send notification (pesan keluar / ack / failed) ──────
     if (eventType === 'send') {
-      return res.status(process.env.HTTP_OK).json({ status: true, type: 'send', message: 'Send event diterima' });
+      return res.status(HTTP.OK).json({ status: true, type: 'send', message: 'Send event diterima' });
     }
 
     // ── Handle unknown ──────────────────────────────────────────────
     if (eventType !== 'incoming') {
-      return res.status(process.env.HTTP_OK).json({ status: true, type: 'unknown', message: 'Event diterima' });
+      return res.status(HTTP.OK).json({ status: true, type: 'unknown', message: 'Event diterima' });
     }
 
     // ── INCOMING MESSAGE ────────────────────────────────────────────
     // Respond 200 SEKARANG sebelum proses AI (hindari Kirimi timeout)
-    res.status(process.env.HTTP_OK).json({ status: true, type: 'incoming', message: 'Webhook diterima' });
+    res.status(HTTP.OK).json({ status: true, type: 'incoming', message: 'Webhook diterima' });
 
     // Proses di background (tidak block response)
     setImmediate(async () => {
@@ -875,7 +876,7 @@ class KirimiChatController {
       return KirimiChatController.handleInboundMessage(req, res);
     }
 
-    return res.status(process.env.HTTP_OK).json({
+    return res.status(HTTP.OK).json({
       status     : true,
       caught     : true,
       eventType,
@@ -904,7 +905,7 @@ class KirimiChatController {
     console.log(`  Dry run: ${dry_run}`);
 
     if (!sender || !message) {
-      return res.status(process.env.HTTP_BAD_REQUEST).json({ success: false, message: 'Wajib ada: sender dan message' });
+      return res.status(HTTP.BAD_REQUEST).json({ success: false, message: 'Wajib ada: sender dan message' });
     }
 
     let agent = device ? await findAgentByDevice(device) : null;
@@ -914,7 +915,7 @@ class KirimiChatController {
     }
 
     if (!agent) {
-      return res.status(process.env.HTTP_NOT_FOUND).json({
+      return res.status(HTTP.NOT_FOUND).json({
         success : false,
         message : 'Tidak ada agent dengan kirimi_device_id. Cek /api/kirimi/status'
       });
@@ -952,7 +953,7 @@ class KirimiChatController {
       });
 
     } catch (err) {
-      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
+      return res.status(HTTP.INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 
@@ -976,7 +977,7 @@ class KirimiChatController {
         }
       });
     } catch (err) {
-      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
+      return res.status(HTTP.INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 
@@ -1002,7 +1003,7 @@ class KirimiChatController {
         data   : { agent: agentName, sessions, pagination: { total, limit: parseInt(limit) || 50 } }
       });
     } catch (err) {
-      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
+      return res.status(HTTP.INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 
@@ -1015,7 +1016,7 @@ class KirimiChatController {
       const { limit = 100 } = req.query;
 
       const session = await ChatSession.findByPk(sessionId);
-      if (!session) return res.status(process.env.HTTP_NOT_FOUND).json({ success: false, message: 'Sesi tidak ditemukan' });
+      if (!session) return res.status(HTTP.NOT_FOUND).json({ success: false, message: 'Sesi tidak ditemukan' });
 
       const messages = await ChatMessage.findAll({
         where : { chatSessionId: sessionId },
@@ -1032,7 +1033,7 @@ class KirimiChatController {
         }
       });
     } catch (err) {
-      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
+      return res.status(HTTP.INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 
@@ -1074,7 +1075,7 @@ class KirimiChatController {
           : 'KIRIMI_USER_CODE / KIRIMI_SECRET belum di-set di .env'
       });
     } catch (err) {
-      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
+      return res.status(HTTP.INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 
@@ -1108,7 +1109,7 @@ class KirimiChatController {
         }
       });
     } catch (err) {
-      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
+      return res.status(HTTP.INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 
@@ -1122,12 +1123,12 @@ class KirimiChatController {
       const userCode = String(process.env.KIRIMI_USER_CODE || '').trim();
       const secret   = String(process.env.KIRIMI_SECRET    || '').trim();
       if (!userCode || !secret) {
-        return res.status(process.env.HTTP_NOT_FOUND).json({ success: false, message: 'KIRIMI_USER_CODE / KIRIMI_SECRET belum di-set di .env' });
+        return res.status(HTTP.NOT_FOUND).json({ success: false, message: 'KIRIMI_USER_CODE / KIRIMI_SECRET belum di-set di .env' });
       }
 
       const agents = await getAllAgentsWithKirimi();
       if (agents.length === 0) {
-        return res.status(process.env.HTTP_NOT_FOUND).json({ success: false, message: 'Tidak ada agent dengan kirimi_device_id' });
+        return res.status(HTTP.NOT_FOUND).json({ success: false, message: 'Tidak ada agent dengan kirimi_device_id' });
       }
 
       const target  = agents[0];
@@ -1153,7 +1154,7 @@ class KirimiChatController {
         results
       });
     } catch (err) {
-      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
+      return res.status(HTTP.INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 }

@@ -1,0 +1,979 @@
+================================================================================
+  ELEVAN PROPERTY — COMPREHENSIVE PROJECT CONTEXT (V6)
+  Dibuat  : 15 Juni 2026
+  Update  : 3 Agustus 2026
+  Tujuan  : SATU file konteks lengkap untuk di-upload ke Claude Code
+  Isi     : Overview · Instrument · Review · Pengembangan · Solusi ·
+            Environments · Informasi · Skills · Tujuan · Roadmap ·
+            Struktur Project · Workflow · Troubleshoot Summary
+  Riwayat : CONTEXT.txt (17 Jun) → _PROJECT_CONTEXT.txt (25 Jun) → V3 (07 Jul)
+            → V4 (20 Jul) → V5 (31 Jul) → V6 (3 Agu, file ini = TERBARU)
+  Pendamping: skills/website_env_concept/ (docs 00–17) untuk detail teknis
+            per-topik bila perlu me-reproduksi/mengembangkan ulang modul.
+================================================================================
+
+
+>> BACA INI DULU — TIGA HAL YANG PALING SERING MENYESATKAN <<
+
+  1. CEK JALUR PRODUKSI SEBELUM MENDIAGNOSIS APA PUN.
+     Ada DUA basis kode qualification yang MIRIP tapi TERPISAH:
+       • services/aiPromptBuilderService.js   → jalur LLM (Claude/ChatGPT/…)
+       • controllers/chatbotPrivateController.js → Private Agent (FALLBACK)
+     `AI_PRIMARY_PROVIDER=chatgpt` berarti PRODUKSI memakai jalur LLM.
+     Memperbaiki Private Agent tidak akan mengubah apa pun yang dilihat
+     customer. Sudah dua kali diagnosis salah arah karena ini (M52, M54).
+     Verifikasi: `grep AI_PRIMARY_PROVIDER backend/.env` + log runtime
+     `[WhatsAppAI] Calling AI provider: { primaryProvider: … }`.
+
+  2. STATE SELALU DARI HISTORY PENUH — JANGAN PERNAH DIPOTONG.
+     `extractQualificationState()` dipanggil DI DALAM buildWhatsappReplyPrompt.
+     Memotong `history` sebelum memanggil builder = memotong input state =
+     seluruh field jadi null pada percakapan panjang = loop tanya-ulang tanpa
+     akhir (M64, pengulangan M35). Pemotongan token HANYA boleh mengenai
+     transkrip yang DITAMPILKAN (`AI_PROMPT_DISPLAY_TURNS`, default 20).
+
+  3. MENAMBAH ATURAN PROMPT ADA HARGANYA.
+     Prompt WhatsApp per pesan ±53–56K token, sedangkan limit TPM
+     gpt-4o-mini = 60.000/menit. Tiap aturan baru memperburuk rasio
+     sinyal:derau dan menurunkan kepatuhan model secara global (M62).
+     Bila sebuah loop bertahan MESKIPUN DIREKTIF FINAL sudah benar →
+     yang kurang adalah EKSTRAKTOR (kode), bukan aturan prompt.
+
+
+>> PERUBAHAN BESAR SEJAK V5 (31 Jul → 3 Agu 2026) <<
+
+  1. DIREKTIF FINAL — obat "lost in the middle" (M62)
+     Diukur: prompt satu pesan ±53.000 token; QUALIFICATION STATE (kebenaran
+     otoritatif) hanya ±450 token dan berada di posisi 8%, disusul ±49.000
+     token prosa. Rasio 1:109. Model memperhatikan AWAL dan AKHIR jauh lebih
+     kuat daripada tengah → gpt-4o-mini kehilangan jejak state, menanyakan
+     ulang Q1 yang sudah ✅, bahkan menolak "Saya sewa apartemen" sebagai
+     non-properti. Fix: `buildFinalDirective()` menempel ±235 token di
+     POSISI 100% prompt — mengulang field ✅, satu pertanyaan berikutnya, dan
+     tiga larangan keras. Sengaja SANGAT ringkas; memanjangkannya justru
+     memperburuk masalah yang sama.
+
+  2. REGRESI SENDIRI: PEMOTONGAN HISTORY MERUSAK STATE (M64)
+     `generateChatGPTWhatsappReply` sempat memotong history ke 12 pesan
+     sebagai mitigasi TPM, dengan komentar keliru "state sudah dihitung
+     sebelumnya". Nyatanya belum. Pada percakapan 19 pesan: transaksi, tipe,
+     kota, budget SEMUA null → AI melihat sesi kosong tiap giliran → customer
+     menulis "Tolong hentikan pertanyaan yang berulang". Sudah dicabut;
+     pemisahan state/tampilan kini dipaksakan di dalam builder.
+
+  3. Q3 — MENERIMA/MENOLAK HARGA YANG DITAWARKAN (M63)
+     Q3 tidak pernah ditanya langsung; AI menawarkan dua harga kontras.
+     Customer punya TIGA cara sah menjawab, dulu hanya satu dikenali:
+       (a) menyebut angka sendiri        → sudah jalan
+       (b) MENERIMA: "sesuai", "sudah sesuai", "iya", "ok", "cocok"
+           → budget = rentang yang DITAWARKAN (satuan periode ikut)
+       (c) MENOLAK: "kemahalan", "terlalu mahal", "mau yang murah"
+           → tier terjangkau
+     Sekaligus memperbaiki inversi lama: kata "mahal" dipetakan ke tier
+     EKSKLUSIF, sehingga customer yang protes kemahalan malah dinaikkan
+     tiernya. Deteksi anchor kini menang karena punya konteks lebih.
+
+  4. Q4 — "N TEMAN" ADALAH JAWABAN PENGHUNI (M65)
+     "Bersama 2 teman kerja", "tinggal bersama 2 teman krj saya", "bertiga"
+     semuanya null karena regex mewajibkan kata "orang". Q4 diulang tanpa
+     henti. Kini `N teman/kawan/rekan` → N+1 orang (customer ikut dihitung,
+     sesuai konvensi AI sendiri "Kak + 5 teman"), `bertiga/berempat` → sesuai
+     angkanya, dan "sama teman kerja" tanpa jumlah tetap dihitung TERJAWAB.
+
+  5. Q2 — KOTA DIBACA BALIK DARI PESAN AI (M66)
+     Hanya pesan CUSTOMER yang dipindai untuk lokasi, sehingga Q2 bisa jatuh
+     ke ❓ padahal AI sendiri berkali-kali menulis "Di Surabaya ada
+     apartemen…". Kini kota dibaca balik dari pesan AI — aman, karena AI
+     tidak pernah menyebut kota yang belum ditetapkan.
+
+  6. Q9 — PENOLAKAN TELANJANG = MANDIRI (M67)
+     Q9 berbentuk PILIHAN ("langsung jadwalkan ATAU perlu koordinasi dulu?").
+     "Tdk perlu", "Tdk mau", "gak usah", "saya survei sndri" memilih cabang
+     pertama = tidak perlu koordinasi = Mandiri. Dulu semuanya null →
+     pertanyaan yang sama diulang 4× sampai customer terpaksa mengetik
+     kalimat panjang. Nilai Q9 untuk keputusan sendiri kini SELALU persis
+     "Mandiri" (dulu kode menghasilkan "Sendirian", melanggar aturannya sendiri).
+
+  7. Q11 — SATU KATA TIER SUDAH CUKUP (M68)
+     "Yang semi, Kak" / "semi, Kak" / "Semi" gagal karena Phase 1 mewajibkan
+     kata "furn" muncul bersama "semi" → pertanyaan diulang 3×. Kini deteksi
+     berpasangan: bila AI baru menanyakan furnitur, satu kata tier cukup.
+
+  8. Q_FAC — FASILITAS AKHIRNYA MASUK ANTREAN (M69)
+     Fasilitas TIDAK PERNAH ditanya: `findNextQuestion()` sama sekali tidak
+     punya Q_FAC. Summary keluar tanpa data fasilitas. Kini Q_FAC wajib,
+     ditempatkan SETELAH Q14 (menempatkannya sebelum Q14 memotong alur BELI
+     — ketahuan lewat A/B test, 4 tes gagal). Jawaban "standar/terserah/
+     semua" → isi fasilitas standar per tipe, JANGAN ditanya ulang.
+
+  9. Q9b/Q9c — JADWAL SURVEI: TANGGAL DULU, BARU JAM (M70)
+     Juga sama sekali tidak ada di antrean. Kini dua pertanyaan terpisah.
+     Customer BERHAK menolak survei — "lihat listing saja"/"skip"/"belum mau
+     survei" dicatat "Minta listing" dan jam TIDAK ditanya lagi. Tanggal
+     disimpan dalam format rapi ("20 Agustus 2026"), bukan ISO string.
+
+  10. HINDARI/PREFER — PENGHINDARAN BERBASIS JARAK (M71)
+      "Saya mau tempat yang jauh dari pemakaman, masjid, gereja, diskotik"
+      menghasilkan `UNKNOWN` (tak satu pun kata kunci cocok) → LLM mengarang
+      "bau busuk"/"tidak ramai" dan menaruh "jauh dari masjid" di PREFER
+      (arah terbalik). Kini ada ekstraktor `FAR_RE`; "jauh dari X" SELALU
+      Hindari, tidak pernah Prefer. Baris Hindari juga kini memuat bentuk
+      NEGATIF ("Tempat panas"), Prefer memuat bentuk POSITIF ("Tempat yang
+      sejuk") — dulu keduanya digabung jadi "Tempat yang sejuk : Hindari
+      tempat yang panas" yang terbaca terbalik.
+
+  11. KOTA vs AREA — PERTANYAAN GABUNGAN MERACUNI SLOT (M60/M61, dari V5,
+      tetap berlaku) Q2 kini KOTA saja; area/kecamatan baris terpisah.
+      Label summary "Kota" (bukan "Lokasi") + baris "Area".
+
+  12. SINGKATAN BARU: sndri/sndrian→sendiri/sendirian, srvei→survei,
+      jln→jalan, msk→masuk, sya→saya, ak/aq→aku. ⚠️ "jl" SENGAJA TIDAK
+      ditambahkan — itu prefiks nama jalan ("Jl. Darmo") yang harus utuh.
+
+
+================================================================================
+  1. OVERVIEW
+================================================================================
+
+Elevan Property = platform manajemen properti berbasis web + AI chatbot WhatsApp
+multi-agent untuk pasar Indonesia. Menghubungkan agen properti dengan calon
+pembeli/penyewa lewat WhatsApp, memakai AI untuk mengkualifikasi kebutuhan
+customer secara otomatis (Q1–Q14), lalu menghasilkan brief/rekomendasi.
+
+Konsep inti:
+  - Website + floating chatbot pencarian properti (publik, tanpa login)
+  - WhatsApp chatbot multi-agent: tiap agent punya nomor/device sendiri
+  - AI 5-opsi: satu PRIMARY (via env, saat ini `chatgpt`) → Private Agent
+    (deterministik, selalu ada sebagai fallback)
+  - Qualification flow Q1–Q14 SELALU jalan; RESPOND_CATALOG_RUN hanya
+    mengontrol apakah katalog ditampilkan SETELAH summary
+  - Data properti: DB (per-agent) + JSON fallback + Rumah123 live (opsional)
+  - Landmark: peta kurasi 45 kota + Google Places live (dorman, billing off)
+  - Admin dashboard: CRUD Country/Province/City/Location/Facility/Property/
+    Customer (7 modul)
+
+Pengguna:
+  - AGENT   : kelola katalog & percakapan sendiri; bisa takeover AI per-customer
+  - CUSTOMER: chat via WhatsApp, dikualifikasi AI, terdaftar otomatis
+  - ADMIN   : master data & monitoring
+
+Deployment:
+  - Frontend : https://propmatches.netlify.app (Netlify)
+  - Backend  : Node.js port 5055 (ngrok auto-start untuk dev webhook)
+  - Database : MySQL `db_property` (Sequelize ORM v6)
+
+Developer:
+  - Owner : Nigel (nigel@iil.co.id)
+  - Stack : Windows 10/11, VS Code + Claude Code, PowerShell + Bash
+  - Lokasi: C:\Users\nigel\Documents\Elevan_Property
+
+
+================================================================================
+  2. INSTRUMENT / TEKNOLOGI
+================================================================================
+
+BACKEND
+  Runtime      : Node.js (CommonJS, BUKAN ESM)
+  Framework    : Express 4.x           Port: 5055
+  ORM          : Sequelize 6.x + mysql2 3.x     DB: MySQL db_property
+  Auth         : JWT (access pendek + refresh HttpOnly cookie) + bcrypt
+  Rate Limit   : express-rate-limit
+  AI APIs      : axios (Claude/QWEN/DeepSeek raw HTTP); openai SDK (ChatGPT)
+  Scraping     : apify-client (Rumah123)
+  Google       : google-auth-library + google-spreadsheet (Contact → Sheets)
+                 Google Places (landmark — DORMAN, billing off)
+                 Google Calendar (OAuth 2.0 — refresh token belum diisi)
+  Dev Tool     : nodemon        Tunnel: ngrok (services/ngrokService.js)
+  Skala kode   : 17 model · 25 controller · 23 service · 24 util · 21 file test
+
+FRONTEND
+  Framework    : Vue 3 (Composition API, <script setup>)
+  Bundler      : Vite 8 (ESM)   Router: vue-router 5   HTTP: axios (silent refresh)
+  Notifikasi   : vue3-toastify
+  CSS          : Bootstrap 5.3.8 + 12 file elevan-*.css kustom
+  Icons        : Font Awesome 7.2.0      JS Lib: jQuery 4.0.0 (Function_Path)
+  Table Engine : CookieFast (window.tableModal / loadModalPagination)
+
+AI PROVIDERS (satu PRIMARY via env → Private Agent; TANPA cross-AI)
+  chatgpt  → OpenAI gpt-4o-mini            ← DEFAULT SAAT INI
+             ⚠️ TPM org 60.000/menit. Prompt per pesan ±53–56K token.
+             Lihat §5 M62/M64 sebelum menambah apa pun ke prompt.
+  claude   → Anthropic claude-3-haiku      (CLAUDE_MODEL)
+  qwen     → Alibaba DashScope             (QWEN_MODEL)
+  deepseek → DeepSeek deepseek-v4-flash    ⚠️ WAJIB v4 (v4-flash|v4-pro)
+  kimi     → Moonshot AI kimi-k3           (KIMI_MODEL) ⚠️ top_p WAJIB 0.95
+             (M74 — API kimi-k3 menolak top_p lain; verifikasi model via
+             tes langsung endpoint sebelum ganti, lihat §5 M74)
+  private  → Private Agent deterministik langsung
+  Fallback: PRIMARY gagal → Private Agent (BUKAN provider eksternal lain).
+  ⚠️ Nama model TIDAK BOLEH hardcode — selalu dari .env (*_MODEL).
+
+WHATSAPP TERMINALS (MVP 3, pipeline identik)
+  FONNTE      : token per-agent (users.fonnte_token). Webhook + polling.
+  KIRIMI      : kredensial AKUN di .env (KIRIMI_USER_CODE + KIRIMI_SECRET),
+                device per-AGENT di DB (users.kirimi_device_id).
+                Webhook: POST /api/kirimi/webhook
+  TIMELINESAI : shared API key. Agent dikenali dari nomor WA terhubung.
+  >> WATI, 360dialog, ChakraHQ SUDAH DIHAPUS (bukan MVP). <<
+
+
+================================================================================
+  3. REVIEW — STATUS FITUR (3 Agustus 2026)
+================================================================================
+
+SUDAH JALAN ✅
+
+  Auth & Keamanan
+    - Register (+email) / Login / Logout (JWT + HttpOnly cookie)
+    - JWT SILENT REFRESH single-flight (anti auto-logout)
+    - Protected routes (verifyToken + requirePrivilege)
+    - SECRET REDACTION: hook ChatMessage → API key tidak pernah masuk DB
+
+  WhatsApp AI Chatbot (3 terminal, pipeline identik)
+    - Webhook Fonnte / Kirimi / TimelinesAI + Fonnte polling
+    - Q1–Q14 Qualification Flow + House Pilot v2 + Listing-Referral Pilot
+    - Provider chain PRIMARY (chatgpt) → Private Agent
+    - DIREKTIF FINAL di ujung prompt (anti lost-in-the-middle)
+    - Dedup 2-layer · fromMe guard · filter grup · off-topic guard
+    - COOKIE RESPONSE TIMER (debounce pesan beruntun, default 12s)
+    - stripOwnEcho · STICKY ANCHORS + window 60 (anti reset-ke-Q1)
+    - lazyChatNormalizer: ekspansi singkatan SMS-speak
+    - Ralat/koreksi jawaban (budget/viewing/tanggal) + ack "✏️ diperbarui"
+    - Google Calendar auto-schedule (⚠️ refresh token belum diisi)
+
+  Qualification — ekstraktor yang sudah tahan jawaban pendek/singkat
+    - Q3 : angka, tier, MENERIMA tawaran ("sesuai"), MENOLAK ("kemahalan")
+    - Q4 : "N orang", "N teman"→N+1, "bertiga", "sama teman kerja"
+    - Q7 : penolakan ("tidak ada", "tetap di X") = jawaban
+    - Q9 : penolakan telanjang ("tdk perlu") = Mandiri
+    - Q9b/Q9c : tanggal survei lalu jam; penolakan → "Minta listing"
+    - Q11: satu kata tier ("semi") cukup
+    - Q_FAC: wajib; "standar/terserah" → fasilitas standar per tipe
+    - Q5 : Hindari (negatif) ↔ Prefer (positif) terpisah; "jauh dari X"
+
+  Customer Management
+    - Registrasi OTOMATIS saat Q1+Q2 terjawab
+    - ai_response ON/OFF per-customer + GATE AI diam saat OFF
+    - Perintah agent via chat (NOMOR WA saja, bisa banyak sekaligus)
+
+  Property Recommendation & Catalog
+    - Katalog DB per-agent (Property.user_id)
+    - Ranking fasilitas (LIKE OR + EXISTS — boost, bukan filter keras)
+    - Budget expansion bertahap + batas wajar
+    - Fallback fasilitas standar 11 tipe + tier premium
+
+  Admin Dashboard / Master Data (7 modul, pola identik)
+  Contact Form → Google Sheets
+  Skill System (3 folder AI-facing + website_env_concept + design guidelines)
+
+BELUM / SEDANG DIKEMBANGKAN ⏳
+  - ⚠️ PRIORITAS: naikkan limit TPM OpenAI (billing) — prompt sudah 53–56K
+    dari plafon 60K; mitigasi pemotongan history TERBUKTI MERUSAK (M64)
+  - Enable billing Google Cloud → Places API live (landmark segar)
+  - Isi GOOGLE_OAUTH_REFRESH_TOKEN → Calendar auto-schedule live
+  - Push notification ke agent saat lead baru
+  - Lead scoring dari kelengkapan Q-flow
+  - Dashboard analytics (funnel Q1→brief)
+  - Follow-up otomatis lead dorman
+
+
+================================================================================
+  4. PENGEMBANGAN — DEVELOPMENT GUIDE
+================================================================================
+
+SETUP LOKAL
+  Backend  : cd backend && npm install && npm run dev      (port 5055)
+  Frontend : cd frontend && npm install && npm run dev     (port 5173)
+  Build FE : cd frontend && npm run build                  (→ dist/)
+
+SYNC / MIGRASI DATABASE
+  cd backend && node scripts/sync-db.js
+  ⚠️ ensureRequiredDatabaseColumns() HARUS jalan SEBELUM sequelize.sync().
+
+MENAMBAH / MENGUBAH PERTANYAAN KUALIFIKASI (pola wajib)
+  1. Tambah field di state (aiPromptBuilderService.js, blok inisialisasi)
+  2. Tambah EKSTRAKTOR:
+       - Phase 1 bila jawabannya berdiri sendiri (tak butuh konteks AI)
+       - Phase 2 (loop pasangan) bila butuh tahu AI baru bertanya apa
+  3. Tambah pertanyaan di findNextQuestion() pada POSISI yang benar
+     ⚠️ Menyisipkan sebelum Q14 memotong alur BELI — taruh sebelum
+        `return null` bila pertanyaan berlaku untuk semua tipe (M69)
+  4. Tambah baris ke buildQualificationStateBlock()
+  5. Tambah baris ke template summary (prompt + doc 04)
+  6. Update skill docs KETIGA folder (byte-identical untuk 2 folder runtime)
+  7. Tulis tes regresi dengan TRANSKRIP NYATA, termasuk kontrol NEGATIF
+  8. Jalankan SELURUH suite — bandingkan dengan baseline, bukan hanya file baru
+
+ATURAN SYNC SKILL DOCS (WAJIB)
+  skills/claude_responds/docs/*.md ≡ skills/chat_gpt_responds/docs/*.md
+  (byte-identical, 13 file per sisi). skills/elevan-property-assistant/ adalah
+  edisi STANDALONE — sudah menyimpang, TIDAK di-load kode, tapi tetap perlu
+  diperbarui karena di-upload manual ke OpenAI platform skills.
+
+DISIPLIN TOKEN (WAJIB — lihat §5 M62)
+  Ukur dampak setiap penambahan ke prompt. Pola aman: emit STRING KOSONG saat
+  data tak tersedia (0 token tambahan). Bila sebuah loop bertahan meski
+  DIREKTIF FINAL benar → tambahkan EKSTRAKTOR, bukan aturan prompt.
+
+KONVENSI KODE
+  - Komentar Bahasa Indonesia untuk logika bisnis; JSDoc untuk fungsi publik
+  - Semua nilai konfigurasi dari .env — TIDAK ADA hardcode
+  - Nama agent & app dinamis (${agentName} dari DB, ${appName} dari env)
+  - Perubahan alur chat WAJIB diuji lewat simulasi node -e dengan call site
+    yang IDENTIK dengan produksi (parameter/mode sama persis)
+
+
+================================================================================
+  5. SOLUSI — MASALAH YANG SUDAH DISELESAIKAN (jangan ulangi solusi lama)
+================================================================================
+
+[M1–M48: lihat V4. M49–M61: lihat V5. Highlight yang paling sering relevan:]
+  M35 Loop repetitif → sticky anchor + history window 60
+  M46 AI jatuh ke private_agent diam-diam → DeepSeek V4 model name
+  M52 Loop Q7 → deteksi berbasis MAKNA + "penolakan = jawaban"
+  M54 Google Places hanya menjangkau Private Agent, bukan produksi
+  M55 429 "Request too large" → skill docs 39–51K dari plafon 60K
+  M60 Pertanyaan gabungan "kota atau area" meracuni slot district
+
+[BARU — sesi 31 Jul → 3 Agu 2026 (V6)]
+
+  M62 LOST IN THE MIDDLE. Prompt ±53K token; QUALIFICATION STATE (±450 token)
+      di posisi 8%, disusul ±49K token prosa (rasio 1:109). gpt-4o-mini
+      kehilangan jejak state: menanyakan ulang Q1 yang sudah ✅, me-reset ke
+      "pencarian baru", menolak "Saya sewa apartemen" sebagai non-properti.
+      SERVER SUDAH BENAR — state block terverifikasi lengkap, hasPropertyKeyword
+      true. Modelnya yang tidak membaca.
+      Fix: buildFinalDirective() ±235 token di POSISI 100% prompt.
+      ⚠️ Percobaan pertama salah taruh (ikut summaryModeInstructions di 8%) —
+      harus benar-benar SETELAH bagian Task.
+      Regresi: tests/finalDirective.test.js (13 assertion, termasuk asersi
+      posisi index/length > 0.98 yang gagal bila ada yang menambah konten
+      setelahnya).
+
+  M63 Q3 MENERIMA/MENOLAK HARGA YANG DITAWARKAN. "Sesuai, Kak" / "Sudah
+      sesuai" mengembalikan null → pertanyaan harga diulang 3× sampai customer
+      menulis "Tolong hentikan pertanyaan yang berulang".
+      Fix: detectBudgetAnchorResponse(aiText, custText) di Phase 2 — aktif
+      HANYA bila pesan AI memuat nominal Rp DAN ajakan memilih. Penerimaan →
+      rentang yang ditawarkan (satuan periode ikut); keluhan → terjangkau.
+      Sekaligus memperbaiki inversi: kata "mahal" dipetakan ke tier EKSKLUSIF,
+      sehingga protes kemahalan menaikkan tier. Deteksi anchor MENIMPA Phase 1
+      karena punya konteks lebih.
+      Regresi: tests/budgetAnchorAcceptance.test.js (19 assertion).
+
+  M64 ⛔ REGRESI SENDIRI — PEMOTONGAN HISTORY MERUSAK STATE.
+      `history.slice(-12)` di generateChatGPTWhatsappReply, dengan komentar
+      keliru "state sudah dihitung sebelumnya". Nyatanya
+      extractQualificationState() dipanggil DI DALAM builder.
+      Pada 19 pesan: transaksi/tipe/kota/budget SEMUA null → AI melihat sesi
+      kosong tiap giliran → loop tak berujung. Pengulangan M35.
+      Fix: state SELALU dari history penuh; hanya transkrip TAMPILAN yang
+      dipangkas (AI_PROMPT_DISPLAY_TURNS=20, di dalam builder agar tidak ada
+      pemanggil yang bisa mengulangi kesalahan yang sama).
+      Regresi: tests/statePersistsLongChat.test.js (19 assertion, termasuk
+      canary yang membuktikan history terpotong memang merusak state).
+
+  M65 Q4 "N TEMAN" TIDAK DIKENALI. Regex mewajibkan kata "orang", sehingga
+      "Bersama 2 teman kerja"/"bertiga" null dan Q4 diulang terus.
+      Fix: N teman/kawan/rekan → N+1 orang; bertiga/berempat → sesuai angka;
+      "sama teman kerja" tanpa jumlah → "bersama teman" (tetap TERJAWAB).
+
+  M66 Q2 KOSONG PADAHAL AI MENYEBUT KOTANYA. Hanya pesan customer dipindai.
+      Fix: pindai balik pesan AI — aman karena AI tidak pernah menyebut kota
+      yang belum ditetapkan.
+
+  M67 Q9 PENOLAKAN TELANJANG. "Tdk perlu"/"Tdk mau"/"survei sndri" null →
+      pertanyaan diulang 4×. Q9 berbentuk PILIHAN, jadi menolak = memilih
+      cabang "tidak perlu koordinasi" = Mandiri.
+      Nilai untuk keputusan sendiri kini SELALU persis "Mandiri" (dulu kode
+      menghasilkan "Sendirian", melanggar aturan promptnya sendiri).
+
+  M68 Q11 SATU KATA TIER. "Yang semi, Kak" gagal karena Phase 1 mewajibkan
+      "semi" DAN "furn" bersamaan → diulang 3×.
+      Fix: deteksi berpasangan — bila AI baru menanyakan furnitur, satu kata
+      tier sudah cukup.
+
+  M69 Q_FAC TIDAK ADA DI ANTREAN SAMA SEKALI. Summary keluar tanpa fasilitas.
+      Fix: Q_FAC wajib, ditempatkan SETELAH Q14.
+      ⚠️ Menempatkannya sebelum Q14 memotong alur BELI — terdeteksi lewat A/B
+      test (54→50 pada customerDateParser). SELALU A/B test saat menyisipkan
+      pertanyaan ke findNextQuestion().
+
+  M70 JADWAL SURVEI TIDAK ADA DI ANTREAN. Fix: Q9b (tanggal) → Q9c (jam),
+      dua pertanyaan terpisah. Penolakan ("lihat listing saja"/"skip") →
+      "Minta listing", jam TIDAK ditanya. Tanggal disimpan format rapi
+      (`formatted`), bukan ISO string.
+
+  M71 HINDARI/PREFER — PENGHINDARAN BERBASIS JARAK. "jauh dari pemakaman,
+      masjid, gereja, diskotik" → UNKNOWN → LLM mengarang "bau busuk" dan
+      menaruh "jauh dari masjid" di PREFER (arah terbalik).
+      Fix: FAR_RE + dedup lintas-mekanisme + "/" dipertahankan
+      ("diskotik/club" satu tempat). Baris Hindari kini bentuk NEGATIF,
+      Prefer bentuk POSITIF, masing-masing berdiri sendiri.
+      Regresi: tests/avoidPreferPairs.test.js (22 assertion, termasuk asersi
+      NEGATIF bahwa "bau"/"busuk"/"sampah" tidak boleh muncul).
+
+  M73 ⭐ JAWABAN BER-SINGKATAN DILUPAKAN SETELAH SATU GILIRAN + JAWABAN
+      PATOKAN MERACUNI TIPE PROPERTI (transkrip 3 Agu 2026, customer sampai
+      menulis "Anda sudah repetitive" & "Saya jengkel").
+
+      (A) AKAR UTAMA — MEMORI SINGKATAN HANYA BERTAHAN SATU GILIRAN.
+          whatsappAIService.js baris ~292 meng-expand HANYA pesan saat ini;
+          transkrip di DB sengaja RAW (autentik untuk takeover agent) — itu
+          keputusan yang benar. Tapi extractQualificationState() menurunkan
+          ULANG SEMUA slot dari history SETIAP giliran, sehingga:
+            giliran N   : "Rencana tahun dpn" → di-expand → Q8 = 03 Agu 2027 ✅
+            giliran N+1 : pesan itu kini di history sebagai RAW "dpn" →
+                          tidak cocok regex mana pun → Q8 = null ❌
+          Slot yang sudah ✅ berubah lagi jadi ❓ → pertanyaan yang sama
+          diulang selamanya. Percakapan TIDAK PERNAH sampai summary.
+          ⚠️ Ini SISTEMIK, bukan khusus tanggal: SETIAP singkatan di SETIAP
+          slot menguap dengan cara yang sama.
+          Bukti terukur (3 skenario identik, hanya history yang berbeda):
+            history RAW      → moveInDate = null
+            history di-expand→ moveInDate = "03 Agustus 2027"
+          Fix: normalisasi dilakukan DI DALAM extractQualificationState() —
+          bukan di pemanggil — supaya JALUR LLM *dan* PRIVATE AGENT (dua basis
+          kode terpisah, pelajaran M52/M54) sama-sama terlindungi, dan tidak
+          ada pemanggil baru yang bisa mengulangi kesalahan yang sama (pola
+          pencegahan yang sama dengan M64).
+          Fail-open: expandAbbreviations dibungkus try/catch.
+
+      (B) JAWABAN PATOKAN LOKASI MENGUBAH TIPE PROPERTI.
+          "Saya mau dekat indomaret, warung, resto" (jawaban Q6) membuat
+          buildingType = 'store'. Penyebab: deteksi tipe Phase 1 (~baris 693)
+          HANYA memakai stripCommercialUsePhrases, sedangkan 3 call-site lain
+          (~1461/1509/1535) memakai rantai lengkap
+          stripCommercialUsePhrases(stripMovingFromPhrases(stripAmbiguousRumah(
+          stripNearPhrases(...)))). stripNearPhrases-lah yang membuang
+          "dekat/deket/near X" — persis kelas kalimat ini.
+          Akibat: (1) customer yang mencari RUMAH akan dicarikan TOKO;
+          (2) tipe bersifat first-match-wins sehingga "Saya mau beli rumah"
+          SESUDAHNYA tidak bisa mengoreksi; (3) memicu reset palsu ke Q1.
+          Fix: samakan rantai strip dengan 3 call-site lain.
+          Kontrol negatif: "sewa toko"/"sewa warung" TETAP → store.
+
+      Verifikasi (disiplin V6 §PRINSIP DEBUG dipatuhi):
+        • Jalur produksi dicek DULU: AI_PRIMARY_PROVIDER=chatgpt → jalur LLM.
+        • Replay transkrip NYATA giliran-per-giliran: sebelum fix tipe='store'
+          & tanggal hilang; sesudah fix tipe='house' konsisten, tanggal
+          bertahan, alur maju Q1→Q2b→Q3→Q8→Q5→Q9 (tidak lagi mundur ke Q1).
+        • tests/abbreviationMemory.test.js (BARU, 19 assertion) — termasuk
+          KONTROL NEGATIF pencarian toko asli. Dibuktikan tidak vacuous:
+          kedua fix dimatikan → 8 assertion GAGAL; dipulihkan → 19/19.
+        • A/B PER-FIX terhadap housePilot (V6 §PRINSIP DEBUG no.4): 66/69 baik
+          dengan maupun tanpa kedua fix → 3 kegagalan itu PRE-EXISTING, bukan
+          regresi sesi ini.
+        • Suite penuh: 746/767. Kegagalan hanya di 3 file yang memang sudah
+          gagal sejak sebelum sesi ini (customerDateParser 54/69,
+          extractFilters 109/112, housePilot 66/69). `npm run lint` 0 error.
+        • Skill docs: doc 03 dapat §3a (singkatan = jawaban permanen) + §3b
+          (patokan ≠ tipe properti), disinkronkan ke KETIGA folder;
+          diff -r claude_responds/docs ↔ chat_gpt_responds/docs KOSONG.
+
+      ⚠️ CATATAN DISIPLIN TOKEN (V6 §MENAMBAH ATURAN PROMPT ADA HARGANYA):
+      perbaikan ini SELURUHNYA di EKSTRAKTOR — nol token tambahan ke prompt.
+      Sesuai arahan V6: bila loop bertahan meski DIREKTIF FINAL benar, yang
+      kurang adalah ekstraktor, bukan aturan prompt.
+
+  M73b SUSULAN — KAMUS SINGKATAN LENGKAP DIMASUKKAN KE SKILL DOCS (sesi
+      terpisah, permintaan eksplisit user). doc 03 §3a sebelumnya hanya
+      memuat 5 baris contoh; kini memuat SELURUH 152 entri ABBR_DICT
+      (lazyChatNormalizer.js), dikelompokkan per kategori (partikel, waktu,
+      lokasi, relasi, transaksi, sopan-santun, English chat-speak, kontraksi
+      Inggris) — PLUS daftar "Deliberately NOT expanded" (no/sma/pg/tmn/
+      standar/bok/jl) supaya AI tahu KENAPA kata itu sengaja tidak
+      diekspansi (mencegah AI menebak sendiri & salah, mis. "sma"→"sama"
+      yang akan merusak landmark "deket SMA 5").
+      ⚠️ INI PERUBAHAN DOKUMENTASI SAJA — TIDAK ADA KODE YANG DIUBAH. Fix
+      perilaku M73a (normalisasi di dalam extractQualificationState + rantai
+      strip tipe) sudah selesai sebelumnya; ini murni menyalin daftar yang
+      sudah ada di kode ke dalam skill docs untuk AI-facing reference.
+      Verifikasi kelengkapan: script node membandingkan SETIAP key
+      ABBR_DICT terhadap teks doc 03 — 152/152 hadir, 0 hilang.
+      Sinkron ke KETIGA folder (chat_gpt_responds, claude_responds,
+      elevan-property-assistant); diff -r chat_gpt_responds/docs ↔
+      claude_responds/docs KOSONG. Standalone edition (elevan-property-
+      assistant) dapat 2 kalimat disesuaikan (menghapus referensi "kode-side
+      expander" yang tidak eksis di luar backend ini) — isi tabelnya SAMA.
+      ⚠️ DAMPAK TOKEN (WAJIB diukur per V6 §DISIPLIN TOKEN): bagian baru
+      §3a ≈ 3.548 char ≈ 887 token — TERUKUR, bukan nol seperti M73a. 10 doc
+      selalu-aktif kini ≈ 41.200 token (masih di bawah 43.400 baseline V6
+      karena penyusutan lain di sesi antara; TETAP PANTAU tren totalnya,
+      lihat §8 UKURAN PROMPT). Tes kode (abbreviationMemory.test.js 19/19)
+      dan lint (0 error) tidak terpengaruh karena tidak ada .js yang disentuh.
+
+  M74 ⭐ PROVIDER BARU: KIMI (MOONSHOT AI). backend/services/kimiService.js
+      dibuat MENIRU deepseekService.js persis (OpenAI-compatible: system+user
+      messages, /chat/completions, error classifier khusus). Diwire penuh ke
+      aiProviderService.js: getPrimaryAIProvider (+'kimi'), PROVIDER_ORDER,
+      canUseKimi, executeAIProviderWithFallback (+kimiFn param ke-5),
+      executeExternalAIFallbackChain (urutan tambah 'kimi' setelah
+      'deepseek'), 3 fungsi wrapper (contact/chatbot/whatsapp), dan
+      checkAIProviderConfig. skillPromptService.js: normalizeProvider +
+      providerFolderMapping — kimi memakai skill set chat_gpt_responds (sama
+      seperti qwen/deepseek, karena sama-sama OpenAI-compatible).
+
+      ⚠️ DUA MASALAH NYATA DITEMUKAN LEWAT TES LANGSUNG KE API (bukan asumsi
+      dari dokumentasi resmi — pelajaran M46 pada DeepSeek: SELALU verifikasi
+      model/parameter ke endpoint sungguhan sebelum menganggap config benar):
+        (a) Model `kimi-k2-thinking` yang awalnya di-set user di .env DITOLAK
+            (404 "Not found the model … or Permission denied") oleh API key
+            yang tersedia. Diprobe 7 nama model langsung ke endpoint resmi
+            (https://api.moonshot.ai/v1) — HANYA kimi-k3, kimi-k2.6, dan
+            kimi-k2.7-code-highspeed yang diterima. Diganti default ke
+            kimi-k3 (rekomendasi resmi Moonshot untuk pemakaian umum,
+            konteks 1M token — cocok untuk qualification flow panjang).
+        (b) kimi-k3 MENOLAK top_p apa pun selain 0.95 ("invalid top_p: only
+            0.95 is allowed for this model") — beda dari provider
+            OpenAI-compatible lain di proyek ini yang semua default 1.0.
+            KIMI_TOP_P default diubah ke 0.95 di kode DAN .env.
+        (c) Sub-bug klasifikasi error: regex awal normalizeKimiError()
+            memakai /model/i longgar, sehingga pesan top_p di atas (yang
+            KEBETULAN mengandung kata "model") salah tergolong "model tidak
+            dikenali". Regex dipersempit ke frasa spesifik ("not found the
+            model", "does not exist", dst) — sama persis kelas kesalahan
+            yang membuat M46 (DeepSeek) senyap dulu, ditangkap SEBELUM
+            sempat menyesatkan diagnosis produksi.
+
+      Env baru (.env + .env.example): KIMI_API_KEY · KIMI_MODEL=kimi-k3 ·
+      KIMI_BASE_URL=https://api.moonshot.ai/v1 · KIMI_MAX_TOKENS=4096 ·
+      KIMI_TEMPERATURE=1.0 · KIMI_TOP_P=0.95 (WAJIB 0.95, jangan diubah).
+      AI_PRIMARY_PROVIDER kini menerima 'kimi' sebagai opsi keenam.
+
+      SKILL.md (chat_gpt_responds & claude_responds) — tabel §3 Provider
+      Chain dapat baris `kimi`, rantai fallback primary=private diperbarui
+      jadi DeepSeek → Kimi → Claude → ChatGPT → QWEN (menyamai urutan nyata
+      di executeExternalAIFallbackChain), versi dinaikkan v7.0→v7.1. docs/*.md
+      TIDAK disentuh (aturan Q1-Q14 provider-agnostic, tidak perlu diubah
+      untuk provider baru) — diff -r tetap KOSONG.
+      elevan-property-assistant/ TIDAK disentuh — sudah generik ("any
+      underlying AI provider"), tidak menyebut provider spesifik.
+
+      Verifikasi: dipanggil LANGSUNG lewat callKimiChatAPI (skill penuh +
+      prompt properti nyata "Saya mau sewa rumah di Surabaya" → balasan
+      sesuai Q-flow) DAN lewat generateWhatsappReplyWithProviderFallback
+      dengan call-site IDENTIK produksi (session/history/AI_PRIMARY_PROVIDER
+      sungguhan) → provider terpakai='kimi', fallbackUsed=false, balasan
+      mengikuti Q3 budget-anchoring (M63) dengan benar. Suite penuh 746/767
+      (baseline tidak berubah), `npm run lint` 0 error.
+
+  M72 Q_FAC/Q9b/Q9c + jawaban pendek Q9/Q11 dikunci bersama di
+      tests/facilitiesViewingAndShortAnswers.test.js (25 assertion), termasuk
+      penjaga bahwa alur BELI (Q_KPR/Q14) tidak terpotong.
+
+
+================================================================================
+  6. ENVIRONMENTS — KONFIGURASI .env
+================================================================================
+
+FILE: backend/.env (copy dari .env.example; JANGAN commit .env asli)
+
+CORE      PORT=5055 · FRONTEND_PORT=5173 · APP_NAME=Elevan Property
+DATABASE  DB_HOST · DB_USER · DB_PASSWORD · DB_NAME=db_property · DB_DIALECT=mysql
+NGROK     NGROK_ENABLE=true
+
+AI PROVIDERS
+  ⛔ KEBIJAKAN BILLING (3 Agu 2026, WAJIB): untuk KELIMA provider (ChatGPT,
+  Kimi, Qwen, DeepSeek, Claude) — DILARANG KERAS auto-recharge/auto-topup
+  saat token/kredit habis, lewat jalur apa pun (kode, script, UI otomatis).
+  Saat kuota habis: biarkan error → provider chain jatuh ke provider
+  berikutnya (aiProviderService.js) → akhirnya Private Agent. Isi ulang
+  HANYA manual oleh owner via dashboard billing masing-masing provider.
+  JANGAN PERNAH menambahkan kode yang memanggil endpoint billing/payment
+  provider mana pun secara otomatis. Sudah didokumentasikan juga sebagai
+  komentar di backend/.env tepat sebelum blok API key.
+
+  AI_PRIMARY_PROVIDER=chatgpt      # chatgpt|claude|qwen|deepseek|kimi|private
+  ENABLE_CLAUDE_FALLBACK=true
+  ENABLE_CHATBOT_PRIVATE_CONTROLLER=true
+  CHAT_GPT_API_KEY / CHAT_GPT_MODEL=gpt-4o-mini / CHAT_GPT_MAX_OUTPUT_TOKENS=4096
+    ⚠️ TPM org 60.000/menit. Prompt per pesan ±53–56K. JANGAN memotong
+       history sebagai mitigasi (M64) — naikkan limit lewat billing OpenAI.
+  ANTHROPIC_API_KEY / CLAUDE_MODEL / CLAUDE_MAX_TOKENS
+  QWEN_BASE_URL / QWEN_API_KEY / QWEN_MODEL
+  DEEPSEEK_API_KEY / DEEPSEEK_MODEL=deepseek-v4-flash  ⚠️ WAJIB v4
+  KIMI_API_KEY / KIMI_MODEL=kimi-k3 / KIMI_BASE_URL=https://api.moonshot.ai/v1
+    ⚠️ KIMI_TOP_P WAJIB 0.95 — kimi-k3 menolak nilai lain (M74).
+
+CHATBOT MODE & MEMORI
+  RESPOND_CATALOG_RUN=ON           # ON=brief+katalog | OFF=brief saja
+  CHATBOT_COOKIE_TTL_MINUTES=90
+  AI_COOKIE_RESPONSE_TIMER=12000   # ms debounce pesan beruntun
+  AI_HISTORY_WINDOW=60             # jendela history (min 24)
+  AI_PROMPT_DISPLAY_TURNS=20       # (BARU) hanya TAMPILAN transkrip; state
+                                   # SELALU dari history penuh (M64)
+
+AI FOOTER      AI_PRIMARY_TAG=propmatches.netlify.app
+SKILL LIMITS   SKILL_MAX_RESPONSE_CHARACTERS=330000
+               SKILL_MAX_PROJECT_CHARACTERS=345000
+PAGINATION     PAGINATION_ROWS=8
+
+WHATSAPP — FONNTE       FONNTE_TOKEN · FONNTE_POLLING_ENABLED · retry/timeout
+WHATSAPP — TIMELINESAI  TIMELINESAI_API_KEY
+WHATSAPP — KIRIMI       KIRIMI_USER_CODE · KIRIMI_SECRET (level AKUN)
+                        + users.kirimi_device_id (per-agent, di DB)
+TERMINAL       MESSAGE_TERMINAL=KIRIMI · MASSEGE_TERMINAL=KIRIMI
+PROPERTY DATA  RUMAH123_DATA=OFF · APIFY_API_TOKEN
+
+GOOGLE
+  GOOGLE_SHEET_ID · GOOGLE_SERVICE_ACCOUNT_JSON_PATH
+  GOOGLE_API_KEY (Places) ⚠️ BLOCKED: billing Google Cloud project belum enable
+  GOOGLE_OAUTH_CLIENT_JSON_PATH / GOOGLE_OAUTH_REFRESH_TOKEN
+    ⚠️ REFRESH_TOKEN MASIH KOSONG — Calendar auto-schedule belum live
+  GOOGLE_CALENDAR_TIMEZONE=Asia/Jakarta
+
+AUTH  ACCESS_TOKEN_SECRET · REFRESH_TOKEN_SECRET · expiry · BCRYPT_SALT_ROUNDS
+
+FILE: frontend/.env
+  VITE_BACKEND_URL · VITE_BACKEND_PORT=5055 · VITE_DEV_SERVER_PORT=5173
+
+CATATAN PENTING
+  - Kirimi butuh kredensial AKUN (.env) DAN device per-agent (DB).
+  - Google Places & Calendar sudah di-wire tapi punya prasyarat eksternal
+    yang belum tuntas — jangan dikira bug kode.
+  - Perubahan .env BARU BERLAKU SETELAH BACKEND DI-RESTART.
+
+
+================================================================================
+  7. INFORMASI — ARSITEKTUR, AGENT & DATA
+================================================================================
+
+AGENT
+  1 agent = 1 record `users` (privilege='agent'): user_id, name, phone,
+  email, catalog_summary, fonnte_token, kirimi_device_id.
+  Identifikasi webhook: Fonnte→users.phone · Kirimi→users.kirimi_device_id ·
+  TimelinesAI→users.phone. Katalog di-scope ke Property.user_id.
+
+DB TABLES (db_property)
+  users · customers · properties · property_images · property_facilities ·
+  property_locations · chat_sessions · chat_messages · facilities (+keywords
+  JSON) · contacts · locations · countries · provinces · cities · logs ·
+  whatsapp_inbound_messages (legacy)
+
+MODEL Customer (inti sejak V4)
+  { user_id (FK agent), customer_id UNIQUE, name, phone (62xxx), email,
+    ai_response 'ON'|'OFF', status, audit }
+  INDEX UNIQUE (user_id, phone) — 1 nomor bisa terdaftar di banyak agent.
+
+ALUR PESAN WHATSAPP (identik di 3 controller)
+  1. Webhook → log raw → detectEventType
+  2. Bukan 'incoming' → return 200
+  3. 'incoming' → RETURN 200 DULU → proses background:
+     a. extract sender/name/message/messageId
+     b. lazyChatNormalizer.expandAbbreviations()
+     c. fromMe guard → filter grup → isOwnEcho/stripOwnEcho
+     d. dedup L1 (messageId) + L2 (DB)
+     e. PERINTAH AGENT (toggle catalog_summary / ai_response)
+     f. session findOrCreate → GATE ai_response=OFF
+     g. property gate → dorman pasca-summary
+     h. COOKIE RESPONSE TIMER (debounce)
+     i. simpan pesan RAW → generateWhatsAppAIReply → simpan balasan
+     j. syncCustomerFromChat → viewingScheduleTrigger
+     k. kirim balasan (retry + deteksi duplicate) → log terminal
+
+QUALIFICATION FLOW — URUTAN AKTUAL findNextQuestion()
+  Q1  Tipe transaksi (sewa/beli/booking)
+  Q2  Kota            ← Q1+Q2 terjawab = TRIGGER REGISTRASI CUSTOMER
+  Q2c Area/kecamatan (kota besar)   · Q2b Riwayat pencarian
+  Q3  Budget (2 harga kontras; terima/tolak/angka sendiri)
+  Q8  Tanggal masuk (WAJIB)
+  Q4  Penghuni · Q5 Red flags (Hindari↔Prefer) · Q6 Patokan lokasi
+  Q7  Area alternatif (penolakan = jawaban)
+  Q9  Decision maker (penolakan telanjang = Mandiri)
+  Q10 Durasi sewa · Q_KPR/Q_KPR-a/Q_COND (beli) · Q11 Furnitur
+  Q12 Tower/lantai (apartemen) · Q14 slot per-tipe
+  Q_FAC  Fasilitas (WAJIB — setelah Q14)
+  Q9b Tanggal survei → Q9c Jam survei (atau "Minta listing")
+  → SUMMARY
+
+  Mandatory sebelum brief: transaksi, tipe, kota, budget, tanggal,
+  red flags, patokan, area alternatif, fasilitas, jadwal survei.
+
+
+================================================================================
+  8. SKILLS — AI SKILL SYSTEM
+================================================================================
+
+LOKASI (5 folder)
+  skills/claude_responds/           → system prompt Claude (SKILL.md + docs 01–13)
+  skills/chat_gpt_responds/         → ChatGPT/QWEN/DeepSeek (docs BYTE-IDENTICAL)
+  skills/elevan-property-assistant/ → edisi STANDALONE untuk upload ke
+                                      platform.openai.com/storage/skills
+                                      ⚠️ TIDAK di-load kode backend
+  skills/website_env_concept/       → arsitektur teknis (docs 00–17)
+  skills/website_design_guidelines/ → panduan desain UI
+  Real-Estate/                      → 26 file: 12 playbook tipe + *_CHAT.md
+                                      + MASTER QFLOW + ANSWER COMPLETENESS
+
+SKILL DOCS (claude_responds/docs — struktur BARU 01–13, jangan pakai nomor lama)
+  01 Core role, scope, style          08 Catalog & recommendations
+  02 Language & intent detection      09 Off-topic & escalation
+  03 Conversation memory & stability  10 Date & money parsing
+  04 Qualification flow Q1–Q14 ★      11 House pilots            [KONDISIONAL]
+  05 Answer completeness & re-ask     12 Facilities reference    [KONDISIONAL]
+  06 Customer conditions              13 Locations & landmarks   [KONDISIONAL]
+  07 Property type playbooks
+  ★ doc 04 memuat: tabel Hindari↔Prefer, "jauh dari X", Q3 terima/tolak harga,
+    Q4 housemates, Q9 penolakan=Mandiri, Q11 satu kata, Q_FAC wajib,
+    Q9b/Q9c jadwal survei, template summary (label Kota + Area).
+
+  CONDITIONAL_FILE_TRIGGERS (skillPromptService.js): hanya 3 doc bersyarat;
+  10 doc lainnya SELALU dimuat.
+
+UKURAN PROMPT (diukur 3 Agu 2026) — ⚠️ TUMBUH, PANTAU TERUS
+  10 doc selalu-aktif : 173.418 chars ≈ 43.400 token  (V5: 39.100)
+  +3 doc kondisional  : 223.218 chars ≈ 55.800 token  (V5: 51.000)
+  Plafon gpt-4o-mini  : 60.000 token/menit
+  Setiap aturan yang ditambahkan memperkecil ruang tersisa DAN menurunkan
+  kepatuhan model (M62). Prioritaskan ekstraktor kode daripada aturan prosa.
+
+GAYA AI (wajib)
+  Ramah/hangat · sopan · responsif · adaptif · informatif · pakai "Kak" ·
+  1 pertanyaan per pesan · mirror bahasa customer · JANGAN bocorkan AI chain ·
+  nama agent & app SELALU dinamis · PENOLAKAN CUSTOMER = JAWABAN ·
+  landmark: jangan pernah mengarang nama/status buka/jam operasional.
+
+
+================================================================================
+  9. TUJUAN
+================================================================================
+
+TUJUAN BISNIS
+  1. Otomasi kualifikasi lead WhatsApp — agent menerima brief siap-tindak
+     (target ≤ 12 pesan AI per lead).
+  2. Tidak ada lead hilang — Q1+Q2 terjawab = tercatat.
+  3. Multi-agent scalable — katalog/customer/nomor terpisah per agent.
+  4. Kontrol penuh agent — takeover kapan pun (ai_response=OFF).
+  5. Customer merasa DIDENGAR — penolakan dihormati sebagai jawaban final;
+     tidak ada pengulangan pertanyaan yang memicu kemarahan.
+
+TUJUAN TEKNIS
+  1. Percakapan TIDAK repetitif/overlap/redundan — state stabil sepanjang
+     percakapan sepanjang apa pun.
+  2. Status pengiriman JUJUR di terminal.
+  3. Summary AKURAT — nilai konkret, tanpa placeholder, tanpa karangan.
+  4. Satu sumber kebenaran per konsep.
+  5. Fail-open pada gate non-kritis.
+  6. Verifikasi di JALUR YANG MELAYANI PRODUKSI, bukan fallback.
+  7. Disiplin token — ukur dampak sebelum menambah apa pun ke prompt.
+  8. Setiap perbaikan perilaku WAJIB punya tes regresi dengan transkrip nyata
+     DAN kontrol negatif.
+
+
+================================================================================
+  10. ROADMAP
+================================================================================
+
+JANGKA PENDEK (1–2 minggu)
+  [ ] ⚠️ Naikkan limit TPM OpenAI (billing) — prompt 53–56K dari plafon 60K
+  [ ] Enable billing Google Cloud → Places API live
+  [ ] Isi GOOGLE_OAUTH_REFRESH_TOKEN → Calendar auto-schedule live
+  [ ] Kurangi doc selalu-aktif (10 dari 13) ATAU pindah ke model lebih besar
+  [ ] Notifikasi agent saat lead baru masuk
+  [ ] Lead scoring otomatis dari kelengkapan Q-flow
+
+JANGKA MENENGAH (1–2 bulan)
+  [ ] Dashboard analytics: funnel Q1→brief, konversi per tipe/agent/lokasi
+  [ ] Follow-up otomatis lead dorman
+  [ ] Riwayat percakapan per customer di Customer Master
+  [ ] Export lead ke CSV/Sheets
+
+JANGKA PANJANG
+  [ ] Multi-bahasa penuh (Mandarin/Jepang/Korea) untuk pasar wisata Bali
+  [ ] Rekomendasi berbasis embedding (semantic match)
+  [ ] Mobile app agent
+  [ ] A/B testing skrip kualifikasi
+  [ ] Sistem komisi & tracking closing per agent
+
+
+================================================================================
+  11. STRUKTUR PROJECT
+================================================================================
+
+Elevan_Property/
+├── backend/
+│   ├── server.js                    ← Entry; ensureRequiredDatabaseColumns()
+│   │                                   SEBELUM sequelize.sync(); ngrok
+│   ├── models/                      (17)
+│   ├── controllers/                 (25)
+│   │   ├── GeneralController.js     ← base CRUD helpers
+│   │   ├── chatbotPrivateController.js ← Private Agent (FALLBACK), Q1–Q14,
+│   │   │                               buildAgentBrief, #buildAvoidPreferPairs,
+│   │   │                               #dedupeAnchorLandmarks
+│   │   ├── fonnte/kirimi/timelinesAI ChatController.js
+│   │   └── *MasterController.js (7 modul)
+│   ├── services/                    (23)
+│   │   ├── whatsappAIService.js     ← orchestrator
+│   │   ├── aiPromptBuilderService.js ← ★ JALUR PRODUKSI: extractQualification
+│   │   │                               State, findNextQuestion,
+│   │   │                               buildQualificationStateBlock,
+│   │   │                               buildFinalDirective ★,
+│   │   │                               detectBudgetAnchorResponse ★,
+│   │   │                               buildLiveLandmarkBlock, _isJustTheCity
+│   │   ├── openaiService.js         ← ⛔ JANGAN potong history di sini (M64)
+│   │   ├── propertyRecommendationService.js
+│   │   ├── customerRegistrationService.js · customerAiToggleService.js
+│   │   ├── viewingScheduleTrigger.js · googleCalendarService.js
+│   │   └── googlePlacesService.js · skillPromptService.js
+│   ├── utils/                       (24)
+│   │   ├── propertyKeywordFilter.js · sessionAnchors.js · whatsappUtils.js
+│   │   ├── standardFacilities.js (11 tipe + premium)
+│   │   ├── customerDateParser.js (clamping/leap/reject_past)
+│   │   ├── lazyChatNormalizer.js (SMS-speak; ⛔ jangan tambah "jl")
+│   │   └── locationLandmarks.js (45 kota) · houseListingPilot.js
+│   ├── tests/                       (21 file, 700/719 lulus)
+│   └── scripts/sync-db.js
+│
+├── frontend/  (Vue 3, 7 modul *_Master, ConfirmModal, router guards)
+│
+├── skills/
+│   ├── claude_responds/     (SKILL.md + docs 01–13)
+│   ├── chat_gpt_responds/   (byte-identical docs)
+│   ├── elevan-property-assistant/ (standalone, untuk upload OpenAI)
+│   ├── website_env_concept/ (docs 00–17)
+│   └── website_design_guidelines/
+│
+├── Real-Estate/             (26 file playbook + CHAT + MASTER QFLOW)
+├── database/                (SQL seed, termasuk 336 properti LEO FELIX)
+├── ELEVAN_PROPERTY_CONTEXT_V5.txt   ← arsip
+└── ELEVAN_PROPERTY_CONTEXT_V6.txt   ← FILE INI
+
+
+================================================================================
+  12. WORKFLOW
+================================================================================
+
+A. WORKFLOW CUSTOMER (end-to-end)
+   1. Chat WA ke nomor agent → webhook
+   2. Normalisasi singkatan → guard (fromMe/grup/echo/dedup)
+   3. Cek ai_response → OFF? AI diam
+   4. Gate properti → debounce 12s
+   5. Q1 → Q2 (Q1+Q2 = CUSTOMER TERDAFTAR)
+   6. Q2c → Q3 (terima/tolak harga) → Q8 → Q4 → Q5 → Q6 → Q7 → Q9
+   7. Q10 → Q11 → Q12 → Q14 → Q_FAC → Q9b (tanggal) → Q9c (jam)
+      ⤷ Penolakan di titik mana pun = JAWABAN, bukan slot kosong
+   8. Customer BARU? tanya nama/email. Customer LAMA? lewati.
+   9. SUMMARY brief (+ katalog bila RESPOND_CATALOG_RUN=ON)
+  10. Sticky anchor di-clear → siap pencarian berikutnya
+
+B. WORKFLOW AGENT (kontrol via chat)
+   - "matikan/nyalakan summary"          → users.catalog_summary
+   - "matikan AI untuk 628xxx"           → customers.ai_response=OFF
+   ⚠️ WAJIB NOMOR WHATSAPP; hanya berlaku dari nomor agent sendiri.
+
+C. WORKFLOW AGENT (dashboard)
+   Login → Master Data (Country→Province→City→Location→Facility→Property)
+   → Customer Master → Chat history
+
+D. WORKFLOW DEVELOPER (menambah/ubah fitur chat)
+   1. CEK AI_PRIMARY_PROVIDER + log runtime — jalur mana yang melayani produksi
+   2. Baca skill docs terkait (04 flow, 05 completeness, 06 kondisi customer)
+   3. Ubah kode DI JALUR YANG BENAR
+   4. node --check <file>
+   5. Simulasi node -e dengan TRANSKRIP NYATA + call site identik produksi
+   6. Ukur dampak token bila menyentuh prompt
+   7. Tulis tes regresi (termasuk kontrol NEGATIF)
+   8. Jalankan SELURUH suite, bandingkan dengan baseline
+   9. Update skill docs KETIGA folder
+  10. Restart backend
+  11. Catat solusinya di §5 (nomor M berikutnya)
+
+
+================================================================================
+  13. TROUBLESHOOT SUMMARY
+================================================================================
+
+GEJALA → PENYEBAB → SOLUSI
+
+[CHAT / AI]
+
+  AI mengulang pertanyaan yang SUDAH dijawab
+    → LANGKAH 1: dump state block. Bila state BENAR tapi AI tetap mengulang →
+      masalah ukuran/posisi prompt (M62), bukan ekstraksi. Pastikan DIREKTIF
+      FINAL ada di posisi 100%.
+    → LANGKAH 2: bila state SALAH (field null padahal customer sudah jawab) →
+      ekstraktornya yang kurang. Cek apakah jawabannya berbentuk singkat/
+      penolakan/singkatan (M63, M65, M67, M68).
+    → LANGKAH 3: bila SEMUA field null pada percakapan panjang → ada yang
+      memotong history sebelum builder (M64). Jangan pernah.
+
+  AI me-reset ke "pencarian baru" di tengah alur
+    → Sama dengan di atas: state kosong. Cek M64 dulu.
+
+  AI menolak jawaban sah sebagai "non-properti"
+    → Rule 0 di prompt LLM. DIREKTIF FINAL memuat larangan eksplisit; pastikan
+      terpasang. hasPropertyKeyword() sering FALSE untuk jawaban pendek —
+      itu normal, gerbang sesungguhnya isPropertyContextContinuation().
+
+  Fasilitas / jadwal survei tidak pernah ditanya
+    → Pastikan Q_FAC dan Q9b/Q9c ada di findNextQuestion() (M69, M70).
+
+  Summary memuat nilai karangan / arah terbalik (Hindari↔Prefer)
+    → Ekstraktor mengembalikan UNKNOWN → LLM mengisi sendiri. Tambahkan
+      ekstraktor untuk kelas ungkapan itu (M71).
+
+  ChatGPT error 429 "Request too large"
+    → Skill docs 43–56K dari plafon 60K. Naikkan limit lewat billing OpenAI.
+      ⛔ JANGAN memotong history sebagai mitigasi (M64).
+
+  Landmark terasa basi
+    → Google Places BLOCKED (billing project Google Cloud belum enable).
+
+  Viewing tidak masuk Google Calendar
+    → GOOGLE_OAUTH_REFRESH_TOKEN kosong.
+
+[PENGIRIMAN WHATSAPP]
+  "✅ Terkirim" tapi customer tidak menerima
+    → (a) Kirimi duplicate (cek log "⚠️ Duplikat")
+      (b) Device disconnect / kredensial kurang
+  Webhook tidak masuk → ngrok URL berubah, update di dashboard.
+
+[DATABASE]
+  Boot gagal "Key column 'user_id' doesn't exist"
+    → ensureRequiredDatabaseColumns() harus SEBELUM sequelize.sync().
+  Customer tidak masuk tabel → Q1/Q2 belum terjawab (memang ditahan).
+
+[NODE]
+  EADDRINUSE :::5055
+    → Get-NetTCPConnection -LocalPort 5055 | %{ Stop-Process -Id $_.OwningProcess -Force }
+
+[SKILL DOCS]
+  Perilaku beda antar provider → diff seluruh 13 docs.
+  Aturan baru tidak dipatuhi → cek apakah docnya KONDISIONAL (11/12/13) dan
+  kata pemicunya benar-benar muncul. Bila sudah termuat tapi tetap diabaikan →
+  M62 (prompt terlalu panjang) — tambahkan ekstraktor, bukan aturan.
+
+PRINSIP DEBUG
+  1. Cek jalur produksi AKTUAL dulu (AI_PRIMARY_PROVIDER + log).
+  2. Dump state block sebelum menebak — hampir selalu memisahkan
+     "ekstraktor kurang" dari "prompt terlalu panjang".
+  3. Reproduksi dengan transkrip NYATA dan call site identik produksi.
+  4. A/B test saat menyisipkan pertanyaan ke findNextQuestion().
+  5. Perubahan kode WAJIB restart backend.
+  6. Gate non-kritis harus fail-open.
+
+
+================================================================================
+  CATATAN AKHIR UNTUK CLAUDE CODE
+================================================================================
+
+  - File ini SATU-SATUNYA konteks yang perlu di-upload. Detail teknis
+    per-topik ada di skills/website_env_concept/docs/.
+  - SELALU cek AI_PRIMARY_PROVIDER sebelum mendiagnosis bug perilaku AI —
+    jalur produksi mungkin BUKAN Private Agent.
+  - JANGAN memotong input extractQualificationState() dalam kondisi apa pun.
+  - Setiap penambahan ke prompt LLM WAJIB diukur dampak tokennya; utamakan
+    ekstraktor kode daripada aturan prosa.
+  - Struktur skill doc BARU 01–13 — jangan rujuk nomor dari V4 atau lebih lama.
+  - Setiap perbaikan baru: tambahkan nomor M berikutnya di §5.
+  - JANGAN hardcode: nama model AI, nama agent, nama aplikasi, nomor telepon,
+    atau kredensial apa pun.
+
+  Baseline tes saat file ini dibuat: 700/719 lulus (19 kegagalan pre-existing
+  di customerDateParser/extractFilters/housePilot — alur BELI/Q_KPR/Q14,
+  tidak terkait perubahan sesi ini).
+
+================================================================================
+  END OF FILE — ELEVAN_PROPERTY_CONTEXT_V6.txt
+================================================================================

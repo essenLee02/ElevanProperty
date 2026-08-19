@@ -126,6 +126,22 @@ const ABBR_DICT = {
   idk: 'tidak tahu', imo: 'menurut saya', fyi: 'sebagai informasi',
   rn: 'sekarang', omw: 'dalam perjalanan',
 
+  // ── Singkatan KOTA (M118) ────────────────────────────────────────────────
+  // Customer WhatsApp menulis kota dengan singkatan sesering menulis "rmh".
+  // Tanpa entri ini, "cari rmh di sby" tidak pernah cocok dengan baris
+  // `cities.name = 'Surabaya'`, sehingga RAG master data maupun deteksi kota
+  // sama-sama meleset — persis keluhan "customer lazy chat".
+  //
+  // ⚠️ HANYA singkatan yang TIDAK ambigu. "bdg" bisa berarti Bandung, dan itu
+  // aman. Tapi "mlg" (Malang) dan "smg" (Semarang) juga dipakai luas, jadi
+  // dimasukkan. JANGAN menambahkan singkatan 2 huruf seperti "sb" atau "jk" —
+  // terlalu sering muncul sebagai potongan kata biasa dan akan merusak kalimat.
+  sby: 'surabaya', sbaya: 'surabaya', jkt: 'jakarta', jakut: 'jakarta utara',
+  jaksel: 'jakarta selatan', jakbar: 'jakarta barat', jaktim: 'jakarta timur',
+  jakpus: 'jakarta pusat', bdg: 'bandung', mlg: 'malang', smg: 'semarang',
+  jogja: 'yogyakarta', jgja: 'yogyakarta', yk: 'yogyakarta', sda: 'sidoarjo',
+  tangsel: 'tangerang selatan', bks: 'bekasi', dpk: 'depok',
+
   // English contractions
   "won't": 'will not', "doesn't": 'does not', "don't": 'do not',
   "can't": 'cannot', "isn't": 'is not', "aren't": 'are not',

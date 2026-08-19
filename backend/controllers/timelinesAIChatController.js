@@ -45,6 +45,7 @@ const { hasPropertyKeyword,
 const { generateWhatsAppAIReply, normalizeAiResponderLabel } = require('../services/whatsappAIService');
 const { getConversationHistory }        = require('../services/sessionService');
 const { sanitizeLog, maskPhone, maskName, appendSentViaTag, isOwnEcho, stripOwnEcho, buildOffTopicRedirect } = require('../utils/whatsappUtils');
+const { HTTP } = require('../config/httpStatus');
 
 /* ══════════════════════════════════════════════════════════════════════════════
    BAGIAN 0 — MESSAGE-ID DEDUP CACHE
@@ -691,22 +692,22 @@ class TimelinesAIChatController {
 
     // ── Handle status update ────────────────────────────────────────
     if (eventType === 'message_status') {
-      return res.status(process.env.HTTP_OK).json({ status: true, type: 'message_status', message: 'Status diterima' });
+      return res.status(HTTP.OK).json({ status: true, type: 'message_status', message: 'Status diterima' });
     }
 
     // ── Handle send notification (pesan keluar / kita sendiri) ──────
     if (eventType === 'send') {
-      return res.status(process.env.HTTP_OK).json({ status: true, type: 'send', message: 'Send event diterima' });
+      return res.status(HTTP.OK).json({ status: true, type: 'send', message: 'Send event diterima' });
     }
 
     // ── Handle unknown ──────────────────────────────────────────────
     if (eventType !== 'incoming') {
-      return res.status(process.env.HTTP_OK).json({ status: true, type: 'unknown', message: 'Event diterima' });
+      return res.status(HTTP.OK).json({ status: true, type: 'unknown', message: 'Event diterima' });
     }
 
     // ── INCOMING MESSAGE ────────────────────────────────────────────
     // Respond 200 SEKARANG sebelum proses AI (hindari TimelinesAI timeout)
-    res.status(process.env.HTTP_OK).json({ status: true, type: 'incoming', message: 'Webhook diterima' });
+    res.status(HTTP.OK).json({ status: true, type: 'incoming', message: 'Webhook diterima' });
 
     // Proses di background (tidak block response)
     setImmediate(async () => {
@@ -764,7 +765,7 @@ class TimelinesAIChatController {
       return TimelinesAIChatController.handleInboundMessage(req, res);
     }
 
-    return res.status(process.env.HTTP_OK).json({
+    return res.status(HTTP.OK).json({
       status     : true,
       caught     : true,
       eventType,
@@ -793,7 +794,7 @@ class TimelinesAIChatController {
     console.log(`  Dry run : ${dry_run}`);
 
     if (!sender || !message) {
-      return res.status(process.env.HTTP_BAD_REQUEST).json({ success: false, message: 'Wajib ada: sender dan message' });
+      return res.status(HTTP.BAD_REQUEST).json({ success: false, message: 'Wajib ada: sender dan message' });
     }
 
     let agent = account ? await findAgentByAccount(account) : null;
@@ -803,7 +804,7 @@ class TimelinesAIChatController {
     }
 
     if (!agent) {
-      return res.status(process.env.HTTP_NOT_FOUND).json({
+      return res.status(HTTP.NOT_FOUND).json({
         success : false,
         message : 'Tidak ada agent aktif. Cek /api/timelinesai/status'
       });
@@ -838,7 +839,7 @@ class TimelinesAIChatController {
       });
 
     } catch (err) {
-      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
+      return res.status(HTTP.INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 
@@ -861,7 +862,7 @@ class TimelinesAIChatController {
         }
       });
     } catch (err) {
-      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
+      return res.status(HTTP.INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 
@@ -887,7 +888,7 @@ class TimelinesAIChatController {
         data   : { agent: agentName, sessions, pagination: { total, limit: parseInt(limit) || 50 } }
       });
     } catch (err) {
-      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
+      return res.status(HTTP.INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 
@@ -900,7 +901,7 @@ class TimelinesAIChatController {
       const { limit = 100} = req.query;
 
       const session = await ChatSession.findByPk(sessionId);
-      if (!session) return res.status(process.env.HTTP_NOT_FOUND).json({ success: false, message: 'Sesi tidak ditemukan' });
+      if (!session) return res.status(HTTP.NOT_FOUND).json({ success: false, message: 'Sesi tidak ditemukan' });
 
       const messages = await ChatMessage.findAll({
         where : { chatSessionId: sessionId },
@@ -917,7 +918,7 @@ class TimelinesAIChatController {
         }
       });
     } catch (err) {
-      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
+      return res.status(HTTP.INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 
@@ -947,7 +948,7 @@ class TimelinesAIChatController {
         message: keyPresent ? `${agents.length} agent siap TimelinesAI` : 'TIMELINESAI_API_KEY belum di-set di .env'
       });
     } catch (err) {
-      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
+      return res.status(HTTP.INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 
@@ -972,7 +973,7 @@ class TimelinesAIChatController {
         }
       });
     } catch (err) {
-      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
+      return res.status(HTTP.INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 
@@ -984,7 +985,7 @@ class TimelinesAIChatController {
     try {
       const apiKey = String(process.env.TIMELINESAI_API_KEY || '').trim();
       if (!apiKey) {
-        return res.status(process.env.HTTP_NOT_FOUND).json({ success: false, message: 'TIMELINESAI_API_KEY belum di-set di .env' });
+        return res.status(HTTP.NOT_FOUND).json({ success: false, message: 'TIMELINESAI_API_KEY belum di-set di .env' });
       }
 
       const results = {};
@@ -1002,7 +1003,7 @@ class TimelinesAIChatController {
 
       return res.json({ success: true, api_base: apiBase(), results });
     } catch (err) {
-      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
+      return res.status(HTTP.INTERNAL_SERVER_ERROR).json({ success: false, message: err.message });
     }
   }
 }

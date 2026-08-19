@@ -360,52 +360,31 @@ sequelize.sync()
         console.log('[FONNTE POLLER] ℹ️  Dinonaktifkan via FONNTE_POLLING_ENABLED=false');
       }
 
-      // ─── ngrok auto-start (opsional, NGROK_ENABLE=true di .env) ────────
-      // Jalan sebagai child process backend — URL tunnel muncul di terminal
-      // yang sama, tidak perlu window ngrok.exe terpisah.
-      if (String(process.env.NGROK_ENABLE || 'false').toLowerCase() === 'true') {
+      // ─── URL publik + banner webhook (M117) ───────────────────────────
+      // Sumber kebenaran ada di services/publicUrlService.js. Sebelumnya blok
+      // ini mencetak "https://<ngrok-url>/api/kirimi/webhook" APA PUN modenya —
+      // termasuk di Hostinger yang tidak punya ngrok sama sekali (terlihat di
+      // log produksi 19 Agu 2026 14:03). Placeholder itu membuat webhook diisi
+      // menebak, dan webhook salah alamat = pesan customer hilang tanpa error.
+      const publicUrlSvc = require('./services/publicUrlService');
+      const printBanner = (ngrokUrl = '') => {
+        for (const line of publicUrlSvc.buildWebhookBanner({ ngrokUrl, port })) {
+          console.log(line);
+        }
+      };
+
+      if (publicUrlSvc.ngrokEnabled()) {
         const { startNgrok } = require('./services/ngrokService');
         console.log('[NGROK] Starting tunnel...');
         startNgrok(port)
-          .then((url) => {
-            console.log('');
-            console.log('╔══════════════════════════════════════════════════════════════╗');
-            console.log('║  NGROK ACTIVE                                                 ║');
-            console.log(`║  ${url.padEnd(62)}║`);
-            console.log('╚══════════════════════════════════════════════════════════════╝');
-            if (activeTerminals.includes('KIRIMI')) {
-              console.log('');
-              console.log('╔══════════════════════════════════════════════════════════════╗');
-              console.log('║  KIRIMI ACTIVE — set webhook URL di Kirimi Dashboard:        ║');
-              console.log(`║  ${(url + '/api/kirimi/webhook').padEnd(62)}║`);
-              console.log(`║  (Server port: ${String(port).padEnd(46)}║`);
-              console.log('║  Device webhook: Kirimi Dashboard → Device → Detail          ║');
-              console.log('╚══════════════════════════════════════════════════════════════╝');
-              console.log('');
-            }
-          })
+          .then((url) => printBanner(url))
           .catch((err) => {
             console.error('[NGROK] Gagal start:', err.message);
-            if (activeTerminals.includes('KIRIMI')) {
-              console.log('');
-              console.log('╔══════════════════════════════════════════════════════════════╗');
-              console.log('║  KIRIMI ACTIVE — set webhook URL di Kirimi Dashboard:        ║');
-              console.log(`║  https://<ngrok-url>/api/kirimi/webhook                      ║`);
-              console.log(`║  (Server port: ${String(port).padEnd(46)}║`);
-              console.log('║  Device webhook: Kirimi Dashboard → Device → Detail          ║');
-              console.log('╚══════════════════════════════════════════════════════════════╝');
-              console.log('');
-            }
+            printBanner('');   // banner tetap menjelaskan apa yang kurang
           });
-      } else if (activeTerminals.includes('KIRIMI')) {
-        console.log('');
-        console.log('╔══════════════════════════════════════════════════════════════╗');
-        console.log('║  KIRIMI ACTIVE — set webhook URL di Kirimi Dashboard:        ║');
-        console.log(`║  https://<ngrok-url>/api/kirimi/webhook                      ║`);
-        console.log(`║  (Server port: ${String(port).padEnd(46)}║`);
-        console.log('║  Device webhook: Kirimi Dashboard → Device → Detail          ║');
-        console.log('╚══════════════════════════════════════════════════════════════╝');
-        console.log('');
+      } else {
+        // Mode VPS/Hostinger: URL publik diturunkan dari APP_URL/PUBLIC_URL.
+        printBanner('');
       }
 
       // ─── Warmup Rumah123 cache ─────────────────────────────────────────

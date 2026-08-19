@@ -20,7 +20,7 @@ const PROPERTY_TYPES = {
   hotel         : ['hotel', 'hotels', 'penginapan', 'motel'],
   villa         : ['villa', 'vila'],
   apartment     : ['apartemen', 'apartment', 'apart'],
-  boarding_house: ['kos', 'kost', 'kosan', 'boarding house', 'boarding_house', 'indekos'],
+  boarding_house: ['ngekosan', 'ngekost', 'ngekos', 'indekost', 'indekos', 'kostan', 'kosan', 'kost', 'kos', 'boarding house', 'boarding_house'],
   mansion       : ['mansion', 'rumah mewah'],        // ← SEBELUM house (rumah mewah ⊃ "rumah")
   warehouse     : ['gudang', 'warehouse'],           // ← SEBELUM house (warehouse ⊃ "house")
   shophouse     : ['ruko', 'shophouse', 'rukan'],    // ← SEBELUM house (shophouse ⊃ "house")

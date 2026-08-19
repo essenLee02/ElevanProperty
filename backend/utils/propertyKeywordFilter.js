@@ -34,7 +34,14 @@ const PROPERTY_TYPES = [
   // Hunian — apartemen & semua variasi ejaan umum
   'apartemen', 'apartmen',
   'villa', 'vila',
-  'kost', 'kos', 'kosan', 'boarding house', 'boarding',
+  // ⚠️ BENTUK BERIMBUHAN WAJIB DIDAFTARKAN SENDIRI (M120). Pencocokan memakai
+  // word-boundary, jadi 'kos' TIDAK cocok di dalam "ngekos" — customer nyata
+  // menulis "Hi.. Saya mau ngekos di Madiun" dan pesannya DITOLAK gerbang
+  // ("bukan query properti"), tidak disimpan, tidak dibalas. Padahal "ngekos"
+  // adalah cara paling lazim orang Indonesia menyebut sewa kamar kos.
+  // 'ngekost' sudah ada sejak awal; 'ngekos' (tanpa t) justru yang terlewat.
+  'kost', 'kos', 'kosan', 'kostan', 'ngekos', 'ngekosan',
+  'indekos', 'indekost', 'boarding house', 'boarding',
   'kontrakan', 'kontrakkan', 'bedeng',
   // Komersial
   'ruko', 'rukan', 'shophouse', 'shop house',
@@ -424,7 +431,11 @@ function extractPropertyTypeFromMessage(message) {
   if (lower.match(/\b(kantor|office)\b/i))                     return 'office';
   if (lower.match(/\b(gudang|warehouse)\b/i))                  return 'warehouse';
   if (lower.match(/\b(hotel|motel|penginapan)\b/i))            return 'hotel';
-  if (lower.match(/\b(kost|kos|kosan|boarding)\b/i))           return 'boarding_house';
+  // ⚠️ Bentuk berimbuhan ikut dicantumkan (M120). Gerbang masuk sudah menerima
+  // "ngekos"/"indekos", tapi kalau TIPE-nya tidak ikut terbaca, pesan lolos
+  // gerbang lalu diproses sebagai properti tanpa tipe — AI menanyakan "tipe
+  // properti apa?" padahal customer sudah mengatakannya.
+  if (lower.match(/\b(kost|kos|kosan|kostan|ngekos|ngekost|ngekosan|indekos|indekost|boarding)\b/i)) return 'boarding_house';
   if (lower.match(/\b(rumah|house|perumahan|residensial)\b/i)) return 'house';
 
   return '';
@@ -445,7 +456,10 @@ function extractTransactionTypeFromMessage(message) {
   // Fungsi ini sempat TIDAK memuatnya, sehingga "Saya booking hotel di Surabaya"
   // menghasilkan transactionType kosong dan katalog dicari tanpa filter
   // transaksi — dua ekstraktor untuk konsep yang sama, berbeda isi (7 Agu 2026).
-  if (lower.match(/\b(sewa|rental|ngontrak|kontrak|disewakan|kost|kos|boarding|rent|lease|booking|book|reservasi|menginap|nginap|nginep)\b/i)) return 'rent';
+  // "ngekos"/"indekos" SELALU berarti menyewa kamar — tidak ada bentuk "beli
+  // ngekos". Tanpa entri ini transaksi tetap kosong, dan AI menanyakan
+  // "sewa atau beli?" untuk hal yang sudah jelas (M120).
+  if (lower.match(/\b(sewa|rental|ngontrak|kontrak|disewakan|kost|kos|kosan|kostan|ngekos|ngekost|ngekosan|indekos|indekost|boarding|rent|lease|booking|book|reservasi|menginap|nginap|nginep)\b/i)) return 'rent';
   if (lower.match(/\b(beli|jual|dijual|purchase|buy|sell|kpr|inden|dp|cicilan|over kredit)\b/i)) return 'sale';
 
   return '';

@@ -1,5 +1,6 @@
 ﻿const { scrapeRumah123, getDatasetItems, transformListing } = require('../services/apifyService');
 const { getCacheStatus, warmupCache } = require('../services/rumah123ContextService');
+const { HTTP } = require('../config/httpStatus');
 
 /**
  * GET /api/rumah123/search
@@ -28,7 +29,7 @@ async function search(req, res) {
 
     // Validasi listingType
     if (!['sale', 'rent'].includes(listingType)) {
-      return res.status(process.env.HTTP_BAD_REQUEST).json({
+      return res.status(HTTP.BAD_REQUEST).json({
         success: false,
         error: 'listingType harus "sale" atau "rent"'
       });
@@ -79,7 +80,7 @@ async function search(req, res) {
     });
   } catch (error) {
     console.error('[Rumah123] Search error:', error.message);
-    res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({
+    res.status(HTTP.INTERNAL_SERVER_ERROR).json({
       success: false,
       error: error.message,
       hint: error.message.includes('APIFY_API_TOKEN')
@@ -159,7 +160,7 @@ async function searchPost(req, res) {
     });
   } catch (error) {
     console.error('[Rumah123] Search POST error:', error.message);
-    res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({
+    res.status(HTTP.INTERNAL_SERVER_ERROR).json({
       success: false,
       error: error.message,
       hint: error.message.includes('APIFY_API_TOKEN')
@@ -199,7 +200,7 @@ async function getDataset(req, res) {
     });
   } catch (error) {
     console.error('[Rumah123] Get dataset error:', error.message);
-    res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({ success: false, error: error.message });
+    res.status(HTTP.INTERNAL_SERVER_ERROR).json({ success: false, error: error.message });
   }
 }
 

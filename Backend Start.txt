@@ -1,0 +1,2 @@
+1. .venv\Scripts\uvicorn.exe main:app --reload
+2. .venv\Scripts\python.exe main.py

@@ -1,0 +1,1077 @@
+{
+  "PROPERTY_TYPES": [
+    "apartemen",
+    "apartmen",
+    "villa",
+    "vila",
+    "kost",
+    "kos",
+    "kosan",
+    "kostan",
+    "ngekos",
+    "ngekosan",
+    "indekos",
+    "indekost",
+    "boarding house",
+    "boarding",
+    "kontrakan",
+    "kontrakkan",
+    "bedeng",
+    "ruko",
+    "rukan",
+    "shophouse",
+    "shop house",
+    "kantor",
+    "perkantoran",
+    "gudang",
+    "pergudangan",
+    "toko",
+    "pertokoan",
+    "penginapan",
+    "resort",
+    "klinik",
+    "kios",
+    "kondotel",
+    "condotel",
+    "kondominium",
+    "condominium",
+    "kondo",
+    "kavling",
+    "kapling",
+    "tanah kavling",
+    "lahan",
+    "tanah",
+    "properti",
+    "perumahan",
+    "cluster",
+    "residensial",
+    "townhouse",
+    "town house",
+    "hunian",
+    "tempat tinggal",
+    "house",
+    "home",
+    "apartment",
+    "apt",
+    "room",
+    "bedroom",
+    "office",
+    "warehouse",
+    "store",
+    "hotel",
+    "motel",
+    "property",
+    "residential",
+    "land",
+    "lot",
+    "studio",
+    "loft",
+    "penthouse"
+  ],
+  "RUMAH_EXCLUSIONS": [
+    "rumah makan",
+    "rumah sakit",
+    "rumah tangga",
+    "rumah ibadah",
+    "rumah tahanan",
+    "rumah duka",
+    "rumah produksi",
+    "warung"
+  ],
+  "ACTION_WORDS": [
+    "sewa",
+    "sewain",
+    "rental",
+    "ngontrak",
+    "kontrak",
+    "beli",
+    "purchase",
+    "jual",
+    "dijual",
+    "disewakan",
+    "dikontrakkan",
+    "cari",
+    "nyari",
+    "mencari",
+    "booking",
+    "bookingan",
+    "membooking",
+    "reservasi",
+    "reservation",
+    "menginap",
+    "nginap",
+    "nginep",
+    "inap",
+    "check in",
+    "check-in",
+    "checkin",
+    "ada",
+    "tersedia",
+    "kosong",
+    "ready",
+    "masih ada",
+    "masih kosong",
+    "masih available",
+    "harga",
+    "berapa",
+    "cicilan",
+    "dp",
+    "uang muka",
+    "biaya",
+    "murah",
+    "termurah",
+    "terjangkau",
+    "ekonomis",
+    "hemat",
+    "mahal",
+    "premium",
+    "mewah",
+    "mau",
+    "ingin",
+    "pengen",
+    "butuh",
+    "perlu",
+    "tanya",
+    "nanya",
+    "rekomendasi",
+    "rekomen",
+    "listing",
+    "unit",
+    "stok",
+    "stock",
+    "ganti",
+    "ubah",
+    "ralat",
+    "cancel",
+    "batal",
+    "edit",
+    "investasi",
+    "invest",
+    "investment",
+    "ditinggali",
+    "ditempati",
+    "dihuni",
+    "huni",
+    "hunian",
+    "disewakan lagi",
+    "dikost",
+    "dikoskan",
+    "kos-kosan",
+    "untuk usaha",
+    "buat usaha",
+    "untuk kantor",
+    "buat kantor",
+    "buy",
+    "sell",
+    "rent",
+    "lease",
+    "book",
+    "get",
+    "find",
+    "search",
+    "look for",
+    "looking for",
+    "looking",
+    "want",
+    "need",
+    "require",
+    "available",
+    "price",
+    "cost",
+    "how much",
+    "cheap",
+    "cheaper",
+    "cheapest",
+    "affordable",
+    "budget",
+    "expensive",
+    "luxury",
+    "recommend",
+    "suggestion",
+    "suggest",
+    "show",
+    "list",
+    "info",
+    "information",
+    "details"
+  ],
+  "ACTION_WORDS_STRICT_BOUNDARY": [
+    "get",
+    "rent",
+    "cost",
+    "show",
+    "info",
+    "edit",
+    "sell",
+    "buy",
+    "want",
+    "need",
+    "lease",
+    "ready",
+    "price",
+    "unit",
+    "list",
+    "find",
+    "search",
+    "rental",
+    "available",
+    "book",
+    "inap",
+    "ada",
+    "dp"
+  ],
+  "STANDALONE_KEYWORDS": [
+    "kpr",
+    "kredit pemilikan",
+    "over kredit",
+    "overkred",
+    "uang muka rumah",
+    "dp rumah",
+    "cicilan rumah",
+    "inden",
+    "inden rumah",
+    "pre-launch",
+    "kavling",
+    "kapling",
+    "perumahan",
+    "real estate",
+    "siap huni",
+    "ready unit",
+    "ready stok",
+    "ready stock",
+    "unit ready",
+    "unit available",
+    "unit kosong",
+    "ada unit",
+    "ada listing",
+    "sertifikat hak milik",
+    "shm",
+    "hgb",
+    "imb",
+    "pbg",
+    "agen properti",
+    "developer properti",
+    "developer",
+    "properti dijual",
+    "properti disewakan",
+    "properti available",
+    "listing properti",
+    "listing property",
+    "berapa kamar",
+    "berapa lantai",
+    "luas bangunan",
+    "luas tanah",
+    "fasilitas perumahan",
+    "akses tol",
+    "dekat sekolah",
+    "dekat mall",
+    "jadwal viewing",
+    "jadwal survey",
+    "jadwal survei",
+    "jadwal kunjungan",
+    "bisa viewing",
+    "bisa survey",
+    "bisa survei",
+    "kapan viewing",
+    "kapan survey",
+    "kapan survei",
+    "mau viewing",
+    "mau survey",
+    "mau survei",
+    "site visit",
+    "open house"
+  ],
+  "PROPERTY_TYPES_STRICT_BOUNDARY": [
+    "apt",
+    "toko",
+    "kos",
+    "loft",
+    "studio",
+    "vila",
+    "unit",
+    "villa",
+    "hotel",
+    "motel",
+    "kios",
+    "house",
+    "home",
+    "room",
+    "lot",
+    "land",
+    "store",
+    "property",
+    "properti"
+  ],
+  "PROPERTY_QUESTION_PATTERNS": [
+    {
+      "__regex__": "sewa\\s+atau\\s+beli",
+      "flags": ""
+    },
+    {
+      "__regex__": "beli\\s+atau\\s+sewa",
+      "flags": ""
+    },
+    {
+      "__regex__": "kisaran\\s+harga",
+      "flags": ""
+    },
+    {
+      "__regex__": "budget",
+      "flags": ""
+    },
+    {
+      "__regex__": "harga\\s+berapa",
+      "flags": ""
+    },
+    {
+      "__regex__": "berapa\\s+harga",
+      "flags": ""
+    },
+    {
+      "__regex__": "di\\s+kota\\s+(apa|mana)",
+      "flags": ""
+    },
+    {
+      "__regex__": "lokasi\\s+(apa|mana|yang|di)",
+      "flags": ""
+    },
+    {
+      "__regex__": "area\\s+(mana|apa)",
+      "flags": ""
+    },
+    {
+      "__regex__": "wilayah\\s+(mana|apa)",
+      "flags": ""
+    },
+    {
+      "__regex__": "\\barea\\b.{0,20}\\bmana\\b",
+      "flags": ""
+    },
+    {
+      "__regex__": "\\bkawasan\\b.{0,20}\\bmana\\b",
+      "flags": ""
+    },
+    {
+      "__regex__": "\\bdaerah\\b.{0,20}\\bmana\\b",
+      "flags": ""
+    },
+    {
+      "__regex__": "\\bkecamatan\\b.{0,20}\\bmana\\b",
+      "flags": ""
+    },
+    {
+      "__regex__": "tipe\\s+properti",
+      "flags": ""
+    },
+    {
+      "__regex__": "jenis\\s+properti",
+      "flags": ""
+    },
+    {
+      "__regex__": "furnished|furnish|furnitur",
+      "flags": ""
+    },
+    {
+      "__regex__": "kamar\\s+(tidur|mandi)",
+      "flags": ""
+    },
+    {
+      "__regex__": "berapa\\s+kamar",
+      "flags": ""
+    },
+    {
+      "__regex__": "luas\\s+(berapa|bangunan|tanah)",
+      "flags": ""
+    },
+    {
+      "__regex__": "\\bfasilitas\\b",
+      "flags": ""
+    },
+    {
+      "__regex__": "ada\\s+fasilitas",
+      "flags": ""
+    },
+    {
+      "__regex__": "kapan\\s+(masuk|pindah|rencan)",
+      "flags": ""
+    },
+    {
+      "__regex__": "bulan\\s+apa",
+      "flags": ""
+    },
+    {
+      "__regex__": "ada\\s+yang\\s+ingin.*tanyakan",
+      "flags": ""
+    },
+    {
+      "__regex__": "masih\\s+(ada|butuh|perlu)",
+      "flags": ""
+    },
+    {
+      "__regex__": "selain\\s+itu",
+      "flags": ""
+    },
+    {
+      "__regex__": "rencananya\\s+masuk",
+      "flags": ""
+    },
+    {
+      "__regex__": "masuk\\s+bulan",
+      "flags": ""
+    },
+    {
+      "__regex__": "pindah\\s+bulan",
+      "flags": ""
+    },
+    {
+      "__regex__": "sewa\\s+untuk\\s+berapa",
+      "flags": ""
+    },
+    {
+      "__regex__": "berapa\\s+lama",
+      "flags": ""
+    },
+    {
+      "__regex__": "tinggal\\s+bersama",
+      "flags": ""
+    },
+    {
+      "__regex__": "bersama\\s+(siapa|siapa\\s+saja)",
+      "flags": ""
+    },
+    {
+      "__regex__": "tinggal\\s+dengan",
+      "flags": ""
+    },
+    {
+      "__regex__": "akan\\s+tinggal",
+      "flags": ""
+    },
+    {
+      "__regex__": "living\\s+with",
+      "flags": ""
+    },
+    {
+      "__regex__": "live\\s+with",
+      "flags": ""
+    },
+    {
+      "__regex__": "rent\\s+or\\s+buy",
+      "flags": ""
+    },
+    {
+      "__regex__": "buy\\s+or\\s+rent",
+      "flags": ""
+    },
+    {
+      "__regex__": "price\\s+range",
+      "flags": ""
+    },
+    {
+      "__regex__": "budget\\s+range",
+      "flags": ""
+    },
+    {
+      "__regex__": "which\\s+(city|area|location)",
+      "flags": ""
+    },
+    {
+      "__regex__": "what\\s+type\\s*(of\\s*)?property",
+      "flags": ""
+    },
+    {
+      "__regex__": "planning\\s+to\\s+move",
+      "flags": ""
+    },
+    {
+      "__regex__": "move[\\s-]in",
+      "flags": ""
+    },
+    {
+      "__regex__": "what\\s+month",
+      "flags": ""
+    },
+    {
+      "__regex__": "when.*plan",
+      "flags": ""
+    },
+    {
+      "__regex__": "how\\s+long.*(?:rent|lease|plan)",
+      "flags": ""
+    },
+    {
+      "__regex__": "lease\\s+duration",
+      "flags": ""
+    },
+    {
+      "__regex__": "who\\s+will\\s+be\\s+living",
+      "flags": ""
+    },
+    {
+      "__regex__": "living\\s+with\\s+you",
+      "flags": ""
+    },
+    {
+      "__regex__": "furnish(?:ing|ed)?\\s+prefer",
+      "flags": ""
+    },
+    {
+      "__regex__": "prefer.*furnish",
+      "flags": ""
+    },
+    {
+      "__regex__": "tower\\s+or\\s+floor",
+      "flags": ""
+    },
+    {
+      "__regex__": "floor\\s+prefer",
+      "flags": ""
+    },
+    {
+      "__regex__": "have\\s+you\\s+seen",
+      "flags": ""
+    },
+    {
+      "__regex__": "how\\s+many\\s+prop",
+      "flags": ""
+    },
+    {
+      "__regex__": "any.*(?:specific|prefer)",
+      "flags": ""
+    },
+    {
+      "__regex__": "would\\s+you\\s+like.*(?:more|know|detail)",
+      "flags": ""
+    },
+    {
+      "__regex__": "what.*looking\\s+for",
+      "flags": ""
+    },
+    {
+      "__regex__": "are\\s+you\\s+looking\\s+to",
+      "flags": ""
+    },
+    {
+      "__regex__": "do\\s+you\\s+have\\s*(a\\s*)?budget",
+      "flags": ""
+    },
+    {
+      "__regex__": "sudah\\s+lihat\\s+berapa",
+      "flags": ""
+    },
+    {
+      "__regex__": "apa\\s+yang\\s+membuat\\s+belum\\s+cocok",
+      "flags": ""
+    },
+    {
+      "__regex__": "yang\\s+sudah\\s+dilihat",
+      "flags": ""
+    },
+    {
+      "__regex__": "berapa\\s+properti.*sudah",
+      "flags": ""
+    },
+    {
+      "__regex__": "pasti\\s+tidak\\s+cocok",
+      "flags": ""
+    },
+    {
+      "__regex__": "ada\\s+yang.*tidak\\s+cocok",
+      "flags": ""
+    },
+    {
+      "__regex__": "hadap\\s+barat|gang\\s+sempit|rumah\\s+tua",
+      "flags": ""
+    },
+    {
+      "__regex__": "definitely\\s+want\\s+to\\s+avoid",
+      "flags": ""
+    },
+    {
+      "__regex__": "anything.*avoid",
+      "flags": ""
+    },
+    {
+      "__regex__": "patokan",
+      "flags": ""
+    },
+    {
+      "__regex__": "jadi\\s+patokan",
+      "flags": ""
+    },
+    {
+      "__regex__": "ada\\s+lokasi.*tertentu",
+      "flags": ""
+    },
+    {
+      "__regex__": "lokasi.*jadi\\s+patokan",
+      "flags": ""
+    },
+    {
+      "__regex__": "dekat\\s+sekolah|dekat\\s+kantor|dekat\\s+mall",
+      "flags": ""
+    },
+    {
+      "__regex__": "specific\\s+landmark",
+      "flags": ""
+    },
+    {
+      "__regex__": "near\\s+a\\s+(school|office|mall|station)",
+      "flags": ""
+    },
+    {
+      "__regex__": "selain\\s+\\S.{0,30}area\\s+sekitar",
+      "flags": ""
+    },
+    {
+      "__regex__": "area\\s+sekitar\\s+(yang|masih)",
+      "flags": ""
+    },
+    {
+      "__regex__": "area.*lain.*oke",
+      "flags": ""
+    },
+    {
+      "__regex__": "area.*lain.*pertimbangkan",
+      "flags": ""
+    },
+    {
+      "__regex__": "besides\\s+\\S.{0,30}(area|city)",
+      "flags": ""
+    },
+    {
+      "__regex__": "other\\s+(area|city|location)",
+      "flags": ""
+    },
+    {
+      "__regex__": "selain\\s+lokasi",
+      "flags": ""
+    },
+    {
+      "__regex__": "pilihan\\s+lokasi",
+      "flags": ""
+    },
+    {
+      "__regex__": "lokasi\\s+lain(nya)?",
+      "flags": ""
+    },
+    {
+      "__regex__": "area\\s+lain(nya)?",
+      "flags": ""
+    },
+    {
+      "__regex__": "wilayah\\s+lain(nya)?",
+      "flags": ""
+    },
+    {
+      "__regex__": "kota\\s+lain(nya)?",
+      "flags": ""
+    },
+    {
+      "__regex__": "daerah\\s+lain(nya)?",
+      "flags": ""
+    },
+    {
+      "__regex__": "mau\\s+pilihan\\s+lain",
+      "flags": ""
+    },
+    {
+      "__regex__": "pertimbangkan\\s+lokasi\\s+lain",
+      "flags": ""
+    },
+    {
+      "__regex__": "lokasi\\s+alternatif",
+      "flags": ""
+    },
+    {
+      "__regex__": "jadwalkan\\s+(viewing|survey|survei|kunjungan)",
+      "flags": ""
+    },
+    {
+      "__regex__": "perlu\\s+koordinasi",
+      "flags": ""
+    },
+    {
+      "__regex__": "koordinasi\\s+dulu",
+      "flags": ""
+    },
+    {
+      "__regex__": "keluarga\\s+lain",
+      "flags": ""
+    },
+    {
+      "__regex__": "schedule\\s+(a\\s+)?(viewing|survey|visit)",
+      "flags": ""
+    },
+    {
+      "__regex__": "check\\s+with\\s+(family|spouse|partner)",
+      "flags": ""
+    },
+    {
+      "__regex__": "langsung\\s+bisa\\s+jadwalkan",
+      "flags": ""
+    },
+    {
+      "__regex__": "langsung\\s+jadwalkan",
+      "flags": ""
+    },
+    {
+      "__regex__": "kira-kira\\s+tanggalnya",
+      "flags": ""
+    },
+    {
+      "__regex__": "info\\s+tanggalnya",
+      "flags": ""
+    },
+    {
+      "__regex__": "mohon.*info.*tanggal",
+      "flags": ""
+    },
+    {
+      "__regex__": "kapan\\s+rencananya\\s+masuk",
+      "flags": ""
+    },
+    {
+      "__regex__": "tanggal\\s+berapa\\s+rencananya\\s+masuk",
+      "flags": ""
+    },
+    {
+      "__regex__": "when.*planning\\s+to\\s+move\\s+in",
+      "flags": ""
+    },
+    {
+      "__regex__": "tower\\s+atau\\s+lantai",
+      "flags": ""
+    },
+    {
+      "__regex__": "preferensi\\s+tower",
+      "flags": ""
+    },
+    {
+      "__regex__": "lantai\\s+(rendah|tinggi|tertentu|berapa)",
+      "flags": ""
+    },
+    {
+      "__regex__": "tower\\s+or\\s+floor",
+      "flags": ""
+    },
+    {
+      "__regex__": "floor\\s+(prefer|choice)",
+      "flags": ""
+    },
+    {
+      "__regex__": "fitted\\s*[\\s-]?out",
+      "flags": ""
+    },
+    {
+      "__regex__": "bare\\s*[\\s-]?shell",
+      "flags": ""
+    },
+    {
+      "__regex__": "kondisi\\s+ruang",
+      "flags": ""
+    },
+    {
+      "__regex__": "siap\\s+pakai",
+      "flags": ""
+    },
+    {
+      "__regex__": "kondisi\\s+(baik|baru)",
+      "flags": ""
+    },
+    {
+      "__regex__": "baru\\/ready",
+      "flags": ""
+    },
+    {
+      "__regex__": "second\\s+kondisi",
+      "flags": ""
+    },
+    {
+      "__regex__": "atau\\s+inden",
+      "flags": ""
+    },
+    {
+      "__regex__": "viewing\\s+jam\\s+berapa",
+      "flags": ""
+    },
+    {
+      "__regex__": "jam\\s+berapa.*viewing",
+      "flags": ""
+    },
+    {
+      "__regex__": "mau\\s+viewing\\s+jam",
+      "flags": ""
+    },
+    {
+      "__regex__": "sudah\\s+lihat\\s+berapa",
+      "flags": ""
+    },
+    {
+      "__regex__": "sudah\\s+sempat\\s+lihat",
+      "flags": ""
+    },
+    {
+      "__regex__": "sebelumnya\\s+sudah\\s+sempat",
+      "flags": ""
+    },
+    {
+      "__regex__": "apa\\s+yang\\s+membuat\\s+belum\\s+cocok",
+      "flags": ""
+    },
+    {
+      "__regex__": "belum\\s+cocok\\s+dari\\s+yang",
+      "flags": ""
+    },
+    {
+      "__regex__": "kira-kira\\s+yang\\s+mana",
+      "flags": ""
+    },
+    {
+      "__regex__": "yang\\s+mana\\s+lebih\\s+sesuai",
+      "flags": ""
+    },
+    {
+      "__regex__": "ada\\s+yang\\s+di\\s+kisaran",
+      "flags": ""
+    },
+    {
+      "__regex__": "di\\s+kisaran\\s+\\d",
+      "flags": ""
+    },
+    {
+      "__regex__": "lebih\\s+sesuai\\s+dengan\\s+rencana",
+      "flags": ""
+    },
+    {
+      "__regex__": "sesuai\\s+dengan\\s+rencana\\s+anda",
+      "flags": ""
+    },
+    {
+      "__regex__": "prefer\\s+yang\\s+(terjangkau|menengah|eksklusif)",
+      "flags": ""
+    },
+    {
+      "__regex__": "terjangkau.*(menengah|eksklusif)",
+      "flags": ""
+    },
+    {
+      "__regex__": "menengah.*eksklusif",
+      "flags": ""
+    },
+    {
+      "__regex__": "budget[\\s-]*friendly.*(mid[\\s-]*range|exclusive)",
+      "flags": ""
+    },
+    {
+      "__regex__": "apa\\s+yang\\s+(membuat|bikin).*(cari|mulai)",
+      "flags": ""
+    },
+    {
+      "__regex__": "mulai\\s+cari\\s+(rumah|properti)",
+      "flags": ""
+    },
+    {
+      "__regex__": "what'?s?\\s+prompting.*search",
+      "flags": ""
+    },
+    {
+      "__regex__": "what\\s+made\\s+you",
+      "flags": ""
+    },
+    {
+      "__regex__": "why.*looking.*now",
+      "flags": ""
+    },
+    {
+      "__regex__": "kpr\\s+atau\\s+cash",
+      "flags": ""
+    },
+    {
+      "__regex__": "cash\\s+atau\\s+kpr",
+      "flags": ""
+    },
+    {
+      "__regex__": "mortgage.*or.*cash",
+      "flags": ""
+    },
+    {
+      "__regex__": "cash.*or.*mortgage",
+      "flags": ""
+    },
+    {
+      "__regex__": "boleh\\s+(?:saya\\s+)?tahu\\s+nama",
+      "flags": ""
+    },
+    {
+      "__regex__": "may\\s+i\\s+know\\s+your\\s+name",
+      "flags": ""
+    },
+    {
+      "__regex__": "boleh\\s+minta\\s+(?:alamat\\s+)?email",
+      "flags": ""
+    },
+    {
+      "__regex__": "alamat\\s+email",
+      "flags": ""
+    },
+    {
+      "__regex__": "your\\s+email\\s+address",
+      "flags": ""
+    }
+  ],
+  "DAILY_LIFE_OFFTOPIC": [
+    {
+      "__regex__": "\\b(mati\\s+listrik|listrik\\s+(mati|padam)|pemadaman|\\bpln\\b|byar\\s*pet|mati\\s+lampu|lampu\\s+(mati|padam))\\b",
+      "flags": ""
+    },
+    {
+      "__regex__": "\\b(wifi\\s+(mati|lemot|lambat|lelet)|internet\\s+(mati|lemot|lambat|down)|sinyal\\s+(jelek|hilang|ilang|lemah)|pulsa\\s+habis|kuota\\s+habis)\\b",
+      "flags": ""
+    },
+    {
+      "__regex__": "\\b(macet|kemacetan)\\b",
+      "flags": ""
+    },
+    {
+      "__regex__": "\\b(gempa|longsor|kebakaran|kebanjiran|badai|angin\\s+kencang)\\b",
+      "flags": ""
+    },
+    {
+      "__regex__": "\\bbanjir\\b(?!\\s*kanal)",
+      "flags": ""
+    },
+    {
+      "__regex__": "\\bopen\\s*po\\b|\\bpre[\\s-]?order\\b|\\btutup\\s*po\\b|\\bpo\\s+(dibuka|closed?|ditutup|tutup)\\b",
+      "flags": "i"
+    },
+    {
+      "__regex__": "\\byang\\s+mau\\s+order\\b|\\btolong\\s+list\\s+nama\\b|\\blist\\s+nama\\s+(di\\s*bawah|yang\\s+mau)\\b",
+      "flags": "i"
+    },
+    {
+      "__regex__": "\\b(beli|pesan|order|mau\\s+makan|lagi\\s+makan)\\s+(?:\\w+\\s+){0,2}?(nasi|bakso|mie|mi\\b|bubur|ayam|sate|soto|rawon|rendang|pecel|gado[\\s-]?gado|martabak|roti|kue|gorengan|jajan(an)?|snack|c[ae]milan|kopi|teh|es\\s+\\w+|jus|boba|seblak|batagor|siomay|pentol|lontong|ketoprak|nasgor|makanan|minuman)\\b",
+      "flags": "i"
+    }
+  ],
+  "CLEAR_NON_PROPERTY": [
+    {
+      "__regex__": "\\b(makanan|minuman|kuliner|restoran|cafe|kafe|masak|resep|menu|makan|bakso|mie|nasi|ayam|sate|soto|jajan|ngopi|kopi|camilan|gorengan|warteg)\\b",
+      "flags": ""
+    },
+    {
+      "__regex__": "\\b(kendaraan|mobil|motor|sepeda|tiket|travel|wisata|hotel liburan|penginapan wisata)\\b",
+      "flags": ""
+    },
+    {
+      "__regex__": "\\b(elektronik|laptop|hp|handphone|gadget|komputer|printer)\\b",
+      "flags": ""
+    },
+    {
+      "__regex__": "\\b(pakaian|baju|sepatu|tas|fashion|belanja online)\\b",
+      "flags": ""
+    },
+    {
+      "__regex__": "\\b(obat|dokter|sakit|rumah sakit|klinik kesehatan|apotik)\\b",
+      "flags": ""
+    },
+    {
+      "__regex__": "\\b(film|movie|bioskop|drakor|drama korea|anime|kartun|lagu|musik|music|konser|game|gaming|netflix|youtube|tiktok|medsos|sosmed|artis|selebriti|seleb|gosip)\\b",
+      "flags": ""
+    }
+  ],
+  "BANJIR_DAILY": {
+    "__regex__": "\\bbanjir\\b(?!\\s*kanal)",
+    "flags": ""
+  },
+  "FLOOD_AVOID_PREFERENCE": {
+    "__regex__": "\\b(bebas|tidak|tdk|anti|hindari|terhindar(?:i)?|menghindari|jauh\\s+dari|aman\\s+dari|rawan|jangan|gk|gak|ga|nggak|ngga|enggak|ndak|ga\\s+mau|gak\\s+mau|nggak\\s+mau|enggak\\s+mau)\\b[\\s\\w]*\\bbanjir\\b",
+    "flags": "i"
+  },
+  "MACET_DAILY": {
+    "__regex__": "\\b(macet|kemacetan)\\b",
+    "flags": ""
+  },
+  "MACET_AVOID_PREFERENCE": {
+    "__regex__": "\\b(bebas|tidak|tdk|anti|hindari|terhindar(?:i)?|menghindari|jauh\\s+dari|aman\\s+dari|jangan|gk|gak|ga|nggak|ngga|enggak|ndak|ga\\s+mau|gak\\s+mau|nggak\\s+mau|enggak\\s+mau)\\b[\\s\\w]*\\b(macet|kemacetan)\\b",
+    "flags": "i"
+  },
+  "PANAS_AVOID_PREFERENCE": {
+    "__regex__": "\\b(bebas|tidak|tdk|anti|hindari|terhindar(?:i)?|menghindari|jauh\\s+dari|jangan|gk|gak|ga|nggak|ngga|enggak|ndak|area|tempat)\\b[\\s\\w]*\\bpanas\\b",
+    "flags": "i"
+  },
+  "_LOCATION_FALLBACK": [
+    "jakarta selatan",
+    "jakarta utara",
+    "jakarta barat",
+    "jakarta timur",
+    "jakarta pusat",
+    "jakarta",
+    "tangerang selatan",
+    "bogor",
+    "depok",
+    "tangerang",
+    "bekasi",
+    "cibubur",
+    "karawang",
+    "purwakarta",
+    "sukabumi",
+    "cirebon",
+    "serang",
+    "cilegon",
+    "alam sutera",
+    "tangerang selatan",
+    "lebak bulus",
+    "pondok indah",
+    "kelapa gading",
+    "serpong",
+    "bintaro",
+    "kemang",
+    "menteng",
+    "bsd",
+    "surabaya",
+    "bandung",
+    "semarang",
+    "yogyakarta",
+    "malang",
+    "surakarta",
+    "sidoarjo",
+    "mojokerto",
+    "madiun",
+    "kediri",
+    "solo",
+    "nusa dua",
+    "denpasar",
+    "seminyak",
+    "canggu",
+    "jimbaran",
+    "mataram",
+    "bali",
+    "kuta",
+    "ubud",
+    "sanur",
+    "lombok",
+    "banda aceh",
+    "bandar lampung",
+    "pekanbaru",
+    "palembang",
+    "padang",
+    "medan",
+    "batam",
+    "jambi",
+    "bengkulu",
+    "balikpapan",
+    "samarinda",
+    "pontianak",
+    "banjarmasin",
+    "makassar",
+    "manado",
+    "gorontalo",
+    "kendari",
+    "palu",
+    "jayapura",
+    "ambon",
+    "sorong",
+    "kupang"
+  ]
+}

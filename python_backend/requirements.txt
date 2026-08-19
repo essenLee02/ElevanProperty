@@ -1,0 +1,43 @@
+# Elevan Property — backend Python (FastAPI)
+# Sengaja RAMPING, mengikuti disiplin package.json Node.js (15 dependency):
+# hanya yang benar-benar dipakai. Lihat V8 §5 M92 — LangChain DITOLAK karena
+# menduplikasi abstraksi provider yang sudah ada.
+
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+
+# MySQL async — DB db_property yang SAMA dengan Node.js, tanpa migrasi data.
+SQLAlchemy==2.0.36
+aiomysql==0.2.0
+
+# HTTP ke provider AI (ChatGPT/Claude/DeepSeek/Kimi/QWEN) & terminal WhatsApp
+# (Kirimi/Fonnte). Satu klien async untuk semuanya — meniru pola axios di
+# Node.js, BUKAN menambah SDK per-provider.
+httpx==0.28.1
+
+# Verifikasi JWT terbitan Node.js (app/core/auth.py) — TIDAK menerbitkan token.
+PyJWT==2.10.1
+
+python-dotenv==1.0.1
+
+# Tunnel publik untuk pengembangan/uji manual (app/core/ngrok_tunnel.py).
+# ⚠️ BUKAN pengganti tunnel produksi Node.js — lihat docstring modul untuk
+# alasan domain terpisah wajib (M97).
+pyngrok==7.2.3
+
+# RAG — perkalian matriks cosine atas 9.167 vektor × 1536 dimensi (M101).
+# ⚠️ numpy dipakai KARENA ALASAN TERUKUR, bukan kebiasaan: indeks JSON milik
+# Node.js berukuran 295 MB dan butuh 9,3 detik hanya untuk di-parse setiap
+# proses start (diukur langsung). Disimpan ulang sebagai float32 biner
+# (~56 MB, dimuat <1 detik lewat memmap) — lihat tools/build_rag_store.py.
+numpy==2.2.1
+
+# Tes
+pytest==8.3.4
+pytest-asyncio==0.25.2
+
+# Uji saja — DB SQLite in-memory untuk tests/test_chatbot_private_controller.py
+# supaya alur controller diuji dengan SQLAlchemy sungguhan, bukan mock.
+aiosqlite==0.22.1

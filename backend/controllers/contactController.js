@@ -10,6 +10,7 @@ const { sendWhatsAppMessage, normalizeWhatsAppNumber, checkFonnteConfig } = requ
 const { findOrCreateSession, saveUserMessage, saveAssistantMessage } = require('../services/sessionService');
 const { safeLog } = require('../utils/safeLog');
 const { generatePrivateContactReply } = require('./chatbotPrivateController');
+const { HTTP } = require('../config/httpStatus');
 
 class ContactController {
   static #sanitize(body) {
@@ -124,7 +125,7 @@ class ContactController {
 
     const validation = validateContactForm(contactPayload);
     if (!validation.valid) {
-      return res.status(process.env.HTTP_BAD_REQUEST).json({ success: false, message: validation.message, error: validation.message });
+      return res.status(HTTP.BAD_REQUEST).json({ success: false, message: validation.message, error: validation.message });
     }
 
     let googleSheetSent  = false;
@@ -208,7 +209,7 @@ class ContactController {
 
         safeLog('AI_WHATSAPP_FAILED_COMPLETELY', aiWhatsappError.message, 'error');
 
-        return res.status(process.env.HTTP_OK).json({
+        return res.status(HTTP.OK).json({
           success:         true,
           googleSheetSent,
           googleSheetError,
@@ -223,7 +224,7 @@ class ContactController {
     } catch (error) {
       safeLog('CONTACT_SUBMIT_FAILED', error.message, 'error');
 
-      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({
+      return res.status(HTTP.INTERNAL_SERVER_ERROR).json({
         success:         false,
         googleSheetSent,
         googleSheetError,
@@ -245,7 +246,7 @@ class ContactController {
         ...status
       });
     } catch (error) {
-      return res.status(process.env.HTTP_INTERNAL_SERVER_ERROR).json({
+      return res.status(HTTP.INTERNAL_SERVER_ERROR).json({
         success:        false,
         message:        error.message,
         error:          error.message,

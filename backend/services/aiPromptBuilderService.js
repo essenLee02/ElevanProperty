@@ -317,6 +317,55 @@ function normalizeAltAreaAnswer(text = '', loc = '') {
  * Filler seperti "Saya booking ... aja, Kak" diabaikan; hanya durasi bersih diambil.
  * @returns {string|null} "N unit" atau null bila tidak ada durasi terdeteksi.
  */
+const _DUR_UNIT_RE = '(?:hari|malam|minggu|pekan|bulan|tahun|thn|day|days|night|nights|week|weeks|month|months|year|years)';
+
+/**
+ * "untuk1 minggu" → "untuk 1 minggu" (M103).
+ *
+ * Typo tanpa spasi NYATA muncul di transkrip produksi ("Sama booking untuk1
+ * minggu saja"). Tanpa dipisah, \b(\d+) tidak pernah cocok karena tidak ada
+ * word-boundary antara huruf dan angka — durasinya hilang diam-diam.
+ *
+ * ⚠️ Regex ditulis sebagai LITERAL, bukan template literal. Di dalam template
+ * literal `\d` runtuh jadi `d` dan `\b` jadi karakter backspace, sehingga
+ * regex-nya salah TANPA error apa pun — kesalahan yang sudah terjadi sekali
+ * saat memperbaiki berkas ini.
+ */
+function deglueDurationDigits(text = '') {
+  return String(text).replace(
+    /([a-z])(\d+)(\s*(?:hari|malam|minggu|pekan|bulan|tahun|thn|day|days|night|nights|week|weeks|month|months|year|years)\b)/gi,
+    '$1 $2$3',
+  );
+}
+
+/**
+ * Durasi yang DISEBUT SENDIRI customer, tanpa AI menanyakannya (M103).
+ *
+ * Phase 2 hanya membaca PASANGAN AI→Customer, jadi durasi di pesan PERTAMA
+ * (belum ada balasan AI) tidak pernah terbaca. Bug produksi nyata: durasi
+ * hilang dari ringkasan DAN AI menanyakannya lagi.
+ *
+ * ⚠️ Anchor WAJIB ("durasi/selama/untuk/book/menginap"). Tanpa penanda itu
+ * "5 hari lagi" (OFFSET tanggal masuk) ikut terbaca sebagai durasi — justru
+ * kesalahan yang dicegah M82.
+ */
+function extractSelfVolunteeredDuration(text = '') {
+  const raw = deglueDurationDigits(text);
+  if (!raw.trim()) return null;
+
+  const anchored = raw.match(
+    /durasi\s*(?:sewa|menginap|booking|nginap|kontrak)?\s*[:-]?\s*(\d+)\s*(hari|malam|minggu|pekan|bulan|tahun|thn|day|days|night|nights|week|weeks|month|months|year|years)\b/i,
+  );
+  if (anchored) return normalizeDuration(`${anchored[1]} ${anchored[2]}`);
+
+  if (/\b\d+\s*(?:hari|malam|minggu|pekan|bulan|tahun)\s+lagi\b/i.test(raw)) return null;
+
+  const m = raw.match(
+    /\b(?:selama|untuk|book(?:ing)?|nginap|menginap|nginep|sewa|stay(?:ing)?|for)\s+(\d+)\s*(hari|malam|minggu|pekan|bulan|tahun|thn|day|days|night|nights|week|weeks|month|months|year|years)\b/i,
+  );
+  return m ? normalizeDuration(`${m[1]} ${m[2]}`) : null;
+}
+
 function normalizeDuration(text = '') {
   const t = String(text || '').toLowerCase();
   const uMap = {
@@ -677,7 +726,7 @@ function extractQualificationState(history = [], currentMessage = '') {
       if (/\bvill?a\b/.test(w))                                            return 'villa';
       if (/\bapartemen\b|\bapartment\b/.test(w))                           return 'apartment';
       if (/\bhotel\b|\bpenginapan\b/.test(w))                             return 'hotel';
-      if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(w))              return 'boarding_house';
+      if (/\bkos\b|\bkost\b|\bkosan\b|\bkostan\b|\bngekos\b|\bngekost\b|\bngekosan\b|\bindekos\b|\bindekost\b/.test(w))              return 'boarding_house';
       if (/\bruko\b|\brukan\b/.test(w))                                   return 'shophouse';
       if (/\btoko\b|\bkios\b|\bwarung\b|\bretail\b/.test(w))             return 'store';
       if (/\bkantor\b|\boffice\b/.test(w))                                           return 'office';
@@ -822,7 +871,7 @@ function extractQualificationState(history = [], currentMessage = '') {
       else if (/\bvill?a\b/.test(tt))                                    state.buildingType = 'villa';
       else if (/\bapartemen\b|\bapartment\b/.test(tt))                   state.buildingType = 'apartment';
       else if (/\bhotel\b|\bpenginapan\b/.test(tt))                     state.buildingType = 'hotel';
-      else if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(tt))      state.buildingType = 'boarding_house';
+      else if (/\bkos\b|\bkost\b|\bkosan\b|\bkostan\b|\bngekos\b|\bngekost\b|\bngekosan\b|\bindekos\b|\bindekost\b/.test(tt))      state.buildingType = 'boarding_house';
       else if (/\bruko\b|\brukan\b/.test(tt))                           state.buildingType = 'shophouse';
       else if (/\btoko\b|\bkios\b|\bwarung\b|\bretail\b/.test(tt))     state.buildingType = 'store';
       else if (/\bkantor\b|\boffice\b/.test(tt))                                   state.buildingType = 'office';
@@ -1132,6 +1181,18 @@ function extractQualificationState(history = [], currentMessage = '') {
       } else if (/\bfurnished\b/.test(text) && !/semi/.test(text)) {
         state.furnishing = 'furnished';
       }
+    }
+  }
+
+  // ── Phase 1.4: durasi yang disebut SENDIRI oleh customer (M103) ──────────
+  // Phase 2 hanya melihat PASANGAN AI→Customer, jadi durasi di pesan PERTAMA
+  // customer (belum ada balasan AI) tidak pernah terbaca — durasi hilang dari
+  // ringkasan dan AI menanyakannya lagi.
+  if (!state.leaseDuration) {
+    for (const msg of ACTIVE_ALL) {
+      if (!QS_CUST_ROLES.has(msg.role)) continue;
+      const found = extractSelfVolunteeredDuration(msg.message || '');
+      if (found) { state.leaseDuration = found; break; }
     }
   }
 
@@ -1831,7 +1892,7 @@ function extractQualificationState(history = [], currentMessage = '') {
       else if (/\bvill?a\b/.test(cur))                                         state.buildingType = 'villa';
       else if (/\bapartemen\b|\bapartment\b/.test(cur))                        state.buildingType = 'apartment';
       else if (/\bhotel\b|\bpenginapan\b/.test(cur))                          state.buildingType = 'hotel';
-      else if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(cur))           state.buildingType = 'boarding_house';
+      else if (/\bkos\b|\bkost\b|\bkosan\b|\bkostan\b|\bngekos\b|\bngekost\b|\bngekosan\b|\bindekos\b|\bindekost\b/.test(cur))           state.buildingType = 'boarding_house';
       else if (/\bruko\b|\brukan\b/.test(cur))                                state.buildingType = 'shophouse';
       else if (/\btoko\b|\bkios\b|\bwarung\b|\bretail\b/.test(cur))          state.buildingType = 'store';
       else if (/\bkantor\b|\boffice\b/.test(cur))                                        state.buildingType = 'office';
@@ -1876,7 +1937,7 @@ function extractQualificationState(history = [], currentMessage = '') {
       if (/\bvill?a\b/.test(w))                                            return 'villa';
       if (/\bapartemen\b|\bapartment\b/.test(w))                           return 'apartment';
       if (/\bhotel\b|\bpenginapan\b/.test(w))                             return 'hotel';
-      if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(w))              return 'boarding_house';
+      if (/\bkos\b|\bkost\b|\bkosan\b|\bkostan\b|\bngekos\b|\bngekost\b|\bngekosan\b|\bindekos\b|\bindekost\b/.test(w))              return 'boarding_house';
       if (/\bruko\b|\brukan\b/.test(w))                                   return 'shophouse';
       if (/\btoko\b|\bkios\b|\bwarung\b|\bretail\b/.test(w))             return 'store';
       if (/\bkantor\b|\boffice\b/.test(w))                                           return 'office';
@@ -1912,7 +1973,7 @@ function extractQualificationState(history = [], currentMessage = '') {
     else if (/\bvill?a\b/.test(cur))                                         curType = 'villa';
     else if (/\bapartemen\b|\bapartment\b/.test(cur))                        curType = 'apartment';
     else if (/\bhotel\b|\bpenginapan\b/.test(cur))                          curType = 'hotel';
-    else if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(cur))           curType = 'boarding_house';
+    else if (/\bkos\b|\bkost\b|\bkosan\b|\bkostan\b|\bngekos\b|\bngekost\b|\bngekosan\b|\bindekos\b|\bindekost\b/.test(cur))           curType = 'boarding_house';
     else if (/\bruko\b|\brukan\b/.test(cur))                                curType = 'shophouse';
     else if (/\btoko\b|\bkios\b|\bwarung\b|\bretail\b/.test(cur))          curType = 'store';
     else if (/\bkantor\b|\boffice\b/.test(cur))                                        curType = 'office';
