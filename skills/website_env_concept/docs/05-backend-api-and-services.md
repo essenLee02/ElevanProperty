@@ -238,7 +238,7 @@ Returns `{ contextText, source: 'rumah123'|'flat_json'|'none', location, propert
 ### ngrokService.js (baru)
 
 `startNgrok(port)` / `stopNgrok()` — jalankan `ngrok http <port>` sebagai child process
-saat `ENABLE_NGROK=true`; parse URL dari output JSON, cetak ke terminal backend, dan
+saat `NGROK_ENABLE=true`; parse URL dari output JSON, cetak ke terminal backend, dan
 matikan saat SIGINT/SIGTERM. Lihat doc 15.
 
 ### propertyRecommendationService.js — backend-driven + lazy

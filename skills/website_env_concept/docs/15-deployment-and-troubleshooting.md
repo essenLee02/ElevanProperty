@@ -7,7 +7,7 @@
 cd backend
 npm install
 npm run dev             # nodemon (dev); node server.js untuk production
-# ENABLE_NGROK=true → URL tunnel muncul otomatis di terminal backend ini
+# NGROK_ENABLE=true → URL tunnel muncul otomatis di terminal backend ini
 
 # Frontend (port 5173) — VITE_BACKEND_PORT harus 5055
 cd frontend
@@ -24,7 +24,7 @@ npm run build           # production → outputs to frontend/dist/
 - [ ] Set `GOOGLE_SERVICE_ACCOUNT_JSON_PATH` (ensure file exists at path)
 - [ ] Set real `FONNTE_TOKEN` / `KIRIMI_USER_CODE`+`KIRIMI_SECRET` / `TIMELINESAI_API_KEY`
 - [ ] Set `MESSAGE_TERMINAL` + `MASSEGE_TERMINAL` sesuai platform aktif
-- [ ] `ENABLE_NGROK=false` di production (pakai domain tetap)
+- [ ] `NGROK_ENABLE=false` di production (pakai domain tetap)
 - [ ] Enable `secure: true` on refresh token cookie in `loginController.js` (HTTPS required)
 - [ ] Replace `0.0.0.0` in CORS `allowedOrigins` in `server.js` with your production domain
 - [ ] Consider moving access token from localStorage to memory-only in `authApi.js`
@@ -39,7 +39,7 @@ saat development. Sekarang **ngrok dijalankan otomatis oleh backend** sebagai ch
 process — tidak perlu window ngrok.exe terpisah.
 
 ```env
-ENABLE_NGROK=true            # backend jalankan `ngrok http 5055 --log=stdout --log-format=json`
+NGROK_ENABLE=true            # backend jalankan `ngrok http 5055 --log=stdout --log-format=json`
 # NGROK_DOMAIN=...           # opsional reserved domain (paid); URL tetap antar restart
 # NGROK_REGION=ap            # opsional
 ```

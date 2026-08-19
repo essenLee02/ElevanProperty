@@ -12,7 +12,7 @@
 | WhatsApp | Fonnte / **Kirimi** / TimelinesAI — multi-agent, token/device per-agent |
 | Live property data | Rumah123 via Apify scraper (opsional di atas DB) |
 | Static property data | JSON fallback `indonesia_property_extended_v3.json` (lazy) |
-| Dev tunnel | ngrok auto-start dari terminal backend (`ENABLE_NGROK`) |
+| Dev tunnel | ngrok auto-start dari terminal backend (`NGROK_ENABLE`) |
 | Google Sheets | Contact form logging (non-blocking) |
 
 ## Directory Structure
@@ -230,6 +230,6 @@ APIFY_API_TOKEN=apify_api_...
 
 # Server / Dev
 APP_PORT=5055                      # frontend VITE_BACKEND_PORT harus 5055
-ENABLE_NGROK=true                  # auto-start tunnel dari terminal backend
+NGROK_ENABLE=true                  # auto-start tunnel dari terminal backend
 FRONTEND_URL=http://localhost:5173
 ```

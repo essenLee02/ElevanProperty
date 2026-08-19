@@ -527,7 +527,7 @@ Bila membangun ulang sistem ini dari nol, pastikan urutan berikut tercakup:
       `ConfirmModal.vue` reusable, `FloatingChatbot.vue`, router guards
       (`requiresAuth`/`requiresGuest`)
 - [ ] Secret redaction hook di `ChatMessage` model (`beforeSave`/`beforeBulkCreate`)
-- [ ] ngrok auto-start (opsional, `ENABLE_NGROK`)
+- [ ] ngrok auto-start (opsional, `NGROK_ENABLE`)
 - [ ] Skill docs sync: `claude_responds/docs/*.md` ≡ `chat_gpt_responds/docs/*.md`
       (byte-identical kecuali `SKILL.md`, 13 file per sisi)
 - [ ] Disiplin token TPM: ukur dampak setiap penambahan ke prompt LLM

@@ -360,10 +360,10 @@ sequelize.sync()
         console.log('[FONNTE POLLER] ℹ️  Dinonaktifkan via FONNTE_POLLING_ENABLED=false');
       }
 
-      // ─── ngrok auto-start (opsional, ENABLE_NGROK=true di .env) ────────
+      // ─── ngrok auto-start (opsional, NGROK_ENABLE=true di .env) ────────
       // Jalan sebagai child process backend — URL tunnel muncul di terminal
       // yang sama, tidak perlu window ngrok.exe terpisah.
-      if (String(process.env.ENABLE_NGROK || 'false').toLowerCase() === 'true') {
+      if (String(process.env.NGROK_ENABLE || 'false').toLowerCase() === 'true') {
         const { startNgrok } = require('./services/ngrokService');
         console.log('[NGROK] Starting tunnel...');
         startNgrok(port)

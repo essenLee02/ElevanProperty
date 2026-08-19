@@ -114,7 +114,7 @@ bila `AI_PRIMARY_PROVIDER` diganti ke `claude`.
 | Google Calendar | Auto-schedule event viewing (OAuth 2.0, BARU) — saat ini 1 langkah manual (refresh token) tersisa |
 | Apify/Rumah123 | Data properti live (opsional, DIGABUNG dengan katalog DB, bukan salah satu) |
 | Database (Sequelize v6) | Sumber utama katalog — Property + PropertyFacility(FK Facility) + PropertyLocation(FK Location), di-scope per-agent (Property.user_id) |
-| ngrok | Auto-start tunnel dev dari terminal backend (ENABLE_NGROK) |
+| ngrok | Auto-start tunnel dev dari terminal backend (NGROK_ENABLE) |
 | MESSAGE_TERMINAL | Sumber metadata `source` log AI (satu platform) |
 | MASSEGE_TERMINAL | Platform mana yang log ke terminal (FONNTE,KIRIMI,TIMELINESAI) |
 | Cookie response timer | Debounce pesan beruntun WhatsApp sebelum AI proses (AI_COOKIE_RESPONSE_TIMER) |
@@ -153,7 +153,7 @@ GOOGLE_OAUTH_CLIENT_JSON_PATH / GOOGLE_OAUTH_REFRESH_TOKEN   # ⚠️ REFRESH_TO
 GOOGLE_CALENDAR_TIMEZONE=Asia/Jakarta
 
 # ngrok / Server
-ENABLE_NGROK=true                  APP_PORT=5055   (frontend VITE_BACKEND_PORT=5055)
+NGROK_ENABLE=true                  APP_PORT=5055   (frontend VITE_BACKEND_PORT=5055)
 
 # Master data / Auth tambahan
 PAGINATION_ROWS=8                  # default page size, semua master data list

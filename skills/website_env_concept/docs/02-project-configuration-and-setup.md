@@ -18,7 +18,7 @@ MASSEGE_TERMINAL=KIRIMI            # FONNTE,KIRIMI,TIMELINESAI
 
 ### ngrok (auto-start tunnel dari terminal backend)
 ```env
-ENABLE_NGROK=true                 # true = backend jalankan `ngrok http <APP_PORT>` sbg child process
+NGROK_ENABLE=true                 # true = backend jalankan `ngrok http <APP_PORT>` sbg child process
 # NGROK_DOMAIN=your-reserved.ngrok-free.app   # opsional (paid plan)
 # NGROK_REGION=ap                             # opsional
 ```
@@ -157,7 +157,7 @@ VITE_DEV_SERVER_PORT=5173
 cd backend
 npm install
 # Fill in backend/.env
-npm run dev           # nodemon; ENABLE_NGROK=true → tunnel muncul di terminal ini
+npm run dev           # nodemon; NGROK_ENABLE=true → tunnel muncul di terminal ini
 
 # Frontend (port 5173)
 cd frontend
