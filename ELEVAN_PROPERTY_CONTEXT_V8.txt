@@ -1017,7 +1017,149 @@ KONVENSI KODE
      kronologis. Bila menemukan referensi "M92" untuk Sidotopo atau "M94"
      untuk villa budget di catatan/tes lama, itu adalah PENOMORAN SEMENTARA
      yang SUDAH digantikan angka final di atas — isi teknisnya identik, hanya
-     labelnya yang berubah. Nomor M berikutnya: **M101**.
+     labelnya yang berubah.
+
+
+[V9 lanjutan — sesi 20 Agustus 2026. Aplikasi SUDAH HIDUP di Hostinger
+ (propmatches.fun): DB tersambung, 648 kota termuat, CORS benar. Dua batch:
+ (1) webhook produksi benar-benar diterima, (2) transkrip customer NYATA
+ booking kantor Madiun.]
+
+  M101 ⭐⭐ WEBHOOK SAMPAI DI HOSTINGER TAPI RATE LIMIT MENGHUKUM CUSTOMER SALAH.
+      Log produksi 20 Agu 2026 menunjukkan webhook Kirimi BENAR-BENAR TIBA:
+        [⇨ HTTP IN] POST /api/kirimi/webhook | body-keys: event,deviceId,…
+        ║ INCOMING WEBHOOK REQUEST DETECTED ║
+      lalu langsung disusul:
+        ValidationError: The 'X-Forwarded-For' header is set but the Express
+        'trust proxy' setting is false (default).
+
+      ⚠️ KOREKSI PENTING atas dugaan awal (JANGAN ulangi salah diagnosis ini):
+      request TIDAK gagal. Tetap HTTP 200, webhook TETAP diproses, AI tetap
+      membalas. Yang rusak jauh lebih halus dan justru lebih berbahaya: karena
+      `trust proxy` false, `req.ip` SELALU menjadi IP PROXY
+      (`::ffff:127.0.0.1`) untuk SEMUA pengirim. Akibatnya SELURUH customer
+      berbagi SATU bucket rate-limit (`webhookLimiter` = 120/menit). Begitu
+      beberapa customer chat bersamaan, customer yang SAH kena HTTP 429 dan
+      pesannya hilang tanpa error yang bisa dimengerti.
+      Dibuktikan lewat reproduksi 4 customer di jaringan BERBEDA:
+        SEBELUM  200 200 200 429   req.ip: 127.0.0.1 ×3 (semua sama)
+        SESUDAH  200 200 200 200   req.ip: 114.10.1.5 · 36.72.200.9 · …
+      Fix: `app.set('trust proxy', TRUST_PROXY_HOPS ?? 1)` di server.js.
+      ⛔ SENGAJA BUKAN `true`. `trust proxy: true` = percaya BUTA seluruh rantai
+      X-Forwarded-For, sehingga siapa pun bisa memalsukan header itu dan LOLOS
+      dari rate limit (sekaligus merusak akurasi IP di log). Angka = jumlah
+      proxy hop yang dipercaya; 1 benar untuk Hostinger/Passenger DAN untuk
+      ngrok (ngrok juga reverse proxy yang mengirim X-Forwarded-For). Bila
+      kelak ada Cloudflare DI DEPAN Hostinger → naikkan ke 2 lewat env,
+      JANGAN diubah jadi `true`. Ada kontrol negatif di tes yang menjaga ini.
+
+      (b) BANNER WEBHOOK FONNTE MENUNJUK ENDPOINT YANG TIDAK PUNYA AI.
+          `publicUrlService` memetakan FONNTE → `/api/fonnte/webhook`. Endpoint
+          itu MEMANG ada di routes/index.js, tapi ditangani
+          `fonnteWebhookController` (LEGACY) yang TIDAK PERNAH memanggil
+          `generateWhatsAppAIReply`. Jalur multi-agent yang setara Kirimi &
+          TimelinesAI ada di `/api/fonnte-chat/webhook`
+          (`fonnteChatController.handleInboundMessage`).
+          Dampak: begitu MASSEGE_TERMINAL diganti ke FONNTE, banner menyuruh
+          isi endpoint yang MENERIMA pesan tapi TIDAK PERNAH MEMBALAS — gagal
+          SENYAP (HTTP 200, tanpa error). Kelas yang sama dengan placeholder
+          `<ngrok-url>`: webhook "berhasil" tapi salah alamat.
+          Fix: peta diperbaiki ke `/api/fonnte-chat/webhook`.
+          ⚠️ SATU ASERSI LAMA DIPERBARUI (`tests/publicUrl.test.js`) dengan
+          alasan tertulis — asersi itu dulu MENGUNCI perilaku yang salah.
+
+      (c) `DB_PORT` SUDAH LAMA ADA DI .env TAPI TIDAK PERNAH DIBACA
+          `config/database.js`. Tidak terasa selama DB di 3306; begitu hosting
+          memberi port non-standar, koneksi gagal dengan pesan menyesatkan
+          padahal .env terlihat benar. Fix: dibaca; kosong → undefined
+          (perilaku lama dipertahankan).
+
+      Regresi: `tests/trustProxyAndWebhookRouting.test.js` (17/17), memakai
+      header PERSIS dari log produksi (IPv6 + rantai + User-Agent
+      Kirimi-Webhook-Forwarder/1.0). A/B: 3 assertion GAGAL saat fix dimatikan.
+      ⚠️ CATATAN TES (berlaku untuk tes mana pun yang memakai express-rate-limit):
+      `process.exit()` di akhir berkas memicu `Assertion failed: !(handle->flags
+      & UV_HANDLE_CLOSING)` di libuv Windows → exit code 127, terbaca CRASH oleh
+      runner MESKI semua assertion lulus. Pakai `process.exitCode = …` lalu
+      biarkan event loop habis sendiri.
+
+  M102 ⭐⭐ TRANSKRIP BOOKING KANTOR MADIUN — AI REPETITIF & KEHILANGAN KONTEKS.
+      Satu percakapan menghasilkan EMPAT cacat berbeda; customer sampai
+      mengulang jawaban yang sama berkali-kali.
+
+      (a) PENOLAKAN SURVEI MENGUAP BILA DIUCAPKAN DI GILIRAN LAIN.
+          Customer menolak survei EMPAT KALI dan tetap ditanya ulang:
+            16.20 "Tdk perlu survei. Saya minta rekomendasi aja dlu"
+                  → AI: "kira-kira mau viewing jam berapa?"        ❌
+            16.21 "Tdk mau survei. Minta katalog saja"      → tidak tercatat ❌
+            16.34 "Minta listing saja"                      → tidak tercatat ❌
+            16.37 AI menanya Q9 (jadwalkan viewing) LAGI                    ❌
+          Akar: cek `VIEWING_REFUSAL_RE` BERSARANG di dalam `aiAsksViewDate`,
+          sehingga penolakan yang diucapkan saat AI menanyakan JAM / Q5 / Q14
+          tidak pernah tercatat.
+          Fix: cek penolakan dijalankan LEBIH DULU, TANPA gate pertanyaan —
+          penolakan survei bersifat MUTLAK dan tidak bergantung pertanyaan yang
+          sedang terbuka (prinsip sama dengan M75 untuk jam sukarela).
+          ⛔ SENGAJA TIDAK menambahkan kata "rekomendasi" telanjang ke regex:
+          "Ada rekomendasi area yang bagus?" adalah PERTANYAAN, bukan penolakan
+          — ada kontrol negatif khusus untuk ini.
+
+      (b) Q5 VARIAN KOMERSIAL TIDAK DIKENALI EKSTRAKTORNYA SENDIRI.
+          Untuk tipe kantor, Q5 dikirim sebagai "Ada syarat yang mutlak
+          diperlukan atau yang tidak boleh ada untuk kantor ini?" — tidak cocok
+          satu pun pola pengenal Q5 → jawaban "Tidak boleh kotor aja" hilang,
+          `redFlags` tetap null, Q5 DIULANG 3× dengan TIGA kalimat berbeda.
+          Fix: tambahkan pola "tidak boleh ada", "mutlak diperlukan",
+          "syarat yang mutlak" ke pengenal Q5.
+          ⚠️⚠️ PELAJARAN BERULANG UNTUK KE-4 KALINYA (M87 booking, M88 Q2c,
+          M95 Q4 penghuni, kini M102 Q5 komersial): **saat menambah atau
+          MENGUBAH KALIMAT sebuah pertanyaan di findNextQuestion, WAJIB
+          tambahkan frasa pengenalnya ke ekstraktor/gerbang.** Fitur yang
+          lengkap di findNextQuestion tidak berarti apa-apa bila JAWABANNYA
+          tidak bisa dikenali. Ini kelas bug yang PALING SERING terulang di
+          proyek ini — periksa lebih dulu setiap kali alur Q diubah.
+
+      (c) JUMLAH ORANG DIBACA SEBAGAI BUDGET.
+          Q14 kantor menanyakan headcount; jawaban "Kemungkinan ada 20-38 orang
+          yg akan berkerja di kantor ini" terbaca sebagai budget AMBIGU →
+          AI membalas "Untuk harga 20-38 — maksudnya dalam ribu, juta, miliar,
+          atau triliun?" dan customer harus mengulang budget dari awal.
+          Fix: `detectBudget()` men-strip pola angka+satuan hitung
+          (orang/staf/karyawan/pegawai/tamu/unit/kamar/pax/…) SEBELUM parsing —
+          mengikuti pola strip LANTAI & TANGGAL yang sudah ada di fungsi yang
+          sama. Hanya bentuk RENTANG yang bocor; "20 orang" tunggal sudah aman
+          sebelumnya. Satuan sengaja SPESIFIK — jangan digeneralisir, karena
+          bentuk "2-3 juta" juga angka+kata.
+
+      (d) TIMEOUT KIMI HARDCODE 90 DETIK.
+          Log produksi berulang: "Kimi API error: timeout of 90000ms exceeded"
+          (AI_PRIMARY_PROVIDER kini = kimi, prompt ±67K token).
+          Melanggar konvensi proyek "semua nilai konfigurasi dari .env".
+          Fix: `KIMI_TIMEOUT_MS`, default TETAP 90000 agar perilaku tidak
+          berubah diam-diam.
+          ⛔ MENAIKKAN timeout BUKAN perbaikan: dengan primary=kimi, tiap
+          timeout berarti customer MENUNGGU selama nilai itu SEBELUM fallback
+          Private Agent berjalan. Untuk WhatsApp, 90 detik ≈ tidak dibalas.
+          Yang benar: TURUNKAN (mis. 30000) agar fallback cepat, ATAU kecilkan
+          prompt (§8 UKURAN PROMPT), ATAU ganti provider primary.
+          ⚠️ Provider lain masih hardcode: openai/deepseek/claude 90000,
+          qwen 60000 — BELUM disentuh, kandidat konsolidasi berikutnya.
+
+      Regresi: `tests/officeRefusalAndHeadcount.test.js` (24/24). A/B per-fix
+      terbukti tidak vacuous: 4 assertion gagal saat (a)/(b)/(d) dimatikan,
+      4 assertion gagal saat (c) dimatikan sendiri.
+
+      ⚠️ MASIH TERBUKA DARI TRANSKRIP YANG SAMA (belum didiagnosis):
+        • Grade B ditanya DUA KALI (16.24 & 16.25).
+        • Q2b berbunyi "Sudah lihat berapa Kantor di kantor ini?" — nama KOTA
+          hilang, diganti "kantor ini".
+        • Furnitur dijawab "Kosongan" (16.13) lalu ditanya ulang dan dijawab
+          "full furnished" (16.31) — JAWABAN BERTENTANGAN akibat bug
+          pengulangan; summary PASTI salah untuk salah satunya.
+        • Teks fallback katalog-kosong DI KODE belum dicek (doc 08 §6 sudah
+          bersih dari Rumah123, kodenya belum diverifikasi).
+
+  ⭐ PENOMORAN M — nomor berikutnya untuk sesi mendatang: **M103**.
 
 
 ================================================================================
@@ -1031,7 +1173,10 @@ CORE      APP_PORT=5055 · APP_FRONTEND_PORT=5173 · APP_NAME=Elevan Property
           server.js membaca `process.env.PORT` LEBIH DULU (fallback ke
           APP_PORT) karena Hostinger/Passenger & PaaS lain menyuntikkan port
           lewat nama generik `PORT`. JANGAN hapus prioritas ini.
-DATABASE  DB_HOST · DB_USER · DB_PASSWORD · DB_NAME=db_property · DB_DIALECT=mysql
+DATABASE  DB_HOST · DB_PORT · DB_USER · DB_PASSWORD · DB_NAME · DB_DIALECT=mysql
+          ⭐ DB_PORT kini BENAR-BENAR dibaca config/database.js (M101) —
+          sebelumnya ada di .env tapi diabaikan, Sequelize selalu pakai 3306.
+          Kosong → undefined → default dialect (perilaku lama).
           ⚠️ PRODUKSI Hostinger: DB_HOST tetap `localhost` (DB satu server
           dengan app), DB_USER/DB_NAME memakai prefix akun (mis.
           u310807636_propmatches / u310807636_db_property) — lihat
@@ -1041,6 +1186,22 @@ APP_URL   origin publik backend (mis. https://propmatches.fun) — dipakai
 NGROK     NGROK_ENABLE=true                 ⚠️ NGROK_AUTHTOKEN kini BENAR-BENAR
           dibaca & dipakai (M94) — sebelumnya nol pengaruh, tunnel jalan
           hanya karena config file mesin kebetulan sudah punya token
+          ⭐ NGROK_ENABLE adalah SAKLAR MODE, bukan sekadar on/off tunnel:
+            true  → DEV LOKAL. URL webhook diturunkan dari URL tunnel ngrok.
+            false → HOSTINGER/VPS. URL webhook diturunkan dari APP_URL.
+          Sumber kebenaran tunggal: services/publicUrlService.js — JANGAN
+          menghitung URL webhook sendiri di tempat lain (dulu server.js
+          mencetak placeholder `<ngrok-url>` apa pun modenya, lihat M100).
+          NGROK_WEBHOOK_URL (opsional) hanya catatan/override manual.
+
+PROXY     TRUST_PROXY_HOPS=1                ⭐ BARU (M101) — jumlah proxy hop
+          yang dipercaya Express. WAJIB ≥1 di Hostinger/VPS & ngrok, karena
+          request datang lewat reverse proxy dengan header X-Forwarded-For.
+          Tanpa ini `req.ip` = IP proxy untuk SEMUA orang → seluruh customer
+          berbagi satu bucket rate-limit → customer sah kena HTTP 429.
+          ⛔ JANGAN diisi `true` (percaya buta = header bisa dipalsukan untuk
+          lolos rate limit). Cloudflare DI DEPAN Hostinger → isi 2.
+          Kosong → default 1 (benar untuk mode dev MAUPUN hosting).
 
 AI PROVIDERS
   AI_PRIMARY_PROVIDER=chatgpt      # NILAI AKTUAL 14 Agu 2026 — SELALU cek ulang
@@ -1058,6 +1219,14 @@ AI PROVIDERS
   DEEPSEEK_API_KEY / DEEPSEEK_MODEL=deepseek-v4-flash  ⚠️ WAJIB v4
   KIMI_API_KEY / KIMI_MODEL=kimi-k3 / KIMI_BASE_URL=https://api.moonshot.ai/v1
     ⚠️ KIMI_TOP_P WAJIB 0.95 — kimi-k3 menolak nilai lain (M74).
+    ⭐ KIMI_TIMEOUT_MS=90000 (BARU, M102) — dulu hardcode di kimiService.js.
+       Produksi berulang kena "timeout of 90000ms exceeded" (prompt ±67K token).
+       ⛔ MENAIKKAN nilai ini MEMPERBURUK pengalaman customer: dengan
+       primary=kimi, tiap timeout = customer menunggu selama nilai ini SEBELUM
+       fallback Private Agent jalan. TURUNKAN (mis. 30000) agar fallback cepat,
+       ATAU kecilkan prompt, ATAU ganti AI_PRIMARY_PROVIDER.
+       ⚠️ Provider lain MASIH hardcode: openai/deepseek/claude 90000, qwen
+       60000 — belum dikonsolidasi ke .env.
 
 CHATBOT MODE & MEMORI
   RESPOND_CATALOG_RUN=ON           # ON=brief+katalog | OFF=brief saja
@@ -1333,6 +1502,26 @@ TUJUAN TEKNIS
 ================================================================================
 
 JANGKA PENDEK (1–2 minggu)
+  [ ] ⭐⭐ PERBAIKI 4 TEMUAN TERBUKA DARI TRANSKRIP KANTOR MADIUN (§5 M102):
+      Grade B ditanya 2×; Q2b kehilangan nama kota ("Sudah lihat berapa Kantor
+      di kantor ini?"); furnitur dijawab bertentangan (Kosongan → full
+      furnished) akibat pengulangan; teks fallback katalog-kosong DI KODE belum
+      diverifikasi bersih dari Rumah123 (skill doc sudah).
+  [ ] ⭐⭐ KLARIFIKASI SCOPE "RAG men-training LLM dari tiap chat WhatsApp".
+      Diminta BERULANG KALI lintas sesi, BELUM pernah dikerjakan karena
+      ambigu. Dua tafsir yang SANGAT berbeda:
+        (a) INDEX transcript `chat_messages` jadi namespace RAG baru supaya
+            percakapan lampau bisa di-retrieve → FEASIBLE, sejalan arsitektur
+            sekarang (read-only retrieval), butuh isolasi per-agent seperti
+            namespace agent_catalog.
+        (b) FINE-TUNING model dari percakapan → TIDAK feasible di arsitektur
+            ini (provider eksternal, tidak ada pipeline training, biaya &
+            privasi data customer).
+      JANGAN mulai membangun sebelum user memilih (a) atau (b).
+  [ ] ⭐ Perbaiki `huggingfaceService.test.js` yang CRASH (dari sesi paralel)
+      + diagnosa housePilot 66/69 → 65/69.
+  [ ] ⭐ Konsolidasi timeout provider ke .env (openai/deepseek/claude 90000,
+      qwen 60000 masih hardcode) — pola sudah ada di KIMI_TIMEOUT_MS (M102d).
   [ ] ⭐ Update skill docs KETIGA folder AI-facing (claude_responds,
       chat_gpt_responds, elevan-property-assistant) agar menyebutkan RAG &
       pengiriman gambar — SKILL.md §3/§8 dan doc 08 §0 adalah kandidat utama
@@ -1453,6 +1642,18 @@ Elevan_Property/
 │   │   │                               SATU-SATUNYA sumber kebenaran, default
 │   │   │                               FAIL-CLOSED, dipakai 4 jalur AI (BUKAN
 │   │   │                               oleh rumah123Controller.js/halaman)
+│   │   ├── ⭐ publicUrlService.js     ← SATU-SATUNYA sumber kebenaran URL
+│   │   │                               publik + banner webhook (M100/M101).
+│   │   │                               ngrokEnabled() · resolvePublicUrl() ·
+│   │   │                               webhookUrls() · buildWebhookBanner().
+│   │   │                               WEBHOOK_PATHS: FONNTE menunjuk
+│   │   │                               /api/fonnte-chat/webhook (multi-agent),
+│   │   │                               BUKAN /api/fonnte/webhook (legacy tanpa AI)
+│   │   ├── kimiService.js           ← timeout dari KIMI_TIMEOUT_MS (M102)
+│   │   ├── huggingfaceService.js    ← dari sesi paralel RAG. ⚠️ Tes-nya
+│   │   │                               huggingfaceService.test.js CRASH
+│   │   │                               ("Cannot read properties of undefined
+│   │   │                               (reading 'provider')") — belum diperbaiki
 │   │   ├── customerRegistrationService.js · customerAiToggleService.js
 │   │   ├── viewingScheduleTrigger.js · googleCalendarService.js
 │   │   └── googlePlacesService.js · skillPromptService.js
@@ -1476,11 +1677,15 @@ Elevan_Property/
 │   │   │                               TIDAK diubah — propertyImageService
 │   │   │                               HANYA membaca, tidak menulis)
 │   │   └── locationLandmarks.js (45 kota) · houseListingPilot.js
-│   ├── tests/                       (56 file — ⭐ 5 baru sesi 18 Agu:
-│   │   │                               ngrokAuthtoken, occupancyAnswerGateDrop,
+│   ├── tests/                       (65 file — 5 baru 18 Agu: ngrokAuthtoken,
+│   │   │                               occupancyAnswerGateDrop,
 │   │   │                               warehouseAreaInventionAndCompoundAvoid,
 │   │   │                               rumah123DisabledForAI,
-│   │   │                               villaBudgetPeriodAndPreferences)
+│   │   │                               villaBudgetPeriodAndPreferences;
+│   │   │                               ⭐ 2 baru 20 Agu:
+│   │   │                               trustProxyAndWebhookRouting (M101),
+│   │   │                               officeRefusalAndHeadcount (M102).
+│   │   │                               Sisanya dari sesi paralel HuggingFace/RAG)
 │   └── scripts/
 │       ├── sync-db.js
 │       └── build-rag-index.js       ← indexer offline, 3 namespace
@@ -1580,6 +1785,15 @@ GEJALA → PENYEBAB → SOLUSI
 [CHAT / AI]
 
   AI mengulang pertanyaan yang SUDAH dijawab
+    → ⭐ LANGKAH 0 (CEK INI DULUAN — penyebab paling sering, sudah 4× terulang:
+      M87, M88, M95, M102b): apakah KALIMAT pertanyaan yang dikirim AI
+      benar-benar DIKENALI oleh ekstraktor/gerbangnya sendiri? Banyak Q punya
+      VARIAN kalimat per tipe properti (mis. Q5 komersial berbunyi "Ada syarat
+      yang mutlak diperlukan atau yang tidak boleh ada untuk kantor ini?").
+      Bila kalimat itu tidak ada di pola pengenal, jawaban customer DIBUANG dan
+      pertanyaan diulang selamanya. Reproduksi cepat:
+        node -e "…extractQualificationState([U(opening),A(<kalimat AI persis>),
+                 U(<jawaban customer>)], <jawaban>)" → cek slot-nya terisi/null.
     → LANGKAH 1: dump state block. Bila state BENAR tapi AI tetap mengulang →
       masalah ukuran/posisi prompt (M62), bukan ekstraksi. Pastikan DIREKTIF
       FINAL ada di posisi 100%.
@@ -1680,6 +1894,26 @@ GEJALA → PENYEBAB → SOLUSI
       memastikan itu gangguan sesaat, bukan config.
   Webhook tidak masuk → ngrok URL berubah, update di dashboard.
 
+  ⭐ Log penuh "ValidationError: The 'X-Forwarded-For' header is set but the
+  Express 'trust proxy' setting is false"
+    → JANGAN salah baca: webhook TIDAK gagal (tetap HTTP 200, AI tetap
+      membalas). Yang rusak: `req.ip` = IP proxy untuk SEMUA orang, sehingga
+      seluruh customer berbagi SATU bucket rate-limit → customer sah kena 429
+      saat beberapa chat bersamaan. Fix: TRUST_PROXY_HOPS (default 1), lihat
+      §5 M101. ⛔ Jangan set `trust proxy: true`.
+
+  ⭐ Customer FONNTE mengirim pesan, webhook 200, tapi AI TIDAK PERNAH membalas
+    → Kemungkinan besar webhook diarahkan ke `/api/fonnte/webhook` (LEGACY,
+      tidak memanggil AI). Yang benar `/api/fonnte-chat/webhook`. Cek banner
+      "✅ WEBHOOK SIAP" di log start — SELALU pakai URL yang tercetak di sana,
+      jangan menebak (§5 M101b).
+
+  ⭐ Log "[KIMI ERROR] timeout of 90000ms exceeded" berulang
+    → Prompt ±67K token terlalu berat untuk timeout default. ⛔ MENAIKKAN
+      KIMI_TIMEOUT_MS memperburuk: customer menunggu lebih lama sebelum
+      fallback Private Agent. TURUNKAN (mis. 30000), ATAU kecilkan prompt,
+      ATAU ganti AI_PRIMARY_PROVIDER (§5 M102d).
+
 [DATABASE]
   Boot gagal "Key column 'user_id' doesn't exist"
     → ensureRequiredDatabaseColumns() harus SEBELUM sequelize.sync().
@@ -1757,14 +1991,23 @@ PRINSIP DEBUG
     dari nol; hanya bangun ulang alasannya bila ada perubahan skala/kebutuhan
     nyata (mis. korpus menembus ~100k vektor).
 
-  ✅ BASELINE TES BERLAKU: **1519/1540** (56 berkas tes, per 18 Agu 2026,
-  sesi M94–M100). Riwayat baseline sesi ini: 1405/1426 (14 Agu, akhir sesi
-  M92/M93) → 1519/1540 (18 Agu, akhir sesi M94–M100).
-  21 kegagalan pre-existing, SELALU di tiga berkas yang sama, TIDAK PERNAH
-  berubah sejak V7 (SEMPAT ada "kegagalan ke-4" sementara di
-  bookingShortStayVersi2 selama M97 belum dikerjakan — sudah tertutup, lihat
-  §5 M97):
-    customerDateParser 54/69 · extractFilters 109/112 · housePilot 66/69
+  ✅ BASELINE TES BERLAKU: **1710/1732** (65 berkas tes, per 20 Agu 2026,
+  akhir sesi M101–M102). Riwayat baseline: 1405/1426 (14 Agu, akhir M92/M93)
+  → 1519/1540 (18 Agu, akhir M94–M100) → 1686/1708 (20 Agu, setelah M101 +
+  tes dari sesi paralel HuggingFace/RAG) → **1710/1732** (20 Agu, akhir M102).
+  ⚠️ Lonjakan besar 1540→1708 BUKAN dari sesi M101/M102 saja — sebagian besar
+  berasal dari sesi PARALEL (HuggingFace/RAG) yang menambah banyak berkas tes.
+  22 kegagalan pre-existing di tiga berkas yang sama (SEMPAT ada "kegagalan
+  ke-4" sementara di bookingShortStayVersi2 selama M97 belum dikerjakan —
+  sudah tertutup, lihat §5 M97):
+    customerDateParser 54/69 · extractFilters 109/112 · housePilot 65/69
+  ⚠️ housePilot turun 66/69 → 65/69 pada 20 Agu. Diverifikasi BUKAN dari
+  M101/M102 (berkas tesnya tidak menyentuh satu pun berkas yang diubah kedua
+  M itu) — berasal dari sesi paralel. BELUM didiagnosis.
+  ⚠️ SATU BERKAS CRASH (tanpa baris RESULT): `huggingfaceService.test.js` —
+  "TypeError: Cannot read properties of undefined (reading 'provider')".
+  Dari sesi paralel RAG/HuggingFace, BELUM diperbaiki. Runner harus
+  memperlakukan "tidak ada baris RESULT" sebagai CRASH, bukan skip.
   Cara membaca hasil suite di sesi berikutnya (`npm test` TIDAK ADA):
     for f in tests/*.test.js; do node "$f"; done   # lalu jumlahkan RESULT: p/t
     • Total turun ATAU ada nama berkas gagal DI LUAR ketiganya → REGRESI sesi
@@ -1772,6 +2015,9 @@ PRINSIP DEBUG
     • Total naik dengan tiga berkas itu tetap gagal → normal (tes baru ditambah).
     • qualifierCharacterization: jamnya DIBEKUKAN (FROZEN_NOW 10 Agu 2026),
       tidak lagi gagal hanya karena dijalankan di hari berbeda.
+    • ⚠️ Tes yang memakai express-rate-limit: JANGAN `process.exit()` di akhir
+      (libuv Windows → exit 127 = terbaca CRASH walau semua assertion lulus).
+      Pakai `process.exitCode = …` (lihat §5 M101).
   `npm run lint` GAGAL — eslint tidak terpasang di node_modules (pre-existing,
   dikonfirmasi BUKAN disebabkan sesi V8/V9; belum pernah berjalan sejak
   sebelum V7 juga per catatan itu).
