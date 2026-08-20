@@ -1,10 +1,11 @@
 ================================================================================
   ELEVAN PROPERTY — COMPREHENSIVE PROJECT CONTEXT (V8)
   Dibuat  : 15 Juni 2026
-  Update  : 18 Agustus 2026 (M94–M100: ngrok authtoken, gerbang Q4/off-topic,
+  Update  : 20 Agustus 2026 (M94–M102: ngrok authtoken, gerbang Q4/off-topic,
             karangan area dari contoh dokumen sendiri, parser tanggal "checkin",
             Rumah123 dimatikan total untuk AI, periode budget vs durasi menginap,
-            deploy Hostinger produksi)
+            deploy Hostinger produksi, trust-proxy webhook, penolakan survei
+            di giliran mana pun, headcount bukan budget, timeout Kimi)
   Tujuan  : SATU file konteks lengkap untuk di-upload ke Claude Code
   Isi     : Overview · Instrument · Review · Pengembangan · Solusi ·
             Environments · Informasi · Skills · Tujuan · Roadmap ·
