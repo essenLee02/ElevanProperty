@@ -20,7 +20,9 @@
 
 'use strict';
 
+require('dotenv').config();
 const f = require('../utils/propertyKeywordFilter');
+const { extractQualificationState } = require('../services/aiPromptBuilderService');
 
 let pass = 0, fail = 0;
 const ok = (label, cond, extra = '') => {
@@ -85,6 +87,34 @@ console.log('\n== Group 4: tipe lain tidak terganggu ==');
     f.extractPropertyTypeFromMessage('beli gudang') === 'warehouse');
   ok('beli tetap sale',
     f.extractTransactionTypeFromMessage('mau beli rumah') === 'sale');
+}
+
+console.log('\n== Group 5: extractQualificationState — pipeline INTERNAL (M120 lanjutan) ==');
+{
+  // ⚠️ Gerbang (propertyKeywordFilter) sudah benar sejak M120, TAPI
+  // aiPromptBuilderService.js punya 5 SALINAN TERPISAH dari regex deteksi
+  // transaksi 'rent' — semuanya luput dari M120 karena patch pertama hanya
+  // menyentuh propertyKeywordFilter.js. Akibatnya pesan LOLOS gerbang dengan
+  // benar, tapi transactionType tetap null di dalam Phase 1 (M121 lanjutan),
+  // dan customer mendapat balasan "beli Gudang" — tipe DAN transaksi salah,
+  // walau gerbang sudah melaporkan boarding_house/rent dengan benar.
+  const msg = 'Hi.. Saya mau ngekos di Madiun';
+  const st = extractQualificationState([], msg);
+  ok('pipeline internal: buildingType = boarding_house',
+    st.buildingType === 'boarding_house', st.buildingType);
+  ok('pipeline internal: transactionType = rent (BUKAN null/sale)',
+    st.transactionType === 'rent', st.transactionType);
+  ok('pipeline internal: city = Madiun', st.city === 'Madiun', st.city);
+
+  for (const [text, why] of [
+    ['saya mau ngekos di Solo', 'ngekos'],
+    ['mau indekos di Malang', 'indekos'],
+    ['cari kostan murah', 'kostan'],
+  ]) {
+    const s = extractQualificationState([], text);
+    ok(`pipeline internal transactionType=rent: ${why}`, s.transactionType === 'rent',
+      `${text} → ${s.transactionType}`);
+  }
 }
 
 console.log(`\n${'='.repeat(60)}`);

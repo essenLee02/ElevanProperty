@@ -314,7 +314,7 @@ function buildQualifyReply(filters, message, agentName, contextSource, history =
  *   @param {object} options   - Optional: { context, contextSource }
  * @returns {Promise<{ reply, provider, contextSource }>}
  */
-async function generateWhatsAppAIReply(params) {
+async function _generateWhatsAppAIReplyCore(params) {
   const { session, agentName, agentUserId = null, agentAiPrimary = null, options = {} } = params;
 
   // id-realestate-lazy-chat-normalizer skill (28 Jul 2026): expand SMS-speak/
@@ -627,6 +627,57 @@ async function generateWhatsAppAIReply(params) {
       provider      : 'fallback_generic',
       contextSource : 'none',
     };
+  }
+}
+
+/**
+ * Wrapper publik generateWhatsAppAIReply() — sama seperti versi inti di atas,
+ * ditambah SATU gerbang deterministik: bila balasan yang baru dihasilkan
+ * adalah SUMMARY dan customer ini belum pernah ditanya namanya
+ * (customers.ask_name = 'NO'), balasan ditukar dengan pertanyaan nama —
+ * summary yang sesungguhnya BARU dikirim giliran berikutnya.
+ *
+ * Kenapa aman ditukar begitu saja (bukan disimpan lalu dikirim susulan):
+ * qualification state SUDAH lengkap di titik ini dan bersifat idempoten — AI
+ * akan menghasilkan ulang summary yang PERSIS SAMA di giliran berikutnya dari
+ * state yang tidak berubah, begitu customerRegistrationService menandai
+ * ask_name='YES' (lewat jawaban ATAU penolakan). Tidak ada data yang hilang.
+ *
+ * Satu call-site ini otomatis melindungi SEMUA jalur balasan (5 provider LLM,
+ * Private Agent, external fallback) karena semuanya bermuara ke return value
+ * _generateWhatsAppAIReplyCore() — pola yang sama dipatuhi RAG (M92) & guard
+ * identitas (M85) di fungsi ini juga.
+ *
+ * Fail-open MUTLAK: kegagalan lookup DB apa pun (atau `phone` tidak dikirim
+ * pemanggil) → balasan asli tetap dikirim tanpa gangguan. Menanyakan nama
+ * adalah penyempurnaan UX, BUKAN gerbang bisnis kritis — tidak boleh pernah
+ * memblokir summary yang sudah selesai dihasilkan.
+ *
+ * @param {object} params - sama seperti _generateWhatsAppAIReplyCore, PLUS:
+ *   @param {string|null} params.phone - nomor WA customer (lookup ask_name)
+ */
+async function generateWhatsAppAIReply(params) {
+  const result = await _generateWhatsAppAIReplyCore(params);
+  try {
+    const { phone, agentUserId = null } = params;
+    if (!phone || !agentUserId) return result;
+
+    const { replyContainsSummary, getIdentityStatus } = require('./customerRegistrationService');
+    if (!replyContainsSummary(result.reply)) return result;
+
+    const status = await getIdentityStatus({ agentUserId, phone });
+    if (status.askName === 'YES') return result;
+
+    const askText = 'Sebelum saya sampaikan ringkasannya — boleh saya tahu nama Kakak? 😊\n\n_(Kalau belum ingin menyebutkan, tidak apa-apa — cukup balas "lewati")_';
+    return {
+      ...result,
+      reply      : askText,
+      replyParts : [askText],
+      provider   : 'qualification',
+    };
+  } catch (err) {
+    console.warn('[WhatsAppAI] Gerbang tanya-nama gagal (fail-open, summary tetap dikirim):', err.message);
+    return result;
   }
 }
 

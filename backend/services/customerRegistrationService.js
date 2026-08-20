@@ -154,6 +154,38 @@ function aiAlreadyAskedEmail(history = []) {
   return (history || []).some(m => (m.role === 'ai' || m.role === 'assistant') && AI_ASKED_EMAIL_RE.test(m.message || ''));
 }
 
+/**
+ * Pesan AI TERAKHIR dari giliran SEBELUM giliran ini — bukan balasan yang baru
+ * saja dibuat untuk `currentMessage` yang sedang diproses.
+ *
+ * ⚠️ Dipanggil SETELAH pesan customer & balasan AI giliran ini SUDAH tersimpan
+ * ke DB (pola hook `syncCustomerFromChat`, lihat di bawah), jadi `history` yang
+ * di-fetch ulang dari DB ikut membawa DUA entri milik giliran ini di ekornya:
+ * [..., customerMsg(giliran ini), aiReply(giliran ini)]. Tanpa membuang dulu
+ * ekor itu, pengecekan "apakah AI baru saja menanyakan nama" akan salah
+ * menguji balasan AI yang BARU DIBUAT (respons UNTUK currentMessage) — bukan
+ * pertanyaan yang currentMessage seharusnya sedang MENJAWAB.
+ *
+ * @param {Array<{role:string,message:string}>} history
+ * @param {string} currentMessage - pesan customer giliran ini
+ * @param {string} currentReply   - balasan AI giliran ini (baru dibuat, sudah tersimpan)
+ * @returns {string} pesan AI dari giliran sebelumnya, atau '' bila tidak ada
+ */
+function _lastAiMessageBeforeCurrentTurn(history = [], currentMessage = '', currentReply = '') {
+  const h = [...(history || [])];
+  while (h.length) {
+    const last = h[h.length - 1];
+    const isThisTurnAi       = (last.role === 'ai' || last.role === 'assistant') && last.message === currentReply;
+    const isThisTurnCustomer = (last.role === 'customer' || last.role === 'user') && last.message === currentMessage;
+    if (isThisTurnAi || isThisTurnCustomer) { h.pop(); continue; }
+    break;
+  }
+  for (let i = h.length - 1; i >= 0; i--) {
+    if (h[i].role === 'ai' || h[i].role === 'assistant') return h[i].message || '';
+  }
+  return '';
+}
+
 /* ══════════════════════════════════════════════════════════════════════════════
    REGISTRASI — idempoten via (user_id, phone)
 ══════════════════════════════════════════════════════════════════════════════ */
@@ -191,9 +223,12 @@ function _normPhone(p) {
  * @param {string|null} p.chatName - nama hasil ekstraksi perkenalan chat (prioritas)
  * @param {string|null} p.waName   - nama profil WhatsApp (fallback)
  * @param {string|null} p.email    - email hasil ekstraksi (nullable)
+ * @param {boolean} p.nameQuestionResolved - true bila giliran ini adalah jawaban
+ *   (atau PENOLAKAN) atas pertanyaan nama yang AI ajukan giliran sebelumnya →
+ *   ask_name wajib menjadi 'YES' walau chatName tetap null (customer menolak).
  * @returns {Promise<{action:'inserted'|'updated'|'exists'|'skipped', customer?:object}>}
  */
-async function registerCustomerFromChat({ agentUserId, phone, chatName = null, waName = null, email = null }) {
+async function registerCustomerFromChat({ agentUserId, phone, chatName = null, waName = null, email = null, nameQuestionResolved = false }) {
   if (!agentUserId || !phone) return { action: 'skipped' };
   const { Customer } = require('../models');
 
@@ -209,6 +244,10 @@ async function registerCustomerFromChat({ agentUserId, phone, chatName = null, w
       // Nama perkenalan chat menggantikan fallback pushname lama (lebih akurat).
       if (chatName && existing.name !== chatName) patch.name = chatName;
       if (email && !existing.email) patch.email = email;
+      // Pertanyaan nama terjawab (nama ATAU penolakan) → jangan tanya lagi.
+      if ((chatName || nameQuestionResolved) && String(existing.ask_name || 'NO').toUpperCase() !== 'YES') {
+        patch.ask_name = 'YES';
+      }
       if (Object.keys(patch).length) {
         patch.updated_date = _todayDate();
         patch.updated_by = agentUserId;
@@ -229,6 +268,10 @@ async function registerCustomerFromChat({ agentUserId, phone, chatName = null, w
       phone:        normPhone,
       email:        email || null,
       ai_response:  'ON',
+      // Nama sudah diketahui saat pendaftaran pertama (customer memperkenalkan
+      // diri sebelum sempat ditanya) → tidak perlu ditanya lagi. Selain itu
+      // (masih pakai nama default WA) → AI WAJIB menanyakan nama nanti.
+      ask_name:     chatName ? 'YES' : 'NO',
       status:       1,
       created_date: _todayDate(),
       created_by:   agentUserId,
@@ -267,7 +310,7 @@ async function registerCustomerFromChat({ agentUserId, phone, chatName = null, w
  * @returns {Promise<{exists:boolean,hasRealName:boolean,hasEmail:boolean,isReturning:boolean,name:string|null}>}
  */
 async function getIdentityStatus({ agentUserId, phone, waName = null }) {
-  const EMPTY = { exists: false, hasRealName: false, hasEmail: false, isReturning: false, name: null, email: null };
+  const EMPTY = { exists: false, hasRealName: false, hasEmail: false, isReturning: false, name: null, email: null, askName: null };
   if (!agentUserId || !phone) return EMPTY;
   try {
     const { Customer } = require('../models');
@@ -275,7 +318,7 @@ async function getIdentityStatus({ agentUserId, phone, waName = null }) {
     if (normPhone.length < 8) return EMPTY;
     const row = await Customer.findOne({
       where: { user_id: String(agentUserId).toUpperCase(), phone: normPhone },
-      attributes: ['name', 'email', 'status'],
+      attributes: ['name', 'email', 'status', 'ask_name'],
     });
     if (!row || row.status === 3) return EMPTY;
 
@@ -292,6 +335,10 @@ async function getIdentityStatus({ agentUserId, phone, waName = null }) {
       // Actual email string (not just the hasEmail flag) — needed by the calendar
       // trigger to send a viewing invite without re-asking a returning customer.
       email: row.email || null,
+      // Penanda OTORITATIF (bukan heuristik) apakah AI sudah menanyakan nama —
+      // 'YES' | 'NO'. Dipakai gerbang pertanyaan nama; hasRealName di atas
+      // masih heuristik lama, dipertahankan untuk pemanggil yang sudah ada.
+      askName: String(row.ask_name || 'NO').toUpperCase(),
     };
   } catch (err) {
     console.warn('[CustomerReg] getIdentityStatus failed (fail-open):', err.message);
@@ -432,7 +479,13 @@ async function syncCustomerFromChat({ reply, sessionId, currentMessage, agentUse
     if (!qualified && !alreadyExists) return { action: 'skipped' };
 
     const { name: chatName, email } = extractIdentityFromChat(history, currentMessage);
-    return await registerCustomerFromChat({ agentUserId, phone, chatName, waName, email });
+    // Apakah giliran AI SEBELUM ini (bukan balasan yang baru saja dibuat untuk
+    // currentMessage) menanyakan nama? Bila ya, currentMessage adalah RESOLUSI
+    // dari pertanyaan itu — nama (bila ada) ATAU penolakan — dan ask_name wajib
+    // menjadi 'YES' agar AI tidak bertanya lagi giliran berikutnya.
+    const prevAiMsg = _lastAiMessageBeforeCurrentTurn(history, currentMessage, reply);
+    const nameQuestionResolved = AI_ASKED_NAME_RE.test(prevAiMsg);
+    return await registerCustomerFromChat({ agentUserId, phone, chatName, waName, email, nameQuestionResolved });
   } catch (err) {
     console.warn('[CustomerReg] syncCustomerFromChat failed (non-fatal):', err.message);
     return { action: 'skipped' };

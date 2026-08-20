@@ -498,6 +498,7 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
       agentName  : agent.name,
       agentAiPrimary: agent.ai_primary,
       agentUserId: agent.user_id,   // scoping katalog per-agent (RESPOND_CATALOG_RUN=ON)
+      phone      : sender,          // gerbang tanya-nama (ask_name) — lookup customers table
     });
     aiResult = result;
     ctxSource = result.contextSource || 'none';
@@ -758,6 +759,7 @@ class FonnteChatController {
         agentName  : agent.name,
       agentAiPrimary: agent.ai_primary,
         agentUserId: agent.user_id,   // scoping katalog per-agent (RESPOND_CATALOG_RUN=ON)
+        phone      : sender,          // gerbang tanya-nama (ask_name) — lookup customers table
       });
       aiReply = result.reply;
 

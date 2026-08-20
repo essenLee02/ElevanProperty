@@ -52,6 +52,12 @@ const Customer = sequelize.define('Customer', {
     defaultValue: 'ON',
     comment: 'ON = AI membalas customer ini; OFF = AI diam (agent takeover manual)'
   },
+  ask_name: {
+    type: DataTypes.STRING(5),
+    allowNull: false,
+    defaultValue: 'NO',
+    comment: 'AI akan menanyakan nama orang di WhatsApp, jika nama dijawab oleh orang di WhatsApp; maka ask_name menjadi YES'
+  },
   status: {
     type: DataTypes.INTEGER(1),
     allowNull: false,

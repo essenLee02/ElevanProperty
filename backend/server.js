@@ -334,6 +334,23 @@ async function ensureRequiredDatabaseColumns() {
     }
   }
 
+  try {
+    const customersTable = await queryInterface.describeTable('customers');
+    if (customersTable && !customersTable.ask_name) {
+      await queryInterface.addColumn('customers', 'ask_name', {
+        type: DataTypes.STRING(5),
+        allowNull: false,
+        defaultValue: 'NO',
+        after: 'ai_response'
+      });
+      console.log('Database migration completed: added customers.ask_name column');
+    }
+  } catch (error) {
+    if (!String(error.message || '').toLowerCase().includes('no description found')) {
+      console.warn('Customers schema check warning:', error.message);
+    }
+  }
+
 }
 
 sequelize.sync()

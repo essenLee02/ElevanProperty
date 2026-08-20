@@ -641,6 +641,16 @@ function extractQualificationState(history = [], currentMessage = '') {
     furnishing      : null,   // Q11
     facilities      : null,   // amenities (gym, kids zone, kolam renang, dll) — opsional
     apartmentPref   : null,   // Q12
+    // Q14 kantor (M122) — SEBELUMNYA tidak ada state eksplisit sama sekali;
+    // "Grade A/B/C?" dan "fit-out/shell?" hanya berupa HINT teks bebas yang
+    // diserahkan ke LLM untuk dibaca ulang dari history tiap giliran. Transkrip
+    // nyata (19-20 Agu 2026): AI SUDAH mengonfirmasi "tercatat Grade C, ya 👍"
+    // lalu 2 giliran kemudian menanyakannya LAGI — lima kali berturut-turut,
+    // sampai customer menulis "Stop diulang". Fakta yang sudah dikonfirmasi
+    // AI sendiri tidak tersimpan di mana pun selain teks bebas, jadi hilang
+    // begitu LLM re-derive dari history yang makin panjang.
+    officeGrade     : null,   // Q14 kantor: 'A' | 'B' | 'C'
+    officeFitOut    : null,   // Q14 kantor: 'fit-out' | 'shell & core'
     financing       : null,   // Q_KPR  (beli only): cash | KPR | kombinasi
     kprDetails      : null,   // Q_KPR-a (beli + KPR): bank & DP
     propertyCondition: null,  // Q_COND (beli residensial): baru/ready | second | inden
@@ -686,38 +696,71 @@ function extractQualificationState(history = [], currentMessage = '') {
   const SYS_DAY   = now.getDate();
   const SYS_YEAR  = now.getFullYear();
 
-  // ── Phase 0: Find "active session start" ──────────────────────────────────
-  // The active session begins at the LATEST of two boundaries. Everything
-  // before that boundary is a stale/abandoned search and must NOT pollute the
-  // current qualification state.
+  // ── Phase 0: Find "active session start" + resolve canonical type/tx/city ──
+  // The active session begins at Boundary A — Summary brief: if a brief was
+  // already sent, the first customer message after it starts a fresh search.
+  // Everything before that boundary is a stale/abandoned search and must NOT
+  // pollute the current qualification state.
   //
-  //   Boundary A — Summary brief: if a brief was already sent, the first
-  //     customer message after it starts a fresh search.
+  // ⚠️ M124 (21 Agu 2026): a second boundary used to live here — "Boundary B"
+  // — which hard-truncated ACTIVE_ALL the instant a customer's city, property
+  // type, or transaction type differed from what was already established,
+  // discarding EVERY answer that came before the switch (budget, move-in date,
+  // survey schedule, facilities — all of it, not just the field that actually
+  // changed). Real transcript: a customer deep in a Surabaya house search named
+  // "Sidoarjo" while answering an alternative-AREA question, and the bot reset
+  // all the way to "Mau sewa atau beli? Dan tipe propertinya apa?" as if the
+  // conversation had never happened.
   //
-  //   Boundary B — Type/transaction change: if the customer switches building
-  //     type (villa→hotel) or flips transaction type (sewa→beli) WITHOUT a
-  //     summary in between, that message starts a fresh search. Business rule:
-  //     "perubahan tipe transaksi atau tipe properti → response kembali ke Q1".
+  // Business rule is now GRANULAR, not all-or-nothing (owner spec, M124):
+  // changing city / transaction type / property type each keep MOST answered
+  // slots and only re-ask what that specific change actually invalidates.
   //
-  // Why Boundary B is critical: a customer can abandon a half-finished search
-  // ("villa di Surabaya, masuk Juni…") and start over ("Mau cari hotel"). Since
-  // qualification state is recomputed from scratch every turn, the old answers
-  // (Surabaya, Juni, furnishing, …) would otherwise leak into the new hotel
-  // search — and a stale AI "berapa lama?" question would mis-pair with the new
-  // opening line as the lease duration. Trimming to the switch point fixes both.
+  // Why this canonical-resolve step still has to exist (can't just delete it):
+  // Phase 1 below extracts buildingType/transactionType/city with a FIRST-WINS
+  // guard (`if (!state.city) state.city = loc;`) — deliberately sticky, so a
+  // Q6 anchor mentioning "kantor" in passing can't flip an established "rumah"
+  // search (M73). That stickiness means Phase 1 ALONE would keep resolving to
+  // whichever value was mentioned FIRST in the active window, forever — a
+  // genuine switch on turn N would correctly show the new value on turn N (via
+  // the Phase 3B override below) but silently REVERT to the old value on turn
+  // N+1, because Phase 1 re-scans from scratch every call and finds the old
+  // message again. This block resolves the CANONICAL (latest genuine) value
+  // for each of the three anchor fields by walking the whole active window
+  // forward once, tracking the running value and where it last flipped — Phase
+  // 3B overrides Phase 1's first-wins result with this resolved value on EVERY
+  // turn (not just the turn the switch happened), and uses the flip *position*
+  // to fire the field-preservation rules exactly once, on the turn the switch
+  // actually occurs.
   {
     const SUMMARY_RE_P0 = /[✓✔]\s*Rencana\s*:/i;
     const histForP0 = ALL.slice(0, -1);
 
-    // Word-boundary aware detectors — all 12 building types, priority order matters:
-    // kondotel before hotel/apartment, mansion/rumah mewah before rumah, store after shophouse.
+    // ── Boundary A: first customer message after the last summary brief ──────
+    const lastSumP0 = histForP0.reduce(
+      (idx, m, i) => QS_AI_ROLES.has(m.role) && SUMMARY_RE_P0.test(m.message || '') ? i : idx,
+      -1
+    );
+    let summaryStart = 0;
+    if (lastSumP0 >= 0) {
+      summaryStart = -1;
+      for (let i = lastSumP0 + 1; i < histForP0.length; i++) {
+        if (QS_CUST_ROLES.has(histForP0[i].role)) { summaryStart = i; break; }
+      }
+      if (summaryStart === -1) summaryStart = ALL.length - 1;  // none yet → only current
+    }
+
+    // Expose ACTIVE_ALL for Phase 1, 2 & 3B (via closure)
+    // eslint-disable-next-line no-var
+    var ACTIVE_ALL = ALL.slice(summaryStart);
+
+    // ── Canonical resolver: walk ACTIVE_ALL forward, track the running
+    // type/tx/city and the index (within ACTIVE_ALL) each last genuinely
+    // flipped. Same word-boundary detectors & guards as before M124 (hedge
+    // messages don't flip type; investment-intent phrasing doesn't flip tx;
+    // location flips require BOTH sides to be a known city name, non-substring
+    // of each other — M51 guard against "gang sempit" misread as a city).
     const typeOfP0 = (txt) => {
-      // Apply the SAME strip chain as detectBuildingType() in
-      // propertyRecommendationService (see the twin in chatbotPrivateController.js).
-      //   stripNearPhrases        — "deket kantor dan mall" is a Q6 ANCHOR, not an office
-      //   stripAmbiguousRumah     — "rumah makan/sakit/…" is not a house
-      //   stripMovingFromPhrases  — "pindah dari apartemen" is the home being LEFT
-      //   stripCommercialUsePhrases — "dipakai kantor"/"buat usaha" is a USE, not a type
       const w = stripCommercialUsePhrases(
         stripMovingFromPhrases(stripAmbiguousRumah(stripNearPhrases((txt || '').toLowerCase())))
       );
@@ -736,91 +779,44 @@ function extractQualificationState(history = [], currentMessage = '') {
       return null;
     };
     const txOfP0 = (txt) => {
-      // See the twin in chatbotPrivateController.js: a BUYER saying "buat investasi,
-      // mau disewakan lagi" is describing the plan, not flipping sale→rent.
       const w = stripInvestmentIntentPhrases((txt || '').toLowerCase());
-      if (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|rent|rental|lease|booking|book|pesan|reservasi)\b/.test(w)) return 'rent';
+      if (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|kos|kost|kosan|kostan|ngekos|ngekost|ngekosan|indekos|indekost|rent|rental|lease|booking|book|pesan|reservasi)\b/.test(w)) return 'rent';
       if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase|invest|investasi)\b/.test(w))                                   return 'sale';
       return null;
     };
+    const locOfP0 = (txt) => detectLocation(txt || '');
 
-    // ── Boundary A: first customer message after the last summary brief ──────
-    const lastSumP0 = histForP0.reduce(
-      (idx, m, i) => QS_AI_ROLES.has(m.role) && SUMMARY_RE_P0.test(m.message || '') ? i : idx,
-      -1
-    );
-    let summaryStart = 0;
-    if (lastSumP0 >= 0) {
-      summaryStart = -1;
-      for (let i = lastSumP0 + 1; i < histForP0.length; i++) {
-        if (QS_CUST_ROLES.has(histForP0[i].role)) { summaryStart = i; break; }
-      }
-      if (summaryStart === -1) summaryStart = ALL.length - 1;  // none yet → only current
+    let runType = null, runTypeIdx = -1;
+    let runTx   = null, runTxIdx   = -1;
+    let runLoc  = null, runLocIdx  = -1;
+    for (let i = 0; i < ACTIVE_ALL.length; i++) {
+      if (!QS_CUST_ROLES.has(ACTIVE_ALL[i].role)) continue;
+      const isHedge = isConditionalFallbackMessage(ACTIVE_ALL[i].message);
+      const t   = isHedge ? null : typeOfP0(ACTIVE_ALL[i].message);
+      const tx  = txOfP0(ACTIVE_ALL[i].message);
+      const loc = locOfP0(ACTIVE_ALL[i].message);
+      if (t && runType && t !== runType) { runType = t; runTypeIdx = i; }
+      else if (t && !runType) { runType = t; }
+      if (tx && runTx && tx !== runTx) { runTx = tx; runTxIdx = i; }
+      else if (tx && !runTx) { runTx = tx; }
+      if (loc && runLoc && loc.toLowerCase() !== runLoc.toLowerCase()
+          && isKnownLocationName(loc) && isKnownLocationName(runLoc)
+          && !loc.toLowerCase().includes(runLoc.toLowerCase())
+          && !runLoc.toLowerCase().includes(loc.toLowerCase())) {
+        runLoc = loc; runLocIdx = i;
+      } else if (loc && !runLoc) { runLoc = loc; }
     }
-
-    // ── Boundary B: latest customer message that switches type, tx, OR city ──
-    // Scans ALL (incl. current message). A switch is only counted once a prior
-    // value has been established — the first mention is the initial choice.
-    //
-    // LOCATION RULE: if the customer switches from one city to another
-    // (e.g. "di Surabaya" → "di Bali") everything resets to Q1, just like a
-    // property-type or transaction-type change. All three dimensions anchor the
-    // search — switching any one abandons the prior context.
-    const locOfP0 = (txt) => {
-      const loc = detectLocation(txt || '');
-      return loc ? loc.toLowerCase() : null;
-    };
-
-    let switchStart   = 0;
-    let switchType    = null;   // previous type, for the change banner
-    {
-      let runType = null;
-      let runTx   = null;
-      let runLoc  = null;
-      for (let i = 0; i < ALL.length; i++) {
-        if (!QS_CUST_ROLES.has(ALL[i].role)) continue;
-        const isHedge = isConditionalFallbackMessage(ALL[i].message);
-        // A hedge message ("kalau gak ada apartemen, villa juga boleh") names a
-        // fallback type without confirming a switch — don't let its type keyword
-        // flip runType or trigger a Q1 reset. txFlipped/locFlipped can still apply.
-        const t   = isHedge ? null : typeOfP0(ALL[i].message);
-        const tx  = txOfP0(ALL[i].message);
-        const loc = locOfP0(ALL[i].message);
-        const typeFlipped = t   && runType && t   !== runType;
-        const txFlipped   = tx  && runTx   && tx  !== runTx;
-        // ⚠️ PERPINDAHAN KOTA me-RESET seluruh sesi (ACTIVE_ALL dipotong), jadi
-        // syaratnya HARUS ketat: kedua nilai wajib nama kota yang DIKENAL.
-        // Tanpa guard ini, teks bebas hasil fallback "di X" bisa menghapus semua
-        // jawaban customer. Kasus nyata (M51): "saya gak mau di gang sempit dan
-        // rumah tua" → loc="gang sempit" → dianggap pindah dari Surabaya →
-        // transaksi/budget/tanggal/penghuni HILANG → AI menanyakan Q1 lagi.
-        const locFlipped  = loc && runLoc && loc !== runLoc
-                            && isKnownLocationName(loc) && isKnownLocationName(runLoc)
-                            // "surabaya" → "surabaya barat" bukan pindah kota.
-                            && !loc.includes(runLoc) && !runLoc.includes(loc);
-        if (typeFlipped || txFlipped || locFlipped) {
-          switchStart = i;
-          switchType  = runType;   // remember what they switched away from
-        }
-        if (t)   runType = t;
-        if (tx)  runTx   = tx;
-        if (loc) runLoc  = loc;
-      }
-    }
-
-    const activeStart = Math.max(summaryStart, switchStart);
-
-    // If the active session began because of a type/tx switch (not a summary),
-    // flag it so the change banner is shown even though Phase 3B — which only
-    // looks WITHIN the now-trimmed segment — will no longer detect a change.
-    if (switchStart > 0 && switchStart >= summaryStart) {
-      state.typeChangedFromHistory = true;
-      state.previousType           = switchType;
-    }
-
-    // Expose activeStart for Phase 1, 2 & 3B (via closure)
+    // Did the LATEST genuine flip land on the current (last) message? Only
+    // then should the dependent fields be reset — a flip several turns back
+    // was already handled on that turn; re-nulling on every later turn would
+    // wipe the customer's fresh answer to the re-ask.
+    const lastIdx = ACTIVE_ALL.length - 1;
     // eslint-disable-next-line no-var
-    var ACTIVE_ALL = ALL.slice(activeStart);
+    var P0_RESOLVED = {
+      type: runType, typeChangedNow: runTypeIdx === lastIdx,
+      tx:   runTx,   txChangedNow:   runTxIdx   === lastIdx,
+      loc:  runLoc,  locChangedNow:  runLocIdx  === lastIdx,
+    };
   }
 
   // ── Phase 1: Scan every customer message for content-detectable fields ────
@@ -844,7 +840,7 @@ function extractQualificationState(history = [], currentMessage = '') {
 
     // Q1 — Transaction type. "booking/pesan" = rent frame (hotel/kondotel/villa)
     if (!state.transactionType) {
-      if (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|rent|rental|lease|booking|book|pesan|reservasi)\b/.test(text))
+      if (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|kos|kost|kosan|kostan|ngekos|ngekost|ngekosan|indekos|indekost|rent|rental|lease|booking|book|pesan|reservasi)\b/.test(text))
         state.transactionType = 'rent';
       else if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase|invest|investasi)\b/.test(text))
         state.transactionType = 'sale';
@@ -1362,6 +1358,42 @@ function extractQualificationState(history = [], currentMessage = '') {
       if (/\b(full|fully|lengkap)\b/.test(lo))            state.furnishing = 'fully furnished';
       else if (/\bsemi\b/.test(lo))                        state.furnishing = 'semi-furnished';
       else if (/\b(kosong|kosongan|unfurnished|polos)\b/.test(lo)) state.furnishing = 'unfurnished/kosongan';
+    }
+
+    // Q14 kantor — Grade gedung (M122). AI bertanya "Grade A (premium), Grade
+    // B (mid), atau Grade C (ekonomis)?" dan customer sering menjawab TELANJANG
+    // ("Grade c", "c", "grade C aja") — tidak ada kata lain untuk dicocokkan
+    // regex generik, jadi anchor ini WAJIB spesifik pada konteks pertanyaan AI.
+    // Pertanyaan boleh diparafrase LLM ("Grade A (premium), Grade B (mid),
+    // atau Grade C?" ATAU "Grade A, B, atau C?" ATAU "gedung grade berapa?
+    // A/B/C?") — jadi disyaratkan LONGGAR: kata "grade"/"gedung" MUNCUL, dan
+    // minimal DUA huruf a/b/c berdiri sendiri (bukan bagian kata lain, mis.
+    // "budget", "cash", "ada") ikut disebutkan.
+    const gradeLetterCount = (aiText.match(/\b[abc]\b/gi) || []).length;
+    // ⚠️ "gedung" SENGAJA tanpa \b di sisi KANAN — imbuhan posesif Indonesia
+    // ("gedungnya") menempel langsung tanpa spasi, jadi \bgedung\b gagal cocok
+    // di "gedungnya" walau maknanya sama persis. \b di sisi KIRI dipertahankan
+    // supaya tidak salah tangkap prefiks ("digedung" tidak match — sengaja).
+    if (!state.officeGrade && /\bgrade\b|\bgedung/i.test(aiText) && gradeLetterCount >= 2) {
+      const lo = custResp.toLowerCase();
+      // Huruf tunggal dgn word-boundary — "c" TIDAK boleh cocok di "cash" atau
+      // "cari". \b memastikan hanya huruf berdiri sendiri (atau setelah kata
+      // "grade"/"gedung") yang tertangkap.
+      const m = lo.match(/\b(?:grade|gedung)?\s*([abc])\b/i);
+      if (m) state.officeGrade = m[1].toUpperCase();
+      else if (/\bterserah\b|\bbebas\b|\btidak\s+masalah\b|\bapa\s+saja\b/.test(lo)) {
+        // Sama seperti fasilitas "terserah" → default masuk akal, LANJUT
+        // (Real-Estate/00_ANSWER_COMPLETENESS_GUIDE §4 Level-2), bukan
+        // ditanya ulang selamanya menunggu huruf yang tidak akan pernah datang.
+        state.officeGrade = 'B (default — customer terserah)';
+      }
+    }
+
+    // Q14 kantor — fit-out atau shell & core.
+    if (!state.officeFitOut && /\bfit[\s-]?out\b.{0,40}\bshell\b/i.test(aiText)) {
+      const lo = custResp.toLowerCase();
+      if (/\bfit[\s-]?out\b/.test(lo))          state.officeFitOut = 'fit-out';
+      else if (/\bshell\b|\bcore\b|\bkosong(an)?\b/.test(lo)) state.officeFitOut = 'shell & core';
     }
 
     // Q2c — district/area (pair detection: AI asked which area, customer answered)
@@ -1929,7 +1961,7 @@ function extractQualificationState(history = [], currentMessage = '') {
       else if (/\brumah\b(?!\s+(?:makan|sakit|tangga|ibadah|duka|produksi|tahanan|susun|potong|kos))|\bhouse\b|\bkontrakan\b/.test(cur))                state.buildingType = 'house';
       else if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(cur)) state.buildingType = 'others';
 
-      if      (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|rent|rental|lease|booking|book|pesan|reservasi)\b/.test(cur)) state.transactionType = 'rent';
+      if      (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|kos|kost|kosan|kostan|ngekos|ngekost|ngekosan|indekos|indekost|rent|rental|lease|booking|book|pesan|reservasi)\b/.test(cur)) state.transactionType = 'rent';
       else if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase|invest|investasi)\b/.test(cur))                               state.transactionType = 'sale';
 
       // ⚠️ Dulu baris ini memakai `CITY_RE` — konstanta 28-kota hardcoded yang SUDAH
@@ -1947,110 +1979,85 @@ function extractQualificationState(history = [], currentMessage = '') {
     }
   }
 
-  // ── 3B: Building-type-change detection (only runs when no summary was shown) ─
-  // RULES (per business logic):
-  //   • Building type changes (villa→rumah, villa→apartment) → reset Q2–Q12, show ⚠️
-  //   • TX-only change, SAME building type (beli gudang→sewa gudang) → just update
-  //     state.transactionType silently; qualification continues from where it left off.
+  // ── 3B: Mid-flow change detection (M124) — GRANULAR per owner spec ─────────
+  // Uses P0_RESOLVED (Phase 0's canonical resolver) instead of re-detecting
+  // type/tx/city here — one detector, not two copies drifting apart.
   //
-  // Uses ACTIVE_ALL so we only compare types WITHIN the active session —
-  // not between the current and a pre-summary session.
+  // Three independent axes, each with its OWN preserve/reset rule. A change is
+  // only ACTED ON the exact turn it happens (typeChangedNow/txChangedNow/
+  // locChangedNow) — Phase 0 already keeps buildingType/transactionType/city
+  // resolved to their canonical value on every later turn, so this block only
+  // needs to fire the one-time side effects (nulling dependent fields so
+  // findNextQuestion re-asks exactly what's now invalid, nothing else).
+  //
+  //   GANTI KOTA        → re-ask landmark only. Transaction, property type,
+  //                        move-in date, survey schedule, facilities all stay.
+  //   GANTI TRANSAKSI   → re-ask budget (new tx's range) + payment method, and
+  //                        (if now sewa) lease/booking duration. City, landmark,
+  //                        move-in date, survey schedule, facilities stay.
+  //   GANTI PROPERTI    → re-ask type-specific slots (budget, facilities, Q14
+  //                        attributes, etc.). City, landmark, move-in date, and
+  //                        survey schedule ALL stay — a property-type switch no
+  //                        longer implies the customer also wants a new city.
+  //
+  // Property-type change takes priority when it co-occurs with a tx or city
+  // change in the same message (its reset already covers budget/financing, so
+  // nothing is lost); a tx change and a city change can both fire together.
   {
-    const histMsgs = ACTIVE_ALL.slice(0, -1).filter(m => QS_CUST_ROLES.has(m.role));
+    if (P0_RESOLVED.type) state.buildingType    = P0_RESOLVED.type;
+    if (P0_RESOLVED.tx)   state.transactionType = P0_RESOLVED.tx;
+    if (P0_RESOLVED.loc)  state.city            = P0_RESOLVED.loc;
 
-    const histType = histMsgs.reduce((t, msg) => {
-      if (t) return t;
-      const w = stripCommercialUsePhrases(stripMovingFromPhrases(stripAmbiguousRumah(stripNearPhrases((msg.message || '').toLowerCase()))));
-      if (/\bkondotel\b|\bcondotel\b/.test(w))                             return 'kondotel';
-      if (/\bmansion\b|\brumah\s+mewah\b/.test(w))                        return 'mansion';
-      if (/\bvill?a\b/.test(w))                                            return 'villa';
-      if (/\bapartemen\b|\bapartment\b/.test(w))                           return 'apartment';
-      if (/\bhotel\b|\bpenginapan\b/.test(w))                             return 'hotel';
-      if (/\bkos\b|\bkost\b|\bkosan\b|\bkostan\b|\bngekos\b|\bngekost\b|\bngekosan\b|\bindekos\b|\bindekost\b/.test(w))              return 'boarding_house';
-      if (/\bruko\b|\brukan\b/.test(w))                                   return 'shophouse';
-      if (/\btoko\b|\bkios\b|\bwarung\b|\bretail\b/.test(w))             return 'store';
-      if (/\bkantor\b|\boffice\b/.test(w))                                           return 'office';
-      if (/\bgudang\b|\bwarehouse\b/.test(w))                                           return 'warehouse';
-      if (/\brumah\b(?!\s+(?:makan|sakit|tangga|ibadah|duka|produksi|tahanan|susun|potong|kos))|\bhouse\b|\bkontrakan\b/.test(w))                   return 'house';
-      if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(w)) return 'others';
-      return null;
-    }, null);
+    const typeChanged = P0_RESOLVED.typeChangedNow;
+    const txChanged   = P0_RESOLVED.txChangedNow  && !typeChanged;
+    const cityChanged = P0_RESOLVED.locChangedNow && !typeChanged;
 
-    const histTx = histMsgs.reduce((t, msg) => {
-      if (t) return t;
-      const w = (msg.message || '').toLowerCase();
-      if (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|rent|rental|lease|booking|book|pesan|reservasi)\b/.test(w)) return 'rent';
-      if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase|invest|investasi)\b/.test(w))                                  return 'sale';
-      return null;
-    }, null);
+    state.typeChangedFromHistory = state.typeChangedFromHistory || typeChanged;
+    state.cityChangedFromHistory = cityChanged;
 
-    // Strip commercial use-phrases so "dipakai kantor"/"buat usaha" doesn't read as
-    // a type switch (house→office) and reset the search.
-    const cur = stripCommercialUsePhrases(stripMovingFromPhrases(stripAmbiguousRumah(stripNearPhrases((currentMessage || '').toLowerCase().trim()))));
-    // A hedge message ("kalau gak ada apartemen, villa juga boleh") names a fallback
-    // type without confirming a switch — must not compute a curType from it, or this
-    // block force-flips buildingType/wipes budget before the primary type is even
-    // confirmed unavailable. Phase 1's Pattern C already records the hedge type into
-    // fallbackTypes instead.
-    const curIsHedge = isConditionalFallbackMessage(currentMessage);
-    let curType = null;
-    if (curIsHedge) {
-      // leave curType null — no forced switch from a hedge message
-    }
-    else if (/\bkondotel\b|\bcondotel\b/.test(cur))                          curType = 'kondotel';
-    else if (/\bmansion\b|\brumah\s+mewah\b/.test(cur))                    curType = 'mansion';
-    else if (/\bvill?a\b/.test(cur))                                         curType = 'villa';
-    else if (/\bapartemen\b|\bapartment\b/.test(cur))                        curType = 'apartment';
-    else if (/\bhotel\b|\bpenginapan\b/.test(cur))                          curType = 'hotel';
-    else if (/\bkos\b|\bkost\b|\bkosan\b|\bkostan\b|\bngekos\b|\bngekost\b|\bngekosan\b|\bindekos\b|\bindekost\b/.test(cur))           curType = 'boarding_house';
-    else if (/\bruko\b|\brukan\b/.test(cur))                                curType = 'shophouse';
-    else if (/\btoko\b|\bkios\b|\bwarung\b|\bretail\b/.test(cur))          curType = 'store';
-    else if (/\bkantor\b|\boffice\b/.test(cur))                                        curType = 'office';
-    else if (/\bgudang\b|\bwarehouse\b/.test(cur))                                        curType = 'warehouse';
-    else if (/\brumah\b(?!\s+(?:makan|sakit|tangga|ibadah|duka|produksi|tahanan|susun|potong|kos))|\bhouse\b|\bkontrakan\b/.test(cur))                curType = 'house';
-    else if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(cur)) curType = 'others';
-
-    let curTx = null;
-    if      (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|rent|rental|lease|booking|book|pesan|reservasi)\b/.test(cur)) curTx = 'rent';
-    else if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase|invest|investasi)\b/.test(cur))                                  curTx = 'sale';
-
-    // Building type changed → full Q2–Q12 reset + ⚠️ banner
-    const buildingTypeChanged = Boolean(histType && curType && histType !== curType);
-
-    // TX-only change (same building type) → silent update, no reset
-    const txOnlyChanged = Boolean(!buildingTypeChanged && histTx && curTx && histTx !== curTx);
-
-    // Don't clobber a change already flagged by Phase 0 (which detects switches
-    // that happened on an earlier turn and are no longer inside ACTIVE_ALL).
-    state.typeChangedFromHistory = state.typeChangedFromHistory || buildingTypeChanged;
-
-    if (txOnlyChanged && curTx) {
-      // Quietly update the transaction type — Q2–Q12 answers remain valid
-      state.transactionType = curTx;
+    if (txChanged) {
+      // Ganti transaksi: budget & payment method depend on sewa vs. beli —
+      // re-ask them. Duration only matters for sewa/booking; findNextQuestion
+      // already gates the duration question on isSewa, so nulling it
+      // unconditionally is harmless when the new tx is 'sale'.
+      state.budget          = null;
+      state.budgetRangeAsked = false;
+      state.financing       = null;
+      state.kprDetails      = null;
+      state.leaseDuration   = null;
     }
 
-    if (buildingTypeChanged) {
-      if (curType) state.buildingType    = curType;
-      if (curTx)   state.transactionType = curTx;
-      state.city         = null;
-      state.budget           = null;
-      state.household        = null;
-      state.redFlags         = null;
+    if (cityChanged) {
+      // Ganti kota: only the landmark/area answers were anchored to the OLD
+      // city. q2cDeclined suppresses a forced re-ask of the area/kawasan
+      // question (Q2c) — the customer is free to volunteer a new one, but the
+      // AI is only required to ask about the landmark (owner spec, item 1).
+      state.district         = null;
       state.anchorPoint      = null;
       state.alternativeAreas = null;
-      state.moveInDate       = null;
-      state.moveInDateAsk    = null;
-      state.decisionMaker    = null;
-      state.leaseDuration    = null;
-      state.furnishing       = null;
-      state.facilities       = null;
-      state.apartmentPref    = null;
-      state.financing        = null;
-      state.kprDetails       = null;
+      state.q2cDeclined      = true;
+    }
+
+    if (typeChanged) {
+      state.budget            = null;
+      state.household         = null;
+      state.redFlags          = null;
+      state.decisionMaker     = null;
+      state.leaseDuration     = null;
+      state.furnishing        = null;
+      state.facilities        = null;
+      state.apartmentPref     = null;
+      state.financing         = null;
+      state.kprDetails        = null;
       state.propertyCondition = null;
-      state.useCase          = null;
-      state.rentOutIntent    = false;
-      state.fallbackTypes    = [];
+      state.useCase           = null;
+      state.rentOutIntent     = false;
+      state.fallbackTypes     = [];
+      state.officeGrade       = null;
+      state.officeFitOut      = null;
+      // City, district, anchorPoint, alternativeAreas, moveInDate,
+      // moveInDateAsk, viewingDate, viewingTime deliberately NOT reset here —
+      // owner spec: property-type change keeps city/landmark/move-in/survey.
     }
   }
 
@@ -2331,11 +2338,24 @@ Kalau sudah ada area/kecamatan tertentu, boleh sekalian disebut ya.` };
   if (type === 'store' && !isSewa) {
     return { q: 'Q14', hint: 'Lanjutkan Q14 toko beli: (a) usaha sendiri atau investasi? (b) mal prime (stabil) atau trade center (yield 8-12%)? (c) luas? (d) prefer unit kosong atau sudah ada penyewa berjalan? — CEK history dulu.' };
   }
-  if (type === 'office' && isSewa) {
-    return { q: 'Q14', hint: 'Lanjutkan Q14 kantor sewa: (a) tim berapa orang? (infer luas 5-7 m²/orang) (b) Grade A/B/C? (c) fit-out atau shell & core? (d) klarifikasi budget all-in service charge! (e) parkir & kebutuhan IT? — CEK history dulu.' };
-  }
-  if (type === 'office' && !isSewa) {
-    return { q: 'Q14', hint: 'Lanjutkan Q14 kantor beli: (a) dipakai perusahaan sendiri atau investasi disewakan? (b) tim berapa orang? (c) Grade gedung? (d) fit-out atau shell? (e) cek SHMSRS/strata title + service charge! — CEK history dulu.' };
+  if (type === 'office') {
+    // ⚠️ Grade & fit-out DIBANGUN DINAMIS dari state (M122), bukan teks tetap.
+    // Sebelumnya hint SELALU menyebut "(b) Grade A/B/C?" apa pun keadaannya —
+    // LLM diberi instruksi "tanyakan grade" pada SETIAP giliran, bahkan pada
+    // giliran yang sudah punya `state.officeGrade` terisi. Instruksi yang
+    // bertentangan dengan fakta yang baru saja dikonfirmasi sendiri adalah
+    // persis yang membuat AI mengulang "Grade A/B/C?" lima kali di transkrip
+    // 19-20 Agu 2026 walau customer sudah menjawab "Grade C" sejak awal.
+    const gradeItem = state.officeGrade
+      ? `✅ Grade gedung SUDAH DIJAWAB: ${state.officeGrade} — JANGAN TANYA LAGI.`
+      : 'Grade A/B/C?';
+    const fitOutItem = state.officeFitOut
+      ? `✅ Fit-out/shell SUDAH DIJAWAB: ${state.officeFitOut} — JANGAN TANYA LAGI.`
+      : 'fit-out atau shell & core?';
+    if (isSewa) {
+      return { q: 'Q14', hint: `Lanjutkan Q14 kantor sewa: (a) tim berapa orang? (infer luas 5-7 m²/orang) (b) ${gradeItem} (c) ${fitOutItem} (d) klarifikasi budget all-in service charge! (e) parkir & kebutuhan IT? — CEK history dulu.` };
+    }
+    return { q: 'Q14', hint: `Lanjutkan Q14 kantor beli: (a) dipakai perusahaan sendiri atau investasi disewakan? (b) tim berapa orang? (c) ${gradeItem} (d) ${fitOutItem} (e) cek SHMSRS/strata title + service charge! — CEK history dulu.` };
   }
   if (type === 'warehouse' && isSewa) {
     return { q: 'Q14', hint: 'Lanjutkan Q14 gudang sewa: (a) untuk produksi/distribusi/penyimpanan? (b) luas m²? (c) tinggi plafon? (d) loading dock? (e) daya listrik KVA? (f) perlu ruang kantor di dalam? — CEK history dulu.' };
@@ -2495,9 +2515,24 @@ function buildQualificationStateBlock(state) {
   }
 
   // Type-change banner — shown when customer switched building type (villa→rumah, etc.)
+  // M124: no longer a full Q2-Q12 wipe — kota/landmark/tanggal masuk/jadwal
+  // survei TETAP dipakai dari sebelum perubahan (lihat qualification state ✅
+  // di bawah); hanya budget/fasilitas/detail khusus tipe yang di-reset.
   if (state.typeChangedFromHistory) {
     lines.push('⚠️  TIPE PROPERTI BERUBAH — Customer beralih ke jenis properti baru.');
-    lines.push('   Q2-Q12 di-RESET. Akui perubahan singkat (1 kalimat), lanjut dari Q terkecil ❓.');
+    lines.push('   Kota, landmark, tanggal masuk, dan jadwal survei TETAP DIPAKAI (lihat ✅ di bawah) —');
+    lines.push('   JANGAN tanya ulang itu. Hanya budget/fasilitas/detail khusus tipe yang di-reset (❓ di bawah).');
+    lines.push('   Akui perubahan singkat (1 kalimat), lanjut dari Q terkecil ❓.');
+    lines.push('');
+  }
+
+  // City-change banner — customer named a DIFFERENT city mid-flow (M124).
+  // Only the landmark/area was invalidated; everything else stays.
+  if (state.cityChangedFromHistory) {
+    lines.push('⚠️  KOTA BERUBAH — Customer pindah pencarian ke kota lain.');
+    lines.push('   Transaksi, tipe properti, budget, tanggal masuk, jadwal survei, dan fasilitas TETAP DIPAKAI —');
+    lines.push('   JANGAN tanya ulang itu dan JANGAN tawarkan pindah kota lagi.');
+    lines.push('   Akui perubahan singkat (1 kalimat), lalu tanyakan patokan lokasi/landmark di kota BARU (Q6).');
     lines.push('');
   }
 
@@ -2572,6 +2607,17 @@ function buildQualificationStateBlock(state) {
     })()),
     row('Apt preference   [Q12]', state.apartmentPref),
   );
+
+  // Q14 kantor — HANYA muncul untuk tipe office (M122). Ditaruh di luar
+  // lines.push() literal, seperti pola BELI-only di bawah, supaya tipe lain
+  // tidak menampilkan "❓ Grade Gedung: BELUM DIJAWAB" yang membingungkan —
+  // pertanyaan itu memang tidak relevan untuk rumah/villa/dsb.
+  if (state.buildingType === 'office') {
+    lines.push(
+      row('Grade gedung [Q14]', state.officeGrade),
+      row('Fit-out/shell [Q14]', state.officeFitOut),
+    );
+  }
 
   // BELI-only rows — hanya ditampilkan untuk transaksi beli (bagian 24 kombinasi)
   const isSale = (state.transactionType || '').toLowerCase().includes('sale')
@@ -3297,7 +3343,8 @@ Kemudian:
    • Jika Q1 sudah ✅ (customer sudah sebut tx+tipe di pesan ini) → langsung tanya Q2 (lokasi).
    • Jika Q1 masih ❓ → tanya: "Untuk pencarian baru, mau *sewa* atau *beli*? Dan tipe propertinya apa? 🏠"
    • JANGAN tampilkan summary lagi sampai semua Q wajib terjawab ulang di sesi ini.
-2. ⚠️ JIKA ADA BANNER "TIPE PROPERTI BERUBAH" DI QUALIFICATION STATE: Akui perubahan singkat (1 kalimat, contoh: "Oke, saya alihkan ke rumah sewa ya 😊"), lalu tanyakan Q terkecil yang masih ❓. JANGAN gunakan jawaban Q2–Q12 dari tipe lama.
+2. ⚠️ JIKA ADA BANNER "TIPE PROPERTI BERUBAH" DI QUALIFICATION STATE: Akui perubahan singkat (1 kalimat, contoh: "Oke, saya alihkan ke rumah sewa ya 😊"), lalu tanyakan Q terkecil yang masih ❓. Kota, landmark, tanggal masuk, dan jadwal survei TETAP DIPAKAI (field ✅ di bawah) — JANGAN tanya ulang itu; hanya field yang masih ❓ (biasanya budget & fasilitas) yang perlu ditanya ulang.
+2b. ⚠️ JIKA ADA BANNER "KOTA BERUBAH" DI QUALIFICATION STATE: Akui perubahan singkat (1 kalimat, contoh: "Oke, jadi di Sidoarjo ya 😊"), lalu tanyakan patokan lokasi/landmark (Q6) untuk kota barunya. JANGAN tawarkan pindah kota lagi, JANGAN tanya ulang transaksi/tipe/budget/tanggal masuk/jadwal survei/fasilitas — semua itu TETAP DIPAKAI dari sebelum perubahan kota.
 3. Jika pesan terbaru adalah jawaban singkat untuk pertanyaan sebelumnya → AKUI singkat (1 kalimat), lalu tanyakan pertanyaan ❓ BERIKUTNYA dengan nomor Q terkecil.
    — Khusus Q2b (Riwayat pencarian): Jawaban seperti "Belum pernah.", "belum pernah cek", "belum lihat", "sudah lihat 3" adalah jawaban Q2b yang VALID → AKUI singkat ("Oke, belum ada referensi sebelumnya 👌") → lanjut ke Q3 (Budget). JANGAN tanya Q2b lagi.
    — Jika QUALIFICATION STATE menampilkan ⏭️ untuk Q2b → customer sudah pernah menjawab tapi tidak cocok pattern — TETAP skip Q2b, lanjut ke Q berikutnya.
