@@ -98,8 +98,18 @@ console.log('\n== Group 5: banyak terminal sekaligus ==');
   const env = { ...VPS, MASSEGE_TERMINAL: 'KIRIMI, FONNTE, TIMELINESAI' };
   const urls = svc.webhookUrls({ env });
   ok('tiga terminal', urls.length === 3, JSON.stringify(urls.map(u => u.terminal)));
-  ok('path Fonnte benar',
-    urls.some(u => u.url.endsWith('/api/fonnte/webhook')), JSON.stringify(urls));
+  // ⚠️ DIPERBARUI M101 (20 Agu 2026), dengan alasan tertulis.
+  // Asersi lama menuntut `/api/fonnte/webhook`. Endpoint itu MEMANG ada di
+  // routes/index.js, tapi ditangani fonnteWebhookController (LEGACY) yang
+  // TIDAK PERNAH memanggil generateWhatsAppAIReply — pesan masuk, AI tidak
+  // pernah membalas (gagal SENYAP, HTTP 200 tanpa error). Jalur multi-agent
+  // yang setara Kirimi/TimelinesAI ada di `/api/fonnte-chat/webhook`.
+  // Jadi asersi ini dulu MENGUNCI perilaku yang salah; sekarang menguncinya
+  // ke endpoint yang benar-benar menjalankan AI.
+  ok('path Fonnte = jalur multi-agent (ada AI), bukan legacy',
+    urls.some(u => u.url.endsWith('/api/fonnte-chat/webhook')), JSON.stringify(urls));
+  ok('KONTROL NEGATIF: tidak ada URL ke endpoint legacy /api/fonnte/webhook',
+    !urls.some(u => /\/api\/fonnte\/webhook$/.test(u.url)), JSON.stringify(urls));
   ok('path TimelinesAI benar',
     urls.some(u => u.url.endsWith('/api/timelinesai/webhook')), JSON.stringify(urls));
 

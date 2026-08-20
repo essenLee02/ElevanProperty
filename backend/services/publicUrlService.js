@@ -26,10 +26,24 @@
 
 'use strict';
 
-/** Terminal yang benar-benar punya endpoint webhook di routes/index.js. */
+/**
+ * Terminal yang benar-benar punya endpoint webhook di routes/index.js.
+ *
+ * ⚠️ FONNTE SENGAJA MEMAKAI `/api/fonnte-chat/webhook`, BUKAN `/api/fonnte/webhook`.
+ * Keduanya ADA di routes/index.js, tapi fungsinya BERBEDA total:
+ *   • `/api/fonnte/webhook`      → fonnteWebhookController (LEGACY). TIDAK pernah
+ *                                  memanggil generateWhatsAppAIReply — jadi pesan
+ *                                  customer masuk, tapi AI TIDAK PERNAH membalas.
+ *   • `/api/fonnte-chat/webhook` → fonnteChatController.handleInboundMessage
+ *                                  (multi-agent, JALUR YANG SAMA dengan Kirimi &
+ *                                  TimelinesAI: dedup, gate, debounce, AI reply).
+ * Mengarahkan dashboard Fonnte ke endpoint legacy = pesan hilang diam-diam
+ * (HTTP 200, tanpa error, tanpa balasan). Kelas kegagalan yang sama dengan
+ * placeholder `<ngrok-url>`: webhook "berhasil" tapi salah alamat.
+ */
 const WEBHOOK_PATHS = Object.freeze({
   KIRIMI: '/api/kirimi/webhook',
-  FONNTE: '/api/fonnte/webhook',
+  FONNTE: '/api/fonnte-chat/webhook',
   TIMELINESAI: '/api/timelinesai/webhook',
 });
 

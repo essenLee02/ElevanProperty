@@ -10,6 +10,38 @@ require('./models');
 const routes = require('./routes/index');
 
 const app = express();
+
+// ─── TRUST PROXY — WAJIB saat di belakang reverse proxy (Hostinger/VPS) ──────
+// BUG PRODUKSI (Hostinger, 20 Agu 2026): webhook Kirimi BENAR-BENAR SAMPAI
+// ("[⇨ HTTP IN] POST /api/kirimi/webhook"), tapi langsung mati di rate limiter:
+//
+//   ValidationError: The 'X-Forwarded-For' header is set but the Express
+//   'trust proxy' setting is false (default).
+//
+// Hostinger menaruh aplikasi Node di belakang reverse proxy, jadi SETIAP
+// request membawa header X-Forwarded-For. Karena `trust proxy` default false,
+// express-rate-limit menolak berjalan (ia tidak bisa menentukan IP asli
+// pengirim, sehingga rate limit-nya tidak bisa dipercaya) dan melempar error.
+// Akibatnya: pesan WhatsApp dari customer TIDAK PERNAH diproses AI sama sekali.
+//
+// ⚠️ SENGAJA BUKAN `true`. `trust proxy: true` = percaya BUTA seluruh rantai
+// X-Forwarded-For, sehingga siapa pun bisa memalsukan header itu dan LOLOS dari
+// rate limit (juga merusak akurasi IP di log). Nilai ANGKA = jumlah proxy hop
+// yang dipercaya dari sisi terdekat; 1 hop benar untuk Hostinger/Passenger dan
+// mayoritas PaaS. Bila kelak ada Cloudflare DI DEPAN Hostinger, naikkan ke 2
+// lewat env — jangan diubah jadi `true`.
+//
+// Default 1 berlaku untuk KEDUA mode, bukan hanya hosting:
+//   NGROK_ENABLE=true  → ngrok JUGA reverse proxy dan ikut mengirim
+//                        X-Forwarded-For, jadi tetap 1 hop.
+//   NGROK_ENABLE=false → Hostinger/VPS di belakang proxy, 1 hop.
+// Akses lokal langsung ke localhost:5055 (tanpa tunnel) tidak mengirim
+// X-Forwarded-For sama sekali, sehingga nilai 1 tidak berpengaruh apa pun di
+// sana — aman sebagai default tunggal. Set TRUST_PROXY_HOPS=0 hanya bila
+// benar-benar tidak ada proxy dan ingin memaksa perilaku Express apa adanya.
+const trustProxyHops = Number(process.env.TRUST_PROXY_HOPS ?? 1);
+app.set('trust proxy', Number.isFinite(trustProxyHops) && trustProxyHops >= 0 ? trustProxyHops : 1);
+
 // ⚠️ URUTAN INI PENTING UNTUK HOSTING (Hostinger/Passenger, Railway, Heroku, dll).
 // Platform hosting MENYUNTIKKAN port lewat `process.env.PORT` dan mem-proxy
 // trafik domain ke port itu. Aplikasi WAJIB mendengarkan port pemberian platform;

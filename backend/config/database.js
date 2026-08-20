@@ -18,6 +18,13 @@ const sequelize = new Sequelize(
   process.env.DB_PASSWORD || '',
   {
     host: process.env.DB_HOST || 'localhost',
+    // DB_PORT sudah lama ADA di .env tapi TIDAK PERNAH dibaca di sini, jadi
+    // Sequelize selalu memakai port default dialect (3306 untuk MySQL). Selama
+    // DB memang di 3306 hal ini tidak terasa — tapi begitu hosting memberi port
+    // non-standar (beberapa MySQL terkelola / tunnel lokal), koneksi gagal
+    // dengan pesan yang menyesatkan padahal .env terlihat sudah benar.
+    // Dikosongkan → undefined → Sequelize pakai default dialect (perilaku lama).
+    port: process.env.DB_PORT ? Number(process.env.DB_PORT) : undefined,
     dialect: process.env.DB_DIALECT || 'mysql',
     logging: sqlLogging
   }
