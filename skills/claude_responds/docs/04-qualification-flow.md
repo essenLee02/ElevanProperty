@@ -92,52 +92,66 @@ Q_FAC → Q12 → Q14 → summary.
 
 ## 2. Session Boundaries (why old answers don't leak)
 
-`activeSessionStart` is the **latest** of three boundaries; only `history.slice(activeStart)` is
-scanned for Q-content:
+`activeSessionStart` is the **summary boundary only** — the first customer message after the last
+summary brief. Anything before belongs to a completed search and is dropped from
+`history.slice(activeStart)`. A greeting + fresh intent (`hi`, `halo`, `pagi`, `permisi`, … +
+restating a property intent) also starts a new search the same way.
 
-1. **Summary boundary** — the first customer message after the last summary brief. Anything
-   before belongs to a completed search.
-2. **Type/transaction switch boundary** — the message where the customer switches building type
-   (villa→hotel) **or** flips transaction (sewa→beli) **without a summary in between**. This is
-   the abandoned-search case.
-3. **Greeting-restart boundary** — a message opening with a greeting (`hi`, `halo`, `pagi`,
-   `permisi`, …) **and** restating a property intent + type — **even if the type is the same**.
-   A greeting + fresh intent means starting over.
+> **⛔ Stale budget must never cross the summary boundary.** A numeric budget from a completed
+> search (e.g. an old `0-1600000` awaiting unit clarification) is dropped when a new search starts
+> after a summary. After *"Hi.. mau sewa apartemen di malang"* (no number), **never** ask "harga
+> 0-1600000 maksudnya ribu/juta?" — that budget belonged to the finished search. Re-ask Q3 by
+> category.
 
-> **⛔ Stale budget must never cross a boundary.** A numeric budget from an abandoned search
-> (e.g. an old `0-1600000` awaiting unit clarification) is dropped when a new search starts. After
-> *"Hi.. mau sewa apartemen di malang"* (no number), **never** ask "harga 0-1600000 maksudnya
-> ribu/juta?" — that budget belonged to the old search. Re-ask Q3 by category. (A category budget
-> like `menengah` has no digit and is preserved correctly.)
+### Mid-flow changes (⚠️ M124 — GRANULAR, not a Q1 wipe)
 
-### The four triggers that reset to Q1
+City / transaction / property-type changes **while still mid-flow** (no summary sent yet) used to
+hard-reset the whole search back to Q1. **That is no longer correct** — a customer naming a
+different city, or flipping sewa↔beli, or switching property type mid-conversation now keeps
+almost everything they already answered; only the field(s) that specific change actually
+invalidates get re-asked. The server computes this and shows you exactly one of two banners when it
+fires — **read the banner text literally, it tells you precisely what survived:**
 
-| Trigger | Example |
-|---|---|
-| Building type changes | "tadinya villa, sekarang mau hotel" |
-| Transaction type flips | "eh bukan beli, mau sewa aja" |
-| **City/location changes** | "tadinya Surabaya, tapi mau Bali aja" |
-| Greeting + fresh intent | "Halo, mau cari apartemen" |
-
-When any fires, the server sets `typeChangedFromHistory` and injects:
+```
+⚠️  KOTA BERUBAH — Customer pindah pencarian ke kota lain.
+   Transaksi, tipe properti, budget, tanggal masuk, jadwal survei, dan fasilitas TETAP DIPAKAI —
+   JANGAN tanya ulang itu dan JANGAN tawarkan pindah kota lagi.
+   Akui perubahan singkat (1 kalimat), lalu tanyakan patokan lokasi/landmark di kota BARU (Q6).
+```
 ```
 ⚠️  TIPE PROPERTI BERUBAH — Customer beralih ke jenis properti baru.
-   Q2-Q12 di-RESET. Akui perubahan singkat (1 kalimat), lanjut dari Q terkecil ❓.
+   Kota, landmark, tanggal masuk, dan jadwal survei TETAP DIPAKAI (lihat ✅ di bawah) —
+   JANGAN tanya ulang itu. Hanya budget/fasilitas/detail khusus tipe yang di-reset (❓ di bawah).
+   Akui perubahan singkat (1 kalimat), lanjut dari Q terkecil ❓.
 ```
 
-**Your response:**
-1. Acknowledge in **ONE** sentence — *"Oke, saya alihkan ke hotel ya 😊"*
-2. Ask the **smallest ❓** (follow ⚡ NEXT ACTION — usually Q1 or Q2)
-3. **Never** carry over old location/budget/date/furnishing/decision/duration
-4. **Never** show a summary on the turn the change happens
+Three axes, three different preserve/reset rules:
 
-> If the trigger message already contains the new type/tx/city, skip those and jump ahead:
-> *"eh mau sewa villa di Bali aja"* → Q1 ✅, type ✅, Q2 ✅ → go straight to Q3.
+| Change | Re-asked | Stays exactly as answered |
+|---|---|---|
+| **Ganti kota** ("tadinya Surabaya, mau Sidoarjo") | Landmark (Q6) only | Transaction, property type, budget, move-in date, survey schedule, facilities |
+| **Ganti transaksi** ("eh bukan beli, mau sewa aja") | Budget, payment method, (+ lease/booking duration if now sewa) | City, landmark, move-in date, survey schedule, facilities |
+| **Ganti properti** ("tadinya villa, sekarang mau hotel") | Budget, facilities, type-specific details (Q14) | City, landmark, move-in date, survey schedule |
 
-**Why this matters:** without the switch boundary, a customer half-filling a villa search then
-typing "Mau cari penyewaan hotel" would carry Surabaya / 26 Juni / furnishing into the hotel
-search, and a stale AI question would mis-pair — storing `leaseDuration = "Mau cari penyewaan
-hotel"` and producing a bogus summary.
+**Your response, in every case:**
+1. Acknowledge in **ONE** sentence — *"Oke, jadi di Sidoarjo ya 😊"* / *"Oke, saya alihkan ke sewa
+   ya 😊"* / *"Oke, saya alihkan ke hotel ya 😊"*
+2. Ask the **smallest ❓** (follow ⚡ NEXT ACTION) — **only** among the fields the banner says were
+   reset. Fields the banner says stayed are already ✅ in the state block — do **not** re-ask them,
+   and do **not** silently re-derive different values for them from earlier in the transcript.
+3. **Never** offer to switch city again once a city change was just acknowledged (a common failure:
+   re-asking "or would you like a different city?" right after the customer just picked one).
+4. **Never** show a summary on the turn the change happens.
+
+> If the trigger message already contains the new value for a field that would otherwise be
+> re-asked, skip it and jump ahead: *"eh mau sewa villa di Bali aja"* (tx+type+city all in one
+> message) → all three ✅ → go straight to whatever's next.
+
+**Why this matters:** the destructive version of this rule was itself the bug — a customer deep in
+a Surabaya house search who named "Sidoarjo" answering an unrelated question got reset all the way
+to "Mau sewa atau beli?", losing budget/move-in date/occupants/furnishing/facilities that had
+already been answered. Treat the banner text as authoritative over anything you might infer from
+skimming the raw transcript yourself.
 
 ### Session TTL
 

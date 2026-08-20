@@ -1,18 +1,21 @@
 ================================================================================
-  ELEVAN PROPERTY — COMPREHENSIVE PROJECT CONTEXT (V8)
+  ELEVAN PROPERTY — COMPREHENSIVE PROJECT CONTEXT (V10)
   Dibuat  : 15 Juni 2026
-  Update  : 20 Agustus 2026 (M94–M102: ngrok authtoken, gerbang Q4/off-topic,
-            karangan area dari contoh dokumen sendiri, parser tanggal "checkin",
-            Rumah123 dimatikan total untuk AI, periode budget vs durasi menginap,
-            deploy Hostinger produksi, trust-proxy webhook, penolakan survei
-            di giliran mana pun, headcount bukan budget, timeout Kimi)
+  Update  : 21 Agustus 2026 (M118–M126: "ngekos" deteksi tipe+transaksi,
+            office Grade/fit-out context loss, ask_name customer workflow,
+            mid-flow city/transaksi/tipe change GRANULAR — bukan lagi reset
+            total ke Q1, satu-pertanyaan-per-pesan pada gerbang kualifikasi,
+            timeout provider AI configurable — akar penyebab balasan >2 menit)
   Tujuan  : SATU file konteks lengkap untuk di-upload ke Claude Code
   Isi     : Overview · Instrument · Review · Pengembangan · Solusi ·
             Environments · Informasi · Skills · Tujuan · Roadmap ·
             Struktur Project · Workflow · Troubleshoot Summary
   Riwayat : CONTEXT.txt (17 Jun) → _PROJECT_CONTEXT.txt (25 Jun) → V3 (07 Jul)
             → V4 (20 Jul) → V5 (31 Jul) → V6 (3 Agu) → V7 (4→12 Agu)
-            → V8 (14→18 Agu, file ini = TERBARU)
+            → V8-label-di-judul/=V9-di-badan-M94-M102 (14→18 Agu, penomoran
+            internal file ini SUDAH tidak konsisten sebelum sesi ini — lihat
+            catatan di §PERUBAHAN BESAR V8→V10 di bawah)
+            → V10 (20→21 Agu, file ini = TERBARU)
   Pendamping: skills/website_env_concept/ (docs 00–19) untuk detail teknis
             per-topik bila perlu me-reproduksi/mengembangkan ulang modul.
 ================================================================================
@@ -24,12 +27,16 @@
      Ada DUA basis kode qualification yang MIRIP tapi TERPISAH:
        • services/aiPromptBuilderService.js   → jalur LLM (Claude/ChatGPT/…)
        • controllers/chatbotPrivateController.js → Private Agent (FALLBACK)
-     `AI_PRIMARY_PROVIDER=chatgpt` (nilai AKTUAL per 14 Agu 2026 — SELALU cek
-     .env, JANGAN asumsikan dari dokumen mana pun, nilainya berubah antar sesi).
+     ⚠️ Nilai `AI_PRIMARY_PROVIDER` di .env BERUBAH ANTAR SESI — dokumen ini
+     PERNAH salah menyebut nilai "aktual"-nya (tertulis chatgpt per 14 Agu,
+     ternyata sudah kimi per 21 Agu tanpa dokumen ini diperbarui — M124/M126
+     baru ketahuan setelah cek .env langsung, BUKAN dari dokumen ini). JANGAN
+     PERNAH percaya nilai yang tertulis di sini atau di dokumen mana pun —
+     SELALU jalankan `grep AI_PRIMARY_PROVIDER backend/.env` + log runtime
+     `[WhatsAppAI] Calling AI provider: {…}` dulu sebelum mendiagnosis.
      Memperbaiki Private Agent tidak akan mengubah apa pun yang dilihat
      customer bila primary bukan 'private'. Sudah berkali-kali diagnosis salah
-     arah karena ini (M52, M54). Verifikasi: `grep AI_PRIMARY_PROVIDER
-     backend/.env` + log runtime `[WhatsAppAI] Calling AI provider: {…}`.
+     arah karena ini (M52, M54).
 
   2. STATE SELALU DARI HISTORY PENUH — JANGAN PERNAH DIPOTONG.
      `extractQualificationState()` dipanggil DI DALAM buildWhatsappReplyPrompt.
@@ -224,6 +231,146 @@
 
 
 ================================================================================
+  >> PERUBAHAN BESAR → V10 (20 Agu → 21 Agu 2026) <<
+================================================================================
+
+⚠️ CATATAN PENOMORAN: judul file ini menyebut "V8" tapi §PERUBAHAN BESAR di
+bawah (M94-M102, 18 Agustus) SUDAH memakai label "V9" di badan teks — file ini
+tidak konsisten SEBELUM sesi ini juga. Bukan diperbaiki mundur (risiko salah
+suntik ke bagian lama yang sudah stabil); sesi ini diberi label V10 di judul
+supaya TIDAK bertabrakan dengan V9 yang sudah ada, dan urutan kronologis tetap
+benar biar dokumen ini sendiri tidak menyesatkan sesi berikutnya.
+
+Sesi ini didorong oleh laporan customer nyata (transkrip WhatsApp, bukan
+laporan bug abstrak) — enam perbaikan terpisah, semuanya diuji-transkrip-nyata
+dan A/B-proven (mematikan tiap fix satu per satu membuktikan tes barunya GAGAL
+tanpa fix itu, bukan sekadar "tes baru kebetulan hijau").
+
+  1. M118–M121 ⭐ "NGEKOS" TIDAK TERDETEKSI SEBAGAI SEWA KOS.
+     Customer "Hi.. Saya mau ngekos di Madiun" dijawab "beli Gudang di
+     Madiun" — SALAH tipe DAN transaksi. Akar: kata berimbuhan (ngekos,
+     ngekost, ngekosan, indekos, indekost, kostan) tidak terdaftar di
+     word-boundary regex \bkos\b — pola yang SAMA dengan bug "booking" hilang
+     dari ACTION_WORDS di sesi sebelumnya. DUA lapisan terpisah harus
+     diperbaiki: gerbang masuk (utils/propertyKeywordFilter.js) DAN 5 SALINAN
+     regex transaksi yang di-copy-paste di dalam aiPromptBuilderService.js —
+     memperbaiki hanya gerbang TIDAK CUKUP, karena extractQualificationState()
+     punya jalur ekstraksi sendiri yang terpisah dari gerbang.
+     → tests/kosVariants.test.js (37/37).
+
+  2. M122 ⭐ AI KEHILANGAN KONTEKS "GRADE GEDUNG" KANTOR — TANYA ULANG 5x.
+     Customer sudah menjawab "Grade C" untuk sewa kantor, AI bahkan sempat
+     mengonfirmasi "tercatat untuk gedung Grade C, ya 👍" — lalu bertanya
+     pertanyaan yang SAMA PERSIS 4 kali lagi dalam 30 menit. Akar: 22 dari 24
+     kombinasi tipe×transaksi Q14 (termasuk Grade/fit-out kantor) HANYA berupa
+     hint teks bebas ("CEK history dulu") — TIDAK ADA state eksplisit sama
+     sekali. Pola yang SAMA dengan bug qualification_state Python (M107):
+     instruksi prompt "cek riwayat" TIDAK PERNAH sekuat state ✅/❓ yang
+     dirender eksplisit. Fix: state.officeGrade/officeFitOut + ekstraktor
+     Phase 2 (context-anchored ke pertanyaan AI) + hint Q14 dinamis.
+     → tests/officeGradeContext.test.js (21/21). ⚠️ 22 kombinasi tipe×transaksi
+     LAIN masih rentan kelas bug yang sama — baru Grade/fit-out kantor yang
+     dapat state eksplisit sejauh ini.
+
+  3. M123 ⭐ FITUR BARU — customers.ask_name (AI WAJIB TANYA NAMA, SEKALI).
+     customers.ask_name (STRING(5), default 'NO') menandai apakah AI sudah
+     menanyakan nama orang yang chat. Begitu terjawab (ATAU DITOLAK — tetap
+     dianggap selesai, nama tetap default WhatsApp), ask_name→'YES' dan TIDAK
+     PERNAH ditanya lagi. Keputusan arsitektur penting: pertanyaan nama
+     TIDAK dibangun lewat prompt LLM sama sekali — diselipkan sebagai
+     INTERCEPT DETERMINISTIK di whatsappAIService.js TEPAT saat balasan yang
+     baru dihasilkan adalah SUMMARY (replyContainsSummary()) dan ask_name
+     masih 'NO': balasan ditukar dengan pertanyaan nama, summary asli
+     otomatis terkirim lagi giliran berikutnya (state kualifikasi idempoten).
+     SATU titik intercept ini otomatis melindungi ke-5 provider LLM + Private
+     Agent + fallback eksternal sekaligus — mengikuti aturan proyek sendiri
+     "tambah ekstraktor kode, bukan aturan prompt" tanpa menambah token prompt
+     sama sekali. Migrasi kolom baru WAJIB didaftarkan di
+     ensureRequiredDatabaseColumns() (server.js) — mengedit models/Customer.js
+     saja TIDAK menambah kolom ke DB yang sudah berjalan.
+     → tests/askNameFlow.test.js (23/23).
+     ⛔ TEMUAN SAMPINGAN (di luar cakupan, DIFLAG bukan diperbaiki): (a)
+     getConversationHistory() (sessionService.js) tidak punya tie-break kolom
+     kedua untuk ORDER BY createdAt — pesan yang dibuat di milidetik yang sama
+     bisa kembali TERBALIK urutannya (dibuktikan langsung, bukan teori); (b)
+     anchorPoint (Q6) bisa salah mengambil jawaban Q5 (red flags) yang lebih
+     awal begitu AI belakangan bertanya soal landmark — juga dibuktikan
+     reproduksi identik di file PRA-M124 (bukan regresi sesi ini).
+
+  4. M124 ⭐⭐ PALING BESAR — GANTI KOTA/TRANSAKSI/TIPE DI TENGAH ALUR
+     ME-RESET SELURUH SESI KE Q1 (BUKAN HANYA FIELD YANG BERUBAH).
+     Transkrip nyata: customer SELESAI hampir seluruh Q1-Q12 (sewa rumah,
+     Surabaya/Citraland, budget, tanggal masuk, penghuni, furnished, kolam
+     renang) — lalu menjawab pertanyaan "area sekitar masih oke?" dengan nama
+     KOTA LAIN ("Sidoarjo"). Bot reset TOTAL ke "Mau sewa atau beli? Dan tipe
+     propertinya apa?" — SEMUA jawaban hilang. Akar: mekanisme "Boundary B"
+     lama (Fase 0, aiPromptBuilderService.js) memotong SELURUH riwayat chat
+     (ACTIVE_ALL) begitu kota/tipe/transaksi berbeda dari yang sudah ada —
+     bukan menghapus field tertentu, tapi MENYEMBUNYIKAN pesan-pesan lama dari
+     Fase 1 sehingga budget/tanggal/penghuni/dll tidak pernah terbaca ulang.
+     Fix (permintaan pemilik proyek, granular per sumbu):
+       • Ganti kota      → HANYA landmark (Q6) ditanya ulang. Sisanya tetap.
+       • Ganti transaksi → budget + metode pembayaran (+ durasi bila sewa)
+                            ditanya ulang. Kota/landmark/tanggal/survei tetap.
+       • Ganti properti  → budget/fasilitas/detail-tipe ditanya ulang. Kota/
+                            landmark/tanggal/survei TETAP (dulu ikut ke-reset).
+     Arsitektur baru: "resolver kanonik" full-history (bukan potong riwayat)
+     yang men-track tipe/transaksi/kota yang benar di SETIAP giliran (bukan
+     hanya giliran perubahan terjadi — first-mention-wins-nya Fase 1 akan
+     REVERT ke nilai lama di giliran berikutnya kalau tidak di-override
+     terus-menerus), plus deteksi one-shot "apakah perubahan terjadi TEPAT di
+     pesan ini" untuk memicu reset field yang tepat, sekali saja.
+     Teks prompt (banner + Task-list rule) yang dulu menyuruh LLM "JANGAN
+     gunakan jawaban Q2-Q12 dari tipe lama" ikut diperbaiki — instruksi lama
+     itu akan MEMBATALKAN fix ini dari sisi prompt walau kode sudah benar
+     (lihat skills/*/docs/04, §PERUBAHAN BESAR poin M124-sync).
+     → tests/midFlowChangeGranular.test.js (45/45), termasuk kontrol negatif
+     M51 ("gang sempit" bukan nama kota) dan M73 (jawaban Q6 "deket kantor"
+     bukan ganti tipe) — dua guard lama yang harus tetap utuh di arsitektur
+     baru. Suite penuh 60+ berkas: NOL regresi baru.
+
+  5. M125 SATU PERTANYAAN PER PESAN DI GERBANG KUALIFIKASI.
+     Gerbang pra-AI (buildQualifyReply, whatsappAIService.js, aktif saat
+     RESPOND_CATALOG_RUN=ON) membundel budget sebagai kalimat tambahan ke
+     pertanyaan APA PUN yang sedang ditanya (kota/transaksi/tipe) — melanggar
+     aturan sendiri yang SUDAH tertulis di skill docs ("one question per
+     message"). Dihapus bundling-nya; budget menyusul di giliran sendiri
+     lewat cascade findNextQuestion yang sudah ada.
+     → tests/qualifyGateSimplified.test.js (14/14).
+
+  6. M126 AKAR PENYEBAB BALASAN AI >2 MENIT — BUKAN DEBOUNCE, TAPI TIMEOUT
+     PROVIDER YANG TIDAK PERNAH DIISI.
+     Pemilik proyek mengira AI_COOKIE_RESPONSE_TIMER (debounce, sudah 12
+     detik) penyebabnya. Dicek langsung ke .env: AI_PRIMARY_PROVIDER aktual
+     adalah **kimi** (BUKAN chatgpt — dokumen versi lama salah, lihat fix di
+     §BACA INI DULU poin 1 di atas). services/kimiService.js SUDAH punya
+     KIMI_TIMEOUT_MS configurable sejak M102 sesi sebelumnya (komentarnya
+     sendiri sudah memperingatkan Kimi kerap MELEBIHI 90 detik untuk prompt
+     ±67K token proyek ini) — tapi var itu TIDAK PERNAH diisi di .env,
+     sehingga diam-diam memakai default axios 90000ms. 90 detik timeout + 12
+     detik debounce + waktu proses = >2 menit, penjelasan yang didukung bukti
+     kode, bukan tebakan. Fix: KIMI_TIMEOUT_MS=30000 di .env. Sekalian: 4
+     provider LAIN (chatgpt/claude/deepseek/qwen) yang MASIH hardcode
+     `timeout: 90000/60000` langsung di axios.post() (tanpa jalur .env sama
+     sekali) diberi pola configurable yang sama (CHAT_GPT_TIMEOUT_MS dst.,
+     default TIDAK berubah) — supaya provider primer berikutnya tidak
+     mewarisi masalah yang sama tanpa cara mengaturnya.
+     → tests/providerTimeoutsConfigurable.test.js (16/16).
+
+  BASELINE TES AKHIR SESI INI: 1856/1879 (71 berkas, +6 berkas tes baru sesi
+  ini: kosVariants sudah ada sebagian, officeGradeContext, askNameFlow,
+  midFlowChangeGranular, qualifyGateSimplified, providerTimeoutsConfigurable,
+  skillDocsM124Sync). 23 kegagalan SAMA PERSIS sepanjang sesi ini, semuanya
+  pre-existing & terverifikasi BUKAN regresi (dibuktikan lewat perbandingan
+  snapshot pra-sesi untuk yang date-drift, dan A/B untuk yang lain):
+  customerDateParser 54/69 · extractFilters 109/112 · housePilot 65/69 ·
+  facilitiesViewingAndShortAnswers 29/30 (date-drift baru, tanggal sistem
+  maju dari 20→21 Agu di tengah sesi) · huggingfaceService (FATAL, pre-
+  existing, tidak tersentuh sesi ini). Nol crash baru, nol berkas gagal baru
+  di luar daftar ini.
+
+
+================================================================================
   1. OVERVIEW
 ================================================================================
 
@@ -410,6 +557,11 @@ SUDAH JALAN ✅
     - Registrasi OTOMATIS saat Q1+Q2 terjawab
     - ai_response ON/OFF per-customer + GATE AI diam saat OFF
     - Perintah agent via chat (NOMOR WA saja, bisa banyak sekaligus)
+    - ⭐ BARU (M123): ask_name — AI wajib menanyakan nama customer SEKALI
+      sebelum summary (intercept deterministik, bukan aturan prompt), lalu
+      customers.ask_name='YES' permanen (jawab ATAU tolak, sama-sama
+      menutup pertanyaan). Off-topic tetap TIDAK didaftarkan/dibalas/disimpan
+      (perilaku lama, terverifikasi masih utuh — bukan bagian baru M123).
 
   Property Recommendation & Catalog
     - Katalog DB per-agent (Property.user_id)
@@ -1149,17 +1301,36 @@ KONVENSI KODE
       terbukti tidak vacuous: 4 assertion gagal saat (a)/(b)/(d) dimatikan,
       4 assertion gagal saat (c) dimatikan sendiri.
 
-      ⚠️ MASIH TERBUKA DARI TRANSKRIP YANG SAMA (belum didiagnosis):
-        • Grade B ditanya DUA KALI (16.24 & 16.25).
+      ⚠️ MASIH TERBUKA DARI TRANSKRIP YANG SAMA (belum didiagnosis per 18 Agu):
+        • Grade B ditanya DUA KALI (16.24 & 16.25). — ✅ DITUTUP M122 (sesi
+          21 Agu): tidak ada state eksplisit officeGrade/officeFitOut sama
+          sekali, hint Q14 murni teks bebas "CEK history dulu". Lihat M122.
         • Q2b berbunyi "Sudah lihat berapa Kantor di kantor ini?" — nama KOTA
-          hilang, diganti "kantor ini".
+          hilang, diganti "kantor ini". — MASIH TERBUKA, belum disentuh.
         • Furnitur dijawab "Kosongan" (16.13) lalu ditanya ulang dan dijawab
           "full furnished" (16.31) — JAWABAN BERTENTANGAN akibat bug
-          pengulangan; summary PASTI salah untuk salah satunya.
+          pengulangan; summary PASTI salah untuk salah satunya. — MASIH
+          TERBUKA, kemungkinan gejala dari kelas bug M122 (22 kombinasi
+          tipe×transaksi Q14 LAIN yang belum dapat state eksplisit).
         • Teks fallback katalog-kosong DI KODE belum dicek (doc 08 §6 sudah
-          bersih dari Rumah123, kodenya belum diverifikasi).
+          bersih dari Rumah123, kodenya belum diverifikasi). — MASIH TERBUKA.
+      (d) "Provider lain masih hardcode: openai/deepseek/claude 90000, qwen
+          60000" — ✅ DITUTUP M126 (sesi 21 Agu): keempatnya sekarang
+          configurable (CHAT_GPT_TIMEOUT_MS dst.), default tidak berubah.
 
-  ⭐ PENOMORAN M — nomor berikutnya untuk sesi mendatang: **M103**.
+  M103–M117: lihat riwayat sesi sebelumnya (M107 qualification_state.py
+  Python, M112 switch-latch satu-giliran, M120–M121 gerbang "ngekos" tahap
+  awal, dll. — bukan diringkas ulang di sini; cross-reference lewat memory
+  auto-session bila perlu detail M-spesifik).
+
+  M118–M126 ⭐⭐ SESI 20–21 AGUSTUS 2026 — lihat §PERUBAHAN BESAR → V10 di
+  ATAS HALAMAN INI untuk ringkasan lengkap keenamnya (deteksi ngekos 2-lapis,
+  office Grade/fit-out context loss, fitur ask_name deterministik, mid-flow
+  change GRANULAR [PALING BESAR — lihat detail penuh di sana], satu-
+  pertanyaan-per-pesan, timeout provider configurable). Tidak diulang di sini
+  untuk menghindari dua sumber kebenaran yang bisa saling menyimpang.
+
+  ⭐ PENOMORAN M — nomor berikutnya untuk sesi mendatang: **M127**.
 
 
 ================================================================================
