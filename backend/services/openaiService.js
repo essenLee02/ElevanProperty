@@ -175,7 +175,13 @@ async function callChatGPTResponseAPI(input, options = {}) {
         Authorization: `Bearer ${config.apiKey}`,
         'Content-Type': 'application/json'
       },
-      timeout: 90000
+      // M126: configurable (was a hardcoded 90000ms). ChatGPT is the current
+      // AI_PRIMARY_PROVIDER — a slow/hung call here makes the customer wait
+      // the FULL timeout before Private Agent fallback even starts. Same fix
+      // pattern already applied to Kimi (KIMI_TIMEOUT_MS) — see that comment
+      // for the full reasoning. Default unchanged (90000) so behavior doesn't
+      // shift silently for anyone who hasn't set CHAT_GPT_TIMEOUT_MS.
+      timeout: Number(process.env.CHAT_GPT_TIMEOUT_MS || 90000)
     });
 
     const text = extractChatGPTText(response.data);

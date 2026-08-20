@@ -127,7 +127,9 @@ async function callDeepSeekChatAPI(userPrompt, options = {}) {
         Authorization : `Bearer ${config.apiKey}`,
         'Content-Type': 'application/json',
       },
-      timeout: 90000,
+      // M126: configurable (was hardcoded), same fix pattern as KIMI_TIMEOUT_MS
+      // — default unchanged (90000) so unset behavior doesn't shift silently.
+      timeout: Number(process.env.DEEPSEEK_TIMEOUT_MS || 90000),
     });
 
     const choice = response.data?.choices?.[0] || {};

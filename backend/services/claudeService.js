@@ -106,7 +106,9 @@ async function callClaudeMessagesAPI(input, options = {}) {
         'anthropic-version': config.apiVersion,
         'content-type': 'application/json'
       },
-      timeout: 90000
+      // M126: configurable (was hardcoded), same fix pattern as KIMI_TIMEOUT_MS
+      // — default unchanged (90000) so unset behavior doesn't shift silently.
+      timeout: Number(process.env.CLAUDE_TIMEOUT_MS || 90000)
     });
 
     const text = extractClaudeText(response.data);

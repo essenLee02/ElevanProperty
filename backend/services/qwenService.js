@@ -93,7 +93,9 @@ async function callQwenChatAPI(systemPrompt, userPrompt, options = {}) {
         'Authorization': `Bearer ${config.apiKey}`,
         'Content-Type' : 'application/json',
       },
-      timeout: 60000,
+      // M126: configurable (was hardcoded), same fix pattern as KIMI_TIMEOUT_MS
+      // — default unchanged (60000) so unset behavior doesn't shift silently.
+      timeout: Number(process.env.QWEN_TIMEOUT_MS || 60000),
     });
 
     // Bailian wraps errors in the body with HTTP 200 (v1: lowercase success; v2: capital Success)

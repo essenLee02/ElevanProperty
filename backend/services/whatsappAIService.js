@@ -246,36 +246,28 @@ function buildQualifyReply(filters, message, agentName, contextSource, history =
   }
 
   // ── KASUS 2: Transaction type tidak diketahui ─────────────────────────────
+  // M125: SATU pertanyaan per pesan — dulu membundel kota+budget sebagai bullet
+  // tambahan di sini juga, walau baru satu topik (transaksi) yang sedang
+  // ditanya. Kota/budget menyusul di giliran berikutnya (KASUS 3/4/5) begitu
+  // transaksi terjawab — customer tidak kehilangan fokus menjawab 3 hal sekaligus.
   else if (!tx) {
-    const parts = [];
-    if (!loc) parts.push(id ? 'Di *kota* mana yang Anda inginkan? 📍 _(Contoh: Surabaya, Malang, Bali)_' : 'Which *city*? 📍');
-    if (!bud) parts.push(id ? 'Kisaran harga berapa? _(Contoh: 3-7 juta/bulan)_ 💰' : 'What price range? _(e.g., 3–7 million/month)_ 💰');
-
     question = id
-      ? `Untuk *${typeLbl || 'properti'}* yang Anda cari — rencananya untuk *sewa* atau *beli*? 🏠${parts.length ? '\n\nSelain itu:\n' + parts.map(p => `• ${p}`).join('\n') : ''}`
-      : `For the *${typeLbl || 'property'}* you're looking for — are you planning to *rent* or *buy*? 🏠${parts.length ? '\n\nAlso:\n' + parts.map(p => `• ${p}`).join('\n') : ''}`;
+      ? `Untuk *${typeLbl || 'properti'}* yang Anda cari — rencananya untuk *sewa* atau *beli*? 🏠`
+      : `For the *${typeLbl || 'property'}* you're looking for — are you planning to *rent* or *buy*? 🏠`;
   }
 
   // ── KASUS 3: Tipe properti tidak diketahui ────────────────────────────────
   else if (!type) {
-    const parts = [];
-    if (!loc) parts.push(id ? 'Di *kota* mana? 📍 _(Contoh: Surabaya, Malang, Bali)_' : 'Which *city*? 📍');
-    if (!bud) parts.push(id ? 'Kisaran harga berapa? 💰' : 'What price range? 💰');
-
     question = id
-      ? `Siap, mau *${txWord}* properti! 🏡\n\nTipe properti apa yang Anda cari?\n_Rumah, Apartemen, Villa, Kos-kosan, Ruko, Kantor, Gudang, atau lainnya_${parts.length ? '\n\nDan juga:\n' + parts.map(p => `• ${p}`).join('\n') : ''}`
-      : `Got it, looking to *${txWord}* a property! 🏡\n\nWhat type of property are you looking for?\n_House, Apartment, Villa, Boarding House, Shophouse, Office, Warehouse, or other_${parts.length ? '\n\nAlso:\n' + parts.map(p => `• ${p}`).join('\n') : ''}`;
+      ? `Siap, mau *${txWord}* properti! 🏡\n\nTipe properti apa yang Anda cari?\n_Rumah, Apartemen, Villa, Kos-kosan, Ruko, Kantor, Gudang, atau lainnya_`
+      : `Got it, looking to *${txWord}* a property! 🏡\n\nWhat type of property are you looking for?\n_House, Apartment, Villa, Boarding House, Shophouse, Office, Warehouse, or other_`;
   }
 
   // ── KASUS 4: Lokasi tidak diketahui ──────────────────────────────────────
   else if (!loc) {
-    const budPart = !bud
-      ? (id ? '\n\nDan kisaran harga yang Anda siapkan? _(Contoh: 5-10 juta/bulan, atau 500 juta - 1 miliar)_ 💰' : '\n\nAlso, what price range do you have in mind? _(e.g., 5–10 million/month)_ 💰')
-      : '';
-
     question = id
-      ? `Baik! Mau *${txWord} ${typeLbl}*. 📍\n\nDi *kota* mana yang Anda inginkan?\n_(Contoh: Surabaya, Malang, Bali, Jakarta Selatan)_\nKalau sudah ada area/kecamatan tertentu, boleh sekalian disebut ya.${budPart}`
-      : `Great! Looking to *${txWord} a ${typeLbl}*. 📍\n\nWhich *city*?\n_(e.g., Surabaya, Malang, Bali, South Jakarta)_\nIf you already have a specific area in mind, feel free to name it too.${budPart}`;
+      ? `Baik! Mau *${txWord} ${typeLbl}*. 📍\n\nDi *kota* mana yang Anda inginkan?\n_(Contoh: Surabaya, Malang, Bali, Jakarta Selatan)_`
+      : `Great! Looking to *${txWord} a ${typeLbl}*. 📍\n\nWhich *city*?\n_(e.g., Surabaya, Malang, Bali, South Jakarta)_`;
   }
 
   // ── KASUS 5: Hanya budget yang belum diketahui ────────────────────────────
@@ -738,4 +730,5 @@ module.exports = {
   analyzePropertyMessage,
   formatWhatsAppResponse,
   normalizeAiResponderLabel,
+  buildQualifyReply,
 };
