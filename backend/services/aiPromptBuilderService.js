@@ -1282,6 +1282,24 @@ function extractQualificationState(history = [], currentMessage = '') {
       const aiAsksViewTime = /jam berapa|pukul berapa|jam yang|paling pas/i.test(ai.message || '');
       const lo = custResp.toLowerCase();
 
+      // ⚠️ PENOLAKAN SURVEI DICATAT DI GILIRAN MANA PUN, bukan hanya saat AI
+      // kebetulan sedang menanyakan TANGGAL survei.
+      // Bug produksi (booking kantor Madiun, 20 Agu 2026) — customer menolak
+      // EMPAT KALI dan tetap ditanya ulang:
+      //   16.20 "Tdk perlu survei. Saya minta rekomendasi aja dlu" → AI: "mau viewing jam berapa?"
+      //   16.21 "Tdk mau survei. Minta katalog saja"               → tidak tercatat (AI menanya JAM, bukan TANGGAL)
+      //   16.34 "Minta listing saja"                               → tidak tercatat (AI menanya Q5)
+      //   16.37 AI menanya Q9 (jadwalkan viewing) LAGI
+      // Penyebab: cek penolakan bersarang di dalam `aiAsksViewDate`, sehingga
+      // penolakan yang diucapkan saat AI menanyakan hal LAIN menguap.
+      // Penolakan survei bersifat MUTLAK dan tidak bergantung pertanyaan yang
+      // sedang terbuka — sekali customer bilang tidak mau survei / minta
+      // listing / katalog / rekomendasi, itu jawaban FINAL untuk Q9b DAN Q9c.
+      // (Prinsip yang sama dengan M75 untuk jam survei sukarela.)
+      if (!state.viewingDate && VIEWING_REFUSAL_RE.test(lo)) {
+        state.viewingDate = 'Minta listing';
+      }
+
       if (aiAsksViewDate && !state.viewingDate) {
         if (VIEWING_REFUSAL_RE.test(lo)) {
           state.viewingDate = 'Minta listing';
@@ -1707,7 +1725,18 @@ function extractQualificationState(history = [], currentMessage = '') {
       // Item spesifik lain sudah ditangkap Phase 1 detectFacilities di atas.
     }
     // Q5 — red flags
-    if (!state.redFlags && /pasti tidak cocok|ingin dihindari|yang\s+dihindari|hadap barat|gang sempit|rumah tua|rawan banjir|rel kereta/.test(aiText)) {
+    // ⚠️ POLA INI HARUS MENCAKUP SEMUA VARIAN KALIMAT Q5 YANG BENAR-BENAR DIKIRIM AI.
+    // Bug produksi (booking kantor Madiun, 20 Agu 2026): untuk tipe KOMERSIAL, Q5
+    // dikirim dengan kalimat berbeda —
+    //   "Ada syarat yang mutlak diperlukan atau yang tidak boleh ada untuk kantor ini?"
+    // — yang TIDAK cocok satu pun pola di bawah. Akibatnya jawaban customer
+    // ("Tidak boleh kotor aja") tidak pernah tersimpan, redFlags tetap null, dan
+    // Q5 DIULANG TERUS (3× dalam satu percakapan, dengan tiga kalimat berbeda).
+    // Kelas yang sama dengan M88 (kalimat Q2c tidak dikenali gerbangnya sendiri):
+    // AI mengirim pertanyaan yang EKSTRAKTORNYA SENDIRI tidak kenali.
+    // ⛔ Saat menambah/mengubah kalimat Q5 di findNextQuestion, WAJIB tambahkan
+    // frasa pengenalnya ke sini juga — kalau tidak, jawabannya menguap.
+    if (!state.redFlags && /pasti tidak cocok|ingin dihindari|yang\s+dihindari|tidak\s+boleh\s+ada|mutlak\s+diperlukan|syarat\s+yang\s+mutlak|hadap barat|gang sempit|rumah tua|rawan banjir|rel kereta/.test(aiText)) {
       // ⚠️ JAWABAN Q5 YANG SEBENARNYA PREFERENSI, BUKAN PENGHINDARAN (M89).
       // Kasus nyata (transkrip Versi 2, 8–10 Agu 2026): Q5 "Ada yang pasti
       // tidak cocok?" dijawab "Saya cari jalan yang strategis dan dekat dengan

@@ -138,7 +138,25 @@ async function callKimiChatAPI(userPrompt, options = {}) {
         Authorization : `Bearer ${config.apiKey}`,
         'Content-Type': 'application/json',
       },
-      timeout: 90000,
+      // ⚠️ TIMEOUT DIBUAT CONFIGURABLE (produksi Hostinger, 20 Agu 2026).
+      // Log produksi berulang:
+      //   [KIMI ERROR] "Kimi API error: timeout of 90000ms exceeded"
+      // Prompt WhatsApp proyek ini ±67K token; kimi-k2.6/k3 kerap melampaui 90
+      // detik untuk beban itu. Dampak ke customer BUKAN sekadar error di log:
+      // dengan AI_PRIMARY_PROVIDER=kimi, tiap timeout berarti customer MENUNGGU
+      // 90 detik penuh SEBELUM fallback ke Private Agent baru berjalan.
+      // Untuk WhatsApp, menunggu 90 detik praktis sama dengan tidak dibalas.
+      //
+      // Nilai hardcode juga melanggar konvensi proyek ("semua nilai konfigurasi
+      // dari .env"). Sekarang: KIMI_TIMEOUT_MS, default tetap 90000 agar
+      // perilaku TIDAK berubah diam-diam bagi yang tidak menyetelnya.
+      //
+      // ⛔ MENAIKKAN timeout BUKAN perbaikan yang benar untuk kasus ini —
+      // itu hanya memperpanjang penantian customer. Yang benar salah satu dari:
+      //   (a) TURUNKAN (mis. 30000) supaya fallback ke Private Agent cepat, ATAU
+      //   (b) kecilkan prompt (§ UKURAN PROMPT — doc selalu-aktif ~67K token), ATAU
+      //   (c) pindah AI_PRIMARY_PROVIDER ke provider yang lebih cepat.
+      timeout: Number(process.env.KIMI_TIMEOUT_MS || 90000),
     });
 
     const choice = response.data?.choices?.[0] || {};

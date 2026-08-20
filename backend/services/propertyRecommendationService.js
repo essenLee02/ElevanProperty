@@ -1253,6 +1253,28 @@ function detectBudget(message = '') {
     // "tanggal 20-30" tanpa bulan (dalam konteks jadwal) → hapus
     .replace(/\btanggal\s*\d{1,2}(?:\s*(?:-|–|sampai|s\/d|hingga|ke)\s*\d{1,2})?/gi, ' ');
 
+  // Buang konteks JUMLAH ORANG/UNIT sebelum parsing angka budget.
+  // Bug produksi (booking kantor Madiun, 20 Agu 2026): Q14 kantor menanyakan
+  // "Berapa orang yang akan bekerja di kantor ini?", customer menjawab
+  // "Kemungkinan ada 20-38 orang yg akan berkerja di kantor ini" → "20-38"
+  // terbaca sebagai BUDGET AMBIGU, sehingga AI membalas
+  //   "Untuk harga 20-38 — maksudnya dalam ribu, juta, miliar, atau triliun?"
+  // Customer harus mengulang budget-nya dari awal. Kelas yang SAMA PERSIS
+  // dengan strip lantai/tanggal di atas: angka yang satuannya BUKAN uang.
+  // ⚠️ Hanya bentuk RENTANG yang bocor ("20-38 orang"); angka tunggal
+  // ("20 orang") sudah tertolak oleh guard lain — tapi pola di bawah menutup
+  // keduanya agar tidak bergantung pada guard lain yang bisa berubah.
+  // Satuan sengaja spesifik (orang/staf/karyawan/pegawai/tamu/unit/kamar/…) —
+  // JANGAN dibuat generik, karena "2-3 juta" juga berbentuk angka+kata.
+  const _COUNT_UNIT = '(?:orang|org|staf|staff|karyawan|pegawai|pekerja|tamu|guest|'
+    + 'penghuni|unit|kamar|ruang(?:an)?|meja|desk|seat|kursi|lantai|pax)';
+  budgetText = budgetText
+    // angka(+rentang) DIIKUTI satuan hitung → "20-38 orang", "30 staf"
+    .replace(new RegExp(`\\b\\d{1,4}(?:\\s*(?:-|–|sampai|s\\/d|hingga|ke)\\s*\\d{1,4})?\\s*${_COUNT_UNIT}\\b`, 'gi'), ' ')
+    // satuan hitung MENDAHULUI angka → "kapasitas 20-38", "untuk 30 orang" sudah
+    // tertutup di atas; ini menutup "kapasitas/muat 20-38"
+    .replace(/\b(?:kapasitas|muat|menampung|headcount|jumlah\s+(?:orang|staf|karyawan))\s*(?:sekitar|kurang\s*lebih|kira-kira)?\s*\d{1,4}(?:\s*(?:-|–|sampai|s\/d|hingga|ke)\s*\d{1,4})?/gi, ' ');
+
   // Apakah budget berupa PLAFON/CEILING ("maksimal 5jt", "di bawah 5jt", "max 5jt")?
   // Jika ya → simpan sebagai batas atas saja. Jika TIDAK (customer tembak harga absolut,
   // mis. "40.750.000.000" / "5 juta") → bangun rentang ±15% (lihat _budgetBand).
