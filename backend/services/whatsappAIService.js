@@ -271,10 +271,14 @@ function buildQualifyReply(filters, message, agentName, contextSource, history =
   }
 
   // ── KASUS 5: Hanya budget yang belum diketahui ────────────────────────────
+  // M127: satu pertanyaan, tanpa basa-basi "Hampir lengkap!" dan tanpa paragraf
+  // tambahan "kalau belum ada angka pasti..." — sama seperti simplifikasi
+  // KASUS 2/3/4 (M125). Petunjuk "terjangkau/menengah ke atas" tetap dikenali
+  // oleh detectBudget() bila customer menjawab begitu tanpa perlu dipancing.
   else if (!bud) {
     question = id
-      ? `Hampir lengkap! Untuk *${txWord} ${typeLbl} di ${loc}* — 💰\n\nKisaran harga yang Anda inginkan berapa?\n_(Contoh: 3-7 juta/bulan, di bawah 500 juta, atau 1-2 miliar)_\n\nJika belum ada angka pasti, cukup ceritakan apakah lebih prefer yang *terjangkau* atau *menengah ke atas* — saya tetap bisa carikan yang sesuai 😊`
-      : `Almost there! For *${txWord}ing a ${typeLbl} in ${loc}* — 💰\n\nWhat's your price range?\n_(e.g., 3–7 million/month, under 500 million, or 1–2 billion)_\n\nIf you don't have an exact number, just tell me whether you prefer *affordable* or *mid-to-premium* — I can still find good options 😊`;
+      ? `Untuk *${txWord} ${typeLbl} di ${loc}*, kisaran harga berapa yang Anda inginkan? 💰\n_(Contoh: 3-7 juta/bulan, di bawah 500 juta, atau 1-2 miliar)_`
+      : `For *${txWord}ing a ${typeLbl} in ${loc}*, what's your price range? 💰\n_(e.g., 3–7 million/month, under 500 million, or 1–2 billion)_`;
   }
 
   if (!question) return null;

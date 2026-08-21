@@ -34,6 +34,7 @@ const {
   extractQualificationState,
   findNextQuestion,
   buildQualificationStateBlock,
+  buildFinalDirective,
 } = require('../services/aiPromptBuilderService');
 
 let pass = 0, fail = 0;
@@ -197,6 +198,43 @@ console.log('\n== Group 8: KONTROL NEGATIF — false positive guards ==');
   const noAiQuestion = extractQualificationState([u('Saya mau grade C dari awal')], '');
   ok('customer menyebut "grade C" TANPA AI pernah bertanya → tidak dipaksa cocok (butuh konteks pertanyaan AI)',
     noAiQuestion.officeGrade === null, JSON.stringify(noAiQuestion.officeGrade));
+}
+
+console.log('\n== Group 9 (M127): DIREKTIF FINAL harus menyebut Grade/fit-out eksplisit ==');
+{
+  // ⚠️ Root cause SEBENARNYA dari transkrip 7x-ditanya-ulang di atas: state
+  // SUDAH benar (Group 1-2 di atas membuktikannya) tapi "SUDAH DIJAWAB" di
+  // posisi 100% prompt (buildFinalDirective, pola M62 anti-lost-in-the-middle)
+  // TIDAK PERNAH menyebut officeGrade/officeFitOut sama sekali — hanya
+  // terkubur di tengah satu string hint Q14 gabungan. LLM mengabaikannya.
+  const T = [
+    u('mau booking office di Solo'),
+    a('Preferensi gedung Grade A (premium), Grade B (mid), atau Grade C (ekonomis)? 🏢'),
+    u('Grade C'),
+  ];
+  const st = extractQualificationState(T, 'Grade C');
+  ok('prasyarat: officeGrade memang sudah C', st.officeGrade === 'C', st.officeGrade);
+
+  const directive = buildFinalDirective(st, { agentName: 'Test Agent', appName: 'Elevan Property' });
+  ok('DIREKTIF FINAL menyebut "Q14 grade=C" eksplisit (baris sendiri, bukan terkubur)',
+    /Q14 grade=C/.test(directive), directive.slice(0, 400));
+  ok('DIREKTIF FINAL TIDAK menyuruh tanya Q14 grade lagi (nq berikutnya bukan Grade)',
+    !/TANYAKAN SEKARANG.*Grade A \(premium\)/s.test(directive));
+
+  // Kontrol: fit-out juga terjawab → harus MUNCUL juga sebagai baris sendiri.
+  const T2 = [...T, a('Untuk kondisi interiornya, prefer fit-out atau shell & core?'), u('fit-out saja')];
+  const st2 = extractQualificationState(T2, 'fit-out saja');
+  ok('prasyarat: officeFitOut memang sudah fit-out', st2.officeFitOut === 'fit-out', st2.officeFitOut);
+  const directive2 = buildFinalDirective(st2, { agentName: 'Test Agent', appName: 'Elevan Property' });
+  ok('DIREKTIF FINAL menyebut "Q14 fit-out=fit-out" eksplisit',
+    /Q14 fit-out=fit-out/.test(directive2), directive2.slice(0, 400));
+
+  // Kontrol negatif: belum terjawab → TIDAK muncul baris Q14 grade sama sekali
+  // (jangan sampai selalu tampil dengan nilai kosong/menyesatkan).
+  const stEmpty = extractQualificationState([u('mau sewa kantor di solo')], '');
+  const directiveEmpty = buildFinalDirective(stEmpty, {});
+  ok('KONTROL: belum terjawab → tidak ada baris "Q14 grade=" sama sekali',
+    !/Q14 grade=/.test(directiveEmpty));
 }
 
 console.log(`\n${'='.repeat(60)}`);

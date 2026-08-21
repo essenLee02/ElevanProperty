@@ -157,6 +157,20 @@ function buildFinalDirective(state, identity = {}) {
   push('Q8 tanggal',   state.moveInDate);
   push('Q10 durasi',   state.leaseDuration);
   push('Q11 furnitur', state.furnishing);
+  // M127: Q14 kantor (Grade/fit-out) TIDAK PERNAH masuk baris SUDAH DIJAWAB
+  // ini — hanya disebut di tengah hint Q14 gabungan (findNextQuestion) dan di
+  // baris state block, KEDUANYA di posisi tengah prompt. Transkrip nyata:
+  // customer menjawab "Grade C" (bahkan dikonfirmasi AI), lalu MENOLAK
+  // menyebutkan lagi ("Terserah"), tapi AI tetap bertanya ulang PERSIS
+  // pertanyaan yang sama 7× berturut-turut sampai customer menulis "Stop
+  // diulang". state.officeGrade sudah benar tersimpan sepanjang itu (dibukti-
+  // kan lewat extractQualificationState di tests/officeGradeContext.test.js)
+  // — LLM-nya yang mengabaikan sinyal di tengah prompt. Pola M62 (lost-in-
+  // the-middle): field yang sudah dijawab HARUS SATU baris eksplisit di sini
+  // (posisi 100%, "menang atas seluruh instruksi di atas"), bukan terkubur di
+  // dalam satu string hint gabungan.
+  push('Q14 grade',    state.officeGrade);
+  push('Q14 fit-out',  state.officeFitOut);
 
   const nq = findNextQuestion(state, {});
   const nextLine = nq
@@ -415,7 +429,19 @@ function isConditionalFallbackMessage(text = '') {
  * di-overwrite oleh nilai baru dalam pesan yang match regex ini — nilai baru hanya
  * ditulis bila memang ada (pesan ralat tanpa nilai baru tidak menghapus apa pun).
  */
-const CORRECTION_RE = /\b(ralat|koreksi|revisi|ganti(?:\s+(?:jadi|ke))?|diganti|ubah(?:\s+(?:jadi|ke))?|diubah|rubah|dirubah|salah\s+(?:sebut|tulis|ketik|kirim|info)|maksud\s?(?:ku|saya|nya)|bukan\s+itu|yang\s+benar|yg\s+bener|harusnya|seharusnya|sebenarnya|eh\s+salah|maaf\s+salah|batal(?:kan)?\s+yang\s+tadi)\b/i;
+// M127: "maaf" TELANJANG (bukan cuma "maaf salah") ditambahkan sendiri.
+// Transkrip nyata: customer "Saya cari harga 2-3 juta/hari" lalu SATU pesan
+// kemudian "Maaf... Saya cari harga 400-800 juta" — apology diikuti angka
+// budget BARU yang sama sekali berbeda (dan satuan yang beda pula: /hari vs
+// lump-sum) adalah pola ralat yang SANGAT umum di WhatsApp Indonesia, tapi
+// tidak match "maaf\s+salah" (harus diikuti kata "salah" persis) maupun kata
+// kunci ralat lain manapun → budget lama (".../malam") tetap dipakai,
+// mengabaikan koreksi customer sepenuhnya. Aman diperlonggar ke "maaf" saja
+// (tanpa "salah") karena SEMUA pemanggil CORRECTION_RE/isCorrectionMsg di
+// file ini mensyaratkan pesan JUGA berisi nilai baru yang valid sebelum
+// menimpa apa pun (lihat komentar di atas) — "maaf" basa-basi tanpa angka
+// baru tidak menghapus apa pun.
+const CORRECTION_RE = /\b(ralat|koreksi|revisi|ganti(?:\s+(?:jadi|ke))?|diganti|ubah(?:\s+(?:jadi|ke))?|diubah|rubah|dirubah|salah\s+(?:sebut|tulis|ketik|kirim|info)|maksud\s?(?:ku|saya|nya)|bukan\s+itu|yang\s+benar|yg\s+bener|harusnya|seharusnya|sebenarnya|eh\s+salah|maaf(?:\s+salah)?|batal(?:kan)?\s+yang\s+tadi)\b/i;
 
 /**
  * Penolakan JADWAL SURVEI (Q9b) — menolak survei adalah JAWABAN yang sah,

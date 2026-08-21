@@ -72,6 +72,12 @@ console.log('\n== Group 4: KASUS 5 (hanya budget kosong) TETAP bertanya budget �
   const r = buildQualifyReply(filters, 'Surabaya', 'Nigel', 'none', [], CATALOG_ON);
   ok('balasan ada', !!r);
   ok('menanyakan budget (satu-satunya info yang kosong)', /kisaran harga/i.test(r.reply), r.reply);
+  // M127: transkrip nyata menunjukkan pesan ini masih verbose ("Hampir
+  // lengkap!" + paragraf "kalau belum ada angka pasti..."). Disederhanakan
+  // jadi satu kalimat + contoh saja, sama seperti KASUS 2/3/4 (M125).
+  ok('TIDAK ada basa-basi "Hampir lengkap!"', !/hampir lengkap/i.test(r.reply), r.reply);
+  ok('TIDAK ada paragraf tambahan "kalau belum ada angka pasti"',
+    !/belum ada angka pasti/i.test(r.reply), r.reply);
 }
 
 console.log('\n== Group 5: KONTROL — semua 4 info lengkap → tidak ada gate reply (lanjut ke AI) ==');
