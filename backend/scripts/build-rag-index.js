@@ -52,7 +52,8 @@ const RAG_ELIGIBLE_SKILL_DOCS = [
   '10-date-money-parsing.md',
   '11-house-pilots.md',
   '12-facilities-reference.md',
-  '13-locations-and-landmarks.md'
+  '13-locations-and-landmarks.md',
+  '14-legalitas-pajak-kpr.md'   // M131: gantikan knowledge/property-id/ (dihapus, digabung ke sini)
 ];
 
 function parseArgs(argv) {

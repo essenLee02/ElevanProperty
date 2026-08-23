@@ -20,7 +20,7 @@ const sequelize = require('../config/database');
  *   Sale (beli) → tiga sertifikat kepemilikan resmi Indonesia ditambahkan:
  *     SHM (Hak Milik, tertinggi/selamanya), SHGB (Hak Guna Bangunan, masa
  *     berlaku tertentu), SHSRS (Hak Satuan Rumah Susun, untuk apartemen/
- *     kondominium) — lihat knowledge/property-id/01-legalitas-dan-sertifikat.md.
+ *     kondominium) — lihat skills/claude_responds/docs/14-legalitas-pajak-kpr.md.
  * null selalu diperbolehkan di kedua transaksi (belum diisi/belum diketahui).
  */
 const CERTIFICATE_TYPES_BY_TX = {
@@ -156,7 +156,7 @@ const Property = sequelize.define('Property', {
     defaultValue: null,
     comment: 'Estimasi DP KPR dalam persen (mis. 5.00, 10.00). Hanya relevan bila kpr_status=Y. '
            + 'Informasi MARKETING/perkiraan listing — BUKAN keputusan kredit bank, dan AI TIDAK '
-           + 'PERNAH memakainya untuk menghitung kelayakan/cicilan customer (lihat knowledge/property-id).'
+           + 'PERNAH memakainya untuk menghitung kelayakan/cicilan customer (lihat skills/claude_responds/docs/14-legalitas-pajak-kpr.md).'
   },
   kpr_installment_estimate: {
     type: DataTypes.DECIMAL(25, 4),

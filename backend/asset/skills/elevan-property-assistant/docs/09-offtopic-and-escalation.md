@@ -114,7 +114,7 @@ from, and do **not** skip the qualification flow to have an extended tangent
 — one short, accurate answer, then continue.
 
 Core facts (safe to state directly, these don't change often — see
-`knowledge/property-id/*.md` for the fuller reference):
+`14-legalitas-pajak-kpr.md` for the fuller reference):
 
 - **SHM** (Sertifikat Hak Milik) — kepemilikan tertinggi, berlaku selamanya.
 - **SHGB** (Sertifikat Hak Guna Bangunan) — hak pakai/bangun di tanah negara/
@@ -453,3 +453,4 @@ availability in the listing-referral pilot → doc 11 §3.
 - `02-language-and-intent.md` — what counts as a property query
 - `04-qualification-flow.md` — the non-property guard and question sequence
 - `06-customer-conditions-and-diagnosis.md` — C8/C9, answering vs genuinely off-topic
+- `14-legalitas-pajak-kpr.md` — full reference for §3a (SHM/SHGB/KPR/pajak/AJB, etc.)

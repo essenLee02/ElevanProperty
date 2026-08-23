@@ -1,11 +1,18 @@
 ================================================================================
-  ELEVAN PROPERTY — COMPREHENSIVE PROJECT CONTEXT (V10)
+  ELEVAN PROPERTY — COMPREHENSIVE PROJECT CONTEXT (V11)
   Dibuat  : 15 Juni 2026
-  Update  : 21 Agustus 2026 (M118–M126: "ngekos" deteksi tipe+transaksi,
-            office Grade/fit-out context loss, ask_name customer workflow,
-            mid-flow city/transaksi/tipe change GRANULAR — bukan lagi reset
-            total ke Q1, satu-pertanyaan-per-pesan pada gerbang kualifikasi,
-            timeout provider AI configurable — akar penyebab balasan >2 menit)
+  Update  : 23 Agustus 2026 (M127–M131: Grade A/B/C repeat-loop + koreksi
+            budget "maaf tanpa salah" + KASUS 5 disederhanakan [M127];
+            GOOGLE_ENABLED kill switch untuk Places API [M128]; skema
+            certificate_type/location_type + seed lokasi & fasilitas +
+            knowledge base legalitas/pajak/KPR + gerbang jawaban terminologi
+            SHM/KPR [M129]; estimasi jarak/waktu tempuh kota-ke-kota +
+            rute feri mayor [M130]; platform API (Kimi/ChatGPT/dst) kini
+            punya wewenang akhir off-topic/diam via sentinel
+            `[[OFFTOPIC_SILENT]]`, backend hanya seleksi awal [M131];
+            knowledge/property-id/ DIHAPUS — digabung ke
+            skills/*/docs/14-legalitas-pajak-kpr.md, ketiga folder AI-facing
+            byte-identical termasuk chat_gpt_responds)
   Tujuan  : SATU file konteks lengkap untuk di-upload ke Claude Code
   Isi     : Overview · Instrument · Review · Pengembangan · Solusi ·
             Environments · Informasi · Skills · Tujuan · Roadmap ·
@@ -15,9 +22,12 @@
             → V8-label-di-judul/=V9-di-badan-M94-M102 (14→18 Agu, penomoran
             internal file ini SUDAH tidak konsisten sebelum sesi ini — lihat
             catatan di §PERUBAHAN BESAR V8→V10 di bawah)
-            → V10 (20→21 Agu, file ini = TERBARU)
+            → V10 (20→21 Agu) → V11 (23 Agu, file ini = TERBARU)
   Pendamping: skills/website_env_concept/ (docs 00–19) untuk detail teknis
             per-topik bila perlu me-reproduksi/mengembangkan ulang modul.
+            skills/{claude_responds,chat_gpt_responds,elevan-property-
+            assistant}/docs/14-legalitas-pajak-kpr.md untuk detail penuh
+            legalitas/pajak/KPR (BARU V11, gantikan knowledge/ yang dihapus).
 ================================================================================
 
 
@@ -371,6 +381,191 @@ tanpa fix itu, bukan sekadar "tes baru kebetulan hijau").
 
 
 ================================================================================
+  >> PERUBAHAN BESAR V10 → V11 (21 → 23 Agustus 2026) <<
+================================================================================
+
+Sesi ini didorong TIGA hal: (1) rumah123.com screenshots + kebutuhan skema
+sertifikat properti, (2) permintaan fitur estimasi jarak/waktu tempuh, (3) satu
+directive arsitektur BESAR dari pemilik proyek tentang siapa yang berwenang
+memutuskan balas/diam saat platform API (bukan Private Agent) yang primary.
+
+  1. M127 ⭐⭐ BUNDEL TIGA TRANSKRIP NYATA — GRADE LOOP, KOREKSI BUDGET, KASUS 5.
+     (a) Grade A/B/C ditanya berulang MESKIPUN AI sendiri sempat mengonfirmasi
+         jawabannya — akar: `buildFinalDirective()` (posisi 100% prompt, M62)
+         tidak pernah menyertakan officeGrade/officeFitOut di daftar `answered`
+         miliknya sendiri, walau field itu SUDAH ada di state (M122). Info yang
+         benar tapi terkubur di tengah prompt tidak cukup — direktif akhir
+         WAJIB menyebutkannya eksplisit. Fix: tambahkan ke daftar `answered`.
+     (b) "Maaf... [nilai budget baru]" tanpa kata "salah" TIDAK dikenali sebagai
+         koreksi (`CORRECTION_RE` mewajibkan "maaf salah") → budget PERTAMA
+         yang salah tetap menang di summary. Fix: `maaf(?:\s+salah)?` — aman
+         karena tiap titik panggil correction SUDAH mewajibkan nilai baru yang
+         valid juga ada di pesan yang sama.
+     (c) KASUS 5 (budget-only question) disederhanakan — preambule "Hampir
+         lengkap!" dan paragraf penutup dihapus.
+     (d) Ditemukan tapi DIFLAG bukan diperbaiki: "Solo" dijawab AI sebagai
+         "Surakarta" — `LOCATION_ALIAS` mencampur nama ALTERNATIF asli
+         (Solo↔Surakarta, Jogja↔Yogyakarta) dengan SEKADAR SINGKATAN
+         (sby, jkt, bdg) dalam satu tabel normalisasi; perlu desain terpisah
+         agar tidak merusak pencocokan kota. Belum dikerjakan.
+
+  2. M128 GOOGLE_ENABLED KILL SWITCH.
+     `GOOGLE_ENABLED=false` (di-set pemilik proyek sendiri di .env) kini
+     benar-benar mematikan Places Text Search DAN Geocoding sekaligus, terlepas
+     dari API key ada/tidak — `googlePlacesService.js` diberi `isGoogleEnabled()`
+     dicek SEBELUM cek API key di kedua fungsi (`warmCityLandmarksCache()`,
+     `geocodeAddress()`).
+     ⚠️ Jebakan tes: cek RETURN VALUE saja (array kosong) tidak bisa membedakan
+     "gerbang memblokir" dari "panggilan terjadi tapi gagal karena API key
+     palsu" (keduanya menghasilkan array kosong lewat catch block yang sama).
+     Fix: mock `axios.get` langsung, pastikan TIDAK PERNAH dipanggil saat OFF.
+
+  3. M129 ⭐⭐ SKEMA SERTIFIKAT + SEED LOKASI/FASILITAS + KNOWLEDGE BASE +
+     GERBANG TERMINOLOGI (dipicu screenshot listing rumah123.com nyata).
+     - `Property.js`: `certificate_type` (validate hook —
+       `CERTIFICATE_TYPES_BY_TX`: rent hanya KOSONG/LAINNYA, sale tambah
+       SHM/SHGB/SHSRS) + `kpr_dp_percent`/`kpr_installment_estimate`
+       (marketing-only, BUKAN simulasi kredit resmi).
+     - `Location.js`: `location_type` (area/landmark/commercial) + `city_id`
+       (validate hook: area WAJIB city_id); unique constraint diganti dari
+       global-`name` ke komposit `(name, city_id)`.
+     - Seed lokasi: HANYA nama yang benar-benar diyakini akurat (bukan target
+       500/kota yang diminta awal — diturunkan setelah ditanya langsung ke
+       pemilik proyek, risiko fabrikasi data lokasi ditolak). 118 entri nyata,
+       8 kota. `created_by` acak dari `users.user_id` NYATA (permintaan
+       eksplisit), termasuk retroactive-fix 205 baris lama yang sempat memakai
+       placeholder string.
+     - Seed 7 fasilitas yang hilang (Club House, Amphitheater, Basketball
+       Court, Foodhall, Jogging Track, Access Card, Community Room) — dari
+       screenshot listing nyata.
+     - Knowledge base legalitas/pajak/KPR (3 berkas, awalnya di `knowledge/`
+       — lihat poin 5 di bawah, KINI SUDAH DIPINDAH & `knowledge/` DIHAPUS).
+     - Gerbang jawaban terminologi (`#tryTerminologyAnswer()`,
+       chatbotPrivateController.js): "apa itu SHM?" dkk. dijawab DETERMINISTIK
+       (bukan RAG — skor RAG untuk query ini hanya ~0.09, jauh di bawah ambang
+       0.30). ⚠️ Ditemukan TIDAK TERJANGKAU semula: "apa itu SHM?" sudah lolos
+       `hasPropertyKeyword()` sebagai in-topic, jadi menaruh gerbang ini DI
+       DALAM guard off-topic membuatnya tidak pernah tereksekusi — dipindah
+       jadi pengecekan TANPA SYARAT sebelum kedua guard off-topic.
+
+  4. M130 ESTIMASI JARAK/WAKTU TEMPUH KOTA-KE-KOTA.
+     "Berapa jarak dari Surabaya ke properti di Jakarta" dijawab DETERMINISTIK
+     (haversine antar-koordinat kota, `utils/cityGeoData.js`, ~40 kota
+     terkurasi + tabel 3 rute feri mayor) — GOOGLE_ENABLED tetap false (pilihan
+     pemilik proyek), jadi ini estimasi garis lurus, bukan rute jalan presisi.
+     ⚠️ Bug keamanan ditemukan & diperbaiki SENDIRI saat verifikasi: pencocokan
+     rute feri awalnya HANYA berbasis pasangan pulau (mis. "jawa"↔"sumatra"),
+     sehingga Surabaya→Banda Aceh (~2400km) disarankan naik feri Merak–
+     Bakauheni — benar pulau, tapi saran yang absurd untuk jarak sejauh itu.
+     Fix: batas jarak `MAX_FERRY_ROUTE_DISTANCE_KM=1300` (Jakarta→Denpasar
+     ~960km tetap dapat rute spesifik; Surabaya→Banda Aceh benar-benar
+     dialihkan ke "tanya agent/cek penerbangan"). Terpasang di KEDUA jalur
+     (whatsappAIService.js SEBELUM memanggil LLM sama sekali — klaim jarak
+     numerik dianggap terlalu berisiko diserahkan ke LLM untuk "menyalin
+     ulang"; chatbotPrivateController.js `#tryDistanceAnswer()`, unconditional
+     seperti gerbang terminologi M129).
+
+  5. M131 ⭐⭐⭐ PALING BESAR — SIAPA BERWENANG MEMUTUSKAN BALAS/DIAM SAAT
+     PLATFORM API PRIMARY, DAN KNOWLEDGE/ DIGABUNG KE SKILLS.
+     Directive pemilik proyek: selama AI_PRIMARY_PROVIDER BUKAN 'private',
+     backend HANYA boleh melakukan satu penyaringan awal yang MURAH (hemat
+     token) — keputusan akhir "ini di luar topik, balas atau diam" ada di
+     tangan platform API itu sendiri (Kimi/ChatGPT/Claude/Qwen/DeepSeek),
+     dipandu skill doc, BUKAN backend yang menebak dari analisis teks.
+
+     KLARIFIKASI PENTING SEBELUM MENULIS KODE (3 pertanyaan diajukan balik ke
+     pemilik proyek, sebelum menyentuh apa pun — perubahan literal "backend
+     tidak boleh ikut campur SAMA SEKALI" berisiko membongkar M122/M124/M125/
+     M127/M129/M130 yang justru dibangun KARENA percaya penuh pada penilaian
+     LLM dari skill doc terbukti tidak cukup andal sesi-sesi sebelumnya):
+       (a) Fix deterministik M122/M124/M125/M127/M129/M130 → TETAP AKTIF
+           sebagai jaring pengaman di jalur LLM-primary (jawaban pemilik
+           proyek: "Keep as safety nets"). TIDAK ADA yang dihapus/dibongkar.
+       (b) Sinyal "diam" → token sentinel eksplisit, bukan backend menebak
+           dari isi teks bebas.
+       (c) Skill docs diperbarui SEKARANG di SEMUA TIGA folder (claude_
+           responds, chat_gpt_responds, elevan-property-assistant) — termasuk
+           chat_gpt_responds, yang sebelumnya (M129/M130) SENGAJA dilewati
+           karena pemilik proyek bilang akan meng-copy sendiri; kali ini
+           pemilik proyek eksplisit minta ketiganya diperbarui sekarang.
+
+     MEKANISME — `utils/offTopicSentinel.js` (BARU): token
+     `OFFTOPIC_SILENT_SENTINEL = '[[OFFTOPIC_SILENT]]'`,
+     `isSilentSentinel(text)` EXACT-MATCH setelah trim (BUKAN substring/
+     includes) — token itu harus jadi SATU-SATUNYA isi balasan model supaya
+     dikenali; sinyal ambigu/tercampur teks lain gagal-aman ke arah TETAP
+     MEMBALAS (bukan diam-diam tak terduga).
+     WIRING: dicek di KEDUA titik panggilan platform API di dalam
+     `whatsappAIService.js` (`_generateWhatsAppAIReplyCore()` — rantai
+     provider utama DAN fallback eksternal), SEBELUM `guardReplyIdentity`/
+     `splitCatalogReply` menyentuh teksnya (balasan diam = `{reply:null,
+     replyParts:[],silent:true}`, bukan teks nyata yang perlu disanitasi).
+     Wrapper publik `generateWhatsAppAIReply()` berhenti lebih awal
+     (`if (result.silent) return result`) sebelum gerbang tanya-nama (M123)
+     ikut memprosesnya. KETIGA controller WhatsApp (Kirimi, Fonnte — termasuk
+     jalur terpisah "Fonnte Chaining" yang membalas lewat HTTP response
+     sinkron, bukan panggilan kirim terpisah — dan TimelinesAI) memeriksa
+     `aiResult.silent` SEBELUM menyimpan balasan ke ChatMessage dan sebelum
+     mengirim ke WhatsApp — pesan customer sendiri TETAP tersimpan untuk audit.
+
+     SKILL DOCS — §3c BARU di `docs/09-offtopic-and-escalation.md` (ketiga
+     folder): daftar 83 kategori off-topic bernomor VERBATIM dari pemilik
+     proyek (diekstrak langsung dari transkrip percakapan, BUKAN parafrase —
+     termasuk 2 entri yang sengaja diulang untuk penekanan: Coding #4/#27,
+     Candi/Temple #43/#44), plus instruksi protokol sentinel dan penjelasan
+     pembagian wewenang ("kamu adalah wewenang akhir begitu pesan sampai ke
+     kamu"). §1 (jawaban atas pertanyaan sendiri TIDAK PERNAH off-topic) tetap
+     ditegaskan sebagai aturan yang menang atas §3c. `chat_gpt_responds`
+     SEKALIGUS disinkron ulang penuh dengan §3a (M129)/§3b (M130) yang selama
+     ini dilewatkan — ketiga folder kini byte-identical lagi untuk doc 09.
+
+  6. HOUSEKEEPING — `knowledge/property-id/` DIGABUNG KE SKILLS, LALU DIHAPUS.
+     3 berkas legalitas/pajak/KPR yang tadinya berdiri sendiri di
+     `Elevan_Property/knowledge/property-id/` digabung jadi SATU berkas baru
+     `docs/14-legalitas-pajak-kpr.md` di ketiga folder skill (byte-identical),
+     supaya "semua .md saling terhubung" (permintaan eksplisit pemilik
+     proyek) alih-alih tersebar di direktori terpisah. Sebelum menghapus
+     `knowledge/`, diverifikasi dulu bahwa folder itu BUKAN sekadar
+     dokumentasi — `scripts/build-rag-index.js` benar-benar meng-index-nya ke
+     namespace RAG `PROPERTY_KNOWLEDGE` saat build. Fix: `14-legalitas-pajak-
+     kpr.md` ditambahkan ke `RAG_ELIGIBLE_SKILL_DOCS` supaya kontennya TETAP
+     bisa diambil RAG (kini lewat namespace `SKILL_DOCS`, bukan namespace
+     terpisah) — nol regresi kapabilitas retrieval. `models/Property.js` (2
+     komentar) diperbarui agar tidak lagi merujuk path yang sudah tidak ada.
+     `Elevan_Property/knowledge/` DIHAPUS SELURUHNYA setelah verifikasi.
+     ⚠️ TEMUAN SAMPINGAN, TIDAK DISENTUH: `backend/asset/skills/{claude_
+     responds,chat_gpt_responds,elevan-property-assistant}` (ketiganya, bukan
+     cuma chat_gpt_responds seperti temuan sesi sebelumnya) ternyata berisi
+     SALINAN BASI (belum memuat §3c M131) — bukti proses/sesi lain di luar
+     percakapan ini masih aktif menulis ke folder itu secara berkala. Di luar
+     scope tugas ini; pemilik proyek sudah menyatakan akan mengelola salinan
+     `backend/asset/skills/` secara manual.
+
+  BASELINE TES AKHIR SESI INI: 81 berkas (+3 baru: terminologyAnswerGate,
+  distanceEstimation + distanceWiringGate + distanceSkillDocsSync,
+  offtopicSentinelM131 — masing-masing A/B-proven non-vacuous). 5 kegagalan
+  pre-existing SAMA PERSIS, dikonfirmasi TIDAK menyentuh berkas mana pun yang
+  diubah sesi ini: customerDateParser, extractFilters,
+  facilitiesViewingAndShortAnswers, housePilot, huggingfaceService. Nol crash
+  baru, nol berkas gagal baru di luar daftar ini. Lint bersih pada semua
+  berkas yang disentuh.
+
+  ⭐ PENOMORAN M — nomor berikutnya untuk sesi mendatang: **M132**.
+
+  BELUM DIKERJAKAN dari directive M131 (di luar scope teknis sesi ini,
+  perlu keputusan/aksi pemilik proyek sendiri — lihat §10 ROADMAP):
+    - Relokasi fisik `backend/asset/skills/chat_gpt_responds` — pemilik
+      proyek akan meng-copy file .md sendiri, TIDAK dikerjakan lewat kode.
+      `services/skillPromptService.js` `SKILLS_ROOT` MASIH menunjuk root
+      `skills/`, belum diubah.
+    - "Training semua keputusan chatbotPrivateController.js dan platform AI
+      dengan RAG" — permintaan besar & terpisah, BELUM digarap sesi ini,
+      butuh klarifikasi scope yang sama seperti item RAG-training lama di
+      §10 ROADMAP (index chat_messages vs fine-tuning — dua tafsir yang
+      sangat berbeda, JANGAN mulai membangun sebelum dipilih).
+
+
+================================================================================
   1. OVERVIEW
 ================================================================================
 
@@ -384,8 +579,12 @@ Indonesia lewat RAG dan gambar properti acak lewat WhatsApp.
 Konsep inti:
   - Website + floating chatbot pencarian properti (publik, tanpa login)
   - WhatsApp chatbot multi-agent: tiap agent punya nomor/device sendiri
-  - AI 6-opsi: satu PRIMARY (via env, saat ini `chatgpt`) → Private Agent
-    (deterministik, selalu ada sebagai fallback)
+  - AI 6-opsi: satu PRIMARY (via env — TERVERIFIKASI `kimi` per 23 Agu 2026,
+    SELALU cek ulang `.env`, jangan percaya angka di file ini) → Private
+    Agent (deterministik, selalu ada sebagai fallback)
+  - ⭐ BARU (M131): saat PRIMARY bukan 'private', platform API itu sendiri
+    (bukan backend) berwenang akhir memutuskan balas/diam untuk pesan yang
+    lolos penyaringan awal murah — via sentinel `[[OFFTOPIC_SILENT]]`
   - Qualification flow Q1–Q14 SELALU jalan; RESPOND_CATALOG_RUN hanya
     mengontrol apakah katalog ditampilkan SETELAH summary
   - Data properti: DB (per-agent) + JSON fallback + Rumah123 live (opsional)
@@ -459,10 +658,14 @@ FRONTEND
 
 AI PROVIDERS (satu PRIMARY via env → Private Agent; TANPA cross-AI di jalur
 normal — cross-AI hanya di fallback chain saat primary='private' gagal)
-  chatgpt  → OpenAI gpt-4o-mini            ← NILAI AKTUAL saat ini (14 Agu 2026)
-             ⚠️ TPM org 60.000/menit. Prompt per pesan ±67K token (LEBIH BESAR
-             dari plafon — lihat §8 UKURAN PROMPT). Lihat §5 M62/M64 sebelum
-             menambah apa pun ke prompt LANGSUNG (di luar RAG opt-in).
+  chatgpt  → OpenAI gpt-4o-mini            ⚠️ TPM org 60.000/menit. Prompt per
+             pesan ±67K token (LEBIH BESAR dari plafon — lihat §8 UKURAN
+             PROMPT). Lihat §5 M62/M64 sebelum menambah apa pun ke prompt
+             LANGSUNG (di luar RAG opt-in).
+             ⚠️ NILAI AKTUAL saat ini (TERVERIFIKASI 23 Agu 2026) = `kimi`,
+             BUKAN chatgpt — dokumen ini pernah salah 2× soal ini (14→21 Agu).
+             JANGAN percaya nilai contoh di file ini; SELALU
+             `grep AI_PRIMARY_PROVIDER backend/.env` dulu (lihat §BACA INI DULU).
   claude   → Anthropic claude-3-haiku      (CLAUDE_MODEL)
   qwen     → Alibaba DashScope             (QWEN_MODEL)
   deepseek → DeepSeek deepseek-v4-flash    ⚠️ WAJIB v4 (v4-flash|v4-pro)
@@ -573,25 +776,49 @@ SUDAH JALAN ✅
       Surabaya") DIBUANG sebagai non-property
 
   RAG & Pengetahuan Tambahan (⭐ BARU, opt-in)
-    - Korpus legalitas/sertifikat, pajak & biaya, KPR & pembiayaan
-      (knowledge/property-id/*.md, 3 berkas)
+    - Korpus legalitas/sertifikat, pajak & biaya, KPR & pembiayaan — ⭐ M131:
+      KINI di `skills/*/docs/14-legalitas-pajak-kpr.md` (ketiga folder,
+      byte-identical), BUKAN lagi `knowledge/property-id/*.md` (folder itu
+      SUDAH DIHAPUS setelah digabung — lihat §PERUBAHAN BESAR V10→V11 poin 6)
     - Jalur LLM: pengetahuan disuntik ke prompt sebagai konteks pelengkap
     - Jalur Private Agent: jawaban ekstraktif verbatim (bukan generasi bebas)
+    - ⭐ M129: pertanyaan terminologi (SHM/SHGB/KPR/AJB dkk.) kini juga dijawab
+      DETERMINISTIK (bukan hanya lewat RAG) — `#tryTerminologyAnswer()`,
+      dipanggil TANPA SYARAT sebelum guard off-topic (RAG skor terlalu rendah
+      ~0.09 untuk query pendek jenis ini, jauh di bawah ambang 0.30)
+    - ⭐ M130: pertanyaan jarak/waktu tempuh kota-ke-kota dijawab DETERMINISTIK
+      (haversine + tabel rute feri mayor), GOOGLE_ENABLED tetap false
     - Katalog semantik (agent_catalog namespace) SIAP tapi TIDAK diaktifkan
       di produksi (includeAgentCatalog opt-in, default false — cegah bocor
       listing mid-interview)
 
+  Off-Topic & Guardrails (⭐ M131 BARU)
+    - Backend: SATU penyaring awal murah (hemat token) — tidak lagi mencoba
+      menjadi penentu akhir saat platform API primary
+    - Platform API (bila primary ≠ 'private'): wewenang AKHIR balas/diam,
+      dipandu skill doc §3c (09-offtopic-and-escalation.md, 83 kategori
+      bernomor) — sinyal diam via sentinel `[[OFFTOPIC_SILENT]]`, exact-match
+    - Fix deterministik M122/M124/M125/M127/M129/M130 TETAP AKTIF sebagai
+      jaring pengaman di jalur ini — TIDAK dibongkar, keputusan eksplisit
+      pemilik proyek (lihat §PERUBAHAN BESAR V10→V11 poin 5)
+
   Admin Dashboard / Master Data (7 modul, pola identik)
   Contact Form → Google Sheets
-  Skill System (3 folder AI-facing + website_env_concept + design guidelines
-    + ⭐ knowledge/ BARU untuk korpus RAG — TERPISAH dari skill docs, lihat
-    §PERUBAHAN BESAR poin 3 untuk alasannya)
+  Skill System (3 folder AI-facing + website_env_concept + design guidelines).
+    ⭐ M131: `knowledge/` (korpus RAG legalitas/pajak/KPR yang dulu terpisah,
+    lihat §PERUBAHAN BESAR V8→V10 poin 3 untuk alasan pemisahan aslinya) SUDAH
+    DIHAPUS — digabung ke `skills/*/docs/14-legalitas-pajak-kpr.md`.
 
 BELUM / SEDANG DIKEMBANGKAN ⏳
   - ⚠️ PRIORITAS LAMA: pantau/naikkan limit TPM provider aktif (billing) —
     prompt sudah ±67K token, MELAMPAUI plafon gpt-4o-mini 60K
-  - ⭐ PRIORITAS BARU: update skill docs KETIGA folder AI-facing dengan
-    kesadaran RAG & pengiriman gambar (kode jalan, dokumentasi skill belum)
+  - ✅ SELESAI (M129–M131): update skill docs KETIGA folder AI-facing dengan
+    kesadaran RAG/terminologi/jarak/off-topic-sentinel — TIDAK lagi terbuka.
+  - ⭐ Relokasi `backend/asset/skills/chat_gpt_responds` (M131 directive) —
+    pemilik proyek akan mengerjakan sendiri (copy manual), bukan lewat kode.
+  - ⭐ "Training chatbotPrivateController.js + platform AI dengan RAG" (M131
+    directive) — permintaan besar terpisah, sama ambigu-nya dengan item RAG-
+    training chat_messages di bawah, BELUM digarap.
   - ⭐ Mode embedding HuggingFace (diminta, belum diimplementasi)
   - ⭐ Verifikasi kualitas retrieval dengan embedding OpenAI ASLI di produksi
     (baru diverifikasi dengan mode `local` yang diketahui kadang salah rangking)
@@ -618,15 +845,20 @@ SYNC / MIGRASI DATABASE
 
 ⭐ SETUP / REBUILD INDEKS RAG (BARU — hanya perlu bila RAG_ENABLED=ON)
   cd backend && node scripts/build-rag-index.js
-    --skip-db         : lewati katalog properti (hanya knowledge/ + skill docs)
-    --only=knowledge   : hanya korpus pengetahuan
-    --only=skills       : hanya referensi skill docs
+    --skip-db         : lewati katalog properti (hanya skill docs referensi)
+    --only=knowledge   : ⚠️ M131 — namespace PROPERTY_KNOWLEDGE ini SEKARANG
+                          SELALU kosong (0 chunk); `knowledge/` sudah dihapus,
+                          korpusnya pindah ke doc 14 (namespace SKILL_DOCS).
+                          Flag ini dibiarkan ada di kode (no-op aman), tidak
+                          perlu dipakai lagi — pakai --only=skills.
+    --only=skills       : hanya referensi skill docs (07/08/10/11/12/13/14 —
+                          termasuk doc 14 legalitas/pajak/KPR sejak M131)
     --only=catalog      : hanya katalog properti per-agent
   RAG_EMBEDDING_MODE=local node scripts/build-rag-index.js   (tanpa jaringan)
-  ⚠️ WAJIB dijalankan ulang setiap kali: knowledge/*.md berubah, skill docs
-  referensi (07/08/10/11/12/13) berubah, katalog properti berubah signifikan,
-  atau RAG_EMBEDDING_MODE/model diganti (ruang vektor berbeda — vectorStore
-  akan MEMBUANG indeks lama otomatis bila model tidak cocok, bukan mencampur).
+  ⚠️ WAJIB dijalankan ulang setiap kali: skill docs referensi (07/08/10/11/12/
+  13/14) berubah, katalog properti berubah signifikan, atau RAG_EMBEDDING_
+  MODE/model diganti (ruang vektor berbeda — vectorStore akan MEMBUANG indeks
+  lama otomatis bila model tidak cocok, bukan mencampur).
   Hasil tersimpan di `backend/data/rag-index.json`, dimuat SEKALI saat start
   (BUKAN dibangun ulang di jalur permintaan customer).
 
@@ -648,17 +880,21 @@ MENAMBAH / MENGUBAH PERTANYAAN KUALIFIKASI (pola wajib)
   7. Tulis tes regresi dengan TRANSKRIP NYATA, termasuk kontrol NEGATIF
   8. Jalankan SELURUH suite — bandingkan dengan baseline, bukan hanya file baru
 
-⭐ MENAMBAH KONTEN KE KORPUS RAG (pola baru)
-  1. Tambah/ubah berkas .md di `knowledge/property-id/` (atau namespace baru
-     bila topiknya bukan legalitas/pajak/KPR)
+⭐ MENAMBAH KONTEN KE KORPUS RAG (pola BARU sejak M131 — `knowledge/` DIHAPUS)
+  1. Tambah/ubah berkas .md di `skills/*/docs/` (mis. 14-legalitas-pajak-kpr.md
+     untuk topik terkait, atau doc referensi baru bila topiknya beda)
   2. WAJIB sertakan peringatan akurasi di kepala berkas bila menyangkut angka
      yang berubah antar waktu/daerah (pajak, suku bunga, syarat bank)
-  3. Jalankan ulang `node scripts/build-rag-index.js`
-  4. JANGAN taruh di `skills/*/docs/` — itu akan membuatnya always-loaded
-  5. Bila menambah dokumen REFERENSI skill baru yang layak di-RAG-kan (bukan
-     aturan inti), tambahkan nama berkasnya ke `RAG_ELIGIBLE_SKILL_DOCS` di
-     scripts/build-rag-index.js — JANGAN pernah menambah doc 01/03/04/05/09
-     (aturan inti) ke daftar itu
+  3. WAJIB tambahkan nama berkasnya ke `RAG_ELIGIBLE_SKILL_DOCS` di
+     scripts/build-rag-index.js supaya ikut ter-index — JANGAN pernah
+     menambah doc 01/03/04/05/09 (aturan inti, selalu dimuat penuh) ke daftar
+     itu
+  4. Jalankan ulang `node scripts/build-rag-index.js`
+  5. ⚠️ Aturan lama "JANGAN taruh di skills/*/docs/" (supaya tidak always-
+     loaded) BERLAKU HANYA untuk 10 doc INTI (01/02/03/04/05/06/09/…) yang
+     TIDAK ada di RAG_ELIGIBLE_SKILL_DOCS — doc REFERENSI (07/08/10/11/12/13/
+     14) memang boleh ada di skills/*/docs/ SELAMA masuk daftar itu; hanya
+     ter-index untuk retrieval, tidak always-loaded ke prompt
 
 ATURAN SYNC SKILL DOCS (WAJIB)
   skills/claude_responds/docs/*.md ≡ skills/chat_gpt_responds/docs/*.md
@@ -666,8 +902,14 @@ ATURAN SYNC SKILL DOCS (WAJIB)
   edisi STANDALONE — sudah menyimpang, TIDAK di-load kode, tapi tetap perlu
   diperbarui karena di-upload manual ke OpenAI platform skills (boleh versi
   LEBIH LENGKAP/adaptif daripada dua folder runtime, mis. M83).
-  ⚠️ KETIGA folder BELUM diperbarui untuk menyebutkan RAG/gambar properti per
-  14 Agu 2026 — kode jalan duluan, dokumentasi skill menyusul (lihat §10).
+  ✅ M131: KETIGA folder kini SUDAH byte-identical lagi untuk doc 09 (§3a/§3b/
+  §3c) dan sudah memuat kesadaran RAG/terminologi/jarak/off-topic-sentinel —
+  item roadmap lama "update skill docs RAG-aware" (per 14 Agu) SELESAI.
+  ⚠️ Sync BUKAN otomatis — sesi M129/M130 sempat sengaja MELEWATKAN
+  chat_gpt_responds atas permintaan pemilik proyek ("saya copy sendiri"), lalu
+  M131 mengubah keputusan itu dan meresyncnya. SELALU cek instruksi terbaru
+  pemilik proyek soal folder mana yang boleh disentuh sebelum mengedit —
+  jangan asumsikan dari sesi lama.
 
 DISIPLIN TOKEN (WAJIB — lihat §5 M62)
   Ukur dampak setiap penambahan ke prompt. Pola aman: emit STRING KOSONG saat
@@ -788,6 +1030,12 @@ KONVENSI KODE
       ⚠️ SENGAJA di `knowledge/`, BUKAN `skills/*/docs/` — kalau ditaruh di
       skills/, otomatis always-loaded ke SETIAP prompt, bertentangan dengan
       seluruh alasan RAG dibuat (hemat token, ambil hanya yang relevan).
+      ⛔ SUPERSEDED M131 (23 Agu): keputusan ini DIBALIK — korpus dipindah ke
+      `skills/*/docs/14-legalitas-pajak-kpr.md` DAN ditambahkan ke
+      `RAG_ELIGIBLE_SKILL_DOCS` supaya tetap ter-index tanpa always-loaded;
+      `knowledge/` DIHAPUS. Alasan di atas historically benar untuk saat itu,
+      tapi TIDAK lagi mencerminkan lokasi file yang sebenarnya — lihat
+      §PERUBAHAN BESAR V10→V11 poin 6.
 
       WIRING — DUA JALUR PRODUKSI, PELAJARAN M52/M54 DIPATUHI:
       (a) LLM: whatsappAIService.js menghitung `ragContext` (await, fail-open
@@ -1375,8 +1623,14 @@ PROXY     TRUST_PROXY_HOPS=1                ⭐ BARU (M101) — jumlah proxy hop
           Kosong → default 1 (benar untuk mode dev MAUPUN hosting).
 
 AI PROVIDERS
-  AI_PRIMARY_PROVIDER=chatgpt      # NILAI AKTUAL 14 Agu 2026 — SELALU cek ulang
+  AI_PRIMARY_PROVIDER=kimi         # TERVERIFIKASI 23 Agu 2026 — SELALU cek ulang
                                     # chatgpt|claude|qwen|deepseek|kimi|private
+                                    # ⚠️ BERUBAH ANTAR SESI, jangan percaya nilai
+                                    # ini tanpa `grep` .env langsung dulu
+  ⭐ M131 (BARU): saat nilai di atas BUKAN 'private', platform API tsb SENDIRI
+    berwenang akhir memutuskan balas/diam (sentinel `[[OFFTOPIC_SILENT]]`,
+    utils/offTopicSentinel.js) — backend hanya penyaring awal murah. Lihat
+    §PERUBAHAN BESAR V10→V11 poin 5.
   ENABLE_CLAUDE_FALLBACK=true
   ENABLE_CHATBOT_PRIVATE_CONTROLLER=true
   CHAT_GPT_API_KEY / CHAT_GPT_MODEL=gpt-4o-mini / CHAT_GPT_MAX_OUTPUT_TOKENS=4096
@@ -1555,38 +1809,33 @@ QUALIFICATION FLOW — URUTAN AKTUAL findNextQuestion() (tidak berubah dari V7)
   8. SKILLS — AI SKILL SYSTEM
 ================================================================================
 
-LOKASI (6 folder — ⭐ knowledge/ BARU, BUKAN skill doc)
-  skills/claude_responds/           → system prompt Claude (SKILL.md + docs 01–13)
-  skills/chat_gpt_responds/         → ChatGPT/QWEN/DeepSeek/Kimi (docs BYTE-IDENTICAL)
+LOKASI (5 folder — ⭐ M131: knowledge/ DIHAPUS, digabung ke skills/*/docs/14)
+  skills/claude_responds/           → system prompt Claude (SKILL.md + docs 01–14)
+  skills/chat_gpt_responds/         → ChatGPT/QWEN/DeepSeek/Kimi (docs BYTE-IDENTICAL,
+                                      termasuk M131 — lihat §PERUBAHAN BESAR V10→V11)
   skills/elevan-property-assistant/ → edisi STANDALONE untuk upload ke
                                       platform.openai.com/storage/skills
                                       ⚠️ TIDAK di-load kode backend
   skills/website_env_concept/       → arsitektur teknis (docs 00–19)
   skills/website_design_guidelines/ → panduan desain UI
-  ⭐ knowledge/property-id/          → korpus RAG (BARU, 3 berkas). BUKAN skill
-                                      doc — tidak dimuat penuh ke prompt,
-                                      hanya diambil per-chunk saat relevan.
-                                      Lihat §5 M92 untuk alasan pemisahan ini.
   Real-Estate/                      → 26 file: 12 playbook tipe + *_CHAT.md
                                       + MASTER QFLOW + ANSWER COMPLETENESS
 
-  ⚠️ KETIGA folder AI-facing (claude_responds, chat_gpt_responds, elevan-
-  property-assistant) BELUM diperbarui sesi ini untuk menyebutkan kapabilitas
-  RAG & pengiriman gambar — kode SUDAH berfungsi dan teruji, tapi AI TIDAK
-  TAHU dari prompt-nya sendiri bahwa kapabilitas ini ada (RAG bekerja secara
-  transparan lewat konteks yang disuntik, jadi ini tidak fatal, tapi doc 08
-  §0 idealnya diperbarui agar AI paham kontrak "gambar mungkin menyusul
-  balasan" saat menjelaskan proses ke customer). Lihat §10 ROADMAP.
+  ✅ M129–M131: KETIGA folder AI-facing (claude_responds, chat_gpt_responds,
+  elevan-property-assistant) SUDAH diperbarui untuk kapabilitas RAG,
+  terminologi (§3a), jarak/waktu tempuh (§3b), dan off-topic silence sentinel
+  (§3c) — item roadmap lama "belum RAG-aware" (per 14 Agu) SELESAI.
 
-SKILL DOCS (claude_responds/docs — struktur 01–13, jangan pakai nomor lama)
+SKILL DOCS (claude_responds/docs — struktur 01–14, jangan pakai nomor lama)
   01 Core role, scope, style          08 Catalog & recommendations
-  02 Language & intent detection      09 Off-topic & escalation
+  02 Language & intent detection      09 Off-topic & escalation ★ (§3a/3b/3c)
   03 Conversation memory & stability  10 Date & money parsing
   04 Qualification flow Q1–Q14 ★      11 House pilots            [KONDISIONAL]
   05 Answer completeness & re-ask     12 Facilities reference    [KONDISIONAL]
   06 Customer conditions              13 Locations & landmarks   [KONDISIONAL]
-  07 Property type playbooks
-  ⭐ Doc 07/08/10/11/12/13 adalah yang DIINDEKS oleh RAG (RAG_ELIGIBLE_SKILL_
+  07 Property type playbooks          14 Legalitas/pajak/KPR ⭐ BARU (M131,
+                                          gantikan knowledge/property-id/)
+  ⭐ Doc 07/08/10/11/12/13/14 adalah yang DIINDEKS oleh RAG (RAG_ELIGIBLE_SKILL_
   DOCS di scripts/build-rag-index.js) sebagai referensi PELENGKAP — bukan
   pengganti. Doc 01/02/03/04/05/06/09 (aturan inti + flow) TIDAK PERNAH
   di-index untuk RAG — selalu dimuat penuh seperti sebelumnya.
@@ -1691,11 +1940,22 @@ JANGKA PENDEK (1–2 minggu)
       JANGAN mulai membangun sebelum user memilih (a) atau (b).
   [ ] ⭐ Perbaiki `huggingfaceService.test.js` yang CRASH (dari sesi paralel)
       + diagnosa housePilot 66/69 → 65/69.
-  [ ] ⭐ Konsolidasi timeout provider ke .env (openai/deepseek/claude 90000,
-      qwen 60000 masih hardcode) — pola sudah ada di KIMI_TIMEOUT_MS (M102d).
-  [ ] ⭐ Update skill docs KETIGA folder AI-facing (claude_responds,
-      chat_gpt_responds, elevan-property-assistant) agar menyebutkan RAG &
-      pengiriman gambar — SKILL.md §3/§8 dan doc 08 §0 adalah kandidat utama
+  [x] ⭐ Konsolidasi timeout provider ke .env — SELESAI M126 (openai/deepseek/
+      claude/qwen kini configurable, sama pola dengan KIMI_TIMEOUT_MS/M102d).
+  [x] ⭐ Update skill docs KETIGA folder AI-facing agar menyebutkan RAG &
+      terminologi & jarak & off-topic-sentinel — SELESAI M129–M131.
+  [ ] ⭐⭐ BARU (M131): relokasi fisik `backend/asset/skills/chat_gpt_responds`
+      — pemilik proyek akan meng-copy sendiri, TIDAK dikerjakan lewat kode.
+      `skillPromptService.js` `SKILLS_ROOT` MASIH menunjuk root `skills/`.
+      ⚠️ `backend/asset/skills/{claude_responds,chat_gpt_responds,elevan-
+      property-assistant}` (ketiganya) ternyata SUDAH ADA dengan isi BASI
+      (bukti proses/sesi lain aktif menulis ke sana secara berkala) — jangan
+      kaget bila ditemukan lagi, dan jangan menganggapnya sumber kebenaran.
+  [ ] ⭐⭐ BARU (M131): klarifikasi scope "training chatbotPrivateController.js
+      + platform AI dengan RAG" — permintaan besar terpisah dari directive
+      M131, ambigu dengan cara yang SAMA seperti item RAG-training
+      chat_messages di bawah (index vs fine-tuning). JANGAN mulai membangun
+      sebelum discope ulang dengan pemilik proyek.
   [ ] ⭐ Implementasi mode embedding HuggingFace di embeddingService.js
       (diminta eksplisit, belum dikerjakan — API gratis, cocok sebagai
       alternatif tanpa biaya untuk RAG_EMBEDDING_MODE)
@@ -1772,7 +2032,10 @@ Elevan_Property/
 │   │   ├── chatbotPrivateController.js ← Private Agent (FALLBACK), Q1–Q14,
 │   │   │                               buildAgentBrief, #buildAvoidPreferPairs,
 │   │   │                               #dedupeAnchorLandmarks,
-│   │   │                               ⭐ #tryKnowledgeAnswer (RAG ekstraktif)
+│   │   │                               #tryKnowledgeAnswer (RAG ekstraktif),
+│   │   │                               ⭐ #tryTerminologyAnswer (M129, SHM/KPR
+│   │   │                               dkk., unconditional sebelum guard),
+│   │   │                               ⭐ #tryDistanceAnswer (M130, sama pola)
 │   │   ├── kirimiChatController.js  ← ⭐ sendViaKirimi() param ke-4 `mediaUrl`
 │   │   │                               (BARU) + wiring kirim gambar properti
 │   │   │                               setelah teks (opt-in)
@@ -1781,7 +2044,9 @@ Elevan_Property/
 │   ├── services/                    (30 — ⭐ 5 baru sesi ini)
 │   │   ├── whatsappAIService.js     ← orchestrator + LETAK SEMUA GERBANG,
 │   │   │                               ⭐ kini juga menghitung ragContext
-│   │   │                               (fail-open) sebelum panggil provider
+│   │   │                               (fail-open) sebelum panggil provider,
+│   │   │                               ⭐ M131 cek sentinel offTopicSentinel
+│   │   │                               di KEDUA titik panggil platform API
 │   │   ├── aiPromptBuilderService.js ← ★ JALUR PRODUKSI: extractQualification
 │   │   │                               State, findNextQuestion,
 │   │   │                               buildQualificationStateBlock,
@@ -1797,6 +2062,10 @@ Elevan_Property/
 │   │   │                               persist, isolasi per-agent (filter)
 │   │   ├── ⭐ propertyImageService.js ← BARU: pilih gambar acak, resolusi
 │   │   │                               URL absolut, korelasi fail-closed
+│   │   ├── ⭐ distanceEstimationService.js ← BARU (M130): haversine + rute
+│   │   │                               feri mayor, dipanggil SEBELUM LLM
+│   │   │                               (klaim jarak numerik terlalu berisiko
+│   │   │                               diserahkan ke LLM untuk "menyalin ulang")
 │   │   ├── kimiService.js           ← Moonshot AI, KIMI_MODEL
 │   │   ├── catalogModeService.js    ← users.catalog_summary (cache TTL, M86)
 │   │   ├── agentBusinessRulesService.js ← users.trans_type/payment_type/
@@ -1831,7 +2100,13 @@ Elevan_Property/
 │   ├── controllers/rumah123Controller.js ← halaman /api/rumah123/* — SENGAJA
 │   │   │                               TIDAK memakai isRumah123EnabledForAI(),
 │   │   │                               tetap hidup penuh (M98)
-│   ├── utils/                       (29)
+│   ├── utils/                       (31 — ⭐ 2 baru: offTopicSentinel,
+│   │   │                               (cityGeoData sudah dihitung di services)
+│   │   ├── ⭐ offTopicSentinel.js     ← BARU (M131): OFFTOPIC_SILENT_SENTINEL
+│   │   │                               `[[OFFTOPIC_SILENT]]` + isSilentSentinel()
+│   │   │                               exact-match, dipakai whatsappAIService.js
+│   │   ├── ⭐ cityGeoData.js          ← BARU (M130): ~40 kota terkurasi + 3
+│   │   │                               rute feri mayor (utils, bukan services)
 │   │   ├── ragChunker.js            ← chunking Markdown sadar-heading,
 │   │   │                               tabel/kode TIDAK PERNAH dipotong
 │   │   ├── propertyKeywordFilter.js ← GERBANG MASUK (M87/M88/⭐M95 — detektor
@@ -1877,16 +2152,13 @@ Elevan_Property/
 │                                       checklist DB/Node app/frontend/routing,
 │                                       peringatan keamanan .env
 │
-├── ⭐ knowledge/                     ← BARU — korpus RAG, BUKAN skill doc
-│   └── property-id/
-│       ├── 01-legalitas-dan-sertifikat.md
-│       ├── 02-proses-pajak-dan-biaya.md
-│       └── 03-kpr-dan-pembiayaan.md
-│
 ├── skills/
-│   ├── claude_responds/     (SKILL.md + docs 01–13) ⚠️ BELUM update RAG-aware
-│   ├── chat_gpt_responds/   (byte-identical docs)   ⚠️ BELUM update RAG-aware
-│   ├── elevan-property-assistant/ (standalone)       ⚠️ BELUM update RAG-aware
+│   ├── claude_responds/     (SKILL.md + docs 01–14) ✅ RAG/terminologi/jarak/
+│   │                         sentinel-aware (M129–M131)
+│   │   └── docs/14-legalitas-pajak-kpr.md ⭐ BARU (M131) — gantikan
+│   │       knowledge/property-id/ (folder itu DIHAPUS)
+│   ├── chat_gpt_responds/   (byte-identical docs, termasuk M131 resync)
+│   ├── elevan-property-assistant/ (standalone, sama update-nya)
 │   ├── website_env_concept/ (docs 00–19)
 │   └── website_design_guidelines/
 │
@@ -1909,9 +2181,18 @@ A. WORKFLOW CUSTOMER (end-to-end; ⭐ = baru V8, hanya bila opt-in ON)
    4. Batas layanan agent (M90) → Gate properti → debounce 12s (mutex, M78)
    5. Q0 (batas layanan bila relevan) → Q1 → Q2 (Q1+Q2 = CUSTOMER TERDAFTAR)
    6. Q2c → Q3 (terima/tolak harga) → Q8 → Q4 → Q5 → Q6 → Q7 → Q9
-      ⤷ ⭐ Bila customer bertanya di luar Q-flow (legalitas/pajak/KPR) dan
+      ⤷ ⭐ M129: pertanyaan terminologi (SHM/SHGB/KPR dkk.) dijawab
+        DETERMINISTIK tanpa syarat, kapan pun muncul mid-flow — tidak
+        menunggu RAG_ENABLED=ON
+      ⤷ ⭐ M130: pertanyaan jarak/waktu tempuh dijawab DETERMINISTIK sebelum
+        LLM dipanggil sama sekali (GOOGLE_ENABLED tetap false)
+      ⤷ ⭐ Bila customer bertanya di luar Q-flow (topik lain) dan
         RAG_ENABLED=ON: jalur LLM dapat konteks tambahan; Private Agent bisa
         menjawab ekstraktif langsung bila skor kecocokan cukup tinggi
+      ⤷ ⭐ M131: bila AI_PRIMARY_PROVIDER ≠ 'private' dan platform API
+        memutuskan pesan ini off-topic & tidak perlu dibalas, ia membalas
+        dengan sentinel `[[OFFTOPIC_SILENT]]` — backend mendeteksi dan diam,
+        pesan customer tetap tersimpan tapi TIDAK ada balasan terkirim
    7. Q10 → Q11 → Q12 → Q14 → Q_FAC → Q9b (tanggal) → Q9c (jam)
       ⤷ Penolakan di titik mana pun = JAWABAN, bukan slot kosong
       ⤷ Jawaban sukarela (di luar urutan) = TETAP DICATAT, bukan dibuang
@@ -1941,8 +2222,9 @@ D. WORKFLOW DEVELOPER (menambah/ubah fitur chat)
    8. Jalankan SELURUH suite (`for f in tests/*.test.js; do node $f; done`,
       jumlahkan `RESULT: p/t` — TIDAK ADA `npm test`), bandingkan dgn baseline
    9. Update skill docs KETIGA folder
-  10. ⭐ Bila menyentuh knowledge/ atau doc referensi RAG-eligible (07/08/10/
-      11/12/13): jalankan ulang `node scripts/build-rag-index.js`
+  10. ⭐ Bila menyentuh doc referensi RAG-eligible (07/08/10/11/12/13/14 —
+      `knowledge/` sudah dihapus M131, kontennya kini di doc 14): jalankan
+      ulang `node scripts/build-rag-index.js`
   11. Restart backend
   12. Catat solusinya di §5 (nomor M berikutnya)
 
@@ -2018,9 +2300,17 @@ GEJALA → PENYEBAB → SOLUSI
       bukan bug.
 
   ⭐ AI tidak menjawab pertanyaan legalitas/pajak/KPR meski korpus ada
-    → LANGKAH 1: cek RAG_ENABLED=ON di .env (default OFF).
+    → LANGKAH 0 (⭐ M129, cek ini DULU): "apa itu SHM/SHGB/KPR" dkk. TIDAK
+      bergantung RAG sama sekali — dijawab `#tryTerminologyAnswer()`
+      (chatbotPrivateController.js) secara DETERMINISTIK, unconditional. Bila
+      tidak terjawab, cek dulu apakah pesannya benar-benar match pola TERMS
+      di sana sebelum menyalahkan RAG.
+    → LANGKAH 1: cek RAG_ENABLED=ON di .env (default OFF) — ini HANYA relevan
+      untuk pertanyaan pengetahuan LAIN di luar terminologi inti M129.
     → LANGKAH 2: cek backend/data/rag-index.json ADA (jalankan
-      `node scripts/build-rag-index.js` bila belum/basi).
+      `node scripts/build-rag-index.js` bila belum/basi). Korpus legalitas/
+      pajak/KPR kini di `skills/*/docs/14-legalitas-pajak-kpr.md` (⭐ M131 —
+      `knowledge/property-id/` SUDAH DIHAPUS, jangan cari di sana lagi).
     → LANGKAH 3: untuk Private Agent, ambangnya SENGAJA tinggi
       (RAG_ANSWER_MIN_SCORE=0.30) — pertanyaan pendek/gaul mungkin di bawah
       ambang pada mode `local`. Set RAG_EMBEDDING_MODE=openai untuk akurasi
@@ -2029,6 +2319,28 @@ GEJALA → PENYEBAB → SOLUSI
       RAG fail-open, jadi kegagalan TIDAK menghentikan balasan tapi juga
       tidak menambah konteks; periksa penyebabnya di log bukan di perilaku
       customer-facing.
+
+  ⭐ AI tidak menjawab pertanyaan jarak/waktu tempuh, atau salah menyebut rute
+    → LANGKAH 1 (M130): cek KEDUA kota (asal & tujuan) disebut EKSPLISIT di
+      SATU pesan yang sama DAN dikenali `utils/cityGeoData.js` (~40 kota
+      terkurasi) — di luar itu, fail-open, lanjut ke LLM/Private Agent biasa.
+    → LANGKAH 2: rute feri hanya disebut untuk 3 rute mayor terverifikasi DAN
+      hanya bila total jarak ≤1300km (MAX_FERRY_ROUTE_DISTANCE_KM) — jarak
+      sangat jauh (mis. Surabaya↔Banda Aceh) SENGAJA dialihkan ke "tanya
+      agent" alih-alih menyebut rute yang tidak relevan (lihat §5 M130).
+
+  ⭐ Customer tidak dapat balasan sama sekali untuk pesan tertentu (M131)
+    → LANGKAH 1: cek AI_PRIMARY_PROVIDER — bila BUKAN 'private', platform API
+      itu sendiri yang memutuskan diam, BUKAN bug backend. Cek apakah
+      balasan mentah dari provider adalah sentinel `[[OFFTOPIC_SILENT]]`
+      (log `[WhatsAppAI] 🤫 … memutuskan diam`).
+    → LANGKAH 2: bila diam untuk pesan yang SEHARUSNYA dijawab (false
+      positive), ini keputusan MODEL berdasar skill doc §3c — perbaiki lewat
+      skill doc (contoh/penjelasan lebih jelas), BUKAN lewat kode backend;
+      backend sengaja tidak menge-override keputusan platform API di sini.
+    → LANGKAH 3: pesan customer TETAP tersimpan di ChatMessage untuk audit
+      meski balasan AI tidak ada — cek riwayat chat, jangan asumsikan pesan
+      hilang/tidak diterima webhook.
 
   ⭐ Gambar properti tidak pernah terkirim
     → LANGKAH 1: cek PROPERTY_IMAGE_SEND_ENABLED=ON di .env (default OFF).
@@ -2150,57 +2462,71 @@ PRINSIP DEBUG
     persetujuan eksplisit pemilik proyek — keduanya belum diverifikasi penuh
     dengan API/DB produksi sungguhan (lihat §10 ROADMAP untuk daftar
     verifikasi yang masih tertunda).
-  - ⭐ BARU (V8): skill docs KETIGA folder AI-facing BELUM diperbarui untuk
-    RAG/gambar — jangan berasumsi AI "tahu" tentang kapabilitas ini dari
-    system prompt-nya sendiri. RAG bekerja transparan lewat konteks yang
-    disuntik (AI tidak perlu "tahu" secara eksplisit untuk memakainya dengan
-    benar), tapi doc 08 §0 sebaiknya tetap diperbarui agar AI bisa menjelaskan
-    proses "gambar mungkin menyusul" ke customer dengan wajar.
+  - ⭐ M131: skill docs KETIGA folder AI-facing SUDAH diperbarui untuk RAG/
+    terminologi/jarak/off-topic-sentinel (item roadmap lama SELESAI) — tapi
+    JANGAN asumsikan sync akan tetap byte-identical selamanya: pemilik proyek
+    sudah 2× mengubah keputusan soal folder mana yang boleh disentuh
+    (chat_gpt_responds dilewati di M129/M130, disync ulang di M131) — SELALU
+    tanya/cek instruksi terbaru sebelum mengedit skill docs.
+  - ⭐ M131: `knowledge/` SUDAH DIHAPUS. Bila menemukan referensi
+    `knowledge/property-id/*.md` di kode/dokumen LAMA (termasuk entri §5 M92
+    di file ini sendiri, yang SENGAJA dibiarkan sebagai catatan historis apa
+    adanya), itu MERUJUK LOKASI LAMA — konten sesungguhnya kini ada di
+    `skills/*/docs/14-legalitas-pajak-kpr.md`.
+  - ⭐ M131: SELALU verifikasi `backend/asset/skills/` sebelum menganggapnya
+    sumber kebenaran — ditemukan berisi salinan BASI dari ketiga folder
+    (bukti proses/sesi lain aktif menulisinya di luar percakapan mana pun).
+    Root `skills/` (yang di-load `skillPromptService.js`) tetap satu-satunya
+    sumber kebenaran untuk kode yang berjalan.
   - ⭐ BARU (V8): LangChain.js dan vector database SENGAJA DITOLAK dengan
     alasan terukur (lihat §10 "DENGAN SENGAJA TIDAK AKAN DIKERJAKAN") — bila
     diminta lagi di sesi mendatang, rujuk bagian itu alih-alih membangun ulang
     dari nol; hanya bangun ulang alasannya bila ada perubahan skala/kebutuhan
     nyata (mis. korpus menembus ~100k vektor).
 
-  ✅ BASELINE TES BERLAKU: **1710/1732** (65 berkas tes, per 20 Agu 2026,
-  akhir sesi M101–M102). Riwayat baseline: 1405/1426 (14 Agu, akhir M92/M93)
-  → 1519/1540 (18 Agu, akhir M94–M100) → 1686/1708 (20 Agu, setelah M101 +
-  tes dari sesi paralel HuggingFace/RAG) → **1710/1732** (20 Agu, akhir M102).
-  ⚠️ Lonjakan besar 1540→1708 BUKAN dari sesi M101/M102 saja — sebagian besar
-  berasal dari sesi PARALEL (HuggingFace/RAG) yang menambah banyak berkas tes.
-  22 kegagalan pre-existing di tiga berkas yang sama (SEMPAT ada "kegagalan
-  ke-4" sementara di bookingShortStayVersi2 selama M97 belum dikerjakan —
-  sudah tertutup, lihat §5 M97):
-    customerDateParser 54/69 · extractFilters 109/112 · housePilot 65/69
-  ⚠️ housePilot turun 66/69 → 65/69 pada 20 Agu. Diverifikasi BUKAN dari
-  M101/M102 (berkas tesnya tidak menyentuh satu pun berkas yang diubah kedua
-  M itu) — berasal dari sesi paralel. BELUM didiagnosis.
+  ✅ BASELINE TES BERLAKU: **81 berkas tes** (per 23 Agu 2026, akhir sesi
+  M127–M131 + housekeeping knowledge→skills). Riwayat baseline: 1405/1426
+  (14 Agu, akhir M92/M93) → 1519/1540 (18 Agu, akhir M94–M100) → 1710/1732
+  (20 Agu, akhir M101–M102) → 1856/1879, 71 berkas (21 Agu, akhir M118–M126)
+  → **81 berkas** (23 Agu, akhir M127–M131; angka pass/total per-baris tidak
+  dicatat ulang di sesi ini — lihat 5 kegagalan pre-existing di bawah untuk
+  yang dikecualikan).
+  5 kegagalan pre-existing SAMA PERSIS sepanjang sesi 23 Agu, dikonfirmasi
+  TIDAK menyentuh berkas mana pun yang diubah sesi ini:
+    customerDateParser · extractFilters · facilitiesViewingAndShortAnswers ·
+    housePilot · huggingfaceService (FATAL/crash, pre-existing, belum
+    diperbaiki — lihat catatan lama di bawah untuk detail gejalanya)
   ⚠️ SATU BERKAS CRASH (tanpa baris RESULT): `huggingfaceService.test.js` —
   "TypeError: Cannot read properties of undefined (reading 'provider')".
-  Dari sesi paralel RAG/HuggingFace, BELUM diperbaiki. Runner harus
+  MASIH belum diperbaiki lintas berapa pun sesi berikutnya. Runner harus
   memperlakukan "tidak ada baris RESULT" sebagai CRASH, bukan skip.
-  Cara membaca hasil suite di sesi berikutnya (`npm test` TIDAK ADA):
+  Cara membaca hasil suite (`npm test` TIDAK ADA):
     for f in tests/*.test.js; do node "$f"; done   # lalu jumlahkan RESULT: p/t
-    • Total turun ATAU ada nama berkas gagal DI LUAR ketiganya → REGRESI sesi
-      berjalan. Cari penyebabnya sebelum melanjutkan.
-    • Total naik dengan tiga berkas itu tetap gagal → normal (tes baru ditambah).
+    • Total turun ATAU ada nama berkas gagal DI LUAR daftar 5 di atas →
+      REGRESI sesi berjalan. Cari penyebabnya sebelum melanjutkan.
+    • Total naik dengan kelima berkas itu tetap gagal → normal (tes baru
+      ditambah, ini pola paling umum tiap sesi).
     • qualifierCharacterization: jamnya DIBEKUKAN (FROZEN_NOW 10 Agu 2026),
       tidak lagi gagal hanya karena dijalankan di hari berbeda.
     • ⚠️ Tes yang memakai express-rate-limit: JANGAN `process.exit()` di akhir
       (libuv Windows → exit 127 = terbaca CRASH walau semua assertion lulus).
       Pakai `process.exitCode = …` (lihat §5 M101).
-  `npm run lint` GAGAL — eslint tidak terpasang di node_modules (pre-existing,
-  dikonfirmasi BUKAN disebabkan sesi V8/V9; belum pernah berjalan sejak
-  sebelum V7 juga per catatan itu).
+  `npm run lint` DIKONFIRMASI JALAN di sesi 23 Agu (eslint terpasang, bersih
+  untuk semua berkas yang disentuh) — kontradiksi catatan lama "eslint tidak
+  terpasang" mungkin sudah tidak berlaku; verifikasi ulang sebelum percaya
+  salah satu klaim tanpa cek langsung `npx eslint <file>`.
 
-  ⭐ DEPLOY PRODUKSI (BARU, M100): propmatches.fun di-hosting di Hostinger
-  (paket Business). Panduan lengkap → **DEPLOY_HOSTINGER.md** (root project).
-  Tiga penyebab 503 diketahui: (1) rename PORT→APP_PORT sempat mematikan
-  platform hosting, SUDAH diperbaiki (server.js baca process.env.PORT dulu);
-  (2) CORS produksi SUDAH diturunkan dari APP_URL; (3) kredensial database
-  Hostinger BELUM diisi — SATU-SATUNYA langkah tersisa milik user (butuh
-  password Hostinger). Nomor M berikutnya untuk sesi mendatang: **M101**.
+  ⭐ DEPLOY PRODUKSI (M100): propmatches.fun di-hosting di Hostinger (paket
+  Business). Panduan lengkap → **DEPLOY_HOSTINGER.md** (root project). Tiga
+  penyebab 503 diketahui: (1) rename PORT→APP_PORT sempat mematikan platform
+  hosting, SUDAH diperbaiki; (2) CORS produksi SUDAH diturunkan dari APP_URL;
+  (3) kredensial database Hostinger — status TERBARU tidak diverifikasi ulang
+  sesi ini, cek DEPLOY_HOSTINGER.md §2 sebelum berasumsi.
+  Nomor M berikutnya untuk sesi mendatang: **M132**.
 
 ================================================================================
-  END OF FILE — ELEVAN_PROPERTY_CONTEXT_V8.txt
+  END OF FILE — ELEVAN_PROPERTY_CONTEXT_V8.txt (V11 per header — nama berkas
+  fisik SENGAJA tidak di-rename ke _V11.txt, ikuti pola V8-judul/=V9-badan
+  yang sudah didokumentasikan di §Riwayat; lihat catatan penomoran di kepala
+  berkas ini bila membingungkan)
 ================================================================================
