@@ -13,6 +13,21 @@ const sequelize = require('../config/database');
  * Status: 1 = aktif, 2 = disabled/blocked, 3 = deleted (soft delete)
  * FK created_by & updated_by → users.user_id
  */
+/**
+ * M129: sertifikat yang boleh diisi TERGANTUNG transaction_type.
+ *   Rent (sewa) → sertifikat kepemilikan tidak relevan bagi penyewa: hanya
+ *     KOSONG/LAINNYA (atau null) yang masuk akal.
+ *   Sale (beli) → tiga sertifikat kepemilikan resmi Indonesia ditambahkan:
+ *     SHM (Hak Milik, tertinggi/selamanya), SHGB (Hak Guna Bangunan, masa
+ *     berlaku tertentu), SHSRS (Hak Satuan Rumah Susun, untuk apartemen/
+ *     kondominium) — lihat knowledge/property-id/01-legalitas-dan-sertifikat.md.
+ * null selalu diperbolehkan di kedua transaksi (belum diisi/belum diketahui).
+ */
+const CERTIFICATE_TYPES_BY_TX = {
+  rent: ['KOSONG', 'LAINNYA'],
+  sale: ['KOSONG', 'LAINNYA', 'SHM', 'SHGB', 'SHSRS'],
+};
+
 const Property = sequelize.define('Property', {
   property_id: {
     type: DataTypes.STRING(50),
@@ -135,6 +150,29 @@ const Property = sequelize.define('Property', {
     defaultValue: 'N',
     comment: 'Sale: Y/N. Default N karena tipe sewa tidak bisa KPR'
   },
+  kpr_dp_percent: {
+    type: DataTypes.DECIMAL(5, 2),
+    allowNull: true,
+    defaultValue: null,
+    comment: 'Estimasi DP KPR dalam persen (mis. 5.00, 10.00). Hanya relevan bila kpr_status=Y. '
+           + 'Informasi MARKETING/perkiraan listing — BUKAN keputusan kredit bank, dan AI TIDAK '
+           + 'PERNAH memakainya untuk menghitung kelayakan/cicilan customer (lihat knowledge/property-id).'
+  },
+  kpr_installment_estimate: {
+    type: DataTypes.DECIMAL(25, 4),
+    allowNull: true,
+    defaultValue: null,
+    comment: 'Estimasi cicilan per bulan (mis. "Cicilan per bulan mulai dari 24,7 Jutaan" di listing '
+           + 'developer) — angka MARKETING dari developer/agent, bukan simulasi kredit resmi bank. '
+           + 'Hanya relevan bila kpr_status=Y.'
+  },
+  certificate_type: {
+    type: DataTypes.STRING(20),
+    allowNull: true,
+    defaultValue: null,
+    comment: 'Sewa: NULL | KOSONG | LAINNYA saja. Beli: NULL | KOSONG | LAINNYA | SHM | SHGB | SHSRS. '
+           + 'Divalidasi di hook validate() model ini terhadap transaction_type — lihat CERTIFICATE_TYPES_BY_TX.'
+  },
   building_type: {
     type: DataTypes.STRING(50),
     allowNull: false,
@@ -176,6 +214,24 @@ const Property = sequelize.define('Property', {
 }, {
   tableName: 'properties',
   timestamps: false,
+  validate: {
+    // M129: certificate_type harus cocok dengan transaction_type. Dicek di
+    // level model (bukan cuma UI) supaya import/API mana pun tidak bisa
+    // menyelundupkan kombinasi tidak masuk akal, mis. sewa dengan SHM.
+    certificateMatchesTransactionType() {
+      if (this.certificate_type == null) return; // null selalu boleh, kedua transaksi
+      const tx = String(this.transaction_type || '').toLowerCase();
+      const allowed = CERTIFICATE_TYPES_BY_TX[tx];
+      if (!allowed) return; // transaction_type tidak dikenal — bukan tanggung jawab validator ini
+      const cert = String(this.certificate_type).toUpperCase();
+      if (!allowed.includes(cert)) {
+        throw new Error(
+          `certificate_type "${this.certificate_type}" tidak valid untuk transaction_type "${this.transaction_type}". ` +
+          `Nilai yang diperbolehkan: ${allowed.join(', ')} (atau null).`
+        );
+      }
+    },
+  },
   indexes: [
     { fields: ['property_id'] },
     { fields: ['city_id'] },
@@ -188,5 +244,9 @@ const Property = sequelize.define('Property', {
     { fields: ['title'] }
   ]
 });
+
+// Static, tidak mengubah bentuk export (module.exports tetap model langsung,
+// supaya semua `require('../models/Property')` yang sudah ada tidak rusak).
+Property.CERTIFICATE_TYPES_BY_TX = CERTIFICATE_TYPES_BY_TX;
 
 module.exports = Property;

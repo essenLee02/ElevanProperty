@@ -37,6 +37,7 @@ const { guardReplyIdentity }                        = require('../utils/replyIde
 const sessionAnchors                                = require('../utils/sessionAnchors');
 const { expandAbbreviations }                       = require('../utils/lazyChatNormalizer');
 const { buildRagContext }                           = require('./ragRetrievalService');
+const { isSilentSentinel }                          = require('../utils/offTopicSentinel');
 
 // Jendela history untuk ekstraksi filter & state kualifikasi. Cukup besar agar
 // pesan pembuka (tipe/transaksi/lokasi) tidak keluar scope di alur panjang, tapi
@@ -533,6 +534,16 @@ async function _generateWhatsAppAIReplyCore(params) {
         propertyCtx,
         { facilityContext, cityContext, locationContext, ragContext }
       );
+
+      // ★ M131: sinyal diam dari platform API ★ — model memutuskan SENDIRI
+      // pesan ini di luar topik (per skill doc §3c) dan tidak perlu dibalas.
+      // Backend tidak menebak/menge-override keputusan ini — deteksi murni
+      // dari token, bukan dari analisis teks balasan.
+      if (isSilentSentinel(result.reply)) {
+        console.log(`[WhatsAppAI] 🤫 ${result.provider} memutuskan diam (sentinel off-topic) — tidak ada balasan dikirim.`);
+        return { reply: null, replyParts: [], provider: result.provider, contextSource, silent: true };
+      }
+
       // Jaring pengaman DETERMINISTIK: model kadang tetap menulis "[Nama Agen]"
       // / "${agentName}" alih-alih nama sungguhan, meski nama itu sudah tertulis
       // apa adanya di prompt DAN dilarang eksplisit (M85). Ganti di sisi kirim —
@@ -593,6 +604,14 @@ async function _generateWhatsAppAIReplyCore(params) {
         const aiResult = await generateWhatsappExternalAIFallback(
           session, history, message, enrichedPropertyCtx, { facilityContext, cityContext, ragContext }
         );
+
+        // ★ M131 ★ — sentinel diam berlaku sama di jalur fallback eksternal ini,
+        // karena ini juga jawaban langsung dari platform API (Claude/ChatGPT/QWEN).
+        if (isSilentSentinel(aiResult.reply)) {
+          console.log(`[WhatsAppAI] 🤫 ${aiResult.provider} memutuskan diam (sentinel off-topic, fallback eksternal) — tidak ada balasan dikirim.`);
+          return { reply: null, replyParts: [], provider: aiResult.provider, contextSource, silent: true };
+        }
+
         // Guard identitas yang sama (M85) — jalur fallback eksternal juga
         // dilayani provider LLM, jadi punya kelas bug yang persis sama.
         const guardedExt = guardReplyIdentity(aiResult.reply, {
@@ -653,7 +672,36 @@ async function _generateWhatsAppAIReplyCore(params) {
  *   @param {string|null} params.phone - nomor WA customer (lookup ask_name)
  */
 async function generateWhatsAppAIReply(params) {
+  // ── M130: pertanyaan JARAK & WAKTU TEMPUH ke properti — dijawab
+  // DETERMINISTIK, SEBELUM memanggil LLM sama sekali (bukan sekadar konteks
+  // yang disuntik ke prompt). Alasan: angka jarak/waktu adalah fakta yang
+  // HARUS akurat — menyuntikkannya sebagai konteks lalu berharap LLM
+  // menyalin persis tanpa membulatkan/mengarang ulang adalah risiko yang
+  // sama seperti kelas bug "AI mengarang nama area" (M84/M92), hanya untuk
+  // domain angka jarak yang salahnya bisa membuat customer salah rencana
+  // perjalanan. GOOGLE_ENABLED=false (keputusan pemilik proyek) — estimasi
+  // HANYA dari tabel koordinat kota statis (utils/cityGeoData.js), jarak
+  // garis lurus, bukan rute jalan presisi; selalu dinyatakan sebagai
+  // estimasi. Fail-open: hanya menjawab bila KEDUA kota (asal & tujuan)
+  // disebutkan eksplisit di pesan yang sama DAN dikenali tabel — di luar
+  // itu, `null` dan alur normal (LLM/Private Agent) berjalan seperti biasa.
+  try {
+    const { tryAnswerDistanceQuery } = require('./distanceEstimationService');
+    const distanceReply = tryAnswerDistanceQuery(params.message);
+    if (distanceReply) {
+      return {
+        reply: distanceReply,
+        replyParts: [distanceReply],
+        provider: 'distance_estimation',
+        contextSource: 'none',
+      };
+    }
+  } catch (err) {
+    console.warn('[WhatsAppAI] Estimasi jarak gagal (fail-open, lanjut ke LLM):', err.message);
+  }
+
   const result = await _generateWhatsAppAIReplyCore(params);
+  if (result.silent) return result;   // M131: platform API diam — jangan diproses lebih lanjut
   try {
     const { phone, agentUserId = null } = params;
     if (!phone || !agentUserId) return result;

@@ -49,6 +49,18 @@ function _apiKey() {
   return _sanitizeEnvValue(process.env.GOOGLE_API_KEY);
 }
 
+/**
+ * Master kill switch — GOOGLE_ENABLED=false mematikan SELURUH pemakaian Google
+ * Maps Platform (Places Text Search + Geocoding) di service ini, terlepas dari
+ * apakah GOOGLE_API_KEY masih terisi. Default AKTIF (true) bila var tidak
+ * diisi sama sekali, supaya perilaku tidak berubah diam-diam bagi siapa pun
+ * yang belum menyetelnya (pola sama dengan *_TIMEOUT_MS di provider AI).
+ */
+function _isEnabled() {
+  const raw = String(process.env.GOOGLE_ENABLED ?? '').trim().toLowerCase();
+  return raw !== 'false' && raw !== '0' && raw !== 'off' && raw !== 'no';
+}
+
 function _isCacheFresh(entry) {
   return entry && (Date.now() - entry.fetchedAt) < CACHE_TTL_MS;
 }
@@ -103,6 +115,11 @@ async function warmCityLandmarksCache(cityName) {
   if (_inFlight.has(key)) return _inFlight.get(key);
 
   const fetchPromise = (async () => {
+    if (!_isEnabled()) {
+      console.log('[GooglePlaces] GOOGLE_ENABLED=false — skipping landmark fetch for', cityName);
+      _landmarkCache.set(key, { landmarks: [], fetchedAt: Date.now() });
+      return [];
+    }
     const apiKey = _apiKey();
     if (!apiKey) {
       console.warn('[GooglePlaces] GOOGLE_API_KEY missing — skipping landmark fetch for', cityName);
@@ -150,6 +167,7 @@ async function warmCityLandmarksCache(cityName) {
  * @returns {Promise<{formattedAddress:string, city:string, province:string, lat:number, lng:number}|null>}
  */
 async function geocodeAddress(address) {
+  if (!_isEnabled()) return null;
   const apiKey = _apiKey();
   const query = String(address || '').trim();
   if (!apiKey || !query) return null;
@@ -182,4 +200,5 @@ module.exports = {
   getCachedCityLandmarks,
   warmCityLandmarksCache,
   geocodeAddress,
+  isGoogleEnabled: _isEnabled,
 };

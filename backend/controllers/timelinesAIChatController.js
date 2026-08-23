@@ -570,6 +570,17 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
     ctxSource = 'none';
   }
 
+  // ── M131: platform API memutuskan DIAM (sentinel off-topic) ─────────
+  // Backend tidak ikut campur dalam keputusan ini — tidak menyimpan balasan,
+  // tidak mengirim apa pun ke WhatsApp. Pesan customer sendiri sudah
+  // tersimpan di atas untuk histori/audit.
+  if (aiResult.silent) {
+    if (isTerminalActive('TIMELINESAI')) {
+      console.log(`[TIMELINESAI] 🤫 ${aiResult.provider} memutuskan diam untuk pesan ini — tidak ada balasan dikirim.`);
+    }
+    return;
+  }
+
   // ── Simpan AI reply ─────────────────────────────────────────────────
   await ChatMessage.create({
     chatSessionId : session.id,

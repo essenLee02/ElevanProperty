@@ -351,6 +351,100 @@ async function ensureRequiredDatabaseColumns() {
     }
   }
 
+  // M129: certificate_type (SHM/SHGB/SHSRS untuk beli; kosong/lainnya untuk
+  // sewa — lihat models/Property.js CERTIFICATE_TYPES_BY_TX) + info KPR
+  // marketing (bukan simulasi kredit resmi).
+  try {
+    const propertiesTable = await queryInterface.describeTable('properties');
+    if (propertiesTable && !propertiesTable.certificate_type) {
+      await queryInterface.addColumn('properties', 'certificate_type', {
+        type: DataTypes.STRING(20),
+        allowNull: true,
+        defaultValue: null,
+        after: 'kpr_status'
+      });
+      console.log('Database migration completed: added properties.certificate_type column');
+    }
+    if (propertiesTable && !propertiesTable.kpr_dp_percent) {
+      await queryInterface.addColumn('properties', 'kpr_dp_percent', {
+        type: DataTypes.DECIMAL(5, 2),
+        allowNull: true,
+        defaultValue: null,
+        after: 'kpr_status'
+      });
+      console.log('Database migration completed: added properties.kpr_dp_percent column');
+    }
+    if (propertiesTable && !propertiesTable.kpr_installment_estimate) {
+      await queryInterface.addColumn('properties', 'kpr_installment_estimate', {
+        type: DataTypes.DECIMAL(25, 4),
+        allowNull: true,
+        defaultValue: null,
+        after: 'kpr_dp_percent'
+      });
+      console.log('Database migration completed: added properties.kpr_installment_estimate column');
+    }
+  } catch (error) {
+    if (!String(error.message || '').toLowerCase().includes('no description found')) {
+      console.warn('Properties schema check warning:', error.message);
+    }
+  }
+
+  // M129: locations mendapat location_type (area/landmark/commercial) +
+  // city_id (WAJIB untuk area) — lihat models/Location.js untuk penjelasan
+  // lengkap ketiga kategori. Unique constraint lama (name saja, global)
+  // diganti ke (name, city_id) supaya nama area boleh berulang antar kota.
+  try {
+    const locationsTable = await queryInterface.describeTable('locations');
+    if (locationsTable && !locationsTable.city_id) {
+      await queryInterface.addColumn('locations', 'city_id', {
+        type: DataTypes.STRING(30),
+        allowNull: true,
+        defaultValue: null,
+        after: 'name'
+      });
+      console.log('Database migration completed: added locations.city_id column');
+    }
+    if (locationsTable && !locationsTable.location_type) {
+      await queryInterface.addColumn('locations', 'location_type', {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+        defaultValue: 'commercial',
+        after: 'city_id'
+      });
+      console.log('Database migration completed: added locations.location_type column (default commercial)');
+    }
+    // Ganti unique index lama (name global) ke (name, city_id) — HANYA sekali,
+    // idempoten lewat cek nama index yang sudah ada.
+    if (locationsTable) {
+      const [existingIndexes] = await sequelize.query('SHOW INDEX FROM locations');
+      const hasOldUnique = existingIndexes.some((idx) => idx.Key_name === 'name' || (idx.Column_name === 'name' && idx.Non_unique === 0 && idx.Key_name !== 'uq_locations_name_city'));
+      const hasNewUnique = existingIndexes.some((idx) => idx.Key_name === 'uq_locations_name_city');
+      if (hasOldUnique && !hasNewUnique) {
+        const oldUniqueKeyNames = [...new Set(existingIndexes.filter((idx) => idx.Column_name === 'name' && idx.Non_unique === 0).map((idx) => idx.Key_name))];
+        for (const keyName of oldUniqueKeyNames) {
+          try {
+            await queryInterface.removeIndex('locations', keyName);
+            console.log(`Database migration completed: removed old unique index "${keyName}" on locations.name`);
+          } catch (idxErr) {
+            console.warn(`Could not remove old index "${keyName}" on locations:`, idxErr.message);
+          }
+        }
+      }
+      if (!hasNewUnique) {
+        try {
+          await queryInterface.addIndex('locations', ['name', 'city_id'], { unique: true, name: 'uq_locations_name_city' });
+          console.log('Database migration completed: added locations unique index (name, city_id)');
+        } catch (idxErr) {
+          console.warn('Could not add uq_locations_name_city index:', idxErr.message);
+        }
+      }
+    }
+  } catch (error) {
+    if (!String(error.message || '').toLowerCase().includes('no description found')) {
+      console.warn('Locations schema check warning:', error.message);
+    }
+  }
+
 }
 
 sequelize.sync()

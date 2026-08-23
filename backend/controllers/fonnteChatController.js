@@ -512,6 +512,17 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
     ctxSource = 'none';
   }
 
+  // ── M131: platform API memutuskan DIAM (sentinel off-topic) ─────────
+  // Backend tidak ikut campur dalam keputusan ini — tidak menyimpan balasan,
+  // tidak mengirim apa pun ke WhatsApp. Pesan customer sendiri sudah
+  // tersimpan di atas untuk histori/audit.
+  if (aiResult.silent) {
+    if (isTerminalActive('FONNTE')) {
+      console.log(`[FONNTE] 🤫 ${aiResult.provider} memutuskan diam untuk pesan ini — tidak ada balasan dikirim.`);
+    }
+    return;
+  }
+
   // ── Simpan AI reply ─────────────────────────────────────────────────
   await ChatMessage.create({
     chatSessionId : session.id,
@@ -761,6 +772,13 @@ class FonnteChatController {
         agentUserId: agent.user_id,   // scoping katalog per-agent (RESPOND_CATALOG_RUN=ON)
         phone      : sender,          // gerbang tanya-nama (ask_name) — lookup customers table
       });
+      // M131: platform API memutuskan DIAM (sentinel off-topic) — jangan simpan
+      // balasan, dan kirim message kosong supaya Fonnte Chaining tidak mengirim apa pun.
+      if (result.silent) {
+        console.log(`[FONNTE CHAINING] 🤫 ${result.provider} memutuskan diam untuk pesan ini — tidak ada balasan dikirim.`);
+        return res.status(HTTP.OK).json({ status: true, message: '' });
+      }
+
       aiReply = result.reply;
 
       await ChatMessage.create({
