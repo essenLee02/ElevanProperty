@@ -98,7 +98,19 @@ async function startNgrok(port) {
       return authtoken ? s.split(authtoken).join('***REDACTED***') : s;
     };
 
-    ngrokProcess = spawn('ngrok', args);
+    // M132: JANGAN spawn 'ngrok' polos — resolusi PATH bisa salah pilih binary.
+    // Ditemukan nyata di mesin dev: saat shell backend dijalankan dari terminal
+    // dengan Python venv aktif (python_backend/.venv), PATH memprioritaskan
+    // copy ngrok BAWAAN pyngrok (python_backend/.venv/Scripts/ngrok.exe) —
+    // bukan ngrok asli (WindowsApps atau npm) — dan Windows Defender memblokir
+    // copy pyngrok itu (WinError 225 "file contains a virus or potentially
+    // unwanted software"). Gejalanya menyesatkan: terlihat seperti timeout
+    // ngrok biasa, padahal proses child bahkan gagal start sama sekali.
+    // NGROK_EXE_PATH (opsional, .env) memberi jalur PASTI, melewati PATH sama
+    // sekali. Kosong → tetap 'ngrok' (perilaku lama, tidak berubah bila tidak
+    // di-set eksplisit).
+    const ngrokExe = (process.env.NGROK_EXE_PATH || '').trim() || 'ngrok';
+    ngrokProcess = spawn(ngrokExe, args);
 
     const rl = readline.createInterface({ input: ngrokProcess.stdout });
     let resolved = false;
@@ -139,6 +151,19 @@ async function startNgrok(port) {
       // teks biasa, bukan JSON stdout — tangkap juga sebagai kandidat lastError.
       const codeMatch = text.match(/ERR_NGROK_\d+/);
       if (codeMatch) lastError = text;
+      // M132: WinError 225 = Windows Defender memblokir binary ngrok yang
+      // ter-resolve — HAMPIR SELALU berarti PATH salah pilih binary (mis.
+      // python_backend/.venv/Scripts/ngrok.exe milik pyngrok), BUKAN masalah
+      // akun/tunnel ngrok. Beri pesan yang menunjuk akar masalah langsung,
+      // jangan biarkan ini terlihat seperti timeout tunnel biasa.
+      if (/WinError 225|contains a virus or potentially unwanted software/i.test(text)) {
+        lastError = 'ngrok binary yang ter-resolve dari PATH diblokir Windows '
+          + 'Defender (WinError 225) — BUKAN masalah akun/tunnel. Kemungkinan '
+          + 'besar shell ini punya Python venv aktif sehingga PATH memilih '
+          + 'python_backend/.venv/Scripts/ngrok.exe (bawaan pyngrok, bukan '
+          + 'ngrok asli). Perbaiki dengan set NGROK_EXE_PATH di .env ke ngrok '
+          + 'asli, atau jalankan backend dari shell TANPA venv Python aktif.';
+      }
     });
 
     ngrokProcess.on('error', (err) => {

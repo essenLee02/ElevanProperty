@@ -2005,17 +2005,12 @@ function extractQualificationState(history = [], currentMessage = '') {
     }
   }
 
-  // ── 3B: Mid-flow change detection (M124) — GRANULAR per owner spec ─────────
+  // ── 3B: Mid-flow change detection (M124, diperluas M132) — GRANULAR per
+  // owner spec, dengan SATU pengecualian compound ──────────────────────────
   // Uses P0_RESOLVED (Phase 0's canonical resolver) instead of re-detecting
   // type/tx/city here — one detector, not two copies drifting apart.
   //
-  // Three independent axes, each with its OWN preserve/reset rule. A change is
-  // only ACTED ON the exact turn it happens (typeChangedNow/txChangedNow/
-  // locChangedNow) — Phase 0 already keeps buildingType/transactionType/city
-  // resolved to their canonical value on every later turn, so this block only
-  // needs to fire the one-time side effects (nulling dependent fields so
-  // findNextQuestion re-asks exactly what's now invalid, nothing else).
-  //
+  // Tiga axis independen (SATU axis berubah sendirian di pesan yang sama):
   //   GANTI KOTA        → re-ask landmark only. Transaction, property type,
   //                        move-in date, survey schedule, facilities all stay.
   //   GANTI TRANSAKSI   → re-ask budget (new tx's range) + payment method, and
@@ -2026,64 +2021,144 @@ function extractQualificationState(history = [], currentMessage = '') {
   //                        survey schedule ALL stay — a property-type switch no
   //                        longer implies the customer also wants a new city.
   //
-  // Property-type change takes priority when it co-occurs with a tx or city
-  // change in the same message (its reset already covers budget/financing, so
-  // nothing is lost); a tx change and a city change can both fire together.
+  // ⭐ M132 (23 Agu 2026, owner spec) — PENGECUALIAN: tipe DAN transaksi
+  // berubah BERSAMAAN di pesan yang sama ("compound reset") dipandang sebagai
+  // customer memulai pencarian baru, bukan sekadar dua axis independen yang
+  // kebetulan berubah bareng — resetnya lebih luas daripada gabungan reset
+  // per-axis di atas. TAPI "kembali ke Q1" di sini TIDAK berarti literally
+  // menanyakan ulang transaksi/tipe — keduanya SUDAH terjawab justru di pesan
+  // yang memicu ini, menanyakannya lagi persis pola repetitive/redundant yang
+  // dilarang eksplisit. Yang direset adalah SELURUH field turunan tipe/
+  // transaksi lama, sehingga findNextQuestion() lanjut dari Q2 dst. dengan
+  // slate hampir bersih — kecuali item yang pemilik proyek eksplisit minta
+  // dipertahankan (durasi sewa, tanggal masuk/beli, informasi survei — SELALU
+  // dipertahankan; kota/area/red flag HANYA dipertahankan bila kota TIDAK ikut
+  // berubah di pesan yang sama).
   {
     if (P0_RESOLVED.type) state.buildingType    = P0_RESOLVED.type;
     if (P0_RESOLVED.tx)   state.transactionType = P0_RESOLVED.tx;
     if (P0_RESOLVED.loc)  state.city            = P0_RESOLVED.loc;
 
-    const typeChanged = P0_RESOLVED.typeChangedNow;
-    const txChanged   = P0_RESOLVED.txChangedNow  && !typeChanged;
-    const cityChanged = P0_RESOLVED.locChangedNow && !typeChanged;
+    const typeChangedNow = P0_RESOLVED.typeChangedNow;
+    const txChangedNow   = P0_RESOLVED.txChangedNow;
+    const locChangedNow  = P0_RESOLVED.locChangedNow;
+    const compoundReset  = typeChangedNow && txChangedNow;
 
-    state.typeChangedFromHistory = state.typeChangedFromHistory || typeChanged;
-    state.cityChangedFromHistory = cityChanged;
+    state.typeChangedFromHistory = state.typeChangedFromHistory || typeChangedNow;
 
-    if (txChanged) {
-      // Ganti transaksi: budget & payment method depend on sewa vs. beli —
-      // re-ask them. Duration only matters for sewa/booking; findNextQuestion
-      // already gates the duration question on isSewa, so nulling it
-      // unconditionally is harmless when the new tx is 'sale'.
-      state.budget          = null;
-      state.budgetRangeAsked = false;
-      state.financing       = null;
-      state.kprDetails      = null;
-      state.leaseDuration   = null;
-    }
+    if (compoundReset) {
+      const cityAlsoChanged = locChangedNow;
+      state.cityChangedFromHistory = cityAlsoChanged;
 
-    if (cityChanged) {
-      // Ganti kota: only the landmark/area answers were anchored to the OLD
-      // city. q2cDeclined suppresses a forced re-ask of the area/kawasan
-      // question (Q2c) — the customer is free to volunteer a new one, but the
-      // AI is only required to ask about the landmark (owner spec, item 1).
-      state.district         = null;
-      state.anchorPoint      = null;
-      state.alternativeAreas = null;
-      state.q2cDeclined      = true;
-    }
-
-    if (typeChanged) {
+      // Selalu dibuang saat tipe+transaksi berubah bersamaan — kombinasi
+      // tipe×transaksi ini sepenuhnya baru, jadi budget/pembayaran/detail
+      // per-tipe lama pasti sudah tidak relevan (owner spec, kedua kondisi).
       state.budget            = null;
-      state.household         = null;
-      state.redFlags          = null;
-      state.decisionMaker     = null;
-      state.leaseDuration     = null;
+      state.budgetRangeAsked  = false;
+      state.financing         = null;
+      state.kprDetails        = null;
       state.furnishing        = null;
       state.facilities        = null;
       state.apartmentPref     = null;
-      state.financing         = null;
-      state.kprDetails        = null;
       state.propertyCondition = null;
       state.useCase           = null;
+      state.household         = null;
       state.rentOutIntent     = false;
       state.fallbackTypes     = [];
       state.officeGrade       = null;
       state.officeFitOut      = null;
-      // City, district, anchorPoint, alternativeAreas, moveInDate,
-      // moveInDateAsk, viewingDate, viewingTime deliberately NOT reset here —
-      // owner spec: property-type change keeps city/landmark/move-in/survey.
+      state.searchHistory     = null;
+      state.aiAskedQ2b        = false;
+
+      if (cityAlsoChanged) {
+        // Kondisi 1 (owner spec): tipe+transaksi+kota SEMUA berubah bareng —
+        // area/landmark/red-flag lama terikat KOTA SEBELUMNYA, tidak lagi
+        // relevan untuk kota yang baru. q2cDeclined dibiarkan false (bukan
+        // di-set true) supaya Q2c benar-benar ditanya untuk kota baru — beda
+        // dari ganti-kota tunggal, di sini bukan sekadar "kota lain, area
+        // sekitar sama", tapi pencarian yang genuinely baru.
+        state.district         = null;
+        state.anchorPoint      = null;
+        state.alternativeAreas = null;
+        state.redFlags         = null;
+        state.preferences      = null;
+        state.q2cDeclined      = false;
+      }
+      // Kondisi 2 (owner spec, kota TIDAK ikut berubah): city/district/
+      // anchorPoint/redFlags/preferences SENGAJA tidak disentuh sama sekali
+      // di sini — owner spec eksplisit "masih pertahankan informasi lokasi
+      // kota, lokasi area, lokasi yang menjadi red flag (Hindari, Prefer)".
+
+      // Dipertahankan di KEDUA kondisi (owner spec eksplisit, tanpa syarat):
+      // leaseDuration (durasi sewa), moveInDate/moveInDateAsk (kapan masuk/
+      // beli), decisionMaker + viewingDate/viewingTime (informasi survei) —
+      // TIDAK disentuh sama sekali di blok manapun di atas.
+    } else {
+      // ── SATU axis berubah sendirian (M124 asli, tidak berubah) ──────────
+      const txChanged   = txChangedNow  && !typeChangedNow;
+      // ⚠️ M132 fix: cityChanged TIDAK LAGI digerbangi `&& !typeChangedNow`.
+      // Guard lama itu membuat district/anchorPoint/alternativeAreas GAGAL
+      // di-reset ketika tipe DAN kota berubah bersamaan TANPA transaksi ikut
+      // berubah (kombinasi yang tidak masuk compoundReset di atas) — data
+      // lokasi lama tetap nyantol padahal kotanya sudah beda. typeChanged di
+      // bawah tidak pernah menyentuh field lokasi, jadi tidak ada risiko
+      // dobel-reset yang saling bertentangan.
+      const cityChanged = locChangedNow;
+
+      state.cityChangedFromHistory = cityChanged;
+
+      if (txChanged) {
+        // Ganti transaksi: budget & payment method depend on sewa vs. beli —
+        // re-ask them. Duration only matters for sewa/booking; findNextQuestion
+        // already gates the duration question on isSewa, so nulling it
+        // unconditionally is harmless when the new tx is 'sale'.
+        state.budget          = null;
+        state.budgetRangeAsked = false;
+        state.financing       = null;
+        state.kprDetails      = null;
+        state.leaseDuration   = null;
+      }
+
+      if (cityChanged) {
+        // Ganti kota: only the landmark/area answers were anchored to the OLD
+        // city. q2cDeclined suppresses a forced re-ask of the area/kawasan
+        // question (Q2c) — the customer is free to volunteer a new one, but the
+        // AI is only required to ask about the landmark (owner spec, item 1).
+        state.district         = null;
+        state.anchorPoint      = null;
+        state.alternativeAreas = null;
+        state.q2cDeclined      = true;
+      }
+
+      if (typeChangedNow) {
+        state.budget            = null;
+        state.household         = null;
+        state.redFlags          = null;
+        state.leaseDuration     = null;
+        state.furnishing        = null;
+        state.facilities        = null;
+        state.apartmentPref     = null;
+        state.financing         = null;
+        state.kprDetails        = null;
+        state.propertyCondition = null;
+        state.useCase           = null;
+        state.rentOutIntent     = false;
+        state.fallbackTypes     = [];
+        state.officeGrade       = null;
+        state.officeFitOut      = null;
+        // ⚠️ M132 fix: decisionMaker DIHAPUS dari daftar reset ini — owner
+        // spec "Ganti properti" item 6 eksplisit "Survei masih dengan nilai
+        // sama (jadwal survei/katalog)". decisionMaker (Q9, siapa yang
+        // memutuskan/mendampingi survei) adalah bagian dari informasi survei
+        // itu, sama seperti viewingDate/viewingTime yang SUDAH TIDAK di-reset
+        // di sini sejak M124 — sebelumnya hanya decisionMaker yang tertinggal
+        // ikut ter-null, sebuah inkonsistensi murni, bukan keputusan sengaja.
+        //
+        // City, district, anchorPoint, alternativeAreas, moveInDate,
+        // moveInDateAsk, viewingDate, viewingTime, decisionMaker deliberately
+        // NOT reset here — owner spec: property-type change keeps
+        // city/landmark/move-in/survey.
+      }
     }
   }
 
