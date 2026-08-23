@@ -12,6 +12,7 @@ Arsitektur: `frontend` (Vue 3 + Vite, static build) disajikan lewat `public_html
 2. **CORS.** Origin produksi diturunkan otomatis dari `APP_URL` (+ varian www) dan `CORS_EXTRA_ORIGINS` opsional — lihat [backend/server.js:30-53](backend/server.js:30).
 3. **Kredensial DB salah.** Kegagalan `sequelize.sync()` bisa membuat proses `process.exit(1)` total (bukan sekadar error) → tidak ada apa pun mendengarkan port. Selalu cocokkan `DB_USER`/`DB_NAME`/`DB_PASSWORD` dengan hPanel > Databases sebelum start.
 4. **Port hardcoded di frontend build.** `VITE_BACKEND_URL` produksi (https://, di balik proxy standar) harus **tanpa** port. `frontend/src/services/backendBaseUrl.js` sudah menangani ini — jangan susun baseURL manual di file lain.
+5. **`sequelize.sync()` crash pada index yang sudah ada (23 Agu 2026).** Setiap kali Passenger me-restart proses (terjadi di setiap deploy/upload), `Model.sync()` mencoba `addIndex()` ulang untuk index yang **sudah ada** di tabel (contoh nyata: `uq_locations_name_city` di tabel `locations`) → MySQL menolak dengan `ER_DUP_KEYNAME`/"already exists", dan sebelumnya kode meng-`process.exit(1)` untuk error APA PUN dari sync → 503 walau kredensial & tabel sebenarnya benar. **Fix sudah masuk kode**: [backend/server.js:450-463](backend/server.js:450) sekarang membedakan error fatal (auth/koneksi gagal → tetap exit) dari error index/entry yang sudah ada (dianggap non-fatal, server tetap start). Tidak perlu tindakan manual lagi untuk kasus ini — cukup pastikan `backend/server.js` versi terbaru ikut ter-upload.
 
 ---
 
@@ -141,7 +142,7 @@ Jika Vue Router pakai history mode, `public_html` butuh `.htaccess` agar refresh
 3. Buka DevTools Network di frontend produksi, pastikan panggilan API mengarah ke `https://propmatches.fun/api/...` (TANPA port).
 4. Login/register (test akun) — cek cookie `Elevan_Refresh_Token` ter-set, tidak ada CORS error di console.
 5. Kirim pesan WhatsApp test ke nomor terhubung (Kirimi/Fonnte sesuai `MESSAGE_TERMINAL`) — pastikan AI membalas dan `NGROK_WEBHOOK_URL` (bila dipakai) benar-benar dipanggil.
-6. Cek log Node.js app di panel Hostinger — pastikan tidak ada error `sequelize.sync()` / provider AI yang berulang.
+6. Cek log Node.js app di panel Hostinger — pastikan tidak ada error `sequelize.sync()` / provider AI yang berulang. Baris `Database sync warning (non-fatal — index/entry sudah ada, tabel tidak berubah)` **aman diabaikan** (lihat §0.5) — yang harus diwaspadai hanya baris `Failed to sync database` diikuti proses berhenti.
 
 ---
 
