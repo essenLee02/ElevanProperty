@@ -1,309 +1,152 @@
-# Deploy ke Hostinger — propmatches.fun
+# Deploy ElevanProperty ke Hostinger (propmatches.fun)
 
-Panduan ini menjelaskan **kenapa `https://propmatches.fun/` membalas 503** dan
-langkah persisnya supaya hidup. Urutannya sengaja: nomor 1–3 adalah penyebab
-503; sisanya membuat aplikasi benar-benar berfungsi.
+Panduan ini ditulis untuk dijalankan oleh Claude Code di sesi berikutnya (atau siapa pun) saat meng-upload/update project ini ke Hostinger. Domain: **propmatches.fun**, dashboard: `https://hpanel.hostinger.com/websites/propmatches.fun`.
 
-> ⚠️ **503 Service Unavailable = proxy Hostinger tidak menemukan aplikasi Node
-> yang hidup di port yang ia harapkan.** Jadi penyebabnya selalu salah satu dari:
-> (a) aplikasi mendengarkan port yang salah, (b) aplikasi mati/crash saat start,
-> (c) aplikasi memang belum pernah dijalankan.
+Arsitektur: `frontend` (Vue 3 + Vite, static build) disajikan lewat `public_html`, `backend` (Node/Express) jalan sebagai Node.js App di Hostinger (Passenger), database MySQL satu server dengan app.
 
 ---
 
-## 0. RINGKASAN PENYEBAB (hasil diagnosis kode & .env Anda)
+## 0. Ringkasan penyebab 503 yang pernah terjadi (M100) — jangan diulang
 
-| # | Penyebab | Status |
+1. **Port.** Passenger menyuntikkan port lewat `process.env.PORT`, bukan `APP_PORT`. [backend/server.js:21](backend/server.js:21) sudah menangani ini: `const port = process.env.PORT || process.env.APP_PORT || 5000;`. **Jangan** override dengan hardcode port sendiri, dan **jangan** isi `PORT=` manual di `.env` produksi — biarkan Passenger yang mengisi.
+2. **CORS.** Origin produksi diturunkan otomatis dari `APP_URL` (+ varian www) dan `CORS_EXTRA_ORIGINS` opsional — lihat [backend/server.js:30-53](backend/server.js:30).
+3. **Kredensial DB salah.** Kegagalan `sequelize.sync()` bisa membuat proses `process.exit(1)` total (bukan sekadar error) → tidak ada apa pun mendengarkan port. Selalu cocokkan `DB_USER`/`DB_NAME`/`DB_PASSWORD` dengan hPanel > Databases sebelum start.
+4. **Port hardcoded di frontend build.** `VITE_BACKEND_URL` produksi (https://, di balik proxy standar) harus **tanpa** port. `frontend/src/services/backendBaseUrl.js` sudah menangani ini — jangan susun baseURL manual di file lain.
+
+---
+
+## 1. Checklist sebelum mulai
+
+- [ ] `backend/.env` sudah berisi nilai produksi (lihat §2). Nilai dev lokal ada di `backend/.env.local.bak`.
+- [ ] `frontend/.env` sudah berisi `VITE_BACKEND_URL=https://propmatches.fun` dan `VITE_BACKEND_PORT=` (kosong).
+- [ ] Password database & Hostinger sudah dikonfirmasi user — JANGAN generate/tebak sendiri.
+- [ ] `git status` bersih atau perubahan sudah di-commit (jangan upload state yang belum di-review).
+
+---
+
+## 2. Backend — variabel `.env` produksi
+
+File: `backend/.env` (JANGAN commit — sudah di-`.gitignore` lewat pola `.env.*`).
+
+| Key | Nilai produksi | Catatan |
 |---|---|---|
-| 1 | Aplikasi mendengarkan `APP_PORT=5055`, bukan port pemberian Hostinger | ✅ **SUDAH SAYA PERBAIKI di kode** |
-| 2 | Kredensial DB masih lokal (`root` / `db_property`) → `sequelize.sync()` gagal → `process.exit(1)` → proses mati | ⛔ **HARUS ANDA ISI** (butuh password Hostinger) |
-| 3 | CORS hanya mengizinkan `localhost` → frontend ditolak | ✅ **SUDAH SAYA PERBAIKI** (baca `APP_URL`) |
-| 4 | `VITE_BACKEND_URL=http://localhost` → frontend memanggil localhost dari browser pengunjung | ⛔ **HARUS ANDA UBAH + REBUILD** |
-| 5 | `.env` berisi ±10 API key aktif ikut ter-upload | ⚠️ **RISIKO KEAMANAN — baca §6** |
+| `NODE_ENV` | `production` | |
+| `APP_PORT` | `5055` (dibiarkan) | hanya fallback dev; Passenger pakai `PORT` |
+| `APP_URL` | `https://propmatches.fun` | sumber CORS allowed origins |
+| `CORS_EXTRA_ORIGINS` | subdomain lain jika ada (mis. `https://shop.propmatches.fun`), pisah koma | opsional |
+| `DB_HOST` | `localhost` | DB satu server dengan app |
+| `DB_PORT` | `3306` | tidak dibaca Sequelize saat ini ([backend/config/database.js](backend/config/database.js)) — cukup dokumentasi |
+| `DB_USER` | `u310807636_propmatches` | prefix akun Hostinger — **cek ulang di hPanel > Databases** |
+| `DB_PASSWORD` | (dari hPanel, dikutip `'...'` jika mengandung `@`) | |
+| `DB_NAME` | `u310807636_db_property` | |
+| `NGROK_ENABLE` | `false` | domain sudah publik, tunnel tidak diperlukan di shared hosting |
+| `NGROK_WEBHOOK_URL` | `https://propmatches.fun/api/kirimi/webhook` | dipakai controller WhatsApp saat `NGROK_ENABLE=false` |
+
+Semua key lain (API key AI: ChatGPT/Claude/Qwen/DeepSeek/Kimi, Fonnte/Kirimi/TimelinesAI, JWT secrets, Google, dll.) **dipertahankan apa adanya** dari `.env` dev — sudah production-ready, tidak perlu diubah kecuali user minta eksplisit.
+
+⚠️ **`AI_PRIMARY_TAG`**: JANGAN diubah kecuali user secara eksplisit minta. Ini footer WA + dipakai `isOwnEcho()` untuk mendeteksi pesan balasan sendiri — mengubahnya tanpa instruksi bisa merusak deteksi echo pesan WhatsApp yang sedang berjalan.
+
+Verifikasi sebelum upload:
+
+```bash
+cd backend && node -e "require('dotenv').config({path:'.env'}); ['NODE_ENV','APP_URL','DB_USER','DB_NAME','NGROK_ENABLE'].forEach(k=>console.log(k,'=',process.env[k]))"
+```
+
+Untuk kembali ke dev lokal kapan saja:
+
+```bash
+cp backend/.env.local.bak backend/.env
+```
 
 ---
 
-## 1. Perubahan kode yang SUDAH diterapkan
+## 3. Frontend — build produksi
 
-### `backend/server.js` — port
-```js
-const port = process.env.PORT || process.env.APP_PORT || 5000;
+File: `frontend/.env`
+
 ```
-Hostinger (Passenger) menyuntikkan `process.env.PORT` dan mem-proxy domain ke
-port itu. Sebelumnya kode hanya membaca `APP_PORT` sehingga selalu bind 5055 →
-proxy menembak port kosong → **503**. `APP_PORT` tetap dipakai saat dev lokal.
-
-### `backend/server.js` — CORS
-Origin produksi kini diturunkan otomatis dari `APP_URL` (termasuk varian `www`),
-plus `CORS_EXTRA_ORIGINS` (opsional, pisah koma) bila perlu domain tambahan.
-
-> Kedua perubahan aman untuk dev: tanpa `PORT` dan dengan `APP_URL=http://localhost`,
-> perilakunya persis seperti sebelumnya. Suite tes tetap **1519/1540**.
-
----
-
-## 2. `backend/.env` — SUDAH DISETEL ke nilai produksi
-
-Kedua baris yang bergantung pada domain sudah diubah langsung di
-`backend/.env` (nilai lokal disimpan sebagai baris ter-komentar di atasnya,
-tinggal ditukar aktif/nonaktif bila kembali kerja lokal):
-
-```env
-APP_URL=https://propmatches.fun
-AI_PRIMARY_TAG=propmatches.fun
-```
-
-`APP_URL` dipakai `server.js` untuk menurunkan CORS allowed origins produksi
-(termasuk varian `www`) — origin `localhost:APP_FRONTEND_PORT` untuk dev SELALU
-tetap diizinkan berapa pun nilai ini, jadi aman biarkan produksi bahkan saat
-Anda masih kerja di komputer lokal.
-
-`AI_PRIMARY_TAG` adalah footer `"> Sent via <tag>"` di setiap balasan WhatsApp,
-DAN dipakai `isOwnEcho()` untuk mengenali balasan AI sendiri saat terpantul
-balik dari WhatsApp — sebelumnya masih menunjuk `propmatches.netlify.app`
-(frontend lama), sekarang `propmatches.fun`.
-
-**Yang MASIH HARUS Anda isi sendiri** (butuh kredensial Hostinger, sengaja
-tidak disentuh):
-
-```env
-# ── Database Hostinger (hPanel → Databases → MySQL) ──────────
-DB_HOST=localhost
-DB_USER=u310807636_propmatches
-DB_NAME=u310807636_db_property
-DB_PASSWORD=<password database Hostinger Anda>
-DB_DIALECT=mysql
-
-# ── Matikan tunnel dev ───────────────────────────────────────
-NGROK_ENABLE=false
-```
-
-**Catatan penting soal `DB_HOST`:** di hosting Hostinger, MySQL biasanya tetap
-`localhost` (database berada di server yang sama). Jangan diisi `propmatches.fun`
-— itu nama domain web, bukan host database. Bila hPanel menampilkan hostname
-khusus (mis. `srv1153.hstgr.io`), pakai yang tertulis di hPanel.
-
-> ⚠️ **Kenapa ini penyebab 503 yang paling mematikan:** di `server.js`, kegagalan
-> koneksi DB masuk ke `.catch(() => process.exit(1))`. Aplikasi **berhenti total**,
-> bukan sekadar error — jadi tidak ada apa pun yang mendengarkan port, dan proxy
-> membalas 503. Selama kredensial DB salah, memperbaiki hal lain tidak akan
-> menghidupkan domain.
-
-### Impor skema database
-hPanel → **Databases → phpMyAdmin** → pilih `u310807636_db_property` → **Import**
-→ unggah file SQL dari folder `database/` proyek Anda.
-
----
-
-## 3. WAJIB: setup aplikasi Node di hPanel
-
-hPanel → **Website → Node.js** (atau *Setup Node.js App*):
-
-| Field | Isi |
-|---|---|
-| Application root | `hbuilds/current/Elevan_Property/backend` |
-| Application startup file | `server.js` |
-| Node version | 18 atau lebih baru |
-| Application mode | Production |
-
-Lalu di folder `backend` server: **Run NPM Install**, kemudian **Restart**.
-
-> `package.json` Anda memakai `"start": "node server.js"` — sudah benar.
-> Jangan pakai `npm run dev` di produksi (itu nodemon).
-
-Setelah restart, buka **log aplikasi** di hPanel. Yang Anda cari:
-```
-Database connected and synced
-Backend listening at http://localhost:<port>
-CORS Allowed Origins: … https://propmatches.fun …
-```
-Kalau muncul `Failed to sync database` → kembali ke §2, kredensial DB masih salah.
-
----
-
-## 4. `frontend/.env` — SUDAH DISETEL, tinggal build ulang & upload
-
-Variabel `VITE_*` **dibaca saat BUILD**, bukan saat runtime — mengubah `.env`
-di server tanpa build ulang **tidak berpengaruh sama sekali**. Nilainya sudah
-saya set di `frontend/.env`:
-
-```env
-VITE_APP_ENV=production
 VITE_BACKEND_URL=https://propmatches.fun
 VITE_BACKEND_PORT=
 ```
 
-> ⚠️ **Kode frontend SUDAH SAYA PERBAIKI supaya nilai kosong ini valid.**
-> Sebelumnya tiga berkas (`api.js`, `authApi.js`, `profileApi.js`) menyusun
-> sendiri `` `${backendUrl}:${backendPort}/api` `` dengan titik dua HARDCODED
-> dan fallback `|| 5005`. Akibatnya bentuk produksi **mustahil dinyatakan**:
-> mengosongkan `VITE_BACKEND_PORT` justru jatuh ke `5005` →
-> `https://propmatches.fun:5005/api` → semua panggilan API dari browser
-> pengunjung gagal. Sekarang ketiganya memakai satu helper
-> `src/services/backendBaseUrl.js`, dan sudah diverifikasi: `npm run build`
-> menghasilkan bundle yang memanggil persis `https://propmatches.fun/api`
-> (dicek langsung di dalam berkas `.js` hasil build, tanpa port menempel).
-
-**Langkah yang tersisa (di komputer lokal Anda):**
+⚠️ Nilai `VITE_*` **dibakukan saat build** (`npm run build`) — mengubahnya di server SETELAH build tidak berpengaruh. Harus build ulang lalu upload ulang isi `frontend/dist/`.
 
 ```bash
-cd frontend && npm run build
+cd frontend
+npm install
+npm run build
 ```
 
-Lalu upload **isi** folder `frontend/dist/` (bukan foldernya) ke `public_html/`.
+Verifikasi baseURL final tertanam benar di bundle (harus persis `https://propmatches.fun/api`, TANPA port menempel):
 
-> `VITE_DEV_SERVER_HOST` / `VITE_PREVIEW_HOST` sengaja TIDAK diubah — itu
-> alamat bind Vite dev/preview server di komputer Anda sendiri, bukan sesuatu
-> yang diunggah ke Hostinger.
+```bash
+grep -o "https://propmatches\.fun[^\"']*" dist/assets/*.js | head
+```
 
----
+Upload **isi** `frontend/dist/` (bukan folder `dist` itu sendiri) ke `public_html` lewat File Manager Hostinger atau FTP/SFTP.
 
-## 5. Routing: satu domain untuk web + API
+### Routing SPA (Vue Router)
 
-Frontend statis di `public_html`, backend Node di port terpisah. Agar
-`https://propmatches.fun/api/...` sampai ke Node, tambahkan `public_html/.htaccess`:
+Jika Vue Router pakai history mode, `public_html` butuh `.htaccess` agar refresh di route selain `/` tidak 404:
 
 ```apache
-RewriteEngine On
-
-# /api/* → aplikasi Node (sesuaikan port bila hPanel menampilkan port khusus)
-RewriteCond %{REQUEST_URI} ^/api/
-RewriteRule ^api/(.*)$ http://127.0.0.1:5055/api/$1 [P,L]
-
-# SPA fallback — semua route non-file dilayani index.html (vue-router history mode)
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^ index.html [L]
-```
-
-> Bila Hostinger sudah otomatis mem-proxy domain ke aplikasi Node Anda, blok
-> `/api/` di atas tidak diperlukan — cek dulu di hPanel apakah domain sudah
-> terhubung ke aplikasi Node atau ke `public_html`.
-
----
-
-## 6. ⚠️ KEAMANAN — lakukan SEKARANG
-
-`backend/.env` Anda memuat kunci **aktif**: OpenAI, Claude, QWEN, DeepSeek, Kimi,
-Fonnte, Kirimi secret, Apify, Google API key, serta `ACCESS_TOKEN_SECRET` /
-`REFRESH_TOKEN_SECRET`.
-
-1. **Pastikan `.env` tidak berada di `public_html`.** Bila bisa dibuka lewat
-   browser, seluruh kunci Anda bocor. Uji: buka `https://propmatches.fun/.env`
-   — harus **404**, bukan menampilkan isi file.
-2. Tambahkan proteksi di `public_html/.htaccess`:
-   ```apache
-   <FilesMatch "^\.env">
-     Require all denied
-   </FilesMatch>
-   ```
-3. **Kunci mana pun yang pernah masuk ke chat, screenshot, atau repo publik
-   sebaiknya di-rotate** (buat baru, cabut yang lama) — termasuk
-   `NGROK_AUTHTOKEN` yang sempat Anda tempel di percakapan.
-4. Jangan pernah commit `.env` asli ke git.
-
----
-
-## 7. Urutan verifikasi (ikuti berurutan)
-
-```
-1. hPanel → log aplikasi Node    → ada "Database connected and synced"?
-                                   TIDAK → §2 (kredensial DB)
-2. hPanel → log aplikasi Node    → ada "Backend listening at ..."?
-                                   TIDAK → §3 (startup file / npm install)
-3. buka https://propmatches.fun/api/chatbot/config
-                                   → balasan JSON? kalau 503 → §3/§5 (routing)
-4. buka https://propmatches.fun/  → halaman Vue muncul? kalau blank → §4 (build)
-5. buka DevTools → Console/Network → error CORS? → §2 (APP_URL) lalu restart
-6. buka https://propmatches.fun/.env → HARUS 404 → §6
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+  RewriteRule ^index\.html$ - [L]
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule . /index.html [L]
+</IfModule>
 ```
 
 ---
 
-## 8. Yang TIDAK perlu diubah
+## 4. Backend — Node.js App di Hostinger (hPanel)
 
-- `RUMAH123_DATA=OFF` — sudah benar (AI hanya pakai katalog database).
-- `AI_PRIMARY_PROVIDER=chatgpt` — silakan tetap; pastikan kuota OpenAI aktif.
-- `MESSAGE_TERMINAL` / `MASSEGE_TERMINAL=KIRIMI` — sudah benar.
-- Webhook WhatsApp: setelah domain hidup, **ganti URL webhook Kirimi** dari
-  URL ngrok lama ke `https://propmatches.fun/api/kirimi/webhook`.
+1. hPanel > Websites > propmatches.fun > **Advanced > Node.js**.
+2. Buat/edit aplikasi Node.js:
+   - **Application root**: folder tempat `backend/` di-upload di server (mis. `backend` di luar `public_html`, TIDAK di dalam `public_html` — lihat §6 keamanan).
+   - **Application startup file**: `server.js`.
+   - **Node.js version**: pilih versi LTS yang tersedia (cocokkan dengan versi lokal — cek `node -v`).
+3. Upload seluruh isi `backend/` (KECUALI `node_modules/`, `.env.local.bak`, dan file dev-only) ke Application root — lewat File Manager/FTP/Git.
+4. Jalankan **NPM Install** dari panel Node.js Hostinger (atau SSH: `npm install --omit=dev`) di Application root.
+5. Pastikan `backend/.env` (§2) ikut ter-upload ke Application root — Hostinger Node.js app membaca `.env` di folder yang sama dengan `server.js` (lewat `dotenv` di [backend/server.js:2](backend/server.js:2)).
+6. **Restart** aplikasi Node.js dari panel setelah upload/env berubah.
 
 ---
 
-## 8. ⭐ Webhook WhatsApp di Hostinger (M101 — 20 Agu 2026)
+## 5. Database
 
-### Yang SUDAH diperbaiki di kode
+1. hPanel > Databases > MySQL Databases — pastikan `u310807636_db_property` sudah ada dan user `u310807636_propmatches` punya akses penuh ke database itu.
+2. Import struktur/data awal jika database masih kosong (lihat folder `database/` di root project untuk dump/migrasi, jika ada).
+3. Start backend sekali (`npm run start` via panel) — `sequelize.sync()` akan membuat tabel yang belum ada berdasarkan `backend/models/`.
 
-**(a) `trust proxy` — rate limit menghukum customer yang salah.**
-Log produksi menampilkan:
-```
-ValidationError: The 'X-Forwarded-For' header is set but the Express
-'trust proxy' setting is false (default).
-```
-Hostinger menaruh app Node di belakang reverse proxy, jadi setiap request
-membawa `X-Forwarded-For`.
+---
 
-> ⚠️ **Koreksi atas dugaan awal:** request TIDAK gagal — tetap HTTP 200 dan
-> webhook tetap diproses. Kerusakan sesungguhnya lebih halus: `req.ip` selalu
-> menjadi IP **proxy** (`::ffff:127.0.0.1`), sehingga **SELURUH customer berbagi
-> SATU bucket rate-limit** (`webhookLimiter` = 120/menit). Begitu beberapa
-> customer chat bersamaan, customer yang sah kena **HTTP 429** dan pesannya
-> hilang tanpa error yang jelas.
+## 6. KEAMANAN — wajib dicek setiap deploy
 
-Fix: `app.set('trust proxy', TRUST_PROXY_HOPS ?? 1)` di `server.js`.
-**Sengaja bukan `true`** — `true` berarti percaya buta seluruh rantai
-`X-Forwarded-For`, sehingga siapa pun bisa memalsukannya dan lolos rate limit.
-Angka = jumlah proxy hop yang dipercaya. `1` benar untuk Hostinger. Bila kelak
-ada Cloudflare DI DEPAN Hostinger, naikkan lewat env:
+- [ ] `backend/.env` **TIDAK BOLEH** berada di dalam `public_html` atau folder mana pun yang bisa diakses browser. Application root Node.js app boleh di luar `public_html`.
+- [ ] Test langsung: `https://propmatches.fun/.env` harus membalas **404**. Kalau tidak, `.env` ter-upload ke lokasi yang salah — pindahkan segera, lalu **rotate semua API key** yang sempat terekspos.
+- [ ] `google-service-account.json` dan file kredensial lain di `backend/asset/` juga tidak boleh publicly accessible.
+- [ ] Jangan commit `.env` asli ke git (sudah dijaga `backend/.gitignore`: `.env`, `.env.*`, kecuali `.env.example`).
+- [ ] Password database (`Nigel217180404@` dsb.) hanya boleh ditulis di `.env` server produksi — jangan tempel ulang di chat/dokumentasi lain setelah deploy selesai.
 
-```env
-TRUST_PROXY_HOPS=2
-```
+---
 
-**(b) Fonnte diarahkan ke endpoint yang tidak punya AI.**
-Banner dulu menyuruh isi `/api/fonnte/webhook`. Endpoint itu ada, tapi
-ditangani `fonnteWebhookController` (**legacy**) yang **tidak pernah** memanggil
-`generateWhatsAppAIReply` — pesan masuk, AI tidak pernah membalas (gagal senyap,
-HTTP 200 tanpa error). Sekarang menunjuk jalur multi-agent yang benar.
+## 7. Urutan verifikasi setelah deploy
 
-**(c) `DB_PORT` ada di `.env` tapi tidak pernah dibaca** `config/database.js`.
-Tidak terasa selama DB di 3306; begitu port non-standar dipakai, koneksi gagal
-padahal `.env` terlihat benar.
+1. `https://propmatches.fun/` — frontend termuat, bukan 503/404.
+2. `https://propmatches.fun/.env` — harus 404 (lihat §6).
+3. Buka DevTools Network di frontend produksi, pastikan panggilan API mengarah ke `https://propmatches.fun/api/...` (TANPA port).
+4. Login/register (test akun) — cek cookie `Elevan_Refresh_Token` ter-set, tidak ada CORS error di console.
+5. Kirim pesan WhatsApp test ke nomor terhubung (Kirimi/Fonnte sesuai `MESSAGE_TERMINAL`) — pastikan AI membalas dan `NGROK_WEBHOOK_URL` (bila dipakai) benar-benar dipanggil.
+6. Cek log Node.js app di panel Hostinger — pastikan tidak ada error `sequelize.sync()` / provider AI yang berulang.
 
-### URL webhook yang harus diisi di dashboard
+---
 
-Ditentukan `MASSEGE_TERMINAL` di `backend/.env`. Backend mencetak daftarnya saat
-start (blok `✅ WEBHOOK SIAP`) — **selalu pakai yang tercetak di log**, jangan
-menebak:
+## 8. Rollback cepat
 
-| Terminal | URL webhook (produksi) |
-|---|---|
-| KIRIMI | `https://propmatches.fun/api/kirimi/webhook` |
-| FONNTE | `https://propmatches.fun/api/fonnte-chat/webhook` ⚠️ **`-chat`**, bukan `/api/fonnte/webhook` |
-| TIMELINESAI | `https://propmatches.fun/api/timelinesai/webhook` |
-
-`MASSEGE_TERMINAL` boleh multi-nilai (`FONNTE,KIRIMI,TIMELINESAI`) — banner akan
-mencetak ketiga URL sekaligus.
-
-### NGROK_ENABLE — dua mode, satu sumber kebenaran
-
-| Nilai | Mode | URL webhook diturunkan dari |
-|---|---|---|
-| `true` | Dev lokal | URL tunnel ngrok (mis. `https://spotter-dragging-sporting.ngrok-free.dev`) |
-| `false` | Hostinger / VPS | `APP_URL` (mis. `https://propmatches.fun`) |
-
-⚠️ `APP_URL` di `.env` produksi **harus** `https://propmatches.fun`. Bila masih
-`http://localhost`, banner tidak bisa membentuk URL publik yang benar.
-(Fonnte juga punya mode polling — `FONNTE_POLLING_ENABLED=true` — yang menarik
-pesan tanpa webhook publik sama sekali; itu jalur terpisah.)
-
-### Verifikasi setelah deploy
-
-```
-1. Log hPanel → cari blok "✅ WEBHOOK SIAP — MODE: VPS / Hosting"
-   → "URL publik" HARUS https://propmatches.fun (bukan localhost/<ngrok-url>)
-2. Kirim WhatsApp ke nomor agent
-   → log HARUS menampilkan "[⇨ HTTP IN] POST /api/kirimi/webhook"
-   → TIDAK BOLEH ada lagi ValidationError X-Forwarded-For
-3. Beberapa customer chat bersamaan → tidak ada yang kena 429
-```
+- Frontend: upload ulang build `dist/` versi sebelumnya (simpan sebagai backup sebelum overwrite).
+- Backend: restore `backend/.env` dari `backend/.env.local.bak` kalau perlu kembali ke setup dev, atau simpan salinan `.env` produksi sebelumnya sebagai `backend/.env.prod.bak` sebelum tiap perubahan besar.
+- Database: jangan jalankan migrasi destruktif tanpa backup `mysqldump` terlebih dahulu.
