@@ -267,12 +267,55 @@ const GENERIC_ZONE_LABELS = new Set([
 ]);
 
 function getKnownLocations() {
-  const dynamicLocations = loadJsonProperties().flatMap((property) => [
-    property.province,
-    property.city,
-    property.district,
-    property.location
-  ]).filter(Boolean)
+  // ⭐ M136 — SUMBER KOSA-KATA AREA: tabel `locations` (DB), BUKAN katalog JSON.
+  //
+  // Dulu baris ini memanggil loadJsonProperties() HANYA untuk memanen nama
+  // province/city/district/area — memuat 9.120 objek properti utuh ke memori
+  // demi beberapa ratus string. Itulah baris log yang dikeluhkan pemilik
+  // proyek pada transkrip produksi 24 Agu 2026:
+  //   "[PropertyRecommendationService] Loaded 9120 fallback properties ..."
+  // muncul untuk agent yang katalognya hanya 1.042 listing.
+  //
+  // Tabel `locations` adalah pengganti yang LEBIH BAIK, bukan sekadar lebih
+  // murah: terkurasi, punya location_type + city_id, dan sudah berisi seluruh
+  // area yang di-seed per agent. `_landmarkCache` (initLandmarkCache) memuatnya
+  // sekali saat startup, jadi di sini nol query tambahan.
+  //
+  // ⚠️ SEMANTIK MERGE DIPERTAHANKAN (pelajaran M92): daftar statis + kota DB
+  // + area DB DIGABUNG, tidak saling menggantikan. Mengganti (bukan menambah)
+  // adalah persis bug yang membuat "Jakarta" tidak dikenali dulu.
+  //
+  // ⛔ JANGAN masukkan nama dari tabel `locations` ke sini. Dicoba dan TERBUKTI
+  // MERUSAK (diverifikasi langsung, bukan teori): daftar ini diurut dari yang
+  // TERPANJANG dan dipakai detectLocation() untuk menebak KOTA, sedangkan
+  // `locations` berisi nama landmark/kawasan yang MENGANDUNG nama kota —
+  // "CITRALAND SURABAYA" (18 huruf) mengalahkan "Surabaya" (8 huruf), sehingga
+  // pesan "beli rumah di Citraland Surabaya" menghasilkan
+  // location="CITRALAND SURABAYA" dan NOL hasil katalog. Ini kelas bug yang
+  // SAMA PERSIS dengan "Business District" vs "Bengkulu Tengah" di catatan
+  // GENERIC_ZONE_LABELS di atas.
+  // Kawasan/landmark punya jalurnya sendiri: detectLandmark() + _landmarkCache.
+  //
+  // Escape hatch: PROPERTY_JSON_LOCATION_VOCAB=ON mengembalikan panen JSON lama
+  // (9.120 baris) bila suatu saat terbukti ada nama daerah yang hilang.
+  // ⚠️ FALLBACK COLD-START (WAJIB, jangan dihapus). Panen JSON tetap dipakai
+  // bila `_dbCities` MASIH KOSONG — yaitu sebelum initCityCache() selesai
+  // (startup) atau di jalur yang tidak pernah memanggilnya (tes, skrip CLI).
+  // Tanpa ini, detectLocation() kehilangan SELURUH kota DB pada jendela itu:
+  // dibuktikan langsung — "Bengkulu Tengah" dan "Kepi" (keduanya ADA di tabel
+  // cities) gagal terdeteksi saat cache dingin, padahal sebelumnya lolos
+  // karena nama-nama itu ikut terbawa katalog JSON.
+  // Di PRODUKSI cache selalu hangat (server.js memanggil initCityCache saat
+  // boot), jadi jalur mahal ini praktis tidak pernah tersentuh — itulah yang
+  // menghilangkan "Loaded 9120 fallback properties" dari log per-chat.
+  const useJsonVocab = String(process.env.PROPERTY_JSON_LOCATION_VOCAB || 'OFF').toUpperCase() === 'ON'
+    || _dbCities.length === 0;
+  const dynamicLocations = (useJsonVocab
+    ? loadJsonProperties().flatMap((property) => [
+      property.province, property.city, property.district, property.location,
+    ])
+    : []
+  ).filter(Boolean)
     .filter(loc => !GENERIC_ZONE_LABELS.has(String(loc).trim().toLowerCase()));
 
   // Kota dari DATABASE bersifat OTORITATIF, tetapi MENAMBAH — tidak pernah
@@ -1767,6 +1810,46 @@ function clearDbPropertiesCache() {
   _dbPropertiesCacheTime = 0;
 }
 
+/**
+ * M136 — cache per-agent, TERPISAH dari cache global `_dbPropertiesCache`.
+ * Key = user_id. Mencegah katalog satu agent tercampur/menimpa agent lain di
+ * proses yang sama (multi-agent adalah inti produk ini).
+ */
+const _agentPropsCache = new Map();   // userId → { rows, at }
+
+/**
+ * Properti milik SATU agent saja, langsung di-scope di level SQL.
+ *
+ * Berbeda dari getDbProperties() yang menarik SELURUH tabel lalu menyaring di
+ * JS: di sini `user_id` + `status:1` masuk ke WHERE, jadi baris agent lain
+ * tidak pernah meninggalkan database. Untuk agent dengan 1.042 listing dari
+ * total ~10.200 baris, ini memangkas ±90% data yang ditarik per giliran chat.
+ *
+ * @param {string} userId users.user_id
+ * @returns {Promise<object[]>} bentuk normalized yang SAMA dengan getDbProperties()
+ */
+async function getDbPropertiesForAgent(userId) {
+  const now = Date.now();
+  const hit = _agentPropsCache.get(userId);
+  if (hit && (now - hit.at) < DB_PROPS_CACHE_TTL_MS) return hit.rows;
+
+  try {
+    const rows = await _queryProperties({ user_id: userId, status: 1 });
+    _agentPropsCache.set(userId, { rows, at: now });
+    console.log(`[PropertyRecommendationService] Loaded ${rows.length} properties for agent ${userId} (scoped, status=1).`);
+    return rows;
+  } catch (err) {
+    console.error(`[PropertyRecommendationService] getDbPropertiesForAgent(${userId}) failed:`, err.message);
+    return [];
+  }
+}
+
+/** Kosongkan cache katalog per-agent (dipakai setelah seed/import/tes). */
+function clearAgentPropertiesCache(userId = null) {
+  if (userId) _agentPropsCache.delete(userId);
+  else _agentPropsCache.clear();
+}
+
 async function getDbProperties() {
   const now = Date.now();
   if (_dbPropertiesCache !== null && (now - _dbPropertiesCacheTime) < DB_PROPS_CACHE_TTL_MS) {
@@ -1774,10 +1857,31 @@ async function getDbProperties() {
   }
 
   try {
+    const normalized = await _queryProperties({ status: 1 });
+    _dbPropertiesCache = normalized;
+    _dbPropertiesCacheTime = now;
+    console.log(`[PropertyRecommendationService] Loaded ${normalized.length} properties from database.`);
+    return normalized;
+  } catch (err) {
+    console.error('[PropertyRecommendationService] getDbProperties() failed:', err.message);
+    return [];
+  }
+}
+
+/**
+ * Query + normalisasi properti. SATU implementasi dipakai jalur global maupun
+ * per-agent (M136) — sebelumnya normalisasi 30-baris ini hanya ada di dalam
+ * getDbProperties(), sehingga menambah jalur per-agent akan berarti
+ * menyalinnya. Duplikasi bentuk data seperti itu persis kelas bug M27/M77.
+ *
+ * @param {object} where klausa Sequelize (mis. { status:1 } atau { user_id, status:1 })
+ */
+async function _queryProperties(where) {
+  {
     const { Property, PropertyImage, PropertyFacility, Facility, PropertyLocation, Location, City, Province } = require('../models');
 
     const rows = await Property.findAll({
-      where: { status: 1 },
+      where,
       include: [
         { model: City,     as: 'city',     attributes: ['name'], required: false },
         { model: Province, as: 'province', attributes: ['name'], required: false },
@@ -1836,17 +1940,45 @@ async function getDbProperties() {
       };
     });
 
-    _dbPropertiesCache = normalized;
-    _dbPropertiesCacheTime = now;
-    console.log(`[PropertyRecommendationService] Loaded ${normalized.length} properties from database.`);
     return normalized;
-  } catch (err) {
-    console.error('[PropertyRecommendationService] getDbProperties() failed:', err.message);
-    return [];
   }
 }
 
-async function getSourceProperties() {
+/**
+ * Sumber properti untuk pencarian/rekomendasi.
+ *
+ * ⭐ M136 — SCOPING PER-AGENT (laporan produksi 24 Agu 2026).
+ * Log nyata untuk agent NATASHA menunjukkan:
+ *   [PropertyRecommendationService] Loaded 9120 fallback properties from extended_v3 JSON
+ * Katalog JSON `indonesia_property_extended_v3.json` itu MILIK SIAPA PUN —
+ * tidak punya kolom user_id sama sekali. Menggabungkannya ke sumber pencarian
+ * agent berarti:
+ *   (a) memuat 9.120 baris yang TIDAK AKAN PERNAH boleh direkomendasikan
+ *       (filterProperties membuangnya lagi lewat filters.userId) — kerja
+ *       sia-sia + memori, persis keluhan pemilik proyek; dan
+ *   (b) RISIKO KEBOCORAN bila ada satu saja jalur yang lupa mengoper userId,
+ *       properti agent lain/tanpa pemilik bisa muncul di katalog agent ini.
+ *
+ * Sekarang: bila `userId` diketahui (SEMUA jalur WhatsApp per-agent), katalog
+ * JSON TIDAK PERNAH disentuh dan query DB langsung di-scope ke agent itu +
+ * status=1. Tanpa userId (chatbot web publik / halaman /about) perilaku LAMA
+ * dipertahankan utuh — merge JSON tetap jadi gap-fill.
+ *
+ * Ini menutup item terbuka yang sudah lama dicatat di §5 M98 ("getSourceProperties()
+ * masih menggabung katalog JSON extended_v3.json — AI masih bisa merekomendasikan
+ * properti yang BUKAN milik agent").
+ *
+ * @param {string|null} userId users.user_id agent pemilik katalog. Null →
+ *   perilaku publik lama (DB semua agent + JSON fallback).
+ * @returns {Promise<object[]>}
+ */
+async function getSourceProperties(userId = null) {
+  if (userId) {
+    // Jalur per-agent: HANYA properti milik agent ini, status aktif.
+    const own = await getDbPropertiesForAgent(userId);
+    return own;   // ⛔ JANGAN merge JSON — katalog itu bukan milik agent mana pun.
+  }
+
   const dbProperties = await getDbProperties();
   if (dbProperties.length > 0) {
     // DB has live data: DB first (priority), JSON catalog as gap-fill fallback (deduped)
@@ -1936,7 +2068,8 @@ function budgetMatches(property = {}, budget = null) {
  *   customer tetap dapat listing kota-wide, bukan kosong sama sekali.
  */
 async function searchProperties(filters = {}) {
-  const source = await getSourceProperties();
+  // M136: scope ke agent bila diketahui — jangan tarik katalog agent lain / JSON publik.
+  const source = await getSourceProperties(filters.userId || null);
   let landmarkPropertyIds = null;
   if (filters.landmark) {
     landmarkPropertyIds = await getPropertyIdsForLandmark(filters.landmark);
@@ -2086,7 +2219,8 @@ function findWithExpandedBudget(source, filters) {
  * @returns {Promise<object[]>}
  */
 async function getAlternatives(filters = {}) {
-  const source = await getSourceProperties();
+  // M136: alternatif pun WAJIB dari katalog agent yang sama.
+  const source = await getSourceProperties(filters.userId || null);
   const seen   = new Set();
   const result = [];
 
@@ -2275,7 +2409,7 @@ async function buildRecommendationContextForLLM(message = '', history = [], opts
   // ── Budget expansion: jika exact matches kosong karena budget terlalu ketat ─
   // Tetap jaga buildingType + location. Hanya budget yang dilonggarkan.
   if (!exactMatches.length && filters.budget) {
-    const source = await getSourceProperties();
+    const source = await getSourceProperties(filters.userId || null);
 
     // Cek apakah ada properti tipe+lokasi yang sama (tanpa constraint harga)
     const typeLocMatch = filterProperties(source, {
@@ -2487,6 +2621,8 @@ module.exports = {
   getFallbackProperties,
   loadJsonProperties,
   mergePropertyCatalog,
+  getDbPropertiesForAgent,
+  clearAgentPropertiesCache,
   searchProperties,
   formatPropertyRecommendation,
   extractPropertyFilters,
