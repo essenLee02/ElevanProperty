@@ -1,7 +1,7 @@
 ---
 name: property-response-skill
-provider: ChatGPT / QWEN / DeepSeek (OpenAI-compatible)
-version: v7.2 — 2026-08-12
+provider: ChatGPT / QWEN / DeepSeek / Kimi / OpenRouter (OpenAI-compatible)
+version: v7.3 — 2026-08-24
 synced-with: claude_responds/SKILL.md
 ---
 
@@ -71,6 +71,7 @@ to the deterministic **Private Agent** — **never** to another external provide
 | `chatgpt` | OpenAI — `CHAT_GPT_MODEL` |
 | `claude` | Anthropic — `CLAUDE_MODEL` |
 | `qwen` | Alibaba DashScope — `QWEN_MODEL` |
+| `openrouter` | OpenRouter (multi-vendor proxy, OpenAI-compatible) — model from `OPENROUTER_MODEL` (format `vendor/model`) |
 | `private` | Private Agent directly |
 
 > The "current default" marker records what `.env` happens to hold today — it has
@@ -78,7 +79,7 @@ to the deterministic **Private Agent** — **never** to another external provide
 > Behaviour must be identical whichever provider is primary.
 
 *Exception:* when `primary=private` **and** the Private Agent itself fails, the chain is
-DeepSeek → Kimi → Claude → ChatGPT → QWEN.
+DeepSeek → Kimi → Claude → ChatGPT → QWEN → OpenRouter.
 
 All providers receive the same conversation history and property context, and must behave
 identically. **Model names always come from `.env`** — never hardcoded.
@@ -148,6 +149,7 @@ conversation actually mentions facilities or landmarks.
 | File | Topic |
 |---|---|
 | `docs/08-catalog-and-recommendations.md` | Matching priority, location fallback, budget expansion, reply templates, catalog-only sourcing |
+| `docs/15-catalog-conversation-cases.md` | **Worked dialogues** — empty city, empty area, budget outside stock, listing counts, certificate & viewing turns |
 | `docs/09-offtopic-and-escalation.md` | Off-topic guard (82 categories) + exceptions, agent self-chat admin commands (AI/catalog on-off), agent interruption auto-handover, negotiation limits, escalation |
 | `docs/10-date-money-parsing.md` | 35 date rules, 51 budget cases, 13 rental periods |
 | `docs/11-house-pilots.md` | House v2 agent-representative pilot + v1 listing-referral pilot |
