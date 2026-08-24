@@ -38,6 +38,12 @@ const sessionAnchors                                = require('../utils/sessionA
 const { expandAbbreviations }                       = require('../utils/lazyChatNormalizer');
 const { buildRagContext }                           = require('./ragRetrievalService');
 const { isSilentSentinel }                          = require('../utils/offTopicSentinel');
+const { tryTerminologyAnswer }                      = require('../utils/terminologyAnswerGate');
+const { getAgentCoverage,
+        buildAgentCoverageContext }                 = require('./agentCoverageService');
+const { resolveGuardrailProfile }                   = require('../utils/guardrailPolicy');
+const { evaluateListingReadiness,
+        buildListingReadinessContext }              = require('../utils/listingReadiness');
 
 // Jendela history untuk ekstraksi filter & state kualifikasi. Cukup besar agar
 // pesan pembuka (tipe/transaksi/lokasi) tidak keluar scope di alur panjang, tapi
@@ -437,14 +443,74 @@ async function _generateWhatsAppAIReplyCore(params) {
 
   const qualResponse = buildQualifyReply(filters, message, agentName, contextSource, history, catalogMode);
 
-  if (qualResponse) {
+  // ── ★ M132: GERBANG ISTILAH LEGAL/SERTIFIKAT (SHM/SHGB/KPR/dst.) ★ ────────
+  // Dicek DI SINI, TIDAK BERSYARAT, bukan hanya di dalam chatbotPrivateController.js
+  // (M129). Root cause transkrip produksi nyata (23-24 Agu 2026): customer
+  // bertanya "Apakah sdh SHM?" berkali-kali dan SELALU dibalas pertanyaan
+  // qualResponse ("...rencananya sewa atau beli?") yang identik — karena
+  // buildQualifyReply() di atas me-return LEBIH DULU setiap kali salah satu
+  // dari 4 info minimum belum ada, kondisi yang HAMPIR SELALU benar persis
+  // saat customer baru bertanya soal sertifikat sebelum sempat menjawab
+  // sewa/beli. chatbotPrivateController.js (tempat #tryTerminologyAnswer()
+  // M129 hidup) hanya dipanggil SETELAH gate ini lolos — jadi M129 secara
+  // efektif tidak pernah tercapai untuk kasus yang justru paling umum, walau
+  // tes unit-nya (terminologyAnswerGate.test.js, memanggil
+  // generatePrivateTerminalMassege LANGSUNG) tetap hijau karena tidak
+  // melewati gate ini sama sekali.
+  //
+  // Fix: jawab istilahnya DULU (fungsi bersama, utils/terminologyAnswerGate.js
+  // — hindari duplikasi daftar istilah, kelas bug M27/M77), lalu SAMBUNG
+  // dengan pertanyaan kualifikasi yang sedianya akan ditanyakan (bila info
+  // masih kurang) supaya alur qualification tidak pernah macet karena
+  // customer bertanya balik. Bila info kualifikasi sudah lengkap, jawab
+  // istilahnya saja — giliran berikutnya tetap berjalan normal ke AI/Private
+  // Agent seperti biasa.
+  const termAnswer = tryTerminologyAnswer(message);
+  if (termAnswer) {
+    console.log('[WhatsAppAI] 📖 Pertanyaan istilah legal/sertifikat terdeteksi — dijawab sebelum melanjutkan qualification flow.');
+    const combinedReply = qualResponse
+      ? `${termAnswer}\n\n${qualResponse.reply}`
+      : `${termAnswer}\n\nAda pertanyaan lain seputar properti yang bisa saya bantu? 😊${agentSignature(agentName, isIndonesian(message, history))}`;
+    return {
+      reply         : combinedReply,
+      replyParts    : [combinedReply],
+      provider      : 'terminology_gate',
+      contextSource,
+    };
+  }
+
+  // ── ★ M133: GERBANG KUALIFIKASI TUNDUK PADA PROFIL GUARDRAIL ★ ───────────
+  // Directive pemilik proyek (24 Agu 2026): saat AI_PRIMARY_PROVIDER BUKAN
+  // 'private', backend TIDAK BOLEH ikut menentukan isi balasan — platform AI
+  // (ChatGPT/Kimi/Claude/Qwen/DeepSeek) yang memutuskan, dipandu skill .md.
+  //
+  // buildQualifyReply() adalah backend MENYUSUN KALIMAT BALASAN (pertanyaan
+  // Q1 "sewa atau beli?"), bukan sekadar menyaring — jadi di profil 'platform'
+  // ia HARUS dilewati. Terbukti langsung saat verifikasi: dengan primary=
+  // chatgpt, gerbang ini tetap membalas sendiri dan ChatGPT TIDAK PERNAH
+  // melihat pesan customer sama sekali. LLM sudah punya instruksi Q1-Q14 penuh
+  // di skill docs (doc 04) — ia mampu menanyakannya sendiri, DAN kini punya
+  // blok KATALOG NYATA AGENT (Step 3.3) untuk menjawab dengan data asli.
+  //
+  // ⛔ BEDA dengan jaring pengaman M129/M130/M132 (terminologi & jarak) yang
+  // SENGAJA DIPERTAHANKAN di kedua profil: itu mencegah LLM MENGARANG fakta
+  // legal/numerik (kelas bug M84/M96), bukan mengatur gaya percakapan.
+  // Dikonfirmasi ulang pemilik proyek 24 Agu 2026 ("keep the safety nets").
+  const guardProfile = resolveGuardrailProfile(agentAiPrimary || session?.agentAiPrimary);
+
+  if (qualResponse && guardProfile === 'local') {
     console.log('[WhatsAppAI] 🛑 Qualification gate triggered — asking for missing info:', {
       hasType  : !!filters.buildingType,
       hasTx    : !!filters.transactionType,
       hasLoc   : !!filters.location,
       hasBudget: !!filters.budget,
+      profile  : guardProfile,
     });
     return qualResponse;
+  }
+  if (qualResponse && guardProfile === 'platform') {
+    console.log('[WhatsAppAI] ➡️  Gerbang kualifikasi DILEWATI (profil platform) — ' +
+                'platform AI yang akan menanyakan Q1-Q14 sendiri sesuai skill docs.');
   }
 
   console.log('[WhatsAppAI] ✅ Proceeding to AI:', {
@@ -470,8 +536,39 @@ async function _generateWhatsAppAIReplyCore(params) {
     console.warn('[WhatsAppAI] Context blocks load failed:', err.message);
   }
 
-  // Append facility + city + landmark context to propertyCtx so it reaches all AI providers
-  const enrichedPropertyCtx = [propertyCtx, facilityContext, cityContext, locationContext].filter(Boolean).join('\n\n');
+  // ── Step 3.3: AGENT COVERAGE (M133) ───────────────────────────────────────
+  // FAKTA katalog agent ini: kota mana yang ada stok, area mana yang ada
+  // isinya, rentang harga nyata. Tanpa ini, LLM tidak punya cara menjawab
+  // "saya punya listing di kota mana saja?" atau "area X kosong, adanya Y"
+  // selain MENEBAK — kelas bug M84/M96 (mengarang nama area) yang mahal.
+  //
+  // ⛔ Ini DATA, bukan keputusan. Backend tidak memilih kota/area mana yang
+  // ditawarkan, tidak menyusun kalimatnya, dan tidak memutuskan balas/diam —
+  // semua itu tetap wewenang platform AI (directive M131, ditegaskan ulang
+  // 24 Agu 2026). Pola identik dengan facilityContext/cityContext/ragContext.
+  // Fail-open: kegagalan apa pun → '' (nol token, balasan tetap jalan).
+  let agentCoverageContext = '';
+  try {
+    const coverage = await getAgentCoverage(agentUserId);
+    agentCoverageContext = buildAgentCoverageContext(coverage, filters);
+  } catch (err) {
+    console.warn('[WhatsAppAI] Agent coverage gagal, dilewati (fail-open):', err.message);
+  }
+
+  // ── Step 3.4: SYARAT MINIMUM LISTING (M134) ───────────────────────────────
+  // Directive pemilik proyek: listing boleh tampil begitu tipe + transaksi +
+  // kota + LOKASI SPESIFIK (area/landmark/commercial) diketahui — budget BUKAN
+  // syarat lagi (customer lazim menyesuaikan harga setelah melihat pilihan).
+  // Dikirim sebagai FAKTA, bukan perintah; platform AI yang menyusun kalimat.
+  let listingReadinessContext = '';
+  try {
+    listingReadinessContext = buildListingReadinessContext(evaluateListingReadiness(filters));
+  } catch (err) {
+    console.warn('[WhatsAppAI] Listing readiness gagal, dilewati (fail-open):', err.message);
+  }
+
+  // Append facility + city + landmark + coverage context to propertyCtx so it reaches all AI providers
+  const enrichedPropertyCtx = [propertyCtx, facilityContext, cityContext, locationContext, agentCoverageContext, listingReadinessContext].filter(Boolean).join('\n\n');
 
   // ── Step 3.6: RAG CONTEXT (opsional, RAG_ENABLED=OFF secara default) ──────
   // Melengkapi prompt dengan (a) pengetahuan jual-beli properti Indonesia yang
@@ -489,6 +586,18 @@ async function _generateWhatsAppAIReplyCore(params) {
       agentUserId,
       buildingType    : filters?.buildingType,
       transactionType : filters?.transactionType,
+      // ⚠️ M134 — WAJIB true, kalau tidak RAG praktis MATI. `retrieveSkillReference`
+      // opt-in dan TIDAK ADA pemanggil produksi yang pernah menyalakannya; sejak
+      // M131 memindahkan korpus legalitas/pajak/KPR dari namespace
+      // PROPERTY_KNOWLEDGE ke SKILL_DOCS, `retrievePropertyKnowledge()`
+      // (satu-satunya blok yang menyala otomatis) selalu mengembalikan kosong.
+      // Akibatnya buildRagContext() SELALU '' walau RAG_ENABLED=ON dan indeks
+      // berisi 151 chunk — diverifikasi langsung, bukan dugaan.
+      // Aman mid-interview: yang diambil di sini REFERENSI PERILAKU (doc
+      // 07/08/10/11/12/13/14/15), BUKAN listing. Blok katalog semantik
+      // (includeAgentCatalog) TETAP opt-in & mati — itu yang berisiko bocor
+      // sebelum brief (lihat catatan panjang di ragRetrievalService.js).
+      includeSkillReference: true,
     });
   } catch (err) {
     console.warn('[WhatsAppAI] RAG context gagal, dilewati:', err.message);
@@ -532,7 +641,7 @@ async function _generateWhatsAppAIReplyCore(params) {
         history,
         message,
         propertyCtx,
-        { facilityContext, cityContext, locationContext, ragContext }
+        { facilityContext, cityContext, locationContext, agentCoverageContext, listingReadinessContext, ragContext }
       );
 
       // ★ M131: sinyal diam dari platform API ★ — model memutuskan SENDIRI
@@ -602,7 +711,7 @@ async function _generateWhatsAppAIReplyCore(params) {
       try {
         console.warn('[WhatsAppAI] primary=private & Private Agent failed → trying external AI fallback');
         const aiResult = await generateWhatsappExternalAIFallback(
-          session, history, message, enrichedPropertyCtx, { facilityContext, cityContext, ragContext }
+          session, history, message, enrichedPropertyCtx, { facilityContext, cityContext, agentCoverageContext, listingReadinessContext, ragContext }
         );
 
         // ★ M131 ★ — sentinel diam berlaku sama di jalur fallback eksternal ini,

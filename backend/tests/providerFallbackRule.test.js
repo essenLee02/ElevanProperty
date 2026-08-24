@@ -5,11 +5,12 @@
  * provider itu (token habis, key invalid, dll) LANGSUNG jatuh ke
  * chatbotPrivateController.js (Private Agent) — TIDAK mencoba provider
  * eksternal lain dulu:
- *   Kimi     → Private Agent
- *   DeepSeek → Private Agent
- *   Qwen     → Private Agent
- *   Claude   → Private Agent
- *   ChatGPT  → Private Agent
+ *   Kimi       → Private Agent
+ *   DeepSeek   → Private Agent
+ *   Qwen       → Private Agent
+ *   Claude     → Private Agent
+ *   ChatGPT    → Private Agent
+ *   OpenRouter → Private Agent
  *   (primary=private) → Private Agent langsung, tanpa AI eksternal
  *
  * Ini SUDAH jadi perilaku PROVIDER_ORDER (satu entri per key) — tes ini
@@ -23,7 +24,7 @@ let pass = 0, total = 0;
 const ok = (n, c) => { total++; if (c) { pass++; console.log(`  ✅ ${n}`); } else { console.log(`  ❌ ${n}`); } };
 
 console.log('\n── Tiap primary → chain SATU provider saja (langsung ke Private Agent) ──');
-for (const primary of ['kimi', 'deepseek', 'qwen', 'claude', 'chatgpt']) {
+for (const primary of ['kimi', 'deepseek', 'qwen', 'claude', 'chatgpt', 'openrouter']) {
   const orig = process.env.AI_PRIMARY_PROVIDER;
   process.env.AI_PRIMARY_PROVIDER = primary;
   delete require.cache[require.resolve('../services/aiProviderService')];

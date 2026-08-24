@@ -3416,6 +3416,8 @@ ${showCatalogAfterBrief ? (propertyContext || 'No backend property catalog conte
 ${extraContext.facilityContext || ''}
 ${extraContext.cityContext || ''}
 ${extraContext.locationContext || ''}
+${extraContext.agentCoverageContext || ''}
+${extraContext.listingReadinessContext || ''}
 ${extraContext.ragContext || ''}
 Latest WhatsApp customer message. This is the highest-priority instruction:
 ${userMessage}

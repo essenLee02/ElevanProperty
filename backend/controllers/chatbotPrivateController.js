@@ -41,6 +41,7 @@ const { hasPropertyKeyword,
         lastAiMessageAsksQuestion }           = require('../utils/propertyKeywordFilter');
 const { extractQualificationState }           = require('../services/aiPromptBuilderService');
 const { parseCustomerDate }                   = require('../utils/customerDateParser');
+const { tryTerminologyAnswer: matchTerminologyAnswer } = require('../utils/terminologyAnswerGate');
 
 // Per-city landmark reference (Q2c sub-area & Q6 anchor point examples) — moved to its
 // own module so this controller file isn't dominated by static data. See file for docs.
@@ -4807,65 +4808,16 @@ class ChatbotPrivateService {
    * @returns {string|null}
    */
   static #tryTerminologyAnswer(userMessage) {
-    const text = String(userMessage || '').toLowerCase();
-
-    // ⚠️ GUARD WAJIB: hanya jawab bila pesan benar-benar sebuah PERTANYAAN.
-    // Tanpa ini, customer yang menjawab "SHM" atas pertanyaan sertifikat yang
-    // sedang berjalan ("mau SHM atau SHGB?") akan salah dianggap bertanya APA
-    // ITU SHM, dan jawabannya sendiri sebagai pilihan sertifikat hilang.
-    const looksLikeQuestion = /\?|^apa\b|\bapa\s+itu\b|\bapakah\b|\bgimana\b|\bbagaimana\b|\bmaksudnya\b|\bartinya\b|\bbedanya\b|\bbeda\b.{0,15}\bsama\b|\bkenapa\b|what\s+is|how\s+does/i.test(text);
-    if (!looksLikeQuestion) return null;
-    // Pola per istilah, diurutkan agar frasa lebih spesifik (SHSRS/SHMSRS)
-    // dicek sebelum yang lebih umum (SHM) supaya tidak salah cocok.
-    const TERMS = [
-      {
-        re: /\bshsrs\b|\bshmsrs\b|sertifikat.{0,15}rumah\s+susun/,
-        answer: 'SHSRS/SHMSRS (Sertifikat Hak Milik atas Satuan Rumah Susun) adalah bukti kepemilikan sah untuk UNIT hunian vertikal seperti apartemen/kondominium — obyeknya satu unit dalam bangunan bersama, bukan sebidang tanah utuh seperti SHM.',
-      },
-      {
-        re: /\bshgb\b|hak\s+guna\s+bangunan/,
-        answer: 'SHGB (Sertifikat Hak Guna Bangunan) adalah hak memakai/mendirikan bangunan di atas tanah negara atau tanah pihak lain, dengan masa berlaku TERBATAS (umumnya 30 tahun, bisa diperpanjang) — beda dari SHM yang berlaku selamanya. Umum untuk rumah di kompleks developer, ruko, dan properti komersial.',
-      },
-      {
-        re: /\bshm\b|sertifikat\s+hak\s+milik/,
-        answer: 'SHM (Sertifikat Hak Milik) adalah bukti kepemilikan properti TERTINGGI dan TERKUAT, berlaku SELAMANYA tanpa batas waktu. Hanya WNI perorangan yang bisa memegang SHM.',
-      },
-      {
-        re: /\bajb\b|akta\s+jual\s+beli/,
-        answer: 'AJB (Akta Jual Beli) adalah bukti sah pengalihan hak dalam transaksi jual-beli properti, dibuat oleh PPAT — wajib ada sebelum sertifikat bisa dibalik nama ke pembeli baru.',
-      },
-      {
-        re: /\bppjb\b|perjanjian\s+pengikatan\s+jual\s+beli/,
-        answer: 'PPJB (Perjanjian Pengikatan Jual Beli) adalah perjanjian awal sebelum AJB resmi bisa dibuat — biasanya dipakai saat properti masih dalam proses KPR/cicilan atau sertifikat induk developer belum pecah per unit.',
-      },
-      {
-        re: /\broya\b/,
-        answer: 'Roya adalah proses pencoretan catatan hak tanggungan (agunan bank) di sertifikat setelah KPR/kredit lunas — wajib dilakukan agar sertifikat benar-benar "bersih" sebelum dijual lagi.',
-      },
-      {
-        re: /\bbphtb\b/,
-        answer: 'BPHTB (Bea Perolehan Hak atas Tanah dan Bangunan) adalah pajak yang ditanggung PEMBELI saat perolehan hak atas properti, dihitung dari nilai transaksi/NJOP dikurangi batas bebas pajak (NPOPTKP) yang berbeda tiap daerah.',
-      },
-      {
-        re: /\bpbg\b|persetujuan\s+bangunan\s+gedung/,
-        answer: 'PBG (Persetujuan Bangunan Gedung) adalah pengganti IMB (Izin Mendirikan Bangunan) — bukti bangunan berdiri sesuai aturan tata ruang yang berlaku.',
-      },
-      {
-        re: /\bslf\b|sertifikat\s+laik\s+fungsi/,
-        answer: 'SLF (Sertifikat Laik Fungsi) adalah bukti bangunan sudah diperiksa dan dinyatakan layak dihuni/dipakai sesuai fungsinya — umumnya untuk bangunan bertingkat/komersial.',
-      },
-      {
-        re: /\bkpr\b/,
-        answer: 'KPR (Kredit Pemilikan Rumah) ada dua jenis utama: KPR SUBSIDI (mis. skema FLPP) — bunga rendah tetap, untuk penghasilan rendah, ada batas harga/penghasilan; dan KPR NONSUBSIDI/KONVENSIONAL — dari bank umum, lebih fleksibel, tanpa batas penghasilan. Syarat umum: WNI, penghasilan rutin, dan dokumen seperti KTP/NPWP/slip gaji.',
-      },
-    ];
-
-    for (const { re, answer } of TERMS) {
-      if (re.test(text)) {
-        return `${answer}\n\nAda pertanyaan lain seputar properti yang bisa saya bantu? 😊`;
-      }
-    }
-    return null;
+    // M132: logika dipindah ke utils/terminologyAnswerGate.js (SATU sumber
+    // kebenaran) supaya whatsappAIService.js juga bisa memakainya SEBELUM
+    // buildQualifyReply() — lihat komentar di modul itu untuk kenapa versi
+    // lama (hidup HANYA di sini) tidak pernah tercapai di jalur produksi
+    // saat info kualifikasi belum lengkap. Baris tambahan "Ada pertanyaan
+    // lain..." dipertahankan PERSIS di sini (bukan di modul bersama) supaya
+    // pemanggil lain (qual gate) bebas menyambung dengan kalimat berbeda.
+    const core = matchTerminologyAnswer(userMessage);
+    if (!core) return null;
+    return `${core}\n\nAda pertanyaan lain seputar properti yang bisa saya bantu? 😊`;
   }
 
   /**

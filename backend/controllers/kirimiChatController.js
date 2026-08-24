@@ -52,6 +52,8 @@ const { hasPropertyKeyword,
 const { generateWhatsAppAIReply, normalizeAiResponderLabel } = require('../services/whatsappAIService');
 const { getConversationHistory }        = require('../services/sessionService');
 const { sanitizeLog, maskPhone, maskName, appendSentViaTag, isOwnEcho, stripOwnEcho, buildOffTopicRedirect } = require('../utils/whatsappUtils');
+const { resolveGuardrailProfile, screenForPlatform } = require('../utils/guardrailPolicy');
+const ambiguityStrikes = require('../utils/ambiguityStrikes');
 const { HTTP } = require('../config/httpStatus');
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -592,31 +594,82 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
     return; // AI dorman sampai ada query properti baru / TTL reset
   }
 
-  if (!isPropertyQuery && !isContinuation) {
+  // ── M133: DUA PROFIL GUARDRAIL (utils/guardrailPolicy.js) ───────────────
+  //   'local'    (primary=private) → backend penuh: menyusun redirect sendiri
+  //                                   (perilaku lama, tidak berubah).
+  //   'platform' (primary=LLM)     → gerbang ini TURUN PERAN jadi penyaring
+  //                                   awal murah saja. Backend TIDAK menyusun
+  //                                   balasan; pesan yang lolos diteruskan ke
+  //                                   platform AI, yang memutuskan membalas
+  //                                   ATAU diam via [[OFFTOPIC_SILENT]] (M131).
+  const guardProfile = resolveGuardrailProfile(agent.ai_primary);
+  const inFlow       = isInPropertyFlow(gateHistory);
+
+  // Profil 'platform' + alur kualifikasi aktif → SELALU teruskan. Jawaban
+  // pendek customer ("ya", "2 bulan", "SHM") tidak boleh ditahan gerbang ini;
+  // itu kelas bug M87/M88/M95 yang sudah berulang tiga kali.
+  const platformForwards = guardProfile === 'platform'
+    && inFlow
+    && screenForPlatform(message, { inActiveFlow: true }).forward;
+
+  // ── M134: pesan properti yang SAH menghapus seluruh strike ambiguitas ────
+  // "Diam" harus SEMENTARA. Customer yang sempat melantur lalu kembali serius
+  // tidak boleh terkunci — menghukum lead yang sah jauh lebih mahal daripada
+  // satu-dua balasan off-topic.
+  if (isPropertyQuery || isContinuation) {
+    ambiguityStrikes.clearStrikes(session.id);
+  }
+
+  // ── M134: sudah di tahap DIAM → jangan balas, jangan panggil API sama sekali
+  // (hemat token, peran guardrail platform yang ditetapkan pemilik proyek).
+  if (!isPropertyQuery && !isContinuation && ambiguityStrikes.isSilenced(session.id)) {
+    if (isTerminalActive('KIRIMI')) {
+      console.log(`[KIRIMI] 🔇 Tahap DIAM (ambiguitas berulang) — ${maskPhone(sender)} tidak dibalas, API tidak dipanggil.`);
+    }
+    return;
+  }
+
+  if (!isPropertyQuery && !isContinuation && !platformForwards) {
     // Off-topic DI TENGAH alur kualifikasi aktif ("Saya mau beli nasi jagung" di
     // sela Q1-Q12) → balas pengarahan ramah kembali ke properti. Pesan off-topic
     // TIDAK disimpan ke DB (kata "beli"-nya bisa mem-flip transaksi di state).
     // Di luar alur aktif (broadcast/random) → tetap skip diam seperti semula.
-    const inFlow = isInPropertyFlow(gateHistory);
-    if (inFlow) {
-      const redirect = appendSentViaTag(buildOffTopicRedirect(agent.name));
-      try { await sendViaKirimi(sender, redirect, agent.kirimi_device_id); } catch (_) { /* non-fatal */ }
+    // M134 — ESKALASI: arahkan (strike 1) → tutup obrolan (strike 2) → diam (3+).
+    // Hitungan dicatat untuk KEDUA profil (menentukan kapan berhenti memanggil
+    // API = hemat token), tapi TEKS balasan hanya disusun backend di profil
+    // 'local'; di profil 'platform' kalimatnya tetap wewenang platform AI.
+    const strike = ambiguityStrikes.recordAmbiguous(session.id);
+    if (inFlow && guardProfile === 'local') {
+      const isId = true; // gate ini hanya aktif di alur ID; detektor bahasa penuh ada di jalur AI
+      const body = strike.stage === 'closing'
+        ? ambiguityStrikes.buildClosingReply(agent.name, isId)
+        : buildOffTopicRedirect(agent.name);
+      if (strike.stage !== 'silent') {
+        const outgoing = appendSentViaTag(body);
+        try { await sendViaKirimi(sender, outgoing, agent.kirimi_device_id); } catch (_) { /* non-fatal */ }
+      }
     }
     if (isTerminalActive('KIRIMI')) {
       const D = '─'.repeat(62);
+      const redirectSent = inFlow && guardProfile === 'local';
       console.log('');
       console.log(D);
-      console.log(`[KIRIMI] ⬇  PESAN MASUK (bukan query properti${inFlow ? ' — dibalas redirect ke properti' : ' — tidak dibalas'})`);
+      console.log(`[KIRIMI] ⬇  PESAN MASUK (bukan query properti${redirectSent ? ' — dibalas redirect ke properti' : ' — tidak dibalas'})`);
       console.log(`[KIRIMI]    Agent    : ${sanitizeLog(agent.name, 60)} (${maskPhone(agent.phone)})`);
       console.log(`[KIRIMI]    Owner    : User ${sanitizeLog(agent.user_id || '-', 40)}`);
       console.log(`[KIRIMI]    Customer : ${maskPhone(sender)} (${maskName(name)})`);
       console.log(`[KIRIMI]    Time     : ${ts}`);
       console.log(`[KIRIMI]    Message  : ${sanitizeLog(message, 120)}`);
-      console.log(`[KIRIMI]    Status   : ⏭️  Tidak disimpan ke DB${inFlow ? ', redirect terkirim' : ', AI skip (bukan query properti)'}`);
+      console.log(`[KIRIMI]    Guardrail: profil '${guardProfile}'`);
+      console.log(`[KIRIMI]    Status   : ⏭️  Tidak disimpan ke DB${redirectSent ? ', redirect terkirim' : ', AI skip (bukan query properti)'}`);
       console.log(D);
       console.log('');
     }
     return; // Pesan off-topic tidak disimpan ke DB
+  }
+
+  if (platformForwards && !isPropertyQuery && !isContinuation) {
+    console.log(`[KIRIMI] ➡️  Guardrail 'platform' — diteruskan ke AI, platform yang memutuskan balas/diam.`);
   }
 
   // ── Simpan pesan customer ke DB (hanya untuk query properti / lanjutan) ─
