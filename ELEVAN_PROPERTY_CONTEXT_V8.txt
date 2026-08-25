@@ -1,7 +1,7 @@
 ================================================================================
   ELEVAN PROPERTY — COMPREHENSIVE PROJECT CONTEXT (V12)
   Dibuat  : 15 Juni 2026
-  Update  : 24 Agustus 2026 (M132–M138: gerbang kualifikasi WhatsApp
+  Update  : 24 Agustus 2026 (M132–M139: gerbang kualifikasi WhatsApp
             MEMBLOKIR M129 terminologi sertifikat setiap kali info belum
             lengkap — diperbaiki + pola "SHM itu apa" (word-order terbalik)
             [M132]; provider OpenRouter (6 opsi → 7, multi-vendor proxy)
@@ -23,7 +23,9 @@
             plus aturan skill doc utk pilih-listing-by-nomor & singkatan
             lokasi [M137]; penilai keseriusan customer 7-indikator + master
             Developer Property (users.developer_property_id) + spesifikasi
-            kamar akhirnya sampai ke AI [M138]. Lihat §PERUBAHAN BESAR V11→V12.)
+            kamar akhirnya sampai ke AI [M138]; ⭐ kontrak SKILL.md §4 "never show
+            listings mid-interview" DICABUT — 2 listing langsung begitu 4 slot
+            diketahui, budget bukan syarat [M139]. Lihat §PERUBAHAN BESAR V11→V12.)
   Tujuan  : SATU file konteks lengkap untuk di-upload ke Claude Code
   Isi     : Overview · Instrument · Review · Pengembangan · Solusi ·
             Environments · Informasi · Skills · Tujuan · Roadmap ·
@@ -940,11 +942,87 @@ tercapai di jalur produksi sesungguhnya".
        brand), /dp/options 200, /lead/qualified 200. Frontend `npm run build`
        sukses (124 modul).
 
-  BASELINE TES AKHIR SESI INI: 2226/2249 (89 berkas, +8 berkas tes baru:
+  9. M139 ⭐⭐⭐ "BERHENTI MENG-INTERVIEW" — KONTRAK SKILL.md §4 DICABUT & DIBALIK.
+     Directive pemilik proyek: "Selama ini AI dikembangkan seperti interview
+     customer. AI harus lebih menyesuaikan kebutuhan customer, karena customer
+     malas terlalu banyak interview. Berikan 2 listing dulu, jika AI sudah dapat
+     informasi minimal lokasi area, kota, tipe transaksi dan tipe properti."
+
+     ⛔ AKAR MASALAH — BUKAN kurang contoh dialog, tapi KONTRAK YANG BERTENTANGAN.
+     M134 sudah membuat aturan 4-slot (budget BUKAN syarat) di doc 15 §0b. TAPI
+     `SKILL.md` §4 — yang file-nya sendiri menyatakan "This file is the operating
+     contract" dan MENGALAHKAN docs/ — masih berbunyi:
+         "❌ Never show listings" / "❌ Still never show listings mid-interview"
+         + kolom tabel "After all mandatory slots ✅"
+     Jadi selama ini LLM membaca DUA aturan yang saling bertentangan, dan yang
+     menang adalah yang berstatus KONTRAK. M134 secara efektif tidak pernah
+     berlaku di perilaku nyata. Kelas kegagalan yang SAMA PERSIS dengan pelajaran
+     lama "prompt outranks skill docs" — memperbaiki doc saja TIDAK CUKUP bila
+     ada baris berstatus lebih tinggi yang berkata sebaliknya.
+
+     FIX (ketiga folder skill):
+       • SKILL.md §4 ditulis ulang: seksi "⭐ SHOW LISTINGS EARLY — this rule
+         outranks the interview" + tabel 4 slot + pernyataan tegas "Budget is
+         NOT required" + catatan PENCABUTAN eksplisit ("That rule is withdrawn")
+         yang MENGUTIP aturan lama supaya sesi berikutnya tidak mengira itu
+         terhapus karena kelalaian lalu mengembalikannya.
+       • Diagram lifecycle §5 diganti: "Q1–Q14 qualification → summary brief"
+         → "minimum slots → 2 listings → refine on the customer's reaction →
+         summary brief → dormant".
+       • Q1–Q14 TIDAK dihapus — tetap dipakai untuk membangun brief akhir &
+         mempersempit pencarian, tapi dikumpulkan SECARA PERCAKAPAN, bukan
+         sebagai gerbang di depan katalog.
+       • Edisi standalone (elevan-property-assistant) diberi teks BERBEDA untuk
+         §4: folder itu memang TIDAK punya backend (§3-nya sendiri menyatakan
+         demikian), jadi rujukan "blok SYARAT MINIMUM LISTING dari backend"
+         diganti instruksi melacak 4 slot sendiri. Menyalin mentah akan
+         menyuruhnya membaca sesuatu yang tidak pernah ada.
+
+     DOC 15 DIPERLUAS (permintaan "kembangkan berbagai kemungkinan customer chat"):
+       §8c dialog kerja PENUH Case 1 (Andy: nama → 2 listing langsung → pilih
+            nomor → survei → sertifikat dideflect → jarak), dengan anotasi
+            KENAPA tiap langkah begitu.
+       §8d dialog kerja PENUH Case 2/3 (Gresik: area kosong → alternatif kota
+            sama → cek Alfamart → budget di atas stok → budget di bawah stok →
+            durasi → customer menolak survei).
+       §8e DELAPAN variasi pendek (a–h): semua-di-satu-pesan, tanya kamar
+            mandi/tidur, filter spesifik, kota kosong, customer vague, dua slot
+            sekaligus, minta N listing, ganti arah di tengah.
+       §0b diperkuat: "show as soon as you can, not wait until you may",
+            default 2 listing, tabel KAPAN slot lain baru relevan (kok mahal →
+            budget; buat keluarga → kamar), larangan menanyakan slot yang sudah
+            terisi.
+       §9 anti-pattern +6 baris (interview setelah 4 slot, tanya budget duluan,
+            tanya ulang slot terisi, dead-end "tidak ada", menebak jumlah kamar).
+
+     ⛔ BUG KODE DITEMUKAN SAAT VERIFIKASI (bukan dilaporkan): salah-ketik
+     "apartmen" (huruf 'e' hilang) — yang dipakai pemilik proyek SENDIRI di
+     Case 2/3 — TIDAK terdeteksi sebagai tipe apartment. PROPERTY_TYPES memuat
+     'apart', tapi pencocokan memakai WORD BOUNDARY sehingga 'apart' TIDAK
+     menangkap 'apartmen'. Dampaknya persis anti-pattern yang baru saja
+     dilarang: AI menanyakan ulang tipe properti yang SUDAH dikatakan customer.
+     Fix: tambah varian 'apartmen', 'apartement', 'aparteman'. Kontrol negatif
+     diverifikasi — "apa ada rumah?"/"apakah ada gudang" TIDAK ikut terbaca
+     apartment.
+
+     ⚠️ JEBAKAN VERIFIKASI (dicatat supaya tidak menyesatkan sesi berikutnya):
+     tes pertama menunjukkan "Puri Surya Jaya" TIDAK terdeteksi → seolah bug
+     besar. Ternyata ARTEFAK TES: `_landmarkCache` diisi `initLandmarkCache()`
+     saat boot server; di proses `node -e` dingin cache kosong dan
+     detectLandmark() langsung return ''. Setelah cache dihangatkan seperti
+     produksi, Case 1 memang READY di pesan PERTAMA. Selalu hangatkan
+     initFacilityCache/initCityCache/initLandmarkCache sebelum menyimpulkan
+     ekstraktor lokasi rusak.
+     → tests/showListingsEarlyM139.test.js (44/44), termasuk kontrol negatif
+       bahwa frasa lama hanya tersisa di catatan pencabutan (tepat 1 kemunculan,
+       bukan sebagai perintah aktif).
+
+  BASELINE TES AKHIR SESI INI: 2270/2293 (90 berkas, +9 berkas tes baru:
   terminologyQualGateWiring, openrouterProviderWiring,
   agentCoverageAndGuardrailProfile, listingReadinessAndAmbiguityStrikes,
   agentScopedCatalogLoad, certificateExposureAndSameCityDistance,
-  leadScoringAndDeveloperProperty — plus perluasan terminologyAnswerGate lama).
+  leadScoringAndDeveloperProperty, showListingsEarlyM139 — plus perluasan
+  terminologyAnswerGate lama).
   5 kegagalan pre-existing SAMA PERSIS sepanjang sesi (diverifikasi ulang
   SETELAH setiap perubahan besar, termasuk setelah RAG_ENABLED=ON):
   customerDateParser, extractFilters, facilitiesViewingAndShortAnswers,
@@ -952,7 +1030,7 @@ tercapai di jalur produksi sesungguhnya".
   berkas gagal baru di luar daftar ini. Lint bersih pada semua berkas yang
   disentuh.
 
-  ⭐ PENOMORAN M — nomor berikutnya untuk sesi mendatang: **M139**.
+  ⭐ PENOMORAN M — nomor berikutnya untuk sesi mendatang: **M140**.
 
   ⚠️ POLA BERULANG SESI INI (M132, M134c, M137a, M138e) — EMPAT KALI ditemukan
   "fitur/kolom/fungsi SUDAH ADA dan BENAR, tapi TIDAK PERNAH TERCAPAI di

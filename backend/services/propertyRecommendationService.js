@@ -19,7 +19,14 @@ const PROPERTY_TYPES = {
   kondotel      : ['kondotel', 'condotel', 'condo hotel', 'kondo hotel', 'condo'], // ← SEBELUM hotel/apartment
   hotel         : ['hotel', 'hotels', 'penginapan', 'motel'],
   villa         : ['villa', 'vila'],
-  apartment     : ['apartemen', 'apartment', 'apart'],
+  // M139: varian salah-ketik NYATA dari transkrip pemilik proyek ("apartmen",
+  // huruf 'e' hilang) plus ejaan campur ID/EN yang lazim di WhatsApp
+  // ("apartement", "aparteman"). Pencocokan memakai WORD BOUNDARY, jadi
+  // 'apart' TIDAK menangkap 'apartmen' — kata dasar saja tidak cukup, tiap
+  // varian harus terdaftar eksplisit. Tipe properti adalah slot ke-1 dari 4
+  // syarat minimum listing: gagal mendeteksinya = AI menanyakan ulang hal yang
+  // SUDAH dikatakan customer, persis anti-pattern yang dilarang doc 15 §0b.
+  apartment     : ['apartemen', 'apartment', 'apartmen', 'apartement', 'aparteman', 'apart'],
   boarding_house: ['ngekosan', 'ngekost', 'ngekos', 'indekost', 'indekos', 'kostan', 'kosan', 'kost', 'kos', 'boarding house', 'boarding_house'],
   mansion       : ['mansion', 'rumah mewah'],        // ← SEBELUM house (rumah mewah ⊃ "rumah")
   warehouse     : ['gudang', 'warehouse'],           // ← SEBELUM house (warehouse ⊃ "house")
