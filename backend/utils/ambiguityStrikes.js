@@ -114,6 +114,29 @@ function buildClosingReply(agentName = '', isId = true) {
       `feel free to message me again 😊\n\nWarm regards,\n*${name}*\n*${appName}*`;
 }
 
+/**
+ * SAPUAN PERIODIK (M153) — audit skala 10.000 agent WhatsApp.
+ *
+ * Tanpa ini, `_strikes` hanya dibersihkan LEWAT PEMBACAAN (_prune dipanggil
+ * saat key yang sama diakses lagi). Sesi yang kena strike lalu customer-nya
+ * TIDAK PERNAH kembali meninggalkan entri itu di Map SELAMANYA — pada skala
+ * 10.000 agent × banyak customer per hari, ini kebocoran memori lambat yang
+ * baru terasa setelah berminggu-minggu (proses harus di-restart untuk lega).
+ * Sapuan berkala menghapus entri kedaluwarsa terlepas dari apakah key-nya
+ * pernah dibaca lagi. `.unref()` supaya timer ini TIDAK mencegah proses Node
+ * keluar (mis. saat dipakai dari skrip sekali-jalan/tes).
+ */
+const _SWEEP_INTERVAL_MS = Number(process.env.AMBIGUITY_SWEEP_INTERVAL_MS || 10 * 60 * 1000);
+const _sweepTimer = setInterval(() => {
+  const now = Date.now();
+  let removed = 0;
+  for (const [key, entry] of _strikes) {
+    if (now - entry.lastAt > STRIKE_TTL_MS) { _strikes.delete(key); removed++; }
+  }
+  if (removed > 0) console.log(`[AmbiguityStrikes] 🧹 sapuan berkala: ${removed} sesi kedaluwarsa dibuang (sisa ${_strikes.size})`);
+}, _SWEEP_INTERVAL_MS);
+_sweepTimer.unref();
+
 module.exports = {
   STRIKE_TTL_MS,
   REDIRECT_LIMIT,

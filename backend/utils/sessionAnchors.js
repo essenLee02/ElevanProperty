@@ -88,6 +88,30 @@ function reconcile(sessionId, filters = {}) {
   return filters;
 }
 
+/**
+ * SAPUAN PERIODIK (M153) — audit skala 10.000 agent WhatsApp.
+ *
+ * `getAnchors()` hanya membuang entri kedaluwarsa SAAT sessionId yang sama
+ * dibaca lagi. Customer yang berhenti chat di tengah jalan (sangat umum)
+ * meninggalkan anchor-nya di Map SELAMANYA — tidak ada yang pernah membacanya
+ * lagi untuk memicu penghapusan. Pada skala 10.000 agent dengan banyak
+ * customer/hari, ini kebocoran memori lambat yang baru terasa setelah
+ * berminggu-minggu uptime. Sapuan berkala menghapus entri kedaluwarsa
+ * terlepas dari pola akses. `.unref()` supaya timer tidak mencegah proses
+ * Node keluar (skrip sekali-jalan/tes).
+ */
+const _SWEEP_INTERVAL_MS = Number(process.env.SESSION_ANCHOR_SWEEP_INTERVAL_MS || 10 * 60 * 1000);
+const _sweepTimer = setInterval(() => {
+  const now = Date.now();
+  const ttl = _ttlMs();
+  let removed = 0;
+  for (const [sessionId, a] of _anchors) {
+    if (now - a.at > ttl) { _anchors.delete(sessionId); removed++; }
+  }
+  if (removed > 0) console.log(`[SessionAnchors] 🧹 sapuan berkala: ${removed} sesi kedaluwarsa dibuang (sisa ${_anchors.size})`);
+}, _SWEEP_INTERVAL_MS);
+_sweepTimer.unref();
+
 module.exports = {
   getAnchors,
   rememberAnchors,

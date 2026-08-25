@@ -1,6 +1,7 @@
 const express    = require('express');
 const router     = express.Router();
 const rateLimit  = require('express-rate-limit');
+const { verifyWebhookSecret } = require('../middleware/verifyWebhookSecret');
 
 /* ══════════════════════════════════════════════════════════════════════════════
    RATE LIMITERS
@@ -32,6 +33,22 @@ const logLimiter = rateLimit({
   message        : { success: false, message: 'Rate limit pada log endpoint.' },
   standardHeaders: true,
   legacyHeaders  : false,
+});
+
+// Login: 8 percobaan GAGAL / 15 menit per IP (audit keamanan, 25 Agu 2026).
+// Sebelumnya /auth/login TIDAK punya rate limit sama sekali — satu-satunya
+// endpoint yang memverifikasi password tanpa batas percobaan, padahal contact/
+// webhook/log semuanya sudah dilindungi. skipSuccessfulRequests: true supaya
+// yang hanya salah ketik password sekali lalu berhasil TIDAK ikut kena hitungan
+// — limiter ini menyasar percobaan tebak-password berulang, bukan mengganggu
+// login normal yang wajar.
+const loginLimiter = rateLimit({
+  windowMs               : 15 * 60 * 1000,
+  max                    : 8,
+  skipSuccessfulRequests : true,
+  message                : { success: false, message: 'Terlalu banyak percobaan login gagal. Coba lagi dalam 15 menit.' },
+  standardHeaders        : true,
+  legacyHeaders          : false,
 });
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -97,7 +114,7 @@ router.post('/chatbot/message',                            chatbotController.sen
 
 router.post('/auth/register',   registerController.insertDataAgent);
 router.get('/auth/users-count', registerController.countUsers);
-router.post('/auth/login',      loginController.loginUser);
+router.post('/auth/login',      loginLimiter, loginController.loginUser);
 router.get('/auth/refresh',     refreshTokenController.refreshTokenController);
 router.delete('/auth/logout',   loginController.logoutUser);
 router.get('/auth/me',          loginController.getCurrentUser);
@@ -124,20 +141,20 @@ router.put('/profile/update-agent',  verifyToken, profileController.updateDataAg
 ══════════════════════════════════════════════════════════════════════════════ */
 
 // Fonnte legacy webhook
-router.post('/fonnte/webhook',       webhookLimiter, fonnteWebhookController.handleWebhook);
+router.post('/fonnte/webhook',       webhookLimiter, verifyWebhookSecret, fonnteWebhookController.handleWebhook);
 
 // Fonnte multi-agent webhook (public)
-router.post('/fonnte-chat/webhook',      webhookLimiter, fonnteChatController.handleInboundMessage);
-router.post('/fonnte-chat/chaining',     webhookLimiter, fonnteChatController.handleChainingWebhook);
-router.post('/fonnte-chat/webhook-raw',  webhookLimiter, fonnteChatController.webhookRawCatcher);
+router.post('/fonnte-chat/webhook',      webhookLimiter, verifyWebhookSecret, fonnteChatController.handleInboundMessage);
+router.post('/fonnte-chat/chaining',     webhookLimiter, verifyWebhookSecret, fonnteChatController.handleChainingWebhook);
+router.post('/fonnte-chat/webhook-raw',  webhookLimiter, verifyWebhookSecret, fonnteChatController.webhookRawCatcher);
 
 // TimelinesAI webhook (public)
-router.post('/timelinesai/webhook',      webhookLimiter, timelinesAIChatController.handleInboundMessage);
-router.post('/timelinesai/webhook-raw',  webhookLimiter, timelinesAIChatController.webhookRawCatcher);
+router.post('/timelinesai/webhook',      webhookLimiter, verifyWebhookSecret, timelinesAIChatController.handleInboundMessage);
+router.post('/timelinesai/webhook-raw',  webhookLimiter, verifyWebhookSecret, timelinesAIChatController.webhookRawCatcher);
 
 // Kirimi webhook (public)
-router.post('/kirimi/webhook',           webhookLimiter, kirimiChatController.handleInboundMessage);
-router.post('/kirimi/webhook-raw',       webhookLimiter, kirimiChatController.webhookRawCatcher);
+router.post('/kirimi/webhook',           webhookLimiter, verifyWebhookSecret, kirimiChatController.handleInboundMessage);
+router.post('/kirimi/webhook-raw',       webhookLimiter, verifyWebhookSecret, kirimiChatController.webhookRawCatcher);
 
 /* ══════════════════════════════════════════════════════════════════════════════
    WHATSAPP ADMIN ROUTES — Butuh login (verifyToken)

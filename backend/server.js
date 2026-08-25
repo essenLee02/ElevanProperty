@@ -3,6 +3,7 @@ require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
 const { DataTypes } = require('sequelize');
 const sequelize = require('./config/database');
@@ -85,6 +86,24 @@ String(process.env.CORS_EXTRA_ORIGINS || '')
   .map((s) => s.trim().replace(/\/+$/, ''))
   .filter(Boolean)
   .forEach((o) => { if (!allowedOrigins.includes(o)) allowedOrigins.push(o); });
+
+// ─── HELMET — header keamanan HTTP standar (audit keamanan, 25 Agu 2026) ──────
+// Backend ini sebelumnya TIDAK mengirim X-Content-Type-Options, X-Frame-Options,
+// dst sama sekali. Konfigurasi di bawah SENGAJA tidak memakai default polos:
+//   • contentSecurityPolicy: false — backend ini API JSON + host aset statis
+//     (gambar properti, json_data), bukan penyaji halaman HTML ber-konten user.
+//     CSP default helmet dirancang untuk halaman HTML dan bisa memblokir hal
+//     yang tidak relevan di sini tanpa manfaat nyata.
+//   • crossOriginResourcePolicy: 'cross-origin' — WAJIB diset eksplisit. Default
+//     helmet v7 ('same-origin') akan membuat browser MENOLAK memuat gambar
+//     properti (/assets/image_data/...) dan /json_data/... saat frontend (origin
+//     berbeda — Vite dev server / Netlify) mem-fetch-nya. `cors` di atas sudah
+//     memvalidasi origin lewat whitelist; header ini tidak menduplikasi itu,
+//     hanya mencegah helmet diam-diam memblokir permintaan cross-origin yang SAH.
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
 
 app.use(cors({
   origin: function(origin, callback) {

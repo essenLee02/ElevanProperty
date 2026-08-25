@@ -126,7 +126,7 @@ class CountryMasterController extends GeneralController {
       await country.update({
         name:         String(name).trim().toUpperCase(),
         updated_date: GeneralController.todayDate(),
-        updated_by:   updatedBy.toUpperCase()
+        updated_by:   updatedBy ? updatedBy.toUpperCase() : null
       });
 
       const creatorName = await GeneralController.resolveUserName(country.created_by);

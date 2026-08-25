@@ -164,7 +164,7 @@ class ProvinceMasterController extends GeneralController {
         country_id:   country_id.toUpperCase(),
         name:         String(name).trim().toUpperCase(),
         updated_date: GeneralController.todayDate(),
-        updated_by:   updatedBy.toUpperCase()
+        updated_by:   updatedBy ? updatedBy.toUpperCase() : null
       });
 
       const creatorName = await GeneralController.resolveUserName(province.created_by);

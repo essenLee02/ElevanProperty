@@ -126,7 +126,7 @@ class FacilityMasterController extends GeneralController {
         icon:         icon        ? String(icon).trim()        : null,
         status:       1,
         created_date: GeneralController.todayDate(),
-        created_by:   createdBy.toUpperCase(),
+        created_by:   createdBy ? createdBy.toUpperCase() : null,
         updated_date: null,
         updated_by:   null
       });

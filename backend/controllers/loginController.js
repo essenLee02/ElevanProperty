@@ -16,6 +16,7 @@ const { HTTP } = require('../utils/httpStatus');
 const { sendSuccess, sendError } = require('../utils/responseFormat');
 const { safeLog } = require('../utils/safeLog');
 const { authLog } = require('../utils/authLogger');
+const { refreshCookieOptions } = require('../utils/refreshCookieOptions');
 
 class LoginController {
   static #cleanEnv(value, fallback = '') {
@@ -120,11 +121,7 @@ class LoginController {
       );
 
       const refreshCookieName = LoginController.#cookieName();
-      res.cookie(refreshCookieName, refreshToken, {
-        httpOnly: true,
-        maxAge:   24 * 60 * 60 * 1000
-        // secure: true  // aktifkan ketika serve via HTTPS
-      });
+      res.cookie(refreshCookieName, refreshToken, refreshCookieOptions(req));
 
       authLog.loginSuccess({
         user_id:  user.user_id,
@@ -183,7 +180,10 @@ class LoginController {
     try {
       const user = await User.findOne({ where: { refresh_token: refreshTokenFromCookie } });
       if (!user) {
-        res.clearCookie(refreshCookieName);
+        // Opsi HARUS sama dengan yang dipakai saat set cookie (secure/sameSite) —
+      // browser tidak akan menghapus cookie SameSite=None jika clearCookie
+      // dipanggil tanpa atribut yang cocok.
+      res.clearCookie(refreshCookieName, refreshCookieOptions(req));
         authLog.logoutFailed('Refresh token tidak dikenali di database', {
           ...requestInfo,
           'HTTP Status': HTTP.NO_CONTENT
@@ -196,7 +196,10 @@ class LoginController {
         { where: { user_id: user.user_id } }
       );
 
-      res.clearCookie(refreshCookieName);
+      // Opsi HARUS sama dengan yang dipakai saat set cookie (secure/sameSite) —
+      // browser tidak akan menghapus cookie SameSite=None jika clearCookie
+      // dipanggil tanpa atribut yang cocok.
+      res.clearCookie(refreshCookieName, refreshCookieOptions(req));
 
       authLog.logoutSuccess({
         user_id:  user.user_id,

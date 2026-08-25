@@ -66,7 +66,7 @@ class DeveloperPropertyMasterController extends GeneralController {
         name:         String(name).trim().toUpperCase(),
         status:       1,
         created_date: GeneralController.todayDate(),
-        created_by:   createdBy.toUpperCase(),
+        created_by:   createdBy ? createdBy.toUpperCase() : null,
         updated_date: null,
         updated_by:   null
       });
@@ -135,7 +135,7 @@ class DeveloperPropertyMasterController extends GeneralController {
       await row.update({
         name:         String(name).trim().toUpperCase(),
         updated_date: GeneralController.todayDate(),
-        updated_by:   updatedBy.toUpperCase()
+        updated_by:   updatedBy ? updatedBy.toUpperCase() : null
       });
 
       const creatorName = await GeneralController.resolveUserName(row.created_by);

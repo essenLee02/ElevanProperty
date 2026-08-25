@@ -24,6 +24,7 @@ const { HTTP } = require('../utils/httpStatus');
 const { sendSuccess, sendError } = require('../utils/responseFormat');
 const { safeLog } = require('../utils/safeLog');
 const { authLog } = require('../utils/authLogger');
+const { refreshCookieOptions } = require('../utils/refreshCookieOptions');
 
 /**
  * Helper bersihkan value env dari karakter aneh (";" di akhir, kutip).
@@ -122,7 +123,8 @@ exports.refreshTokenController = async (req, res) => {
           { refresh_token: null },
           { where: { user_id: user.user_id } }
         );
-        res.clearCookie(refreshCookieName);
+        // Opsi harus sama dengan saat set (lihat catatan di refreshCookieOptions.js).
+        res.clearCookie(refreshCookieName, refreshCookieOptions(req));
 
         authLog.refreshFailed('Refresh token expired / signature invalid: ' + errToken.message, {
           ...requestInfo,
@@ -176,11 +178,7 @@ exports.refreshTokenController = async (req, res) => {
       }
 
       // 7. Refresh cookie dengan refresh_token baru
-      res.cookie(refreshCookieName, newRefreshToken, {
-        httpOnly: true,
-        maxAge:   24 * 60 * 60 * 1000
-        // secure: true   // aktifkan saat pakai HTTPS
-      });
+      res.cookie(refreshCookieName, newRefreshToken, refreshCookieOptions(req));
 
       // Log SUCCESS ke terminal dalam bentuk box
       authLog.refreshSuccess({

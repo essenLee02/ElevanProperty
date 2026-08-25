@@ -185,7 +185,7 @@ class CityMasterController extends GeneralController {
         province_id:  province_id.toUpperCase(),
         name:         String(name).trim().toUpperCase(),
         updated_date: GeneralController.todayDate(),
-        updated_by:   updatedBy.toUpperCase()
+        updated_by:   updatedBy ? updatedBy.toUpperCase() : null
       });
 
       const creatorName  = await GeneralController.resolveUserName(city.created_by);
@@ -372,7 +372,7 @@ class CityMasterController extends GeneralController {
       await city.update({
         status:       newStatus,
         updated_date: GeneralController.todayDate(),
-        updated_by:   updatedBy.toUpperCase()
+        updated_by:   updatedBy ? updatedBy.toUpperCase() : null
       });
 
       const updaterName  = await GeneralController.resolveUserName(updatedBy);

@@ -227,7 +227,7 @@ class LocationMasterController extends GeneralController {
       await loc.update({
         name:         String(name).trim().toUpperCase(),
         updated_date: GeneralController.todayDate(),
-        updated_by:   updatedBy.toUpperCase()
+        updated_by:   updatedBy ? updatedBy.toUpperCase() : null
       });
 
       const creatorName = await GeneralController.resolveUserName(loc.created_by);
