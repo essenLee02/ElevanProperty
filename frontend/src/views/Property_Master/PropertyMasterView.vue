@@ -845,7 +845,28 @@ const loadAreaOptions = async (cityId) => {
   }
 };
 
-watch(() => form.city_id, (cityId) => { loadAreaOptions(cityId); });
+watch(() => form.city_id, (cityId, prevCityId) => {
+  loadAreaOptions(cityId);
+
+  // Kota berubah → patokan area & landmark milik kota LAMA tidak lagi sah
+  // (aturan pemilik proyek: keduanya harus sekota dengan properti), jadi
+  // dibuang dari form. Patokan generik tanpa kota (Alfamart, Indomaret,
+  // stasiun) TIDAK ikut hilang karena memang berlaku di kota mana pun.
+  //
+  // prevCityId dicek supaya pemuatan awal form edit (undefined → cityId) tidak
+  // ikut menghapus patokan yang baru saja dibaca dari database.
+  if (!prevCityId || prevCityId === cityId) return;
+
+  const before = form.locations.length;
+  form.locations = form.locations.filter((l) => {
+    const boundToCity = l.location_type === 'area' || l.location_type === 'landmark';
+    return !boundToCity || String(l.city_id || '') === String(cityId || '');
+  });
+  const dropped = before - form.locations.length;
+  if (dropped > 0) {
+    setAlert('warning', `${dropped} lokasi patokan (area/landmark) dihapus karena kota properti berubah. Silakan pilih ulang.`);
+  }
+});
 
 /* Fetcher Modal → { rows, currentPage, lastPage } */
 const fetchCountries = async (search, page) => {
@@ -961,10 +982,20 @@ const showModalLocation = async () => {
     setAlert('warning', 'Simpan properti terlebih dahulu sebelum menambahkan lokasi patokan');
     return;
   }
+  // Kota wajib lebih dulu: area & landmark disaring per kota, jadi tanpa kota
+  // tidak ada opsi yang bisa ditawarkan dengan benar.
+  if (!form.city_id) {
+    setAlert('warning', 'Pilih Kota properti terlebih dahulu sebelum mengisi lokasi patokan');
+    return;
+  }
   modalRef.value?.open({
     title: 'Pilih Lokasi Patokan (Landmarks)', placeholder: 'Ketik nama lokasi, atau * untuk semua',
-    headers: ['Lokasi', 'Status'], chunks: ['name', 'status'],
-    actionParams: ['location_id', 'name'], multiSelect: true,
+    // Kolom "Status" dibuang: endpoint sudah memfilter status = 1, jadi isinya
+    // selalu sama. Diganti Tipe + Kota — Kota adalah pembeda yang benar-benar
+    // dibutuhkan agen, karena commercial ditampilkan lintas kota dan sebagian
+    // di antaranya tempat bernama (kota kosong = berlaku umum).
+    headers: ['Lokasi', 'Tipe', 'Kota'], chunks: ['name', 'location_type', 'city_name'],
+    actionParams: ['location_id', 'name', 'location_type', 'city_id'], multiSelect: true,
     preselected: form.locations.map(l => ({ location_id: l.location_id, name: l.name })),
     fetch: fetchLocations,
     onChoose: async (selections) => {
@@ -1001,7 +1032,10 @@ const showModalLocation = async () => {
         }
 
         // Update local form with selected locations
-        form.locations = selections.map(s => ({ location_id: s.location_id, name: s.name }));
+        form.locations = selections.map(s => ({
+          location_id: s.location_id, name: s.name,
+          location_type: s.location_type || '', city_id: s.city_id || null,
+        }));
         toast.success('Lokasi patokan berhasil diperbarui');
       } catch (err) {
         console.error('Error updating locations:', err);
@@ -1103,7 +1137,11 @@ const loadDetail = async () => {
         if (locResult?.isSuccess === 1) {
           form.locations = (locResult.data.response.locations || []).map(l => ({
             location_id: l.location_id,
-            name: l.location?.name || ''
+            name: l.location?.name || '',
+            // Dibawa serta supaya form tahu mana patokan yang terikat kota
+            // (area/landmark) dan mana yang generik saat kota diganti.
+            location_type: l.location?.location_type || '',
+            city_id: l.location?.city_id || null,
           }));
         }
       } catch (locErr) {

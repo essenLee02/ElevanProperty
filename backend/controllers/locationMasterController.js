@@ -401,19 +401,15 @@ class LocationMasterController extends GeneralController {
    * GET /api/location/nearby-options?city_id=<id>&search=&page=
    *
    * Aturan (dari pemilik proyek, 25 Agu 2026):
-   *   • location_type 'area' & 'landmark'  → HARUS satu kota dengan propertinya.
-   *     Kawasan & patokan hanya masuk akal sebagai penanda lokasi bila memang
-   *     berada di kota yang sama.
-   *   • location_type 'commercial'         → TIDAK difilter kota. Indomaret,
-   *     Alfamart, sekolah, stasiun, bank ada di mana-mana; membatasinya per
-   *     kota hanya menyembunyikan pilihan yang sah.
+   *   • Properti WAJIB punya kota dulu. Tanpa city_id → daftar kosong.
+   *   • 'area' & 'landmark' → HARUS sekota dengan propertinya. Kawasan &
+   *     patokan hanya masuk akal bila memang berada di kota yang sama.
+   *   • TANPA kota + tipe 'commercial'/kosong → bebas kota mana pun. Alfamart,
+   *     Indomaret, sekolah, stasiun memang ada di mana-mana.
    *
-   * ⚠️ BEDA DARI SQL CONTOH: contoh memakai INNER JOIN ke `cities`, yang
-   * DIAM-DIAM MEMBUANG seluruh baris commercial generik — di DB ini 572 baris
-   * commercial memang sengaja ber-city_id NULL (INDOMARET, PASAR TRADISIONAL,
-   * dst.), persis jenis patokan yang paling sering dipakai. Karena itu di sini
-   * commercial diambil TANPA join kota, supaya maksud "tidak perlu cocokkan
-   * kota" benar-benar terpenuhi.
+   * Konsekuensi yang disengaja: bila kota properti DIGANTI, patokan area &
+   * landmark yang sudah dipilih menjadi tidak valid dan dibuang di form
+   * (lihat PropertyMasterView.vue); patokan generik tetap dipertahankan.
    */
   static async getNearbyLocationOptions(req, res) {
     try {
@@ -428,28 +424,38 @@ class LocationMasterController extends GeneralController {
         ? { name: { [Op.like]: `%${search}%` } }
         : {};
 
-      // area/landmark WAJIB sekota; tanpa city_id keduanya tidak ditawarkan
-      // sama sekali (lebih baik kosong daripada menyarankan kawasan kota lain).
-      const sameCityTypes = cityId
-        ? { city_id: cityId, location_type: { [Op.in]: ['area', 'landmark'] } }
-        : null;
+      // Properti WAJIB punya kota dulu sebelum boleh mengisi patokan. Tanpa
+      // kota, tidak ada satu pun opsi yang ditawarkan — termasuk commercial —
+      // supaya agen tidak sempat memilih patokan yang nanti harus dianulir.
+      if (!cityId) {
+        return sendSuccess(res, HTTP.OK, {
+          locations: [],
+          pagination: { total: 0, page: 1, pageSize, totalPages: 0, hasNextPage: false, hasPrevPage: false },
+        }, 'Pilih kota properti terlebih dahulu');
+      }
 
-      // commercial TIDAK difilter kota sama sekali (keputusan pemilik proyek,
-      // 25 Agu 2026 — SQL contoh: `OR lc.location_type = 'commercial'`).
-      // Catatan jujur: sebagian kecil baris commercial adalah tempat BERNAMA
-      // milik satu kota (PLAZA SENAYAN, CITO MALL, AMBARRUKMO PLAZA), jadi
-      // secara teori bisa muncul untuk properti di kota lain. Itu masalah
-      // kualitas MASTER DATA (city_id-nya belum diisi), bukan logika picker —
-      // dan nama kota kini ditampilkan di daftar sehingga agen bisa melihatnya.
-      const commercialClause = { location_type: 'commercial' };
+      // area & landmark → WAJIB sekota dengan propertinya.
+      const sameCityTypes = { city_id: cityId, location_type: { [Op.in]: ['area', 'landmark'] } };
+
+      // Bebas kota HANYA untuk baris yang memang TIDAK punya kota. Setara
+      // dengan `IFNULL(cy.name,'') = '' AND IFNULL(lc.location_type,'') IN
+      // ('commercial','')` di SQL pemilik proyek: ALFAMART/INDOMARET memang ada
+      // di setiap kota. Tempat BERNAMA yang sudah punya kota (Plaza Senayan,
+      // Tunjungan Plaza) otomatis tersaring keluar — tidak lagi muncul sebagai
+      // patokan untuk properti di kota lain.
+      const genericClause = {
+        city_id: null,
+        [Op.or]: [
+          { location_type: 'commercial' },
+          { location_type: '' },
+          { location_type: null },
+        ],
+      };
 
       const where = {
         status: 1,
         ...searchClause,
-        [Op.or]: [
-          ...(sameCityTypes ? [sameCityTypes] : []),
-          commercialClause,
-        ],
+        [Op.or]: [sameCityTypes, genericClause],
       };
 
       const { count, rows } = await Location.findAndCountAll({
