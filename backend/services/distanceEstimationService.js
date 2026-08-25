@@ -241,6 +241,25 @@ function tryAnswerDistanceQuery(userMessage, context = {}) {
 
   if (!originName || !destName) return null;
 
+  // ⛔ M137 — ASAL == TUJUAN → JANGAN dijawab di sini. Tabel koordinat modul ini
+  // hanya punya SATU titik per kota, jadi "dari Sidoarjo ke Sidoarjo" menghasilkan
+  // "sekitar 0 km" — angka yang benar secara matematis tapi OMONG KOSONG bagi
+  // customer yang sebenarnya menanyakan jarak ANTAR-AREA di dalam kota yang sama
+  // (mis. Pondok Candra → Puri Surya Jaya, ±8,9 km).
+  //
+  // Guard lama hanya melindungi cabang `cities.length === 1`; cabang >= 2 (kota
+  // yang sama disebut dua kali) tetap lolos dan mengirim "0 km" ke customer —
+  // dibuktikan langsung lewat node -e sebelum fix ini.
+  //
+  // Mengembalikan null di sini membuat pertanyaan MENGALIR ke platform AI, yang
+  // punya pengetahuan dunia nyata soal jarak antar-kawasan (sesuai directive
+  // pemilik proyek: intra-kota adalah rana platform AI, bukan tabel statis
+  // backend — GOOGLE_ENABLED=false, jadi tidak ada geocoding presisi di sini).
+  // Untuk AI_PRIMARY_PROVIDER='private', Private Agent memang tidak bisa
+  // menjawab ini; #tryDistanceAnswer() akan jatuh ke "saya cek dahulu" — jujur,
+  // BUKAN mengarang angka.
+  if (originName === destName) return null;
+
   const result = estimateDistanceAndTime(originName, destName);
   return result ? result.text : null;
 }

@@ -41,7 +41,7 @@ const {
 } = require('../models');
 const GeneralController = require('../controllers/GeneralController');
 const { validateUserBusinessFields } = require('../utils/userBusinessRules');
-const { resolveBudgetTierRange } = require('../services/propertyRecommendationService');
+const { resolveBudgetTierRange, clearAgentPropertiesCache, clearDbPropertiesCache } = require('../services/propertyRecommendationService');
 const { clearAgentCoverageCache } = require('../services/agentCoverageService');
 
 const DRY = process.argv.includes('--dry');
@@ -402,7 +402,9 @@ async function main() {
   console.log(`  [4/4] ${locRows.length} property_locations...`);
   for (const b of chunk(locRows, 500)) await PropertyLocation.bulkCreate(b, { ignoreDuplicates: true });
 
-  clearAgentCoverageCache();   // coverage lama sudah basi setelah seed
+  clearAgentCoverageCache();          // coverage lama sudah basi setelah seed
+  clearAgentPropertiesCache(agentId); // M136: cache katalog per-agent juga basi
+  clearDbPropertiesCache();           // dan cache global (jalur publik/web)
 
   console.log('\n' + '═'.repeat(70));
   console.log(`  ✅ BATCH 2 SELESAI — ${propRows.length} properti (jual + sewa) untuk ${agentId}`);

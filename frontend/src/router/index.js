@@ -10,6 +10,8 @@ import RegisterView from '../views/RegisterView.vue'
 import ProfileView from '../views/ProfileView.vue'
 import FacilityListView from '../views/Facility_Master/FacilityListView.vue'
 import FacilityMasterView from '../views/Facility_Master/FacilityMasterView.vue'
+import DeveloperPropertyListView from '../views/Developer_Property_Master/DeveloperPropertyListView.vue'
+import DeveloperPropertyMasterView from '../views/Developer_Property_Master/DeveloperPropertyMasterView.vue'
 import CountryListView from '../views/Country_Master/CountryListView.vue'
 import CountryMasterView from '../views/Country_Master/CountryMasterView.vue'
 import ProvinceListView from '../views/Province_Master/ProvinceListView.vue'
@@ -81,6 +83,25 @@ const router = createRouter({
       path: '/facility/edit/:facility_id',
       name: 'facility-edit',
       component: FacilityMasterView,
+      meta: { layout: 'auth', requiresAuth: true }
+    },
+    // Master Data — Developer Property (brand agensi: Ray White, Brighton, dst.)
+    {
+      path: '/developer-property',
+      name: 'developer-property-list',
+      component: DeveloperPropertyListView,
+      meta: { layout: 'auth', requiresAuth: true }
+    },
+    {
+      path: '/developer-property/add',
+      name: 'developer-property-add',
+      component: DeveloperPropertyMasterView,
+      meta: { layout: 'auth', requiresAuth: true }
+    },
+    {
+      path: '/developer-property/edit/:developer_property_id',
+      name: 'developer-property-edit',
+      component: DeveloperPropertyMasterView,
       meta: { layout: 'auth', requiresAuth: true }
     },
     // Master Data — Country

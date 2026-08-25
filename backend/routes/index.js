@@ -60,6 +60,8 @@ const profileController          = require('../controllers/profileController');
 
 // Master data controllers
 const facilityMasterController   = require('../controllers/facilityMasterController');
+const developerPropertyMasterController = require('../controllers/developerPropertyMasterController');
+const leadQualificationController = require('../controllers/leadQualificationController');
 const countryMasterController    = require('../controllers/countryMasterController');
 const provinceMasterController   = require('../controllers/provinceMasterController');
 const cityMasterController       = require('../controllers/cityMasterController');
@@ -200,6 +202,31 @@ router.post('/facility/insert',                     verifyToken, facilityMasterC
 router.put('/facility/update/:facility_id',         verifyToken, facilityMasterController.updateDataFacility);
 router.patch('/facility/toggle-status/:facility_id',verifyToken, facilityMasterController.toggleStatusFacility);
 router.delete('/facility/delete/:facility_id',      verifyToken, facilityMasterController.deleteFacility);
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   LEAD QUALIFICATION — ADMIN ONLY
+   Daftar customer yang LAYAK di-follow-up agent, dinilai dari 7 indikator
+   (services/leadScoringService.js). Admin-only BUKAN sekadar formalitas:
+   hasilnya adalah nomor WhatsApp + isi percakapan LINTAS AGENT.
+══════════════════════════════════════════════════════════════════════════════ */
+
+router.get('/lead/qualified',     verifyToken, requirePrivilege('admin'), leadQualificationController.listQualifiedLeads);
+router.get('/lead/detail/:phone', verifyToken, requirePrivilege('admin'), leadQualificationController.getLeadDetail);
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   MASTER DATA — DEVELOPER PROPERTY (brand agensi: Ray White, Brighton, dst.)
+══════════════════════════════════════════════════════════════════════════════ */
+
+// /options SENGAJA didaftarkan SEBELUM /detail/:id — Express mencocokkan rute
+// secara berurutan, jadi tanpa ini "options" akan tertangkap sebagai nilai
+// :developer_property_id dan dropdown selalu balas 404.
+router.get('/developer-property/options',                          verifyToken, developerPropertyMasterController.getDeveloperPropertyOptions);
+router.get('/developer-property/list',                             verifyToken, developerPropertyMasterController.showDataDeveloperProperty);
+router.get('/developer-property/detail/:developer_property_id',    verifyToken, developerPropertyMasterController.getDetailDeveloperProperty);
+router.post('/developer-property/insert',                          verifyToken, developerPropertyMasterController.insertDataDeveloperProperty);
+router.put('/developer-property/update/:developer_property_id',    verifyToken, developerPropertyMasterController.updateDataDeveloperProperty);
+router.patch('/developer-property/toggle-status/:developer_property_id', verifyToken, developerPropertyMasterController.toggleStatusDeveloperProperty);
+router.delete('/developer-property/delete/:developer_property_id', verifyToken, developerPropertyMasterController.deleteDeveloperProperty);
 
 /* ══════════════════════════════════════════════════════════════════════════════
    MASTER DATA — COUNTRY (Butuh login)

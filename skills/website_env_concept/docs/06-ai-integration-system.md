@@ -1,5 +1,28 @@
 # 06. AI Integration System
 
+> ⭐ **UPDATE V12 (24 Agu 2026, M132–M136)** — enam perubahan sejak isi doc ini
+> ditulis. Bacaan lengkap → `ELEVAN_PROPERTY_CONTEXT_V8.txt` §PERUBAHAN BESAR
+> V11→V12. Ringkas:
+> 1. **OpenRouter** = provider ke-7 (`services/openrouterService.js`), kontrak
+>    sama dengan Kimi. Lihat subbagian baru di bawah.
+> 2. **`buildQualifyReply` (Pre-Qualification Gate) TIDAK LAGI mensyaratkan
+>    budget** — subbagian di bawah ("4-slot" lama) sudah SALAH, lihat catatan
+>    ⭐ M134 langsung di subbagian itu.
+> 3. **`utils/terminologyAnswerGate.js` (M132)** dicek di gerbang kualifikasi
+>    SEBELUM `buildQualifyReply` sempat mengembalikan pertanyaan generik —
+>    fix bug produksi nyata (pertanyaan SHM diam-diam diabaikan berkali-kali).
+> 4. **`utils/guardrailPolicy.js` (M133)** — dua profil eksplisit `'local'`
+>    (backend menyusun SEMUA balasan) vs `'platform'` (backend HANYA
+>    penyaring awal murah, platform API wewenang penuh). Menggantikan
+>    penjelasan implisit lama soal M131.
+> 5. **`services/agentCoverageService.js` (M133)** — fakta katalog per-agent
+>    (kota/area/harga) disuntik ke prompt via `extraContext`, pola sama
+>    dengan `facilityContext`/`cityContext`/`ragContext`.
+> 6. **RAG_ENABLED=ON** (dulu OFF/eksperimental) — dan bug yang mematikannya
+>    (`retrieveSkillReference()` opt-in, tidak ada pemanggil produksi yang
+>    pernah menyalakannya) sudah diperbaiki. `RAG_EMBEDDING_MODE=local` aktif
+>    di produksi sekarang, bukan cuma mode tes.
+
 ## Provider Fallback Architecture (single primary → Private Agent)
 
 `AI_PRIMARY_PROVIDER` memilih **satu** AI eksternal sebagai primary. Jika primary
@@ -283,11 +306,31 @@ Asks missing fields cumulatively (one message can cover ≥1 missing field):
 Missing: type           → "Sedang cari properti jenis apa? (Rumah, Apartemen, Villa, Kos, dll.)"
 Missing: tx             → "Sedang cari untuk disewa atau dibeli?"
 Missing: type + tx      → "Sedang cari properti jenis apa? Untuk disewa atau dibeli?"
-Missing: loc            → "Di kota atau area mana yang Anda inginkan?"
-Missing: bud (sewa)     → "Di [lokasi] saya punya di kisaran [X] dan [Y]. Mana yang lebih sesuai?"
-Missing: bud (beli)     → same, with purchase price ranges
+Missing: loc (kota)     → "Di kota atau area mana yang Anda inginkan?"
 All 4 present           → return null (proceed to AI)
 ```
+
+⚠️ **BERUBAH V12/M134** — "4 present" di atas BUKAN LAGI tipe+tx+kota+BUDGET.
+Budget dihapus sebagai syarat; slot ke-4 sekarang **lokasi spesifik**
+(area/landmark/commercial — `utils/listingReadiness.js`, `evaluateListingReadiness()`).
+Customer boleh melihat listing dulu dan menyesuaikan harga SETELAH melihat
+("kok kemahalan, saya mau yang 1-2,5 juta") — itu alur normal, bukan
+kegagalan. Blok baris "bud (sewa)/(beli)" di versi doc ini SUDAH TIDAK
+akurat (fungsi lama menanyakan budget di sini sudah dihapus); jangan
+mengasumsikan budget diminta sebelum listing tampil.
+
+⚠️ **BUG PRODUKSI DITEMUKAN & DIPERBAIKI V12/M132**: gerbang ini adalah titik
+PALING AWAL di seluruh pipeline WhatsApp — ia me-return SEBELUM AI provider
+manapun (LLM atau Private Agent) dipanggil, dan HANYA melihat slot yang
+terisi, TIDAK PERNAH melihat isi pesan. Ini berarti pertanyaan istilah
+("apa itu SHM?") yang muncul SEBELUM qualifikasi lengkap (kondisi paling
+umum) selalu dibalas pertanyaan generik di atas, mengabaikan pertanyaan
+customer sepenuhnya — dibuktikan lewat transkrip produksi nyata. Fix:
+`utils/terminologyAnswerGate.js` (`tryTerminologyAnswer()`) dicek TEPAT
+sebelum gerbang ini mengembalikan hasilnya; bila cocok, jawaban istilah
+digabung dengan pertanyaan gerbang ("jawab dulu, lalu lanjut tanya") alih-
+alih menggantikannya begitu saja. Lihat `utils/terminologyAnswerGate.js` dan
+`tests/terminologyQualGateWiring.test.js`.
 
 ---
 
@@ -431,24 +474,35 @@ Regression: `backend/tests/agentSignatureIdentity.test.js`.
 
 ## aiProviderService.js
 
-### `executeAIProviderWithFallback(taskName, chatGPTFn, claudeFn, qwenFn, deepseekFn)`
+### `executeAIProviderWithFallback(taskName, chatGPTFn, claudeFn, qwenFn, deepseekFn, kimiFn, agentAiPrimary, openrouterFn)`
 
-1. Read `AI_PRIMARY_PROVIDER` from env (`getPrimaryAIProvider`)
-2. `PROVIDER_ORDER` = **satu provider per key** — `{ qwen:['qwen'], claude:['claude'], chatgpt:['chatgpt'], deepseek:['deepseek'] }`.
+⭐ **Signature bertambah dua parameter sejak versi lama doc ini** — `kimiFn` (M74,
+sesi lama) dan `openrouterFn` (M132/V12), ditambahkan di EKOR supaya urutan
+parameter lama tidak berubah untuk caller yang belum diperbarui.
+
+1. Read `AI_PRIMARY_PROVIDER` from env, ATAU `users.ai_primary` per-agent bila
+   diisi (`getPrimaryAIProvider(agentAiPrimary)`) — hanya jalur WhatsApp yang
+   per-agent; web chatbot & contact form tetap pakai setting global.
+2. `PROVIDER_ORDER` = **satu provider per key** — `{ qwen:['qwen'], claude:['claude'],
+   chatgpt:['chatgpt'], deepseek:['deepseek'], kimi:['kimi'], openrouter:['openrouter'] }`.
    Tidak ada cross-AI: bila primary gagal, caller menjatuhkan ke Private Agent.
-3. `avail` mengecek key/config tiap provider: `canUseChatGPT / canUseClaude / canUseQwen / canUseDeepSeek`
+3. `avail` mengecek key/config tiap provider: `canUseChatGPT / canUseClaude / canUseQwen /
+   canUseDeepSeek / canUseKimi / canUseOpenRouter`
 4. Returns `{ reply, provider, primaryProvider, fallbackUsed, fallbackProvider, primaryError, providerErrors }`
 
 Helpers: `getPrimaryAIProvider`, `getAIProviderOrder`, `isClaudeEnabled`,
-`checkAIProviderConfig` (status semua provider termasuk deepseek).
+`checkAIProviderConfig` (status SEMUA 6 provider eksternal + private).
 
 `executeExternalAIFallbackChain(...)` — dipakai HANYA saat `AI_PRIMARY_PROVIDER=private`
-dan Private Agent gagal; urutan darurat: **DeepSeek → Claude → ChatGPT → QWEN**.
+dan Private Agent gagal sendiri; urutan darurat: **DeepSeek → Kimi → Claude → ChatGPT
+→ QWEN → OpenRouter** (OpenRouter ditambahkan di ekor V12, urutan lima provider lama
+tidak berubah).
 
-Empat wrapper (masing-masing meneruskan `deepseekFn`):
+Empat wrapper (masing-masing kini meneruskan `kimiFn` DAN `openrouterFn`):
 - `generateChatbotReplyWithProviderFallback` — website chatbot
 - `generateContactReplyWithProviderFallback` — contact form
-- `generateWhatsappReplyWithProviderFallback` — WhatsApp (all platforms)
+- `generateWhatsappReplyWithProviderFallback` — WhatsApp (all platforms), SATU-SATUNYA
+  yang meneruskan `agentAiPrimary` (per-agent override)
 - `generateWhatsappExternalAIFallback` — rantai darurat saat primary=private
 
 ### AI Error Handling (no cross-AI)
@@ -501,6 +555,30 @@ Empat wrapper (masing-masing meneruskan `deepseekFn`):
 - Implementation: **raw axios HTTP**. Log `[DEEPSEEK REQUEST]` menampilkan model +
   max_tokens + temperature + top_p + source (kirimi/timelinesai/fonnte)
 - Fungsi: `generateDeepSeekContactReply / ChatbotReply / WhatsappReply`, `checkDeepSeekConfig`
+
+---
+
+## ⭐ OpenRouter Integration (`openrouterService.js`) — BARU V12/M132
+
+- Multi-vendor proxy, OpenAI-compatible: `${OPENROUTER_BASE_URL}/chat/completions`
+  (default base `https://openrouter.ai/api/v1`)
+- Key: `OPENROUTER_API_KEY` · Model: `OPENROUTER_MODEL`, format **"vendor/model"**
+  (mis. `openai/gpt-4o-mini`, `anthropic/claude-3-haiku`, `deepseek/deepseek-chat`)
+- Param dinamis dari `.env`: `OPENROUTER_MAX_TOKENS`, `OPENROUTER_TEMPERATURE`,
+  `OPENROUTER_TOP_P`, `OPENROUTER_TIMEOUT_MS` (default 30000)
+- Header opsional (rekomendasi OpenRouter untuk atribusi dashboard, TIDAK wajib):
+  `HTTP-Referer` dari `APP_URL`, `X-Title` dari `APP_NAME` — dikirim hanya bila terisi
+- System prompt = skill `chat_gpt_responds` (`skillPromptService.js` `normalizeProvider()`
+  memetakan `'openrouter'` ke bucket yang sama dengan chatgpt/qwen/deepseek/kimi)
+- Error handling: regex model-error SENGAJA sempit (`not a valid model`, `no endpoints
+  found`, dll — BUKAN `/model/i` polos), pelajaran langsung dari M74 Kimi (pesan
+  penolakan param seperti top_p bisa mengandung kata "model" tanpa itu berarti nama
+  model salah)
+- Fungsi: `generateOpenRouterContactReply / ChatbotReply / WhatsappReply`, `checkOpenRouterConfig`
+- Masuk ke `PROVIDER_ORDER` (`AI_PRIMARY_PROVIDER=openrouter`) DAN ke ekor rantai
+  fallback eksternal (primary='private' gagal): `DeepSeek→Kimi→Claude→ChatGPT→QWEN→OpenRouter`
+- Diverifikasi LANGSUNG ke API sungguhan (bukan asumsi dokumentasi) — satu giliran
+  WhatsApp penuh via OpenRouter menghasilkan balasan qualifikasi yang benar.
 
 ---
 

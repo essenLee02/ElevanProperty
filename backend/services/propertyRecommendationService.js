@@ -1877,71 +1877,78 @@ async function getDbProperties() {
  * @param {object} where klausa Sequelize (mis. { status:1 } atau { user_id, status:1 })
  */
 async function _queryProperties(where) {
-  {
-    const { Property, PropertyImage, PropertyFacility, Facility, PropertyLocation, Location, City, Province } = require('../models');
+  const { Property, PropertyImage, PropertyFacility, Facility, PropertyLocation, Location, City, Province } = require('../models');
 
-    const rows = await Property.findAll({
-      where,
-      include: [
-        { model: City,     as: 'city',     attributes: ['name'], required: false },
-        { model: Province, as: 'province', attributes: ['name'], required: false },
-        { model: PropertyImage,    as: 'images',    attributes: ['url'], required: false },
-        {
-          model: PropertyFacility, as: 'facilities', attributes: ['facility_id'], required: false,
-          include: [
-            { model: Facility, as: 'facility', attributes: ['name'], required: false, where: { status: 1 } }
-          ]
-        },
-        {
-          model: PropertyLocation, as: 'locations', attributes: ['location_id'], required: false,
-          include: [
-            { model: Location, as: 'location', attributes: ['name'], required: false, where: { status: 1 } }
-          ]
-        }
-      ]
-    });
+  const rows = await Property.findAll({
+    where,
+    include: [
+      { model: City,     as: 'city',     attributes: ['name'], required: false },
+      { model: Province, as: 'province', attributes: ['name'], required: false },
+      { model: PropertyImage,    as: 'images',    attributes: ['url'], required: false },
+      {
+        model: PropertyFacility, as: 'facilities', attributes: ['facility_id'], required: false,
+        include: [
+          { model: Facility, as: 'facility', attributes: ['name'], required: false, where: { status: 1 } }
+        ]
+      },
+      {
+        model: PropertyLocation, as: 'locations', attributes: ['location_id'], required: false,
+        include: [
+          { model: Location, as: 'location', attributes: ['name'], required: false, where: { status: 1 } }
+        ]
+      }
+    ]
+  });
 
-    const normalized = rows.map(p => {
-      const d = p.toJSON();
-      // Nilai harga MENTAH (numeric) untuk budget BETWEEN yang akurat — hindari
-      // re-parse dari string "450 juta". priceType disimpan mentah (night/monthly/…).
-      const rawPrice = (d.price !== null && d.price !== undefined && d.price !== '')
-        ? Number(d.price) : null;
-      return {
-        id             : d.property_id,
-        // Pemilik/agent properti (users.user_id). Dipakai untuk scoping katalog
-        // per-agent di terminal WhatsApp: tiap agent hanya merekomendasikan
-        // listing miliknya sendiri (lihat filterProperties → filters.userId).
-        userId         : d.user_id || '',
-        title          : d.title || '',
-        description    : d.description || '',
-        price          : formatDbPrice(d.price, d.price_type),
-        priceValue     : Number.isFinite(rawPrice) ? rawPrice : null,
-        priceType      : (d.price_type || '').toLowerCase(),
-        location       : d.city?.name || '',
-        province       : d.province?.name || '',
-        city           : d.city?.name || '',
-        district       : d.district || '',
-        area           : d.area || '',
-        address        : d.address || '',
-        buildingArea   : d.building_area || '',
-        landArea       : d.land_area || '',
-        buildingType   : (d.building_type || '').toLowerCase(),
-        transactionType: (d.transaction_type || '').toLowerCase(),
-        facilities     : (d.facilities || []).map(f => f.facility?.name).filter(Boolean).join(', '),
-        // Lokasi/landmark terdekat (mis. "Pasar Besar, PTC") — dari property_locations
-        // (FK ke locations). Dipakai untuk baris "Lokasi Terdekat" di catalog listing.
-        nearbyLocations: (d.locations || []).map(l => l.location?.name).filter(Boolean).join(', '),
-        imageUrl       : (d.images || [])[0]?.url || '',
-        status         : 'available',
-        bedrooms       : d.bed_rooms   || 0,
-        bathrooms      : d.bath_rooms  || 0,
-        furnishedStatus: d.furnished_status || ''
-      };
-    });
-
-    return normalized;
-  }
+  return rows.map(p => {
+    const d = p.toJSON();
+    // Nilai harga MENTAH (numeric) untuk budget BETWEEN yang akurat — hindari
+    // re-parse dari string "450 juta". priceType disimpan mentah (night/monthly/…).
+    const rawPrice = (d.price !== null && d.price !== undefined && d.price !== '')
+      ? Number(d.price) : null;
+    return {
+      id             : d.property_id,
+      // Pemilik/agent properti (users.user_id). Dipakai untuk scoping katalog
+      // per-agent di terminal WhatsApp: tiap agent hanya merekomendasikan
+      // listing miliknya sendiri (lihat filterProperties → filters.userId).
+      userId         : d.user_id || '',
+      title          : d.title || '',
+      description    : d.description || '',
+      price          : formatDbPrice(d.price, d.price_type),
+      priceValue     : Number.isFinite(rawPrice) ? rawPrice : null,
+      priceType      : (d.price_type || '').toLowerCase(),
+      location       : d.city?.name || '',
+      province       : d.province?.name || '',
+      city           : d.city?.name || '',
+      district       : d.district || '',
+      area           : d.area || '',
+      address        : d.address || '',
+      buildingArea   : d.building_area || '',
+      landArea       : d.land_area || '',
+      buildingType   : (d.building_type || '').toLowerCase(),
+      transactionType: (d.transaction_type || '').toLowerCase(),
+      facilities     : (d.facilities || []).map(f => f.facility?.name).filter(Boolean).join(', '),
+      // Lokasi/landmark terdekat (mis. "Pasar Besar, PTC") — dari property_locations
+      // (FK ke locations). Dipakai untuk baris "Lokasi Terdekat" di catalog listing.
+      nearbyLocations: (d.locations || []).map(l => l.location?.name).filter(Boolean).join(', '),
+      imageUrl       : (d.images || [])[0]?.url || '',
+      status         : 'available',
+      bedrooms       : d.bed_rooms   || 0,
+      bathrooms      : d.bath_rooms  || 0,
+      furnishedStatus: d.furnished_status || '',
+      // ⭐ M137 — certificate_type SUDAH ADA di tabel sejak M129 tapi TIDAK
+      // PERNAH dibaca satu baris kode pun di luar models/Property.js
+      // (diverifikasi grep: nol hit di services/utils/controllers). Akibatnya
+      // AI TIDAK PUNYA CARA tahu status sertifikat saat customer bertanya
+      // "apakah rumah ini sudah SHM?" — satu-satunya pilihannya adalah
+      // MENGARANG, persis kelas bug M84/M96.
+      // ⚠️ SENGAJA dipertahankan sebagai null/'' bila kosong (BUKAN diganti
+      // 'KOSONG'/'Belum ada'): null berarti "belum diisi/belum diketahui",
+      // yang BEDA artinya dari sertifikat bernilai 'KOSONG'. Membedakan
+      // keduanya penting — lihat aturan jawaban di skill doc 15 §7.
+      certificateType: d.certificate_type || null
+    };
+  });
 }
 
 /**
@@ -2367,6 +2374,11 @@ function formatPropertyItem(item, index) {
     furnishedStatus: item.furnishedStatus || '-',
     facilities: item.facilities || '-',
     nearbyLocations: item.nearbyLocations || '',
+    // M137: dibedakan TIGA keadaan, jangan diratakan jadi satu string —
+    // 'SHM'/'SHGB'/… = diketahui; 'KOSONG' = sertifikat memang belum terbit;
+    // '' (null di DB) = BELUM DIISI di sistem, AI tidak boleh menyimpulkan
+    // apa pun darinya. Lihat aturan jawaban di skill doc 15 §7.
+    certificateType: item.certificateType || '',
     description: item.description || '-'
   };
 }
@@ -2377,7 +2389,31 @@ function formatPropertyRecommendation(properties = [], options = {}) {
   return properties.slice(0, limit).map((item, index) => {
     const formatted = formatPropertyItem(item, index);
     const nearbyLine = formatted.nearbyLocations ? `\n   Nearby Landmarks: ${formatted.nearbyLocations}` : '';
-    return `${formatted.no}. ${formatted.title}\n   Location: ${formatted.location}\n   Price: ${formatted.price}\n   Type: ${humanBuildingType(formatted.buildingType)} - ${humanTransactionType(formatted.transactionType)}\n   Area: building ${formatted.buildingArea}, land ${formatted.landArea}\n   Address: ${formatted.address}\n   Facilities: ${formatted.facilities}${nearbyLine}`;
+    // M137: baris sertifikat SELALU dirender untuk transaksi JUAL (termasuk saat
+    // kosong) supaya LLM melihat perbedaan "tidak tahu" vs "tahu belum ada".
+    // Menghilangkan barisnya saat kosong akan membuat LLM menebak.
+    const certLine = String(formatted.transactionType).toLowerCase() === 'sale'
+      ? `\n   Certificate: ${formatted.certificateType || 'BELUM DIISI DI SISTEM (jangan simpulkan apa pun — arahkan ke tim)'}`
+      : '';
+    // M138: jumlah kamar tidur/mandi + status furnish. Datanya SUDAH ada di
+    // hasil query (bed_rooms/bath_rooms/furnished_status) tapi TIDAK PERNAH
+    // dirender ke teks yang dilihat LLM — kelas gap yang PERSIS SAMA dengan
+    // certificate_type di M137. Tanpa baris ini, pertanyaan customer yang
+    // sangat lazim ("berapa kamar tidurnya?") hanya bisa dijawab dengan
+    // menebak. 0 diperlakukan sebagai TIDAK DIISI, bukan "nol kamar" —
+    // default kolomnya memang 0, jadi 0 tidak bisa dibedakan dari kosong.
+    const bed  = Number(formatted.bedrooms)  > 0 ? `${formatted.bedrooms} KT`  : null;
+    const bath = Number(formatted.bathrooms) > 0 ? `${formatted.bathrooms} KM` : null;
+    const roomsLine = (bed || bath)
+      ? `\n   Rooms: ${[bed, bath].filter(Boolean).join(', ')}`
+      : '\n   Rooms: BELUM DIISI DI SISTEM (jangan menebak jumlah kamar — arahkan ke tim)';
+    // ⚠️ formatPropertyItem() mengganti nilai kosong dengan STRING '-', yang
+    // truthy — cek `if (furnishedStatus)` saja akan mencetak "Furnished: -".
+    const furnishRaw  = String(formatted.furnishedStatus || '').trim();
+    const furnishLine = (furnishRaw && furnishRaw !== '-')
+      ? `\n   Furnished: ${furnishRaw}`
+      : '';
+    return `${formatted.no}. ${formatted.title}\n   Location: ${formatted.location}\n   Price: ${formatted.price}\n   Type: ${humanBuildingType(formatted.buildingType)} - ${humanTransactionType(formatted.transactionType)}${roomsLine}\n   Area: building ${formatted.buildingArea}, land ${formatted.landArea}${furnishLine}\n   Address: ${formatted.address}\n   Facilities: ${formatted.facilities}${nearbyLine}${certLine}`;
   }).join('\n\n');
 }
 

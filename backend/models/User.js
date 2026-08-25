@@ -22,6 +22,9 @@ const sequelize = require('../config/database');
  * - fonnte_token     : Fonnte token milik agent (untuk kirim WA via Fonnte, nullable)
  * - kirimi_device_id : Device ID Kirimi milik agent (mis. "D-3OCA6"; user_code & secret di .env, nullable)
  * - email          : alamat email user (nullable)
+ * - developer_property_id : FK ke developer_properties — brand agensi tempat
+ *                     agent bernaung (Ray White/Brighton/dst). Dipakai AI untuk
+ *                     menjawab "agent ini dari mana?" dengan data, bukan tebakan.
  * - catalog_summary : ON = Summary with catalog, OFF = Summary without catalog (nullable)
  * - ai_primary      : AI provider pilihan agent untuk terminal message
  *                     ("Default" = ikut backend/.env AI_PRIMARY_PROVIDER)
@@ -76,6 +79,14 @@ const User = sequelize.define('User', {
     type: DataTypes.TEXT,
     allowNull: true,
     defaultValue: null
+  },
+  developer_property_id: {
+    type: DataTypes.STRING(30),
+    allowNull: true,
+    defaultValue: null,
+    comment: 'FK ke developer_properties.developer_property_id — brand agensi/'
+           + 'brokerage tempat agent bernaung (Ray White, Brighton, Xavier Marks, dst). '
+           + 'Nullable: agent independen / data lama yang belum dipetakan.'
   },
   status: {
     type: DataTypes.INTEGER(1),

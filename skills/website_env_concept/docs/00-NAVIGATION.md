@@ -1,21 +1,35 @@
 # Elevan Property Platform — Documentation Index
 
-**Status**: current with codebase (updated 2026-08-12). WhatsApp terminal platforms
-aktif: **Fonnte, Kirimi, TimelinesAI** (ChakraHQ/WATI/360dialog = legacy, di luar
-scope dok ini). Master data 6-modul: **Country, Province, City, Location, Facility,
-Property**. Panggil skill ini untuk merekonstruksi/mengembangkan ulang modul, API,
-environment, database, framework, komponen, atau security yang SAMA dengan kondisi
-project saat ini — terutama lihat doc **17** untuk ringkasan lengkap perubahan terbaru.
+**Status**: ⚠️ isi doc 01–19 di bawah TERAKHIR disegarkan 2026-08-12 — BELUM
+disisir ulang untuk perubahan V12/M132–M136 (24 Agu 2026). Untuk perubahan
+TERBARU, rujuk `ELEVAN_PROPERTY_CONTEXT_V8.txt` §PERUBAHAN BESAR V11→V12
+(file itu = sumber kebenaran paling akurat saat ini) — ringkasan sudah
+disisipkan ke doc **06** (AI integration) sebagai callout di bagian atas.
+WhatsApp terminal platforms aktif: **Fonnte, Kirimi, TimelinesAI**
+(ChakraHQ/WATI/360dialog = legacy, di luar scope dok ini). Master data
+6-modul: **Country, Province, City, Location, Facility, Property**. Panggil
+skill ini untuk merekonstruksi/mengembangkan ulang modul, API, environment,
+database, framework, komponen, atau security yang SAMA dengan kondisi project
+saat ini — terutama lihat doc **17** untuk ringkasan perubahan Juli/Agustus,
+dan `ELEVAN_PROPERTY_CONTEXT_V8.txt` untuk 24 Agustus ke atas.
 
-> **Skala kode saat ini**: 25 controller · 25 service · 28 util · 17 model ·
-> 48 berkas tes. AI provider: 6 opsi (`kimi` default saat ini · deepseek ·
-> chatgpt · claude · qwen · private) — nilai default **berubah-ubah**, selalu
-> cek `AI_PRIMARY_PROVIDER` di `.env`, jangan diasumsikan dari dokumen mana pun.
+> **Skala kode saat ini**: angka di bawah SUDAH BASI (per 12 Agu) — jangan
+> percaya persis, jalankan `ls backend/controllers | wc -l` dst. untuk angka
+> aktual. AI provider: ⭐ **7 opsi** sejak V12 (`kimi` · deepseek · chatgpt ·
+> claude · qwen · **openrouter (BARU)** · private) — nilai default
+> **berubah-ubah**, selalu cek `AI_PRIMARY_PROVIDER` di `.env`, jangan
+> diasumsikan dari dokumen mana pun. Doc 06 masih menyebut "6 opsi" di
+> beberapa tempat lama — sudah diberi catatan ⭐ di bagian yang relevan,
+> tapi belum disisir baris-per-baris.
 >
 > **Perilaku AI (Agustus 2026)**: rangkaian perbaikan M78–M91 menambahkan
 > gerbang batas-layanan agent, guard tanda tangan, mode katalog per-agent,
 > mutex debounce, dan konversi durasi sewa. Ringkasannya di doc **17 §0**;
-> pemetaan modul → berkas di doc **19**.
+> pemetaan modul → berkas di doc **19**. ⭐ **V12 (24 Agu)**: gerbang
+> kualifikasi WhatsApp tidak lagi mensyaratkan budget (diganti lokasi
+> spesifik), RAG_ENABLED=ON, dua profil guardrail eksplisit (local/platform),
+> eskalasi ambiguitas 3-tahap, katalog per-agent tidak lagi memuat JSON
+> 9.120-baris publik — lihat `ELEVAN_PROPERTY_CONTEXT_V8.txt`.
 
 > Ringkasan 1-file untuk upload cepat: `../WEBSITE_ENV_CONCEPT_BRIEF.txt` (bisa
 > tertinggal versi — untuk detail akurat & terbaru, rujuk `docs/*.md` di sini).
@@ -31,7 +45,7 @@ project saat ini — terutama lihat doc **17** untuk ringkasan lengkap perubahan
 | 03 | `03-database-design-and-models.md` | Skema tabel + model Sequelize (15 model) |
 | 04 | `04-auth-and-agents.md` | JWT, login/register, agent, normalisasi telepon, token per-agent |
 | 05 | `05-backend-api-and-services.md` | Semua route, controller, service, util |
-| 06 | `06-ai-integration-system.md` | Provider AI (DeepSeek/Kimi/QWEN/ChatGPT/Claude → Private, tanpa cross-AI), whatsappAIService, katalog per-agent + fallback fasilitas standar, prompt builder, skill loader |
+| 06 | `06-ai-integration-system.md` | Provider AI (DeepSeek/Kimi/QWEN/ChatGPT/Claude/**OpenRouter⭐** → Private, tanpa cross-AI), whatsappAIService, katalog per-agent + fallback fasilitas standar, prompt builder, skill loader. ⭐ Callout V12 di baris paling atas. |
 | 07 | `07-frontend-and-modules.md` | Vue 3, router/auth guard, 6 modul master, ConfirmModal, Facility, vendor global (App.vue) |
 | 08 | `08-fonnte-whatsapp-integration.md` | Fonnte multi-agent (implementasi: webhook, per-agent token, flow) |
 | 09 | `09-whatsapp-terminal-multiagent.md` | Terminal multi-agent: Fonnte + Kirimi + TimelinesAI, dedup DB, fromMe/group filter, cookie response timer, MASSEGE_TERMINAL, gate, routing |
@@ -69,6 +83,9 @@ project saat ini — terutama lihat doc **17** untuk ringkasan lengkap perubahan
 - **AI mengarang nama area / pertanyaan diulang / jawaban customer dibuang?** → 17 §0 (M84, M87, M88) → 10
 - **Fasilitas "terserah/standar/apapun" hilang dari summary?** → 17 §0 (M91) → 16
 - **Katalog tidak muncul setelah summary?** → 17 §0 (M86) → 06 → 12
+- **Perubahan TERBARU (24 Agu 2026, OpenRouter/RAG-ON/listing readiness/
+  ambiguity strikes/katalog per-agent)?** → `ELEVAN_PROPERTY_CONTEXT_V8.txt`
+  §PERUBAHAN BESAR V11→V12 (BUKAN di doc 01–19, belum disisir)
 
 ---
 

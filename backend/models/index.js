@@ -13,6 +13,7 @@ const Province = require('./Province');
 const City = require('./City');
 const Location = require('./Location');
 const Customer = require('./Customer');
+const DeveloperProperty = require('./DeveloperProperty');
 
 ChatSession.hasMany(ChatMessage, { foreignKey: 'chatSessionId', as: 'messages' });
 ChatMessage.belongsTo(ChatSession, { foreignKey: 'chatSessionId', as: 'session' });
@@ -47,6 +48,15 @@ Customer.belongsTo(User, { foreignKey: 'user_id',    targetKey: 'user_id', as: '
 Customer.belongsTo(User, { foreignKey: 'created_by', targetKey: 'user_id', as: 'creator', constraints: false });
 User.hasMany(Customer,   { foreignKey: 'user_id',    sourceKey: 'user_id', as: 'customers', constraints: false });
 
+// User (agent) → DeveloperProperty (brand agensi tempat agent bernaung).
+// constraints:false mengikuti pola SELURUH asosiasi di file ini — FK bersifat
+// INFORMASIONAL di level aplikasi, tidak ditegakkan DB, supaya data lama yang
+// belum dipetakan (developer_property_id = null) tidak memblokir boot/sync.
+User.belongsTo(DeveloperProperty, { foreignKey: 'developer_property_id', targetKey: 'developer_property_id', as: 'developerProperty', constraints: false });
+DeveloperProperty.hasMany(User,   { foreignKey: 'developer_property_id', sourceKey: 'developer_property_id', as: 'agents',            constraints: false });
+DeveloperProperty.belongsTo(User, { foreignKey: 'created_by', targetKey: 'user_id', as: 'creator', constraints: false });
+DeveloperProperty.belongsTo(User, { foreignKey: 'updated_by', targetKey: 'user_id', as: 'updater', constraints: false });
+
 // Property → Location relationship (many-to-many through property_locations table)
 Property.hasMany(PropertyLocation,  { foreignKey: 'property_id', sourceKey: 'property_id', as: 'locations', constraints: false });
 PropertyLocation.belongsTo(Property, { foreignKey: 'property_id', targetKey: 'property_id', as: 'property',  constraints: false });
@@ -68,5 +78,6 @@ module.exports = {
   Province,
   City,
   Location,
-  Customer
+  Customer,
+  DeveloperProperty
 };

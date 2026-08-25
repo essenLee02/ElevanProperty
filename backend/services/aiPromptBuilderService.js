@@ -3417,6 +3417,7 @@ ${extraContext.facilityContext || ''}
 ${extraContext.cityContext || ''}
 ${extraContext.locationContext || ''}
 ${extraContext.agentCoverageContext || ''}
+${extraContext.agentIdentityContext || ''}
 ${extraContext.listingReadinessContext || ''}
 ${extraContext.ragContext || ''}
 Latest WhatsApp customer message. This is the highest-priority instruction:

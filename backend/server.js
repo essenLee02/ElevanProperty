@@ -267,6 +267,23 @@ async function ensureRequiredDatabaseColumns() {
       console.log('Database migration completed: added users.catalog_summary column');
     }
 
+    // M138 — brand agensi/brokerage tempat agent bernaung (FK ke
+    // developer_properties). `after: 'refresh_token'` menempatkannya TEPAT
+    // SEBELUM users.status sesuai permintaan pemilik proyek — posisi kolom
+    // memang tidak memengaruhi perilaku SQL, tapi tabel users sudah lebar dan
+    // urutan yang disengaja membuatnya jauh lebih enak dibaca saat inspeksi
+    // manual. Nullable: agent independen / baris lama yang belum dipetakan
+    // TIDAK boleh gagal boot hanya karena kolom baru ini.
+    if (usersTable && !usersTable.developer_property_id) {
+      await queryInterface.addColumn('users', 'developer_property_id', {
+        type: DataTypes.STRING(30),
+        allowNull: true,
+        defaultValue: null,
+        after: 'refresh_token'
+      });
+      console.log('Database migration completed: added users.developer_property_id column');
+    }
+
     // ── Preferensi agent: AI provider + jenis transaksi yang dilayani ────────
     // NOT NULL + defaultValue → baris lama otomatis terisi default yang aman
     // (Default/Both/Cash), jadi tidak ada agent yang tiba-tiba kehilangan

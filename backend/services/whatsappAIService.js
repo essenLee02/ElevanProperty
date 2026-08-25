@@ -44,6 +44,8 @@ const { getAgentCoverage,
 const { resolveGuardrailProfile }                   = require('../utils/guardrailPolicy');
 const { evaluateListingReadiness,
         buildListingReadinessContext }              = require('../utils/listingReadiness');
+const { getAgentIdentity,
+        buildAgentIdentityContext }                 = require('./agentIdentityService');
 
 // Jendela history untuk ekstraksi filter & state kualifikasi. Cukup besar agar
 // pesan pembuka (tipe/transaksi/lokasi) tidak keluar scope di alur panjang, tapi
@@ -555,6 +557,16 @@ async function _generateWhatsAppAIReplyCore(params) {
     console.warn('[WhatsAppAI] Agent coverage gagal, dilewati (fail-open):', err.message);
   }
 
+  // ── Step 3.35: IDENTITAS AGENSI AGENT (M138) ──────────────────────────────
+  // Menjawab "Kakak dari agensi/developer mana?" dengan DATA
+  // (users.developer_property_id), bukan tebakan. Fakta, bukan perintah.
+  let agentIdentityContext = '';
+  try {
+    agentIdentityContext = buildAgentIdentityContext(await getAgentIdentity(agentUserId));
+  } catch (err) {
+    console.warn('[WhatsAppAI] Agent identity gagal, dilewati (fail-open):', err.message);
+  }
+
   // ── Step 3.4: SYARAT MINIMUM LISTING (M134) ───────────────────────────────
   // Directive pemilik proyek: listing boleh tampil begitu tipe + transaksi +
   // kota + LOKASI SPESIFIK (area/landmark/commercial) diketahui — budget BUKAN
@@ -568,7 +580,7 @@ async function _generateWhatsAppAIReplyCore(params) {
   }
 
   // Append facility + city + landmark + coverage context to propertyCtx so it reaches all AI providers
-  const enrichedPropertyCtx = [propertyCtx, facilityContext, cityContext, locationContext, agentCoverageContext, listingReadinessContext].filter(Boolean).join('\n\n');
+  const enrichedPropertyCtx = [propertyCtx, facilityContext, cityContext, locationContext, agentCoverageContext, agentIdentityContext, listingReadinessContext].filter(Boolean).join('\n\n');
 
   // ── Step 3.6: RAG CONTEXT (opsional, RAG_ENABLED=OFF secara default) ──────
   // Melengkapi prompt dengan (a) pengetahuan jual-beli properti Indonesia yang
@@ -641,7 +653,7 @@ async function _generateWhatsAppAIReplyCore(params) {
         history,
         message,
         propertyCtx,
-        { facilityContext, cityContext, locationContext, agentCoverageContext, listingReadinessContext, ragContext }
+        { facilityContext, cityContext, locationContext, agentCoverageContext, agentIdentityContext, listingReadinessContext, ragContext }
       );
 
       // ★ M131: sinyal diam dari platform API ★ — model memutuskan SENDIRI
@@ -711,7 +723,7 @@ async function _generateWhatsAppAIReplyCore(params) {
       try {
         console.warn('[WhatsAppAI] primary=private & Private Agent failed → trying external AI fallback');
         const aiResult = await generateWhatsappExternalAIFallback(
-          session, history, message, enrichedPropertyCtx, { facilityContext, cityContext, agentCoverageContext, listingReadinessContext, ragContext }
+          session, history, message, enrichedPropertyCtx, { facilityContext, cityContext, agentCoverageContext, agentIdentityContext, listingReadinessContext, ragContext }
         );
 
         // ★ M131 ★ — sentinel diam berlaku sama di jalur fallback eksternal ini,
