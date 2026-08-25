@@ -12,7 +12,7 @@
  */
 
 const { Op } = require('sequelize');
-const { Location } = require('../models');
+const { Location, City } = require('../models');
 const { HTTP }     = require('../utils/httpStatus');
 const { sendSuccess, sendError } = require('../utils/responseFormat');
 const GeneralController = require('./GeneralController');
@@ -344,6 +344,157 @@ class LocationMasterController extends GeneralController {
     } catch (error) {
       console.error('[LOCATION DELETE ERROR]', error.message);
       return sendError(res, HTTP.INTERNAL_SERVER_ERROR, null, 'Gagal menghapus lokasi');
+    }
+  }
+
+  /* ──────────────────────────────────────────────────────────────────────────
+     AREA OPTIONS — sumber nilai untuk Property.area (M143)
+  ────────────────────────────────────────────────────────────────────────── */
+
+  /**
+   * GET /api/location/areas?city_id=<id>
+   *
+   * Daftar KAWASAN (location_type='area') milik satu kota, untuk mengisi
+   * dropdown/datalist `Property.area` di halaman tambah/edit properti.
+   *
+   * Kenapa endpoint TERPISAH dari /location/list:
+   *   • /location/list ter-paginate (agent kehilangan pilihan di halaman 2), dan
+   *   • mencampur landmark/commercial ke pilihan AREA membuat `Property.area`
+   *     terisi nama toko/RS ("INDOMARET") alih-alih nama kawasan — persis
+   *     pencemaran kosakata yang dicegah di M136 (getKnownLocations).
+   *
+   * `location_type='area'` SELALU punya city_id (hook validate Location.js),
+   * jadi filter kota di sini aman dan tidak akan membuang baris yang sah.
+   */
+  static async getAreaOptions(req, res) {
+    try {
+      const cityId = String(req.query.city_id || '').trim();
+
+      const where = { status: 1, location_type: 'area' };
+      if (cityId) where.city_id = cityId;
+
+      const rows = await Location.findAll({
+        where,
+        attributes: ['location_id', 'name', 'city_id'],
+        order: [['name', 'ASC']],
+      });
+
+      return sendSuccess(res, HTTP.OK, {
+        areas: rows.map(r => ({
+          location_id: r.location_id,
+          name:        r.name,
+          city_id:     r.city_id,
+        })),
+      }, 'Opsi area berhasil dimuat');
+
+    } catch (error) {
+      console.error('[LOCATION AREA OPTIONS ERROR]', error.message);
+      return sendError(res, HTTP.INTERNAL_SERVER_ERROR, null, 'Gagal memuat opsi area');
+    }
+  }
+
+  /* ──────────────────────────────────────────────────────────────────────────
+     PICKER "LOKASI/PATOKAN TERDEKAT" — untuk halaman tambah/edit properti (M148)
+  ────────────────────────────────────────────────────────────────────────── */
+
+  /**
+   * GET /api/location/nearby-options?city_id=<id>&search=&page=
+   *
+   * Aturan (dari pemilik proyek, 25 Agu 2026):
+   *   • location_type 'area' & 'landmark'  → HARUS satu kota dengan propertinya.
+   *     Kawasan & patokan hanya masuk akal sebagai penanda lokasi bila memang
+   *     berada di kota yang sama.
+   *   • location_type 'commercial'         → TIDAK difilter kota. Indomaret,
+   *     Alfamart, sekolah, stasiun, bank ada di mana-mana; membatasinya per
+   *     kota hanya menyembunyikan pilihan yang sah.
+   *
+   * ⚠️ BEDA DARI SQL CONTOH: contoh memakai INNER JOIN ke `cities`, yang
+   * DIAM-DIAM MEMBUANG seluruh baris commercial generik — di DB ini 572 baris
+   * commercial memang sengaja ber-city_id NULL (INDOMARET, PASAR TRADISIONAL,
+   * dst.), persis jenis patokan yang paling sering dipakai. Karena itu di sini
+   * commercial diambil TANPA join kota, supaya maksud "tidak perlu cocokkan
+   * kota" benar-benar terpenuhi.
+   */
+  static async getNearbyLocationOptions(req, res) {
+    try {
+      const cityId = String(req.query.city_id || '').trim();
+      const search = String(req.query.search || '').trim();
+      const page     = Math.max(1, parseInt(req.query.page, 10) || 1);
+      const pageSize = GeneralController.pageSize();
+      const offset   = (page - 1) * pageSize;
+
+      // "*" = tampilkan semua (konvensi modal picker proyek ini).
+      const searchClause = (search && search !== '*')
+        ? { name: { [Op.like]: `%${search}%` } }
+        : {};
+
+      // area/landmark WAJIB sekota; tanpa city_id keduanya tidak ditawarkan
+      // sama sekali (lebih baik kosong daripada menyarankan kawasan kota lain).
+      const sameCityTypes = cityId
+        ? { city_id: cityId, location_type: { [Op.in]: ['area', 'landmark'] } }
+        : null;
+
+      // commercial TIDAK difilter kota sama sekali (keputusan pemilik proyek,
+      // 25 Agu 2026 — SQL contoh: `OR lc.location_type = 'commercial'`).
+      // Catatan jujur: sebagian kecil baris commercial adalah tempat BERNAMA
+      // milik satu kota (PLAZA SENAYAN, CITO MALL, AMBARRUKMO PLAZA), jadi
+      // secara teori bisa muncul untuk properti di kota lain. Itu masalah
+      // kualitas MASTER DATA (city_id-nya belum diisi), bukan logika picker —
+      // dan nama kota kini ditampilkan di daftar sehingga agen bisa melihatnya.
+      const commercialClause = { location_type: 'commercial' };
+
+      const where = {
+        status: 1,
+        ...searchClause,
+        [Op.or]: [
+          ...(sameCityTypes ? [sameCityTypes] : []),
+          commercialClause,
+        ],
+      };
+
+      const { count, rows } = await Location.findAndCountAll({
+        where,
+        attributes: ['location_id', 'name', 'location_type', 'city_id', 'status'],
+        order: [['location_type', 'ASC'], ['name', 'ASC']],
+        limit: pageSize,
+        offset,
+      });
+
+      // Nama kota untuk kolom "Kota" di picker (SQL contoh: IFNULL(cy.name,'')).
+      // Dipakai lookup terpisah, bukan include: belum ada asosiasi
+      // Location→City di models/index.js dan menambahkannya di sini berisiko
+      // mengubah query lain yang memakai model Location.
+      const cityIds = [...new Set(rows.map((r) => r.city_id).filter(Boolean))];
+      const cityNameById = new Map();
+      if (cityIds.length) {
+        const cities = await City.findAll({
+          where: { city_id: { [Op.in]: cityIds } },
+          attributes: ['city_id', 'name'],
+        });
+        cities.forEach((cy) => cityNameById.set(cy.city_id, cy.name));
+      }
+
+      const totalPages = Math.ceil(count / pageSize);
+      return sendSuccess(res, HTTP.OK, {
+        locations: rows.map((r) => ({
+          location_id  : r.location_id,
+          name         : r.name,
+          location_type: r.location_type,
+          city_id      : r.city_id,
+          city_name    : cityNameById.get(r.city_id) || '',   // '' = berlaku umum
+          status       : r.status,
+          status_label : r.status === 1 ? 'Aktif' : 'Disabled',
+        })),
+        pagination: {
+          total: count, page, pageSize, totalPages,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1,
+        },
+      }, 'Opsi lokasi patokan berhasil dimuat');
+
+    } catch (error) {
+      console.error('[LOCATION NEARBY OPTIONS ERROR]', error.message);
+      return sendError(res, HTTP.INTERNAL_SERVER_ERROR, null, 'Gagal memuat opsi lokasi patokan');
     }
   }
 }

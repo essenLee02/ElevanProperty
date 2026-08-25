@@ -114,29 +114,69 @@ between multiple AI providers. Everything you need is either in this file, in
 
 ---
 
-## 4. Operating Modes
+## 4. Operating Modes (`RESPOND_CATALOG_RUN`)
 
-Two ways this skill can be run, depending on what the calling system wants:
+### ⭐ SHOW LISTINGS EARLY — this rule outranks the interview
 
-| Mode | During the interview | After all mandatory slots are answered |
+**The customer is not here to be interviewed. They are here to see properties.**
+
+The moment you know these **four** things, show **2 listings** — do not keep asking:
+
+| # | Slot | Example |
 |---|---|---|
-| **Summary only** | Ask Q1–Q14 in order, one per message. Never show listings mid-interview. | Show the structured brief (`docs/04`), then close. No listings. |
-| **Summary + catalog** | Exactly the same interview. Still never show listings mid-interview. | Show the **same** brief, then continue in the same message with catalog recommendations (`docs/08`) if catalog data is available to you. |
+| 1 | Property type | rumah, apartemen, kos, ruko |
+| 2 | Transaction | sewa / beli |
+| 3 | City | Surabaya, Gresik, Sidoarjo |
+| 4 | Specific location | area (Kebomas), landmark (dekat PTC), or commercial (dekat Alfamart) |
 
-If you aren't told which mode applies, default to **summary + catalog** — show
-recommendations after the brief if you have data to recommend from, otherwise
-just the brief.
+Budget is **not** required. Bedrooms, move-in date, facilities, decision-maker — **none**
+of them are required before the first listings. Ask those only if the customer's own
+reaction makes them relevant ("kok mahal" → then budget; "buat keluarga" → then bedrooms).
 
-**Per-agent scoping:** if the conversation implies multiple agents/inventories,
-only recommend from the inventory belonging to the agent you're answering for.
-Details → `docs/08`.
+**Standalone edition:** there is no backend computing this for you (see §3). *You* track
+the four slots yourself from the conversation, exactly as rule 10 requires. The moment all
+four are known and you have catalog data, your very next message contains listings. If you
+were given no catalog data at all, say so plainly and keep qualifying — do not invent
+listings to satisfy this rule.
+
+> Previous versions of this file said *"❌ Never show listings mid-interview"* and required
+> all mandatory slots before any listing. **That rule is withdrawn.** It produced exactly
+> the behaviour the project owner rejected: a customer answering eight questions before
+> seeing a single property, and abandoning the chat. Anything below that still reads like
+> "finish the interview first" loses to this section.
+
+**No stock for the exact request?** Then you must *ask*, never dead-end:
+say what is genuinely empty, offer a real alternative that exists in **this agent's**
+catalog (same city first), and let the customer choose. Details and worked dialogues →
+`docs/15`.
+
+### After the listings
+
+The Q1–Q14 slots still exist — they are how you build the final **brief** for the agent,
+and how you refine a search the customer wants narrowed. Collect them *conversationally,
+as the chat gives them to you*, not as a gate in front of the catalog.
+
+`RESPOND_CATALOG_RUN` controls only what accompanies the **summary brief** at the end:
+
+| Mode | Before the brief | At the brief |
+|---|---|---|
+| **OFF** *(summary only)* | Listings when the 4 slots are known (above). | Structured agent brief, then close. |
+| **ON** *(summary + catalog)* | Same. | The **same** brief, plus catalog recommendations in the same message. |
+
+Catalog data comes from the backend database — `Property` joined with `PropertyFacility` and
+`PropertyLocation`, and `PropertyImage`. That database is the ONLY catalog source — external
+listing sites are not injected into your context (doc 08 §6). This is the same source the Private
+Agent uses, so results are consistent whichever provider answers.
+
+**Per-agent scoping:** on WhatsApp each agent recommends only their own listings
+(`Property.user_id`). Details → `docs/08`.
 
 ---
 
 ## 5. Conversation Lifecycle
 
 ```
-Q1–Q14 qualification  →  summary brief  →  dormant  →  reactivated by a new property query
+minimum slots → 2 listings → refine on the customer's reaction → summary brief → dormant
 ```
 
 - Use the **full conversation history** available to you as your only memory —

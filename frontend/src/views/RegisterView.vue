@@ -148,6 +148,29 @@
             </div>
           </div>
 
+          <!-- Developer / Agensi asal agent -->
+          <div class="form-group">
+            <label class="form-label col-form-label" for="developerProperty">Developer / Agensi</label>
+            <select
+              id="developerProperty"
+              v-model="form.developer_property_id"
+              class="form-control form-control-lg form-control-sm"
+              :disabled="isSubmitting || isLoadingDevelopers"
+            >
+              <option value="">— Tidak berafiliasi (agent independen) —</option>
+              <option
+                v-for="d in developerOptions"
+                :key="d.developer_property_id"
+                :value="d.developer_property_id"
+              >{{ d.name }}</option>
+            </select>
+            <small class="text-muted">
+              <template v-if="isLoadingDevelopers">Memuat daftar developer…</template>
+              <template v-else-if="developerOptions.length">Brand agensi asal agent (Ray White, Brighton, dll). Boleh dikosongkan.</template>
+              <template v-else>Belum ada developer aktif di master — bisa diisi nanti lewat halaman Profile.</template>
+            </small>
+          </div>
+
           <!-- AI Primary -->
           <div class="form-group">
             <label class="form-label col-form-label" for="aiPrimary">AI Primary</label>
@@ -312,10 +335,11 @@
 </template>
 
 <script setup>
-import { reactive, ref, computed, watch } from 'vue';
+import { reactive, ref, computed, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { toast } from 'vue3-toastify';
 import { registerUser } from '../services/authApi';
+import { getDeveloperPropertyOptions } from '../services/developerPropertyApi';
 
 /* ── Constants ─────────────────────────────────────────── */
 const features = [
@@ -331,6 +355,7 @@ const PHONE_REGEX = /[^0-9+\-\s]/g;
 const router       = useRouter();
 const form         = reactive({
   name: '', birthdate: '', phone: '', username: '', email: '',
+  developer_property_id: '',
   ai_primary: 'Default', trans_type: 'Both', payment_type: 'Both',
   rental_duration: '', rental_type: '',
   password: '', konfirmasi: '',
@@ -410,6 +435,7 @@ const submitRegister = async () => {
       phone     : form.phone    || null,
       username  : form.username,
       email     : form.email    || null,
+      developer_property_id: form.developer_property_id || null,
       ai_primary  : form.ai_primary   || 'Default',
       trans_type  : form.trans_type   || 'Both',
       payment_type: form.payment_type || null,
@@ -438,4 +464,22 @@ const submitRegister = async () => {
     isSubmitting.value = false;
   }
 };
+
+/* ── Developer / agensi asal agent — diisi saat register supaya AI bisa
+   menjawab "agent ini dari agensi mana?" dari DATA sejak hari pertama.
+   Fail-open: master gagal dimuat → daftar kosong, register tetap jalan. */
+const developerOptions    = ref([]);
+const isLoadingDevelopers = ref(false);
+
+onMounted(async () => {
+  isLoadingDevelopers.value = true;
+  try {
+    const res = await getDeveloperPropertyOptions();
+    developerOptions.value = res?.isSuccess === 1 ? (res.data.response.options || []) : [];
+  } catch (_) {
+    developerOptions.value = [];
+  } finally {
+    isLoadingDevelopers.value = false;
+  }
+});
 </script>

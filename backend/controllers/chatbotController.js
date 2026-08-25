@@ -50,8 +50,12 @@ class ChatbotController {
     }
 
     const lines = [
-      `PROPERTY CATALOG CONTEXT (from backend database / indonesia_property_extended_v3.json):`,
-      `Source file: ${propertyContext.sourceFile || 'backend database (indonesia_property_extended_v3.json)'}`,
+      // M144: teks ini masuk PROMPT LLM. Menyebut nama berkas JSON yang sudah
+      // tidak dipakai bukan sekadar komentar basi — ia MEMBERI TAHU model bahwa
+      // ada sumber katalog lain selain database, tepat di konteks tempat model
+      // memutuskan boleh merekomendasikan apa. Sumbernya sekarang HANYA DB.
+      `PROPERTY CATALOG CONTEXT (from backend database):`,
+      `Source: ${propertyContext.sourceFile || 'backend database (properties + property_facilities + property_locations + property_images)'}`,
       `Total records in dataset: ${propertyContext.totalRecords || 'unknown'}`,
       `Context records provided: ${propertyContext.sampleSize || propertyContext.properties.length} properties`,
       `Selection strategy: ${propertyContext.selectionStrategy || 'not specified'}`,

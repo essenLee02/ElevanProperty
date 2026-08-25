@@ -55,17 +55,23 @@ async function main() {
   {
     const surabaya = await City.findOne({ where: { name: 'SURABAYA' } });
     const ptc = await Location.findOne({ where: { name: 'Pakuwon Trade Center (PTC)', city_id: surabaya.city_id }, raw: true });
-    ok('Surabaya: "Pakuwon Trade Center (PTC)" ada, location_type=landmark', ptc && ptc.location_type === 'landmark');
+    // M147: PTC adalah MALL -> 'commercial'. Assertion lama (landmark) justru
+    // mengunci salah-kategori yang diminta pemilik proyek untuk diperbaiki:
+    // models/Location.js menaruh fasilitas komersial (mall/pasar/kampus/RS) di
+    // 'commercial', dan 'landmark' untuk patokan wisata/publik.
+    ok('Surabaya: "Pakuwon Trade Center (PTC)" ada, location_type=commercial', ptc && ptc.location_type === 'commercial');
 
     const sidoarjo = await City.findOne({ where: { name: 'SIDOARJO' } });
     const japfa = await Location.findOne({ where: { name: 'PT Japfa Comfeed Indonesia Tbk', city_id: sidoarjo.city_id }, raw: true });
-    ok('Sidoarjo: "PT Japfa Comfeed Indonesia Tbk" ada, location_type=landmark', japfa && japfa.location_type === 'landmark');
+    // M147: pabrik/perusahaan = fasilitas komersial, bukan patokan wisata.
+    ok('Sidoarjo: "PT Japfa Comfeed Indonesia Tbk" ada, location_type=commercial', japfa && japfa.location_type === 'commercial');
 
     const jaksel = await City.findOne({ where: { name: 'JAKARTA SELATAN' } });
     const kemang = await Location.findOne({ where: { name: 'Kemang', city_id: jaksel.city_id }, raw: true });
     ok('Jakarta Selatan: "Kemang" ada, location_type=area', kemang && kemang.location_type === 'area');
     const senayanCity = await Location.findOne({ where: { name: 'Senayan City', city_id: jaksel.city_id }, raw: true });
-    ok('Jakarta Selatan: "Senayan City" ada, location_type=landmark', senayanCity && senayanCity.location_type === 'landmark');
+    // M147: Senayan City adalah MALL -> 'commercial'.
+    ok('Jakarta Selatan: "Senayan City" ada, location_type=commercial', senayanCity && senayanCity.location_type === 'commercial');
   }
 
   console.log('\n== KONTROL NEGATIF — tidak ada duplikat (name, city_id) ==');

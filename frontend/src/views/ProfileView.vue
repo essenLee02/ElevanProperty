@@ -102,6 +102,35 @@
                 <p class="field-hint">Menentukan apakah ringkasan chatbot menyertakan daftar katalog properti.</p>
               </div>
 
+              <!-- Developer / Agensi asal agent (users.developer_property_id) -->
+              <div class="form-group">
+                <label class="col-form-label" for="developerProperty">Developer / Agensi</label>
+                <select
+                  id="developerProperty"
+                  v-model="form.developer_property_id"
+                  :disabled="isSubmitting || isLoadingDevelopers"
+                >
+                  <option value="">— Tidak berafiliasi (agent independen) —</option>
+                  <option
+                    v-for="d in developerOptions"
+                    :key="d.developer_property_id"
+                    :value="d.developer_property_id"
+                  >{{ d.name }}</option>
+                </select>
+                <p class="field-hint">
+                  <template v-if="isLoadingDevelopers">Memuat daftar developer…</template>
+                  <template v-else-if="developerOptions.length">
+                    Brand agensi tempat Anda bernaung (Ray White, Brighton, dll).
+                    Dipakai AI untuk menjawab pertanyaan customer
+                    <em>"Kakak dari agensi mana?"</em> berdasarkan data, bukan tebakan.
+                  </template>
+                  <template v-else>
+                    Belum ada developer aktif di master. Tambahkan lewat menu
+                    <strong>Master Developer Property</strong> terlebih dahulu.
+                  </template>
+                </p>
+              </div>
+
               <!-- AI Primary — provider yang dipakai di terminal message -->
               <div class="form-group">
                 <label class="col-form-label" for="aiPrimary">AI Primary</label>
@@ -289,6 +318,7 @@ import { reactive, ref, computed, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { toast } from 'vue3-toastify';
 import { getCurrentProfile, updateProfile } from '../services/profileApi';
+import { getDeveloperPropertyOptions } from '../services/developerPropertyApi';
 
 const router = useRouter();
 
@@ -301,6 +331,7 @@ const form = reactive({
   birthdate:      '',
   email:          '',
   catalog_summary: 'OFF',
+  developer_property_id: '',
   ai_primary:      'Default',
   trans_type:      'Both',
   payment_type:    'Both',
@@ -318,6 +349,7 @@ const originalForm = reactive({
   birthdate:       '',
   email:           '',
   catalog_summary: 'OFF',
+  developer_property_id: '',
   ai_primary:      'Default',
   trans_type:      'Both',
   payment_type:    'Both',
@@ -422,6 +454,7 @@ const loadProfile = async () => {
       form.birthdate  = user.birthdate ? user.birthdate.split('T')[0] : '';
       form.email            = user.email            || '';
       form.catalog_summary  = user.catalog_summary  || 'OFF';
+      form.developer_property_id = user.developer_property_id || '';
       form.ai_primary       = user.ai_primary       || 'Default';
       form.trans_type       = user.trans_type       || 'Both';
       form.payment_type     = user.payment_type     || 'Both';
@@ -497,6 +530,8 @@ const submitUpdate = async () => {
       password:   form.password,
       email:            form.email            || null,
       catalog_summary:  form.catalog_summary   || null,
+      // '' → null: backend membaca null sebagai "agent independen", bukan id kosong.
+      developer_property_id: form.developer_property_id || null,
       ai_primary:       form.ai_primary       || 'Default',
       trans_type:       form.trans_type       || 'Both',
       payment_type:     form.payment_type     || null,
@@ -522,6 +557,7 @@ const submitUpdate = async () => {
       const saved = result.data.response.user;
       form.trans_type      = saved.trans_type      || form.trans_type;
       form.payment_type    = saved.payment_type    || form.payment_type;
+      form.developer_property_id = saved.developer_property_id ?? form.developer_property_id;
       form.ai_primary      = saved.ai_primary      || form.ai_primary;
       form.rental_duration = saved.rental_duration ?? '';
       form.rental_type     = saved.rental_type     || '';
@@ -557,7 +593,27 @@ const submitUpdate = async () => {
   }
 };
 
+/* ── Developer / agensi asal agent (users.developer_property_id) ───────────
+   Diambil dari master `developer_properties` (hanya yang status aktif).
+   Fail-open: bila master gagal dimuat, daftar kosong dan field tetap bisa
+   dikosongkan — jangan sampai satu endpoint master memblokir simpan profil. */
+const developerOptions    = ref([]);
+const isLoadingDevelopers = ref(false);
+
+const loadDeveloperOptions = async () => {
+  isLoadingDevelopers.value = true;
+  try {
+    const res = await getDeveloperPropertyOptions();
+    developerOptions.value = res?.isSuccess === 1 ? (res.data.response.options || []) : [];
+  } catch (_) {
+    developerOptions.value = [];
+  } finally {
+    isLoadingDevelopers.value = false;
+  }
+};
+
 onMounted(() => {
   loadProfile();
+  loadDeveloperOptions();
 });
 </script>

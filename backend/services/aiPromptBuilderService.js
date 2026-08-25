@@ -4,6 +4,8 @@ const { parseCustomerDate, isDontKnowDateAnswer, WAITING_THE_UPDATE } = require(
 const { expandAbbreviations }                 = require('../utils/lazyChatNormalizer');
 const { expandStandardFacilities }            = require('../utils/standardFacilities');
 const { detectCustomerFrustration } = require('../utils/propertyKeywordFilter');
+const { customerAsksPropertyData,
+        buildAnswerFirstDirective } = require('../utils/customerQuestionGuard');
 const { getCityLandmarks }                    = require('../utils/locationLandmarks');
 
 /* ─── Qualification State Extractor ────────────────────────────────────────── */
@@ -173,9 +175,23 @@ function buildFinalDirective(state, identity = {}) {
   push('Q14 fit-out',  state.officeFitOut);
 
   const nq = findNextQuestion(state, {});
-  const nextLine = nq
-    ? `TANYAKAN SEKARANG → ${nq.q}: ${nq.hint}`
-    : 'Semua field wajib sudah ✅ → TAMPILKAN SUMMARY BRIEF sekarang.';
+
+  // ── M142: customer BERTANYA → jawab dulu, tunda pertanyaan berikutnya ─────
+  // Baris "TANYAKAN SEKARANG" ada di posisi 100% prompt (M62) dan MENGALAHKAN
+  // semua instruksi di atasnya. Transkrip produksi: customer bertanya alamat
+  // sebuah listing, dijawab Q2b ("sudah lihat berapa rumah?"); bertanya alamat
+  // lagi, dijawab Q3 (budget tier). Data alamatnya SUDAH ada di konteks
+  // katalog — yang salah murni direktif yang memaksa bertanya.
+  // Selama satu giliran itu, direktif diganti "JAWAB DULU"; pertanyaan
+  // berikutnya tetap disebut sebagai LANJUTAN opsional, bukan hilang.
+  const askedNow = identity.customerMessage
+    && customerAsksPropertyData(identity.customerMessage);
+
+  const nextLine = askedNow
+    ? buildAnswerFirstDirective(identity.customerMessage, nq)
+    : (nq
+      ? `TANYAKAN SEKARANG → ${nq.q}: ${nq.hint}`
+      : 'Semua field wajib sudah ✅ → TAMPILKAN SUMMARY BRIEF sekarang.');
 
   // ── Anti-karangan nama area (M84) ─────────────────────────────────────────
   // Bug produksi 6 Agu 2026: customer hanya menyebut kota Malang; area tidak
@@ -2317,7 +2333,29 @@ Kalau sudah ada area/kecamatan tertentu, boleh sekalian disebut ya.` };
   {
     const hasSpecificLocation = Boolean(state.district || state.anchorPoint || state.landmark);
     const minimumMet = Boolean(state.transactionType && state.buildingType && state.city && hasSpecificLocation);
-    if (minimumMet && !state.listingsShown) {
+    // ⚠️ `=== false`, BUKAN `!state.listingsShown`. listingsShown hanya PASTI
+    // benar saat state datang dari extractQualificationState() (produksi
+    // sesungguhnya). Puluhan tes lama di file ini memanggil findNextQuestion()
+    // LANGSUNG dengan object state buatan tangan untuk menguji cabang lain
+    // (officeGrade, budget follow-up, dst.) — di situ listingsShown selalu
+    // `undefined`. Memakai `!state.listingsShown` membuat gerbang ini
+    // membajak SEMUA tes itu (regresi nyata, ditemukan lewat full suite run).
+    // `undefined` diperlakukan sebagai "anggap sudah tampil" — aman karena
+    // jalur produksi SELALU eksplisit true/false, tidak pernah undefined.
+    //
+    // ⚠️ KEDUA: gerbang HANYA boleh menyala pada giliran PERTAMA syarat
+    // minimum terpenuhi — bukan tiap kali dipanggil ulang. Deteksi
+    // listingsShown via regex pada teks AI (baris bernomor + harga) rapuh
+    // untuk banyak transkrip sintetis yang sengaja pendek (mis. tes
+    // bookingShortStayVersi2: Q2b SUDAH ditanya, budget SUDAH dijawab, tapi
+    // tidak ada baris "1. ... Rp ..." tertulis literal). Tanda yang JAUH
+    // lebih andal bahwa percakapan sudah melewati titik "baru sampai info
+    // minimum": salah satu pertanyaan SETELAH gerbang ini (Q2b/Q2b-riwayat/
+    // budget) sudah pernah dijawab. Bila SALAH SATU dari itu sudah terisi,
+    // percakapan sudah maju melewati titik ini — jangan mundur memaksa
+    // listing di tengah alur yang sudah berjalan.
+    const pastThisPoint = Boolean(state.aiAskedQ2b || state.searchHistory || state.budget);
+    if (minimumMet && state.listingsShown === false && !pastThisPoint) {
       const humanType = _humanType[type] || 'properti';
       const where = state.district || state.anchorPoint || state.landmark;
       return {
@@ -3534,6 +3572,8 @@ ${buildFinalDirective(qualState, {
   appName    : resolvedAppName,
   catalogMode: showCatalogAfterBrief ? 'ON' : 'OFF',
   hasCatalog : hasCatalogContext,
+  // M142: dipakai untuk mendeteksi "customer sedang bertanya" → jawab dulu.
+  customerMessage: userMessage,
 })}`;
 }
 

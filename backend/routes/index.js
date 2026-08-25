@@ -300,6 +300,11 @@ router.delete('/property/:property_id/images/:image_id', verifyToken, propertyMa
    MASTER DATA — LOCATION (Butuh login)
 ══════════════════════════════════════════════════════════════════════════════ */
 
+// /areas SEBELUM /detail/:location_id — Express mencocokkan berurutan, tanpa ini
+// "areas" tertangkap sebagai :location_id dan dropdown selalu 404.
+router.get('/location/areas',                             verifyToken, locationMasterController.getAreaOptions);
+// Picker "Lokasi/Patokan Terdekat": area+landmark sekota, commercial lintas kota.
+router.get('/location/nearby-options',                    verifyToken, locationMasterController.getNearbyLocationOptions);
 router.get('/location/list',                              verifyToken, locationMasterController.showDataLocation);
 router.get('/location/detail/:location_id',               verifyToken, locationMasterController.getDetailLocation);
 router.post('/location/insert',                           verifyToken, locationMasterController.insertDataLocation);

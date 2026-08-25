@@ -31,6 +31,39 @@ function normPhone(p) {
 
 class CustomerMasterController extends GeneralController {
 
+  /**
+   * M141 — SATU gerbang kepemilikan, dipakai oleh SEMUA endpoint by-id
+   * (detail/update/toggle-status/toggle-ai/delete).
+   *
+   * ⛔ SEBELUM FIX INI: kelima endpoint itu mencari customer HANYA lewat
+   * `customer_id`, tanpa pernah membandingkan `customer.user_id` dengan agent
+   * yang login. Siapa pun yang login (privilege apa pun) dan tahu/menebak SATU
+   * customer_id bisa melihat, MENGUBAH, menonaktifkan AI, atau MENGHAPUS
+   * customer milik agent LAIN — bukan sekadar bocor baca, tapi tulis penuh.
+   * Ditemukan saat menelusuri laporan pemilik proyek soal isolasi data
+   * customer per-agent ("Setiap agent punya data customer yang berbeda").
+   *
+   * Admin (privilege='admin') boleh melewati batas ini — sejalan dengan
+   * requirePrivilege('admin') yang sudah dipakai leadQualificationController.js
+   * (M138) untuk kasus yang sama: admin melihat lintas-agent, agent biasa TIDAK.
+   *
+   * @returns {Promise<{customer:object}|{error:{status:number,message:string}}>}
+   */
+  static async #findOwnedCustomer(customer_id, req) {
+    const customer = await Customer.findOne({ where: { customer_id, status: { [Op.ne]: 3 } } });
+    if (!customer) {
+      return { error: { status: HTTP.NOT_FOUND, message: 'Customer tidak ditemukan' } };
+    }
+
+    const isAdmin = req.user?.privilege === 'admin';
+    const isOwner = customer.user_id === String(req.user?.userId || '').toUpperCase();
+    if (!isAdmin && !isOwner) {
+      return { error: { status: HTTP.FORBIDDEN, message: 'Customer ini milik agent lain — akses ditolak' } };
+    }
+
+    return { customer };
+  }
+
   static #row(c, extra = {}) {
     return {
       id:            c.id,
@@ -145,10 +178,9 @@ class CustomerMasterController extends GeneralController {
     }
 
     try {
-      const customer = await Customer.findOne({ where: { customer_id, status: { [Op.ne]: 3 } } });
-      if (!customer) {
-        return sendError(res, HTTP.NOT_FOUND, null, 'Customer tidak ditemukan');
-      }
+      const owned = await CustomerMasterController.#findOwnedCustomer(customer_id, req);
+      if (owned.error) return sendError(res, owned.error.status, null, owned.error.message);
+      const customer = owned.customer;
 
       const phoneNorm = normPhone(phone);
       if (phoneNorm) {
@@ -209,8 +241,18 @@ class CustomerMasterController extends GeneralController {
       const offset   = (page - 1) * pageSize;
       const search   = req.query.search ? String(req.query.search).trim() : '';
       const aiResp   = req.query.ai_response ? String(req.query.ai_response).trim().toUpperCase() : '';
-      const showAll  = String(req.query.all || '') === '1';
-      const userId   = req.user?.userId || null;
+      // M141: ?all=1 HARUS admin. Ditemukan saat menelusuri laporan pemilik
+      // proyek soal isolasi data customer per-agent — endpoint ini menerima
+      // ?all=1 dari SIAPA PUN yang login (hanya verifyToken, tanpa cek
+      // privilege), jadi agent biasa bisa melihat customer agent LAIN hanya
+      // dengan menambah query string. Frontend saat ini tidak pernah mengirim
+      // ?all=1, jadi tidak terlihat dari UI — tapi endpoint-nya tetap terbuka
+      // untuk siapa pun yang tahu param-nya. Fail-closed: privilege selain
+      // 'admin' TIDAK PERNAH boleh melihat customer agent lain, apa pun query-nya.
+      const requestedAll = String(req.query.all || '') === '1';
+      const isAdmin      = req.user?.privilege === 'admin';
+      const showAll      = requestedAll && isAdmin;
+      const userId        = req.user?.userId || null;
 
       const where = { status: { [Op.ne]: 3 } };
       if (!showAll && userId) where.user_id = String(userId).toUpperCase();
@@ -274,10 +316,9 @@ class CustomerMasterController extends GeneralController {
   static async getDetailCustomer(req, res) {
     const { customer_id } = req.params;
     try {
-      const customer = await Customer.findOne({ where: { customer_id, status: { [Op.ne]: 3 } } });
-      if (!customer) {
-        return sendError(res, HTTP.NOT_FOUND, null, 'Customer tidak ditemukan');
-      }
+      const owned = await CustomerMasterController.#findOwnedCustomer(customer_id, req);
+      if (owned.error) return sendError(res, owned.error.status, null, owned.error.message);
+      const customer = owned.customer;
 
       const creatorName = await GeneralController.resolveUserName(customer.created_by);
       const updaterName = await GeneralController.resolveUserName(customer.updated_by);
@@ -309,10 +350,9 @@ class CustomerMasterController extends GeneralController {
     const updatedBy = req.user?.userId || null;
 
     try {
-      const customer = await Customer.findOne({ where: { customer_id, status: { [Op.ne]: 3 } } });
-      if (!customer) {
-        return sendError(res, HTTP.NOT_FOUND, null, 'Customer tidak ditemukan');
-      }
+      const owned = await CustomerMasterController.#findOwnedCustomer(customer_id, req);
+      if (owned.error) return sendError(res, owned.error.status, null, owned.error.message);
+      const customer = owned.customer;
 
       const newStatus = customer.status === 1 ? 2 : 1;
       const label     = newStatus === 1 ? 'Aktif' : 'Disabled';
@@ -344,10 +384,9 @@ class CustomerMasterController extends GeneralController {
     const updatedBy = req.user?.userId || null;
 
     try {
-      const customer = await Customer.findOne({ where: { customer_id, status: { [Op.ne]: 3 } } });
-      if (!customer) {
-        return sendError(res, HTTP.NOT_FOUND, null, 'Customer tidak ditemukan');
-      }
+      const owned = await CustomerMasterController.#findOwnedCustomer(customer_id, req);
+      if (owned.error) return sendError(res, owned.error.status, null, owned.error.message);
+      const customer = owned.customer;
 
       const newVal = customer.ai_response === 'ON' ? 'OFF' : 'ON';
       await customer.update({
@@ -380,10 +419,9 @@ class CustomerMasterController extends GeneralController {
     const updatedBy = req.user?.userId || null;
 
     try {
-      const customer = await Customer.findOne({ where: { customer_id, status: { [Op.ne]: 3 } } });
-      if (!customer) {
-        return sendError(res, HTTP.NOT_FOUND, null, 'Customer tidak ditemukan atau sudah dihapus');
-      }
+      const owned = await CustomerMasterController.#findOwnedCustomer(customer_id, req);
+      if (owned.error) return sendError(res, owned.error.status, null, owned.error.message);
+      const customer = owned.customer;
 
       await customer.update({
         status:       3,

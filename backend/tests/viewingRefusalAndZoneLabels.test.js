@@ -62,11 +62,13 @@ console.log('\n── (2) Label zona generik BUKAN nama kota ──');
   }
   ok('"Business District" sendiri → bukan lokasi', detectLocation('Business District') === '');
 
-  // Judul listing harus resolve ke KOTA aslinya, bukan label zonanya.
-  ok('judul listing → kota asli ("Bengkulu Tengah")',
-     detectLocation('Bengkulu Tengah Business District House') === 'Bengkulu Tengah');
-  ok('judul listing → kota asli ("Kepi")',
-     detectLocation('Kepi Near Airport House') === 'Kepi');
+  // M144: dua assertion "judul listing -> kota asli" DIPINDAH ke blok async
+  // di akhir berkas. "Bengkulu Tengah" & "Kepi" adalah kota NYATA di tabel
+  // `cities`, tapi detectLocation() baru mengenalinya setelah initCityCache()
+  // dihangatkan (produksi menghangatkannya saat boot). Sebelum M144 tes ini
+  // lulus karena kosakata lokasi ikut diambil dari katalog JSON; begitu JSON
+  // dihapus, cache dingin membuatnya gagal PALSU. Jebakan yang sama sudah
+  // tercatat untuk _landmarkCache (M139).
 
   // Kota sungguhan tidak boleh ikut tersaring.
   ok('kota nyata tetap terdeteksi (Surabaya)', detectLocation('Saya mau di Surabaya') === 'Surabaya');
@@ -113,5 +115,19 @@ console.log('\n── Transkrip penuh: alur maju, tidak mengulang, sisa 1 field 
   ok('TIDAK ada kota bernama "Business District"', !/business district/i.test(st.city || ''));
 }
 
-console.log(`\nRESULT: ${pass}/${total}`);
-process.exit(pass === total ? 0 : 1);
+/* -- Assertion yang MEMBUTUHKAN cache kota hangat (seperti produksi) -- */
+(async () => {
+  const svc = require('../services/propertyRecommendationService');
+  await svc.initCityCache();
+
+  console.log('\n-- (2b) Judul listing resolve ke KOTA ASLI (cache kota hangat) --');
+  ok('judul listing -> kota asli ("Bengkulu Tengah")',
+     svc.detectLocation('Bengkulu Tengah Business District House') === 'Bengkulu Tengah');
+  ok('judul listing -> kota asli ("Kepi")',
+     svc.detectLocation('Kepi Near Airport House') === 'Kepi');
+  ok('label zona generik TETAP bukan kota walau cache hangat',
+     svc.detectLocation('Business District') === '');
+
+  console.log(`\nRESULT: ${pass}/${total}`);
+  process.exit(pass === total ? 0 : 1);
+})().catch((e) => { console.error('FATAL:', e); process.exit(1); });

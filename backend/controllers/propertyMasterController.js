@@ -72,6 +72,53 @@ class PropertyMasterController extends GeneralController {
    * buat ulang dari array `facilities`. Hanya facility_id valid (status ≠ 3)
    * yang disimpan. `facilities` = [{ facility_id, facility_qty? }].
    */
+  /**
+   * M145 — hubungkan AREA properti ke master `locations` lewat property_locations.
+   *
+   * Directive pemilik proyek: "Pada Property.area arahkan datanya pada
+   * Location.location_id". `properties.area` sendiri SENGAJA tetap menyimpan
+   * NAMA (STRING) — kolom itu dibaca langsung oleh kartu katalog, pencocokan
+   * area di propertyRecommendationService, dan summary. Mengganti isinya jadi
+   * id akan memaksa join di setiap pembaca dan menampilkan id mentah ke
+   * customer bila ada satu saja yang terlewat.
+   *
+   * Yang dilakukan di sini: begitu `area` cocok dengan sebuah Location
+   * (location_type='area', status=1, kota yang SAMA), buat/rapikan baris
+   * property_locations-nya. Jadi linkage location_id BENAR-BENAR ada dan bisa
+   * di-query, tanpa mengorbankan keterbacaan kolom `area`.
+   *
+   * Fail-open: kegagalan di sini TIDAK boleh membatalkan simpan properti —
+   * linkage adalah pelengkap, bukan data inti.
+   */
+  static async #syncAreaLocation(propertyId, areaName, cityId, userId) {
+    try {
+      const name = String(areaName || '').trim();
+      if (!propertyId || !name || !cityId) return;
+
+      const loc = await Location.findOne({
+        where: { name, city_id: cityId, location_type: 'area', status: 1 },
+        attributes: ['location_id'],
+      });
+      if (!loc) return;   // area diketik bebas & belum terdaftar → tidak ada yang bisa dihubungkan
+
+      const existing = await PropertyLocation.findOne({
+        where: { property_id: propertyId, location_id: loc.location_id },
+        attributes: ['id'],
+      });
+      if (existing) return;   // sudah terhubung — idempoten
+
+      await PropertyLocation.create({
+        property_id : propertyId,
+        location_id : loc.location_id,
+        created_date: new Date(),
+        created_by  : userId || null,
+      });
+      console.log(`[PROPERTY] 🔗 AREA LINK — ${propertyId} → ${loc.location_id} ("${name}")`);
+    } catch (err) {
+      console.warn('[PROPERTY] sync area→location gagal (non-fatal):', err.message);
+    }
+  }
+
   static async #syncFacilities(propertyId, facilities, userId) {
     if (!Array.isArray(facilities)) return;
 
@@ -200,6 +247,7 @@ class PropertyMasterController extends GeneralController {
 
       // Simpan fasilitas terpilih (jika ada)
       await PropertyMasterController.#syncFacilities(newProperty.property_id, facilities, createdBy);
+      await PropertyMasterController.#syncAreaLocation(newProperty.property_id, newProperty.area, newProperty.city_id, createdBy);
 
       console.log(`[PROPERTY] ✅ INSERT — ${newProperty.property_id} | "${newProperty.title}" | ${city.name}, ${province.name} | By: ${createdBy}`);
 
@@ -324,6 +372,14 @@ class PropertyMasterController extends GeneralController {
       // Sinkronkan fasilitas hanya jika field dikirim (undefined = tidak diubah)
       if (facilities !== undefined) {
         await PropertyMasterController.#syncFacilities(property.property_id, facilities, updatedBy);
+      }
+
+      // M145: area diubah -> rapikan linkage property_locations-nya juga.
+      // `property` sudah membawa nilai terbaru setelah update() di atas.
+      if (area !== undefined) {
+        await PropertyMasterController.#syncAreaLocation(
+          property.property_id, property.area, property.city_id, updatedBy
+        );
       }
 
       const creatorName = await GeneralController.resolveUserName(property.created_by);

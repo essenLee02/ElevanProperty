@@ -1017,7 +1017,99 @@ tercapai di jalur produksi sesungguhnya".
        bahwa frasa lama hanya tersisa di catatan pencabutan (tepat 1 kemunculan,
        bukan sebagai perintah aktif).
 
-  BASELINE TES AKHIR SESI INI: 2270/2293 (90 berkas, +9 berkas tes baru:
+  9. M140 (***) M139 TIDAK CUKUP - DIREKTIF BERNOMOR MENGALAHKAN SKILL.md.
+     Transkrip produksi 25 Agu 2026, SETELAH M139 live: customer bilang "Mau
+     cari rumah di Citraland Surabaya" -> "Rencana beli" (4 slot minimum
+     lengkap) tapi AI TETAP bertanya Q2b, Q3, Q8, Q4. Customer memohon "Ada
+     listing nya? Saya minta" dan tetap ditanya lagi.
+     AKAR: findNextQuestion() menyuntikkan pertanyaan sebagai DIREKTIF BERNOMOR
+     ke DIREKTIF FINAL (posisi 100%, M62) yang MENGALAHKAN SKILL.md. M139
+     memperbaiki dokumen; kode tetap memaksa Q2b, jadi LLM menurut pada kode.
+     FIX: gerbang SHOW_LISTINGS di DALAM findNextQuestion(), sebelum Q2b.
+     state.listingsShown (BARU) memastikan gerbang menyala SEKALI saja.
+     [X] DUA REGRESI ditemukan lewat full-suite & diperbaiki: (a) tes lama
+     memanggil findNextQuestion() dengan state buatan tangan (listingsShown
+     undefined) -> pakai `=== false` eksplisit; (b) transkrip sintetis pendek
+     yang sudah lewat Q2b/budget -> tambah syarat !pastThisPoint.
+     -> tests/showListingsAfterMinimumM140AndCustomerIsolationM141.test.js (23/23)
+
+  10. M141 (**) IDOR - CUSTOMER SATU AGENT BISA DIBACA/DIUBAH/DIHAPUS AGENT LAIN.
+      Ditemukan saat menelusuri laporan isolasi data customer per-agent.
+      (a) GET /customer/list?all=1 diterima dari SIAPA PUN yang login (hanya
+          verifyToken, tanpa cek privilege) - agent biasa bisa melihat SELURUH
+          customer lintas-agent lewat satu query param.
+      (b) KELIMA endpoint by-id (detail/update/toggle-status/toggle-ai/delete)
+          mencari customer HANYA lewat customer_id, TANPA membandingkan
+          customer.user_id dengan agent yang login - bukan sekadar bocor baca,
+          tapi tulis PENUH (ubah, matikan AI, HAPUS milik agent lain).
+      FIX: showAll = requestedAll && privilege==='admin'; helper baru
+      #findOwnedCustomer() (owner ATAU admin, else 403) dipakai kelima endpoint.
+      Diverifikasi HIDUP: agent lain 403 baca MAUPUN hapus; pemilik & admin 200.
+
+  11. M142 (**) AI MENGABAIKAN PERTANYAAN CUSTOMER - DIREKTIF MEMAKSA INTERVIEW.
+      Transkrip nyata: "Alamat Sawahan House Sale Surabaya, itu ada dimana?"
+      -> dijawab Q2b; ditanya alamat lagi -> dijawab Q3 budget. Alamatnya SUDAH
+      ada di konteks katalog (baris Address:), jadi ini BUKAN data hilang -
+      buildFinalDirective() selalu menutup prompt dengan "TANYAKAN SEKARANG ->
+      Qx" di posisi 100% (M62), mengalahkan aturan "jawab customer".
+      FIX: utils/customerQuestionGuard.js (BARU) mendeteksi pertanyaan data
+      (alamat/harga/kamar/sertifikat/fasilitas/ketersediaan) lalu mengganti
+      baris itu dengan "JAWAB DULU dari data katalog, jangan menebak, jangan
+      balas pertanyaan interview"; pertanyaan berikutnya tetap disebut sebagai
+      lanjutan opsional, bukan dibuang.
+      KEDUA: pertanyaan NAMA diulang setelah customer menjawab "Saya Agus".
+      customers.ask_name baru di-set 'YES' oleh syncCustomerFromChat() yang
+      jalan SETELAH balasan dibuat - kolom DB selalu terlambat satu giliran.
+      FIX: gerbang tanya-nama juga memeriksa RIWAYAT (aiAlreadyAskedName()).
+      -> tests/answerCustomerQuestionM142.test.js (36/36, termasuk 10 kontrol
+        negatif: "Rencana beli"/"Saya Agus"/"Terserah" bukan pertanyaan).
+
+  12. M143 DEVELOPER/AGENSI AGENT BISA DIUBAH DARI UI.
+      users.developer_property_id (M138) sudah ada di DB & dipakai AI, tapi
+      TIDAK ADA input-nya di Profile maupun Register - agent tidak punya cara
+      mengisinya. Ditambah dropdown dari master developer_properties (status
+      aktif saja) di KEDUA halaman, divalidasi backend (id hantu -> 400;
+      kosong -> null = agent independen).
+
+  13. M144 (***) KATALOG JSON DIHAPUS TOTAL DARI KODE PRODUKSI.
+      Directive: terminal message WAJIB memakai data DATABASE.
+      loadJsonProperties(), getFallbackProperties(), mergePropertyCatalog()
+      DIHAPUS beserta export-nya, plus cabang PROPERTY_JSON_LOCATION_VOCAB.
+      DIVERIFIKASI SEBELUM MENGHAPUS: 8.840 dari 9.120 entri JSON judulnya
+      SUDAH ADA di tabel properties (97%); 280 sisanya data sintetis tanpa
+      pemilik agent yang sejak M136 memang tak pernah bisa direkomendasikan.
+      Berkas dibiarkan di disk sebagai arsip - yang dihapus PEMAKAIANNYA.
+      Dua penyebutan nama berkas juga dibersihkan dari chatbotController.js -
+      teks itu masuk PROMPT LLM (memberi tahu model ada sumber selain DB).
+      KONSEKUENSI DISENGAJA: DB kosong -> katalog kosong yang JUJUR.
+      [X] DUA TES GAGAL, AKARNYA yang diperbaiki (bukan assertion-nya):
+      (a) agentScopedCatalogLoad menjaga cabang cold-start JSON yang kini usang
+          -> diganti assertion "getKnownLocations TIDAK menyentuh JSON";
+      (b) viewingRefusalAndZoneLabels diam-diam bergantung kosakata JSON untuk
+          "Bengkulu Tengah"/"Kepi" - KEDUANYA kota NYATA di tabel cities;
+          tesnya tak pernah menghangatkan initCityCache(). Direstrukturisasi
+          agar menghangatkan cache seperti produksi (43/43). Jebakan cold-cache
+          yang SAMA dengan _landmarkCache di M139.
+
+  14. M145 FORMAT KARTU LISTING + LINKAGE AREA -> LOCATION.
+      (a) Kartu WhatsApp: baris KOSONG setelah judul, dan "Estimasi Harga"
+          (bukan "Harga" polos - angka katalog masih bisa nego; menyebutnya
+          harga final membuat agent menanggung selisihnya). Ditambah baris
+          Area & Alamat - keduanya SUDAH ada di DB tapi tak pernah dirender,
+          sehingga customer harus bertanya balik. Baris dihilangkan bila data
+          kosong (bukan mencetak "-").
+      (b) properties.area SENGAJA TETAP menyimpan NAMA (STRING), bukan
+          location_id: kolom itu dibaca langsung kartu katalog, pencocokan
+          area, dan summary - mengganti jadi id memaksa join di setiap pembaca
+          dan menampilkan id mentah ke customer bila satu terlewat. Gantinya
+          #syncAreaLocation() (BARU) membuat baris property_locations saat area
+          cocok Location (type='area', status=1, kota sama) - linkage
+          location_id BENAR-BENAR ada & bisa di-query. Idempoten + fail-open.
+      (c) Input Area di /property/add|edit kini datalist dari
+          GET /api/location/areas?city_id= (status=1, location_type='area'),
+          tetap boleh ketik bebas untuk area baru.
+
+  BASELINE TES AKHIR SESI INI: 2330/2353 (92 berkas, +11 berkas tes baru:
   terminologyQualGateWiring, openrouterProviderWiring,
   agentCoverageAndGuardrailProfile, listingReadinessAndAmbiguityStrikes,
   agentScopedCatalogLoad, certificateExposureAndSameCityDistance,
@@ -1030,7 +1122,7 @@ tercapai di jalur produksi sesungguhnya".
   berkas gagal baru di luar daftar ini. Lint bersih pada semua berkas yang
   disentuh.
 
-  ⭐ PENOMORAN M — nomor berikutnya untuk sesi mendatang: **M140**.
+  ⭐ PENOMORAN M — nomor berikutnya untuk sesi mendatang: **M146**.
 
   ⚠️ POLA BERULANG SESI INI (M132, M134c, M137a, M138e) — EMPAT KALI ditemukan
   "fitur/kolom/fungsi SUDAH ADA dan BENAR, tapi TIDAK PERNAH TERCAPAI di

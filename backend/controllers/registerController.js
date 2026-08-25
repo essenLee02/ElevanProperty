@@ -26,6 +26,7 @@ class RegisterController extends GeneralController {
     const {
       name, birthdate, phone, username, password, konfirmasi, privilege, createdBy, email,
       ai_primary, trans_type, payment_type, rental_duration, rental_type,
+      developer_property_id,
     } = req.body;
 
     const requestInfo = {
@@ -113,6 +114,25 @@ class RegisterController extends GeneralController {
         ? String(createdBy).trim().replace(/(^\w{1})|(\s+\w{1})/g, l => l.toUpperCase())
         : 'Self-Register';
 
+      // M143 — asal agensi/brokerage agent, dipilih saat register supaya
+      // "agent ini dari mana?" bisa dijawab AI dari DATA sejak hari pertama
+      // (agentIdentityService/M138), bukan menunggu diisi manual belakangan.
+      // Divalidasi ke master; kosong = agent independen (kolom nullable).
+      let resolvedDeveloperPropertyId = null;
+      if (developer_property_id !== undefined && developer_property_id !== null
+          && String(developer_property_id).trim() !== '') {
+        const { DeveloperProperty } = require('../models');
+        const dev = await DeveloperProperty.findOne({
+          where: { developer_property_id: String(developer_property_id).trim(), status: 1 },
+          attributes: ['developer_property_id'],
+        });
+        if (!dev) {
+          return sendError(res, HTTP.BAD_REQUEST, null,
+            'Developer property tidak ditemukan atau sedang tidak aktif');
+        }
+        resolvedDeveloperPropertyId = dev.developer_property_id;
+      }
+
       const newUser = await User.create({
         user_id:       newUserId,
         name:          formattedName,
@@ -122,6 +142,7 @@ class RegisterController extends GeneralController {
         password:      hashedPassword,
         email:         cleanEmail || null,
         catalog_summary: 'OFF', // default OFF saat register — bisa diubah di halaman profile
+        developer_property_id: resolvedDeveloperPropertyId,
         ...business.values,     // ai_primary, trans_type, payment_type, rental_duration, rental_type
         refresh_token: null,
         updated_date:  null,
@@ -155,6 +176,7 @@ class RegisterController extends GeneralController {
         username:     newUser.username,
         email:        newUser.email,
         catalog_summary: newUser.catalog_summary,
+        developer_property_id: newUser.developer_property_id,
         ai_primary:      newUser.ai_primary,
         trans_type:      newUser.trans_type,
         payment_type:    newUser.payment_type,

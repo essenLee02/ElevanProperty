@@ -86,6 +86,16 @@ const Property = sequelize.define('Property', {
     allowNull: true,
     comment: 'Area / kawasan, mis. "Citraland", "Pakuwon Indah"'
   },
+  // M146 — FK informasional ke locations.location_id untuk AREA properti.
+  // `area` (STRING) TETAP menyimpan NAMA yang dibaca kartu katalog & summary;
+  // kolom ini menambah linkage yang bisa di-JOIN tanpa mengorbankan tampilan.
+  // Nullable: area yang diketik bebas / label sintetis lama tidak punya master.
+  area_location_id: {
+    type: DataTypes.STRING(50),
+    allowNull: true,
+    defaultValue: null,
+    comment: 'FK ke locations.location_id (location_type=area) untuk kolom area'
+  },
   district: {
     type: DataTypes.STRING(255),
     allowNull: true,

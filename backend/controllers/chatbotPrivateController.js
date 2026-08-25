@@ -812,10 +812,42 @@ class ResponseBuilderWhatsApp {
       ? `\n   ![${item.title || 'Properti'}](${item.imageUrl})`
       : '';
 
+    // M144 — AREA & ALAMAT ditampilkan di kartu listing.
+    // Laporan pemilik proyek (25 Agu 2026) atas transkrip nyata: kartu hanya
+    // menampilkan "📍 Lokasi: SURABAYA, JAWA TIMUR" — kota+provinsi saja.
+    // Customer TIDAK bisa tahu listing itu di kawasan mana atau alamatnya di
+    // mana, padahal `properties.area` dan `properties.address` SUDAH terisi
+    // dan sudah ikut ternormalisasi di _queryProperties(). Akibat langsung di
+    // transkrip: customer harus BERTANYA balik ("Alamat Sawahan House Sale
+    // Surabaya, itu ada dimana?") untuk informasi yang seharusnya sudah ada
+    // di kartu.
+    //
+    // ⚠️ Baris hanya dirender bila datanya ADA. Mencetak "Area: -" /
+    // "Alamat: -" menambah derau di WhatsApp (kartu sudah panjang) tanpa
+    // menambah informasi — dan yang lebih penting, TIDAK boleh diisi tebakan.
+    const areaVal    = String(item.area || '').trim();
+    const addressVal = String(item.address || '').trim();
+    const areaLine    = areaVal    ? [`   🗺️ ${isId ? 'Area' : 'Area'}: ${areaVal}`] : [];
+    const addressLine = addressVal ? [`   🏡 ${isId ? 'Alamat' : 'Address'}: ${addressVal}`] : [];
+
+    // ⚠️ M145 — FORMAT KARTU (contoh eksplisit dari pemilik proyek 25 Agu 2026):
+    //   1. *Judul*
+    //      <BARIS KOSONG>          ← judul dipisah dari detail, bukan menempel
+    //      📍 Lokasi / 🗺️ Area / 🏡 Alamat / 💰 Estimasi Harga / 📐 Luas / 🏷️ Fasilitas
+    //
+    // "Estimasi Harga", BUKAN "Harga" — ini bukan sekadar gaya bahasa. Harga
+    // katalog adalah ANGKA ACUAN yang masih bisa berubah/nego di lapangan;
+    // menyebutnya "Harga" polos membuat customer memperlakukannya sebagai
+    // harga final dan agent yang menanggung selisihnya. Sejalan dengan aturan
+    // "jangan janjikan yang bukan wewenang AI" (doc 09 negotiation limits).
+    const gap = imgTag ? '' : `\n`;   // gambar sudah memberi jarak visualnya sendiri
+
     return [
-      `${index + 1}. *${item.title || (isId ? 'Properti' : 'Property')}*${imgTag}`,
+      `${index + 1}. *${item.title || (isId ? 'Properti' : 'Property')}*${imgTag}${gap}`,
       `   📍 Lokasi: ${PropertyFormatter.formatLocation(item)}`,
-      `   💰 Harga: *${item.price || '-'}*`,
+      ...areaLine,
+      ...addressLine,
+      `   💰 ${isId ? 'Estimasi Harga' : 'Estimated Price'}: *${item.price || '-'}*`,
       `   🏠 Tipe: ${PropertyFormatter.humanBuildingType(item.buildingType, lang)} — ${PropertyFormatter.humanTransactionType(item.transactionType, lang)}`,
       `   📐 Luas: bangunan ${item.buildingArea || '-'}, tanah ${item.landArea || '-'}`,
       `   🏷️ Fasilitas: ${PropertyFormatter.formatFacilities(item.facilities)}`,

@@ -108,7 +108,15 @@
                 </div>
                 <div class="form-group">
                   <label class="col-form-label" for="area">Area / Kawasan</label>
-                  <input class="form-control form-control-lg form-control-sm" id="area" v-model.trim="form.area" type="text" placeholder="Contoh: Citraland, Pakuwon Indah" :disabled="isSubmitting" maxlength="255" autocomplete="off" />
+                  <input class="form-control form-control-lg form-control-sm" id="area" v-model.trim="form.area" type="text" list="area-options" placeholder="Contoh: Citraland, Pakuwon Indah" :disabled="isSubmitting" maxlength="255" autocomplete="off" />
+                  <datalist id="area-options">
+                    <option v-for="a in areaOptions" :key="a.location_id" :value="a.name" />
+                  </datalist>
+                  <p class="field-hint">
+                    <template v-if="!form.city_id">Pilih kota dulu untuk melihat daftar area yang sudah terdaftar.</template>
+                    <template v-else-if="areaOptions.length">{{ areaOptions.length }} area terdaftar di kota ini — pilih dari daftar, atau ketik area baru.</template>
+                    <template v-else>Belum ada area terdaftar untuk kota ini. Ketik nama areanya, lalu daftarkan di Master Lokasi agar bisa dipakai ulang.</template>
+                  </p>
                 </div>
                 <div class="form-group">
                   <label class="col-form-label" for="postal_code">Kode Pos</label>
@@ -495,7 +503,7 @@
 </template>
 
 <script setup>
-import { reactive, ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { reactive, ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { toast } from 'vue3-toastify';
 import ConfirmModal from '../../components/ConfirmModal.vue';
@@ -512,8 +520,8 @@ import {
 import { getCountryList } from '../../services/countryApi';
 import { getProvinceList } from '../../services/provinceApi';
 import { getCityList } from '../../services/cityApi';
+import { getAreaOptions, getNearbyLocationOptions } from '../../services/locationApi';
 import { getFacilityList } from '../../services/facilityApi';
-import { getLocationList } from '../../services/locationApi';
 import {
   getPropertyLocations,
   bulkAddLocations,
@@ -819,6 +827,26 @@ const onProvinceInput = () => {
 };
 const onCityInput = () => { form.city_id = ''; };
 
+/* ── M143: opsi Area diambil dari MASTER LOKASI (location_type='area') ──────
+   Sebelumnya `area` murni free-text, sehingga nilai yang tersimpan sering
+   tidak cocok dengan tabel `locations` sama sekali — akibatnya AI tidak bisa
+   memetakan "customer minta area X" ke listing mana pun. Datalist tetap
+   MENGIZINKAN ketik bebas (agent boleh memasukkan area yang belum terdaftar),
+   tapi memunculkan nilai master lebih dulu supaya ejaannya konsisten. */
+const areaOptions = ref([]);
+
+const loadAreaOptions = async (cityId) => {
+  if (!cityId) { areaOptions.value = []; return; }
+  try {
+    const res = await getAreaOptions(cityId);
+    areaOptions.value = res?.isSuccess === 1 ? (res.data.response.areas || []) : [];
+  } catch (_) {
+    areaOptions.value = [];   // fail-open: form tetap bisa dipakai walau master gagal dimuat
+  }
+};
+
+watch(() => form.city_id, (cityId) => { loadAreaOptions(cityId); });
+
 /* Fetcher Modal → { rows, currentPage, lastPage } */
 const fetchCountries = async (search, page) => {
   const result = await getCountryList({ search, page });
@@ -910,8 +938,17 @@ const removeFacility = (facilityId) => {
   form.facilities = form.facilities.filter(f => f.facility_id !== facilityId);
 };
 
+/**
+ * M148 — daftar "Lokasi/Patokan Terdekat".
+ *
+ * Dulu memakai getLocationList() polos: SELURUH master lokasi lintas kota, jadi
+ * properti di Sidoarjo bisa diberi patokan kawasan Jakarta. Sekarang memakai
+ * endpoint khusus yang menegakkan aturan pemilik proyek:
+ *   • area & landmark → WAJIB sekota dengan propertinya (form.city_id)
+ *   • commercial      → lintas kota (Indomaret/sekolah/stasiun ada di mana saja)
+ */
 const fetchLocations = async (search, page) => {
-  const result = await getLocationList({ search, page });
+  const result = await getNearbyLocationOptions({ search, page, city_id: form.city_id || '' });
   if (result?.isSuccess === 1) {
     const r = result.data.response;
     return { rows: r.locations || [], currentPage: r.pagination?.page || page, lastPage: r.pagination?.totalPages || 1 };

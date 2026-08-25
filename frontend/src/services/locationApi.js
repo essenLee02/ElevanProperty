@@ -30,3 +30,18 @@ export const toggleLocationStatus = (locationId) =>
 
 export const deleteLocation = (locationId) =>
   api.delete(`/location/delete/${locationId}`).then(r => r.data);
+
+/**
+ * Daftar KAWASAN (location_type='area') untuk satu kota — sumber nilai
+ * Property.area di halaman tambah/edit properti (M143).
+ * Tidak ter-paginate: dropdown tidak boleh kehilangan pilihan di halaman 2.
+ */
+export const getAreaOptions = (cityId) =>
+  api.get('/location/areas', { params: cityId ? { city_id: cityId } : {} }).then(r => r.data);
+
+/**
+ * Opsi "Lokasi/Patokan Terdekat" untuk halaman properti (M148).
+ * area+landmark difilter kota properti; commercial lintas kota.
+ */
+export const getNearbyLocationOptions = (params = {}) =>
+  api.get('/location/nearby-options', { params }).then(r => r.data);

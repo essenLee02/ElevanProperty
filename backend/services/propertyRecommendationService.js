@@ -315,15 +315,15 @@ function getKnownLocations() {
   // Di PRODUKSI cache selalu hangat (server.js memanggil initCityCache saat
   // boot), jadi jalur mahal ini praktis tidak pernah tersentuh — itulah yang
   // menghilangkan "Loaded 9120 fallback properties" dari log per-chat.
-  const useJsonVocab = String(process.env.PROPERTY_JSON_LOCATION_VOCAB || 'OFF').toUpperCase() === 'ON'
-    || _dbCities.length === 0;
-  const dynamicLocations = (useJsonVocab
-    ? loadJsonProperties().flatMap((property) => [
-      property.province, property.city, property.district, property.location,
-    ])
-    : []
-  ).filter(Boolean)
-    .filter(loc => !GENERIC_ZONE_LABELS.has(String(loc).trim().toLowerCase()));
+  // ⭐ M144 — kosakata lokasi TIDAK LAGI pernah diambil dari katalog JSON.
+  // Cabang lama (PROPERTY_JSON_LOCATION_VOCAB=ON atau _dbCities kosong) memuat
+  // 9.120 objek properti utuh hanya untuk memanen beberapa ratus string nama
+  // tempat — dan nama-nama itu sendiri sebagian besar label sintetis
+  // ("Green Zone", "Business District") yang justru disaring lagi oleh
+  // GENERIC_ZONE_LABELS di bawah. Sumbernya sekarang HANYA tabel `cities`
+  // (DB, otoritatif) + daftar statis di bawah. Saat cache DB masih dingin,
+  // daftar statis itulah fallback-nya — bukan JSON.
+  const dynamicLocations = [];
 
   // Kota dari DATABASE bersifat OTORITATIF, tetapi MENAMBAH — tidak pernah
   // MENGGANTIKAN daftar statis.
@@ -358,6 +358,12 @@ function getKnownLocations() {
 // listing yang SECARA NYATA tercatat dekat Pakuwon, bukan cuma cocok di level kota.
 let _landmarkCache = new Map(); // nama landmark (UPPERCASE) → location_id
 
+// M146 - nama area (UPPERCASE) -> NAMA KOTA pemiliknya.
+// Dipakai detectLocation(): bila customer hanya menyebut KAWASAN ("Dukuh Kupang")
+// tanpa kotanya, kota bisa disimpulkan dari master alih-alih mengembalikan
+// string kawasan itu sebagai "kota" (yang tidak akan cocok dengan tabel cities).
+let _areaCityCache = new Map();
+
 /**
  * Muat/refresh daftar landmark dari tabel `locations` (status=1). Dipanggil sekali
  * saat server startup (mirror pola initCityCache() / initFacilityCache()).
@@ -365,7 +371,20 @@ let _landmarkCache = new Map(); // nama landmark (UPPERCASE) → location_id
 async function initLandmarkCache() {
   try {
     const { Location } = require('../models');
-    const rows = await Location.findAll({ where: { status: 1 }, attributes: ['location_id', 'name'], raw: true });
+    const rows = await Location.findAll({ where: { status: 1 }, attributes: ['location_id', 'name', 'city_id', 'location_type'], raw: true });
+    // Peta area -> kota (M146). Hanya location_type='area': landmark/commercial
+    // generik (INDOMARET dst.) muncul di banyak kota, menyimpulkan kota darinya
+    // akan menebak-nebak.
+    try {
+      const { City } = require('../models');
+      const cityRows = await City.findAll({ attributes: ['city_id', 'name'], raw: true });
+      const cityById = new Map(cityRows.map((c) => [c.city_id, c.name]));
+      _areaCityCache = new Map(
+        rows
+          .filter((r) => r.location_type === 'area' && r.city_id && cityById.has(r.city_id))
+          .map((r) => [String(r.name || '').trim().toUpperCase(), cityById.get(r.city_id)])
+      );
+    } catch (_) { _areaCityCache = new Map(); }   // fail-open
     _landmarkCache = new Map(
       rows.map((r) => [String(r.name || '').trim().toUpperCase(), r.location_id]).filter(([name]) => name)
     );
@@ -439,56 +458,23 @@ async function getPropertyIdsForLandmark(landmarkName) {
 //   3. Terminal message saat pemberian summary (fonnte/kirimi/timelinesAI controllers)
 // Hasil di-cache setelah pemuatan pertama.
 
-const JSON_DATA_PATH = path.resolve(
-  __dirname,
-  '../asset/json_data/indonesia_property_extended_v3.json'
-);
-
-let _jsonPropertiesCache = null;
-
-function loadJsonProperties() {
-  if (_jsonPropertiesCache) return _jsonPropertiesCache;
-
-  try {
-    const raw = fs.readFileSync(JSON_DATA_PATH, 'utf8');
-    const json = JSON.parse(raw);
-    const records = json.properties || [];
-
-    _jsonPropertiesCache = records.map((p, index) => ({
-      id: p.id || index + 1,
-      title: p.title || '',
-      description: p.description || '',
-      price: p.price || '',
-      // Normalise location object → flat fields expected by filterProperties.
-      location: p.location?.city || p.location?.province || '',
-      province: p.location?.province || '',
-      city: p.location?.city || '',
-      district: p.location?.area || '',
-      address: p.address || '',
-      buildingArea: p.building_area || '',
-      landArea: p.land_area || '',
-      buildingType: p.building_type || '',
-      transactionType: p.transaction_type || '',
-      facilities: Array.isArray(p.facilities) ? p.facilities.join(', ') : (p.facilities || ''),
-      imageUrl: p.image || '',
-      status: 'available'
-    }));
-
-    console.log(`[PropertyRecommendationService] Loaded ${_jsonPropertiesCache.length} fallback properties from extended_v3 JSON (lazy).`);
-    return _jsonPropertiesCache;
-  } catch (err) {
-    console.error('[PropertyRecommendationService] Failed to load JSON file:', err.message);
-    return [];
-  }
-}
-
-// LAZY fallback accessor. TIDAK di-load saat module-load (server start) — hanya
-// terpanggil saat about/chatbot/terminal benar-benar butuh contoh data & DB kosong.
-function getFallbackProperties() {
-  return loadJsonProperties();
-}
-
-
+/* ⛔ M144 — LOADER KATALOG JSON DIHAPUS (25 Agu 2026).
+ *
+ * `asset/json_data/indonesia_property_extended_v3.json` TIDAK LAGI dibaca oleh
+ * kode produksi mana pun. Directive pemilik proyek: rekomendasi properti untuk
+ * terminal message WAJIB dari DATABASE (`properties` + `property_facilities` +
+ * `property_locations` + `property_images`).
+ *
+ * Diverifikasi sebelum penghapusan: 8.840 dari 9.120 entri JSON judulnya sudah
+ * ada di tabel `properties`; 280 sisanya data sintetis tanpa pemilik agent.
+ * Berkasnya SENGAJA dibiarkan di disk sebagai arsip — yang dihapus adalah
+ * PEMAKAIANNYA, supaya tidak ada jalur yang diam-diam menghidupkannya lagi.
+ *
+ * Fungsi yang dihapus bersama blok ini: loadJsonProperties(),
+ * getFallbackProperties(), mergePropertyCatalog(). Bila suatu saat butuh
+ * seed/contoh data, tulis skrip import SEKALI ke DB — jangan kembalikan
+ * pembacaan file di jalur permintaan customer.
+ */
 
 function normalizeText(value) {
   return String(value || '').toLowerCase().trim();
@@ -782,9 +768,55 @@ function detectLocation(message = '') {
     }
   }
 
+  // ──── M146: JANGAN AMBIL NAMA KOTA DARI DALAM NAMA AREA YANG LEBIH PANJANG ────
+  // Bug nyata: "Rumah saya di Dukuh Kupang" (kawasan SURABAYA) terbaca kota
+  // "Kupang" (NTT, +/-1.800 km) karena "kupang" cocok sebagai kata utuh di
+  // dalam "dukuh kupang". Untuk pertanyaan waktu tempuh, salah kota sejauh itu
+  // bukan ketidaknyamanan kecil - jawabannya jadi omong kosong total.
+  // Kelas SAMA dengan "Business District" menutupi "Bengkulu Tengah" (M136):
+  // yang lebih PANJANG & lebih SPESIFIK harus menang.
+  // _landmarkCache memuat SELURUH baris `locations` (termasuk location_type
+  // 'area'), jadi nama kawasan resmi sudah tersedia tanpa query baru.
+  // Fail-open: cache dingin -> detectLandmark() '' -> perilaku lama persis.
+  const areaHit = detectLandmark(textForLoc);
+  const maskedText = areaHit
+    ? textForLoc.replace(new RegExp(escapeRegExp(areaHit.toLowerCase()), 'gi'), ' ')
+    : textForLoc;
+
   // ──── FORMAL LOCATION MATCHING ────
-  const found = getKnownLocations().find((location) => new RegExp(`\\b${escapeRegExp(location.toLowerCase())}\\b`, 'i').test(textForLoc));
+  // Dicari pada teks yang nama-area-nya SUDAH dimasking, supaya token kota yang
+  // hanya muncul sebagai bagian dari nama area tidak ikut tertangkap.
+  const found = getKnownLocations().find((location) => new RegExp(`\\b${escapeRegExp(location.toLowerCase())}\\b`, 'i').test(maskedText));
   if (found) return found;
+
+  // M146: kawasan dikenal tapi kotanya tidak disebut -> simpulkan kota dari
+  // master (Location.city_id). "Rumah saya di Dukuh Kupang" -> Surabaya.
+  // Tanpa ini, fallback pola "di X" akan mengembalikan "dukuh kupang" sebagai
+  // KOTA - nilai yang tidak akan pernah cocok dengan tabel cities.
+  if (areaHit) {
+    const cityOfArea = _areaCityCache.get(String(areaHit).trim().toUpperCase());
+    if (cityOfArea) {
+      // Tabel `cities` menyimpan nama HURUF BESAR ("SURABAYA"), sedangkan sisa
+      // sistem memakai bentuk kanonik dari getKnownLocations() ("Surabaya").
+      // Kembalikan bentuk kanonik supaya nilai ini identik dengan jalur deteksi
+      // kota biasa - kalau tidak, perbandingan kota di M124 (ganti-kota) akan
+      // melihat "SURABAYA" != "Surabaya" dan mengira customer pindah kota.
+      const canon = getKnownLocations().find(
+        (c) => String(c).toUpperCase() === String(cityOfArea).toUpperCase()
+      );
+      return canon || cityOfArea;
+    }
+  }
+
+  // M146 - JARING PENGAMAN: masking bisa MENGHAPUS kotanya sendiri bila nama
+  // area di master kebetulan sudah memuat nama kota (mis. baris bernama
+  // "CITRALAND SURABAYA"). Dalam kasus itu masked text kehilangan "surabaya"
+  // dan pencarian di atas gagal, padahal kotanya JELAS disebut customer.
+  // Jadi: coba sekali lagi pada teks ASLI sebelum jatuh ke pola bebas "di X".
+  // Urutannya penting - area->kota (blok di atas) harus menang lebih dulu,
+  // supaya "Dukuh Kupang" tetap jadi Surabaya, bukan Kupang NTT.
+  const foundRaw = getKnownLocations().find((location) => new RegExp(`\\b${escapeRegExp(location.toLowerCase())}\\b`, 'i').test(textForLoc));
+  if (foundRaw) return foundRaw;
 
   // ──── PATTERN MATCHING ("di X") ────
   // ⚠️ Fallback bebas — HANYA dipakai bila tidak ada nama kota dikenal & tidak
@@ -1743,23 +1775,6 @@ function isRecommendationRequest(message = '') {
   ].some((keyword) => text.includes(keyword));
 }
 
-function mergePropertyCatalog(dbProperties = []) {
-  const source = [...dbProperties, ...getFallbackProperties()];
-  const seen = new Set();
-  const merged = [];
-
-  source.forEach((property) => {
-    const key = [property.title, property.city || property.location, property.buildingType, property.transactionType, property.price]
-      .map((value) => String(value || '').toLowerCase().trim())
-      .join('|');
-    if (!seen.has(key)) {
-      seen.add(key);
-      merged.push(property);
-    }
-  });
-
-  return merged;
-}
 
 /**
  * Format a numeric price + price_type (from `properties` table) to an Indonesian
@@ -1993,13 +2008,27 @@ async function getSourceProperties(userId = null) {
     return own;   // ⛔ JANGAN merge JSON — katalog itu bukan milik agent mana pun.
   }
 
-  const dbProperties = await getDbProperties();
-  if (dbProperties.length > 0) {
-    // DB has live data: DB first (priority), JSON catalog as gap-fill fallback (deduped)
-    return mergePropertyCatalog(dbProperties);
-  }
-  // DB empty or unreachable → fall back to JSON catalog only
-  return loadJsonProperties();
+  // ⭐ M144 — DATABASE ADALAH SATU-SATUNYA SUMBER KATALOG.
+  // Directive pemilik proyek (25 Agu 2026): "Hapus penggunaan data dari
+  // indonesia_property_extended_v3.json. Terminal message harus menggunakan
+  // data dari database sebagai rekomendasi properti."
+  //
+  // Sebelumnya jalur TANPA userId (chatbot web publik / halaman /about) masih
+  // menggabung katalog JSON sebagai gap-fill. Itu dihapus TOTAL sekarang.
+  //
+  // Diverifikasi SEBELUM menghapus (bukan diasumsikan aman): 8.840 dari 9.120
+  // entri JSON judulnya SUDAH ADA di tabel `properties` (97%). 280 sisanya
+  // adalah data sintetis bergenerik-nama ("Tanjung Near Hospital Apartment
+  // Rent") yang TIDAK dimiliki agent mana pun — sejak M136 baris seperti itu
+  // memang sudah tidak pernah bisa direkomendasikan di jalur ber-agent. Jadi
+  // menghapus JSON tidak menghilangkan katalog nyata siapa pun; ia hanya
+  // berhenti menyuntikkan duplikat + data hantu ke jalur publik.
+  //
+  // Konsekuensi yang DISENGAJA: bila DB kosong/tak terjangkau, hasilnya array
+  // kosong — BUKAN diam-diam menyajikan katalog JSON basi. Katalog kosong yang
+  // jujur jauh lebih baik daripada merekomendasikan properti yang tidak ada di
+  // sistem (kelas bug "AI mengarang listing" yang berulang di proyek ini).
+  return getDbProperties();
 }
 
 // Map raw DB price_type (night/daily/weekly/monthly/yearly/cash/…) → period vocab.
@@ -2661,9 +2690,6 @@ function buildDynamicResponseRules(filters = {}, opts = {}) {
 }
 
 module.exports = {
-  getFallbackProperties,
-  loadJsonProperties,
-  mergePropertyCatalog,
   getDbPropertiesForAgent,
   clearAgentPropertiesCache,
   searchProperties,

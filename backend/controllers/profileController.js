@@ -53,7 +53,7 @@ exports.getCurrentProfile = async (req, res) => {
 
     const user = await User.findOne({
       where: { refresh_token: refreshTokenFromCookie },
-      attributes: ['user_id', 'name', 'username', 'phone', 'birthdate', 'status', 'email', 'catalog_summary', 'fonnte_token', 'kirimi_device_id', 'ai_primary', 'trans_type', 'payment_type', 'rental_duration', 'rental_type']
+      attributes: ['user_id', 'name', 'username', 'phone', 'birthdate', 'status', 'email', 'catalog_summary', 'fonnte_token', 'kirimi_device_id', 'ai_primary', 'trans_type', 'payment_type', 'rental_duration', 'rental_type', 'developer_property_id']
     });
 
     if (!user) {
@@ -82,6 +82,7 @@ exports.updateDataAgent = async (req, res) => {
   const {
     name, phone, birthdate, password, fonnte_token, kirimi_device_id, email, catalog_summary,
     ai_primary, trans_type, payment_type, rental_duration, rental_type,
+    developer_property_id,
   } = req.body;
 
   const requestInfo = {
@@ -191,6 +192,30 @@ exports.updateDataAgent = async (req, res) => {
     }
     Object.assign(updateFields, business.values);
 
+    // M143 — asal agensi/brokerage agent (users.developer_property_id).
+    // Sebelumnya TIDAK ADA di halaman profil sama sekali, jadi agent tidak
+    // punya cara mengubahnya lewat UI. Divalidasi terhadap master
+    // developer_properties supaya tidak menyimpan id hantu — FK di proyek ini
+    // `constraints:false` (informasional), jadi DB TIDAK akan menahannya.
+    // String kosong / null = sengaja dikosongkan (agent independen).
+    if (developer_property_id !== undefined) {
+      const raw = developer_property_id === null ? '' : String(developer_property_id).trim();
+      if (!raw) {
+        updateFields.developer_property_id = null;
+      } else {
+        const { DeveloperProperty } = require('../models');
+        const dev = await DeveloperProperty.findOne({
+          where: { developer_property_id: raw, status: 1 },
+          attributes: ['developer_property_id'],
+        });
+        if (!dev) {
+          return sendError(res, HTTP.BAD_REQUEST, null,
+            'Developer property tidak ditemukan atau sedang tidak aktif');
+        }
+        updateFields.developer_property_id = dev.developer_property_id;
+      }
+    }
+
     // Metadata update
     updateFields.updated_date = new Date();
     updateFields.update_by    = user.username;
@@ -208,7 +233,7 @@ exports.updateDataAgent = async (req, res) => {
     /* 5. Kembalikan data terbaru (tanpa password) */
     const updatedUser = await User.findOne({
       where: { user_id: user.user_id },
-      attributes: ['user_id', 'name', 'username', 'phone', 'birthdate', 'email', 'catalog_summary', 'fonnte_token', 'kirimi_device_id', 'ai_primary', 'trans_type', 'payment_type', 'rental_duration', 'rental_type']
+      attributes: ['user_id', 'name', 'username', 'phone', 'birthdate', 'email', 'catalog_summary', 'fonnte_token', 'kirimi_device_id', 'ai_primary', 'trans_type', 'payment_type', 'rental_duration', 'rental_type', 'developer_property_id']
     });
 
     // Log ke terminal

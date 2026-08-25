@@ -827,11 +827,30 @@ async function generateWhatsAppAIReply(params) {
     const { phone, agentUserId = null } = params;
     if (!phone || !agentUserId) return result;
 
-    const { replyContainsSummary, getIdentityStatus } = require('./customerRegistrationService');
+    const { replyContainsSummary, getIdentityStatus, aiAlreadyAskedName } =
+      require('./customerRegistrationService');
     if (!replyContainsSummary(result.reply)) return result;
 
     const status = await getIdentityStatus({ agentUserId, phone });
     if (status.askName === 'YES') return result;
+
+    // ⛔ M142 — JANGAN tanya nama DUA KALI (bug produksi 25 Agu 2026).
+    // customers.ask_name baru di-set 'YES' oleh syncCustomerFromChat() yang
+    // berjalan SETELAH balasan ini dibuat & dikirim. Jadi pada giliran
+    // BERIKUTNYA (saat customer sudah menjawab "Saya Agus"), status.askName
+    // MASIH 'NO' — dan gerbang ini menukar summary dengan pertanyaan nama
+    // untuk KEDUA KALINYA. Transkrip nyata:
+    //   AI  : "boleh saya tahu nama Kakak?"
+    //   Cust: "Saya Agus, Kak"
+    //   AI  : "boleh saya tahu nama Kakak?"      ← diulang
+    // Kolom DB saja tidak cukup karena urutannya memang selalu terlambat satu
+    // giliran; yang menentukan adalah APA yang sudah AI tanyakan di riwayat.
+    let alreadyAsked = false;
+    try {
+      const recent = await getConversationHistory(params.session?.id, 8);
+      alreadyAsked = aiAlreadyAskedName(recent);
+    } catch (_) { /* fail-open: lebih baik bertanya sekali lagi daripada crash */ }
+    if (alreadyAsked) return result;   // sudah pernah ditanya → kirim summary-nya
 
     const askText = 'Sebelum saya sampaikan ringkasannya — boleh saya tahu nama Kakak? 😊\n\n_(Kalau belum ingin menyebutkan, tidak apa-apa — cukup balas "lewati")_';
     return {

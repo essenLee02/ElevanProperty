@@ -86,8 +86,15 @@ console.log('\n== Group 5: kosa-kata detectLocation() tidak tercemar nama landma
   const fn = fnRaw.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
   ok('getKnownLocations TIDAK memakai _landmarkCache (di kode, bukan komentar)',
     !/_landmarkCache/.test(fn), fn.slice(0, 200));
-  ok('fallback cold-start tetap ada saat _dbCities kosong',
-    /_dbCities\.length\s*===\s*0/.test(fn), fn.slice(0, 300));
+  // ⭐ DIPERBARUI M144: assertion lama mensyaratkan cabang cold-start
+  // `_dbCities.length === 0` TETAP ADA — cabang itu SATU-SATUNYA gunanya
+  // adalah menyalakan kosakata lokasi dari katalog JSON. Karena JSON kini
+  // dihapus total dari kode produksi (directive pemilik proyek), cabang itu
+  // ikut hilang dan assertion lama menjadi usang. Yang HARUS tetap dijaga
+  // sekarang: getKnownLocations() tidak menyentuh JSON sama sekali, dan
+  // fallback statis tetap ada (baris berikutnya).
+  ok('getKnownLocations TIDAK menyentuh katalog JSON sama sekali',
+    !/loadJsonProperties|getFallbackProperties/.test(fn), fn.slice(0, 300));
   ok('daftar statis + kota DB tetap DIGABUNG (pelajaran M92, bukan menggantikan)',
     /\[\.\.\._dbCities,\s*\.\.\.FALLBACK_LOCATION_KEYWORDS\]/.test(SRC));
 }
