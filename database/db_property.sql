@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Waktu pembuatan: 24 Agu 2026 pada 17.34
+-- Waktu pembuatan: 25 Agu 2026 pada 02.30
 -- Versi server: 10.4.32-MariaDB
 -- Versi PHP: 8.1.25
 
@@ -5512,7 +5512,9 @@ INSERT INTO `chat_messages` (`id`, `chatSessionId`, `user_id`, `role`, `message`
 (5955, 1, 'LFGKT49002', 'customer', 'Saya mau tanya mengenai sertifikatnya  dlu, Kak\nApakah sdh SHM?', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1787498556005\",\"platform\":\"kirimi\"}', '2026-08-23 15:22:48', '2026-08-23 15:22:48', '6282233556796', NULL),
 (5956, 1, 'LFGKT49002', 'ai', 'Terima kasih! 😊 Untuk *Rumah* yang Anda cari, saya butuh beberapa informasi tambahan:\n\n1️⃣ Apakah rencananya untuk *sewa* atau *beli*?\n2️⃣ Di *kota* mana? _(Contoh: Surabaya, Malang, Bali)_\n3️⃣ Kisaran harga yang diinginkan? _(Contoh: 5-10 juta/bulan, atau di bawah 1 miliar)_\n\nSilakan ceritakan kebutuhannya, saya siap bantu! 🏡\n\nSalam hangat,\n*LEO FELIX*\n*Elevan Property*', 'whatsapp', '{\"aiProvider\":\"qualification\",\"contextSource\":\"db_catalog\"}', '2026-08-23 15:22:49', '2026-08-23 15:22:49', '6282233556796', NULL),
 (5957, 1, 'LFGKT49002', 'customer', 'Apakah sdh ada surat ijin kos?', 'whatsapp', '{\"agentName\":\"LEO FELIX\",\"messageId\":\"kirimi_1787498576475\",\"platform\":\"kirimi\"}', '2026-08-23 15:23:08', '2026-08-23 15:23:08', '6282233556796', NULL),
-(5958, 1, 'LFGKT49002', 'ai', 'Terima kasih! 😊 Untuk *Kos-Kosan* yang Anda cari, saya butuh beberapa informasi tambahan:\n\n1️⃣ Apakah rencananya untuk *sewa* atau *beli*?\n2️⃣ Di *kota* mana? _(Contoh: Surabaya, Malang, Bali)_\n3️⃣ Kisaran harga yang diinginkan? _(Contoh: 5-10 juta/bulan, atau di bawah 1 miliar)_\n\nSilakan ceritakan kebutuhannya, saya siap bantu! 🏡\n\nSalam hangat,\n*LEO FELIX*\n*Elevan Property*', 'whatsapp', '{\"aiProvider\":\"qualification\",\"contextSource\":\"db_catalog\"}', '2026-08-23 15:23:09', '2026-08-23 15:23:09', '6282233556796', NULL);
+(5958, 1, 'LFGKT49002', 'ai', 'Terima kasih! 😊 Untuk *Kos-Kosan* yang Anda cari, saya butuh beberapa informasi tambahan:\n\n1️⃣ Apakah rencananya untuk *sewa* atau *beli*?\n2️⃣ Di *kota* mana? _(Contoh: Surabaya, Malang, Bali)_\n3️⃣ Kisaran harga yang diinginkan? _(Contoh: 5-10 juta/bulan, atau di bawah 1 miliar)_\n\nSilakan ceritakan kebutuhannya, saya siap bantu! 🏡\n\nSalam hangat,\n*LEO FELIX*\n*Elevan Property*', 'whatsapp', '{\"aiProvider\":\"qualification\",\"contextSource\":\"db_catalog\"}', '2026-08-23 15:23:09', '2026-08-23 15:23:09', '6282233556796', NULL),
+(6057, 287, 'NA40D8N007', 'customer', 'Hello... Mau cari rumah di Citraland Surabaya', 'whatsapp', '{\"agentName\":\"NATASHA AUWLIANDY\",\"messageId\":\"kirimi_1787586604332\",\"platform\":\"kirimi\"}', '2026-08-24 15:50:16', '2026-08-24 15:50:16', '6282233556796', NULL),
+(6058, 287, 'NA40D8N007', 'ai', 'Untuk *Rumah* yang Anda cari — rencananya untuk *sewa* atau *beli*? 🏠', 'whatsapp', '{\"aiProvider\":\"private_agent\",\"contextSource\":\"db_catalog\"}', '2026-08-24 15:51:46', '2026-08-24 15:51:46', '6282233556796', 'private');
 
 -- --------------------------------------------------------
 
@@ -5576,7 +5578,9 @@ INSERT INTO `chat_sessions` (`id`, `name`, `normalizedName`, `phone`, `normalize
 (102, 'Dimas A', 'dimas a', '120363008938', '120363008938', NULL, NULL, 'kirimi_leo_felix', NULL, '2026-08-15 03:26:35', '2026-08-15 03:26:35'),
 (104, 'Final Check', 'final check', '628999111222', '628999111222', NULL, NULL, 'kirimi_leo_felix', NULL, '2026-08-15 03:29:16', '2026-08-15 03:29:16'),
 (106, 'Uji Root', 'uji root', '628999000111', '628999000111', NULL, NULL, 'kirimi_whatsapp_python', '2026-08-17 15:35:45', '2026-08-16 15:53:48', '2026-08-17 15:35:45'),
-(281, 'Marli PAVLIN', 'marli pavlin', '120363378685518938', '120363378685518938', NULL, NULL, 'kirimi_natasha_auwliandy', NULL, '2026-08-24 15:30:04', '2026-08-24 15:30:04');
+(281, 'Marli PAVLIN', 'marli pavlin', '120363378685518938', '120363378685518938', NULL, NULL, 'kirimi_natasha_auwliandy', NULL, '2026-08-24 15:30:04', '2026-08-24 15:30:04'),
+(287, 'Nigel 期凡努', 'nigel 期凡努', '6282233556796', '6282233556796', NULL, NULL, 'kirimi_natasha_auwliandy', NULL, '2026-08-24 15:50:16', '2026-08-24 15:50:16'),
+(298, 'Customer', 'customer', '62881036588874', '62881036588874', NULL, NULL, 'kirimi_natasha_auwliandy', NULL, '2026-08-24 16:27:27', '2026-08-24 16:27:27');
 
 -- --------------------------------------------------------
 
@@ -6416,6 +6420,36 @@ INSERT INTO `customers` (`id`, `user_id`, `customer_id`, `name`, `phone`, `email
 (64, 'LFGKT49002', 'XX4LQGZ003', '🌻', '6288805301123', NULL, 'ON', 'NO', 1, '2026-08-13', 'LFGKT49002', NULL, NULL),
 (74, 'LFGKT49002', 'NIECF79004', 'Nigel ???', '628123456796', NULL, 'ON', 'NO', 1, '2026-08-15', 'LFGKT49002', NULL, NULL),
 (76, 'LFGKT49002', 'FI5HO0C005', 'Final Check', '628999111222', NULL, 'ON', 'NO', 1, '2026-08-15', 'LFGKT49002', NULL, NULL);
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `developer_properties`
+--
+
+CREATE TABLE `developer_properties` (
+  `id` int(11) NOT NULL,
+  `developer_property_id` varchar(30) NOT NULL COMMENT 'Generated ID: prefix nama + random alphanumeric + count padded 3 digit',
+  `name` varchar(100) NOT NULL,
+  `status` int(1) NOT NULL DEFAULT 1 COMMENT '1 = aktif, 2 = disabled/blocked, 3 = deleted (soft delete)',
+  `created_date` date NOT NULL COMMENT 'Tanggal pembuatan data',
+  `created_by` varchar(50) NOT NULL COMMENT 'FK ke users.user_id — siapa yang membuat',
+  `updated_date` date DEFAULT NULL COMMENT 'Tanggal update terakhir',
+  `updated_by` varchar(50) DEFAULT NULL COMMENT 'FK ke users.user_id — siapa yang terakhir mengubah'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data untuk tabel `developer_properties`
+--
+
+INSERT INTO `developer_properties` (`id`, `developer_property_id`, `name`, `status`, `created_date`, `created_by`, `updated_date`, `updated_by`) VALUES
+(1, 'RW0H9K0001', 'RAY WHITE', 1, '2026-08-25', 'SA6EDRU001', NULL, NULL),
+(2, 'EPCRIDE002', 'ERA PROPERTY', 1, '2026-08-25', 'SA6EDRU001', NULL, NULL),
+(3, 'XMBHA3Y003', 'XAVIER MARKS', 1, '2026-08-25', 'SA6EDRU001', NULL, NULL),
+(4, 'GPUJ0XL004', 'GALAXY PROPERTY', 1, '2026-08-25', 'SA6EDRU001', NULL, NULL),
+(5, 'BRH8W2M005', 'BRIGHTON', 1, '2026-08-25', 'SA6EDRU001', NULL, NULL),
+(6, 'PR3MWOG006', 'PROPNEX', 1, '2026-08-25', 'SA6EDRU001', NULL, NULL),
+(7, 'PR69WTG007', 'PROPMATCHES', 1, '2026-08-25', 'SA6EDRU001', NULL, NULL);
 
 -- --------------------------------------------------------
 
@@ -7753,7 +7787,8 @@ INSERT INTO `locations` (`id`, `location_id`, `name`, `city_id`, `location_type`
 (0, 'PG3SGEU999', 'Perumnas GKB', 'GRE46MM004', 'area', 1, '2026-08-24', 'NA40D8N007', NULL, NULL),
 (0, 'GGIGYIP1000', 'Green Garden Gresik', 'GRE46MM004', 'area', 1, '2026-08-24', 'NA40D8N007', NULL, NULL);
 INSERT INTO `locations` (`id`, `location_id`, `name`, `city_id`, `location_type`, `status`, `created_date`, `created_by`, `updated_date`, `updated_by`) VALUES
-(0, 'BRHLDZT1001', 'Bukit Randuagung', 'GRE46MM004', 'area', 1, '2026-08-24', 'NA40D8N007', NULL, NULL);
+(0, 'BRHLDZT1001', 'Bukit Randuagung', 'GRE46MM004', 'area', 1, '2026-08-24', 'NA40D8N007', NULL, NULL),
+(0, 'PJROBDF1002', 'Puri Surya Jaya', 'SIDL6W8003', 'area', 1, '2026-08-24', 'NA40D8N007', NULL, NULL);
 
 -- --------------------------------------------------------
 
@@ -18674,7 +18709,12 @@ INSERT INTO `properties` (`id`, `property_id`, `city_id`, `province_id`, `countr
 (10206, 'VG099HR10206', 'GRE46MM004', 'JTMRXK9001', 'INDZSF4001', 'NA40D8N007', 'Veteran Apartment Sale Gresik', 'Apartment dijual di kawasan Veteran, Gresik. Lingkungan strategis, siap huni.', 795000000.0000, 'Cash', 'Jl. Veteran No. 55, Gresik', 'Veteran', NULL, '61061', NULL, 3, 3, 1300, '100 m2', NULL, 'Lantai 10', NULL, 'Y', NULL, NULL, 'SHGB', 'apartment', 'Sale', 1, '2026-08-24', 'NA40D8N007', NULL, NULL),
 (10207, 'SGDE7BS10207', 'GRE46MM004', 'JTMRXK9001', 'INDZSF4001', 'NA40D8N007', 'Suci Apartment Sale Gresik', 'Apartment dijual di kawasan Suci, Gresik. Lingkungan strategis, siap huni.', 1350000000.0000, 'Negotiable', 'Jl. Suci No. 87, Gresik', 'Suci', NULL, '60266', NULL, 3, 2, 4400, '102 m2', NULL, 'Lantai 2', NULL, 'Y', NULL, NULL, 'SHSRS', 'apartment', 'Sale', 1, '2026-08-24', 'NA40D8N007', NULL, NULL),
 (10208, 'BG0ESR510208', 'GRE46MM004', 'JTMRXK9001', 'INDZSF4001', 'NA40D8N007', 'Bungah Apartment Sale Gresik', 'Apartment dijual di kawasan Bungah, Gresik. Lingkungan strategis, siap huni.', 405000000.0000, 'Cash', 'Jl. Bungah No. 48, Gresik', 'Bungah', NULL, '60214', 'Semi Furnished', 3, 3, 1300, '44 m2', NULL, 'Lantai 4', NULL, 'Y', NULL, NULL, 'SHGB', 'apartment', 'Sale', 1, '2026-08-24', 'NA40D8N007', NULL, NULL),
-(10209, 'NGZ5JCR10209', 'GRE46MM004', 'JTMRXK9001', 'INDZSF4001', 'NA40D8N007', 'Ngipik Apartment Sale Gresik', 'Apartment dijual di kawasan Ngipik, Gresik. Lingkungan strategis, siap huni.', 1900000000.0000, 'Cash', 'Jl. Ngipik No. 75, Gresik', 'Ngipik', NULL, '61399', NULL, 2, 1, 6600, '67 m2', NULL, 'Lantai 18', NULL, 'Y', NULL, NULL, 'SHGB', 'apartment', 'Sale', 1, '2026-08-24', 'NA40D8N007', NULL, NULL);
+(10209, 'NGZ5JCR10209', 'GRE46MM004', 'JTMRXK9001', 'INDZSF4001', 'NA40D8N007', 'Ngipik Apartment Sale Gresik', 'Apartment dijual di kawasan Ngipik, Gresik. Lingkungan strategis, siap huni.', 1900000000.0000, 'Cash', 'Jl. Ngipik No. 75, Gresik', 'Ngipik', NULL, '61399', NULL, 2, 1, 6600, '67 m2', NULL, 'Lantai 18', NULL, 'Y', NULL, NULL, 'SHGB', 'apartment', 'Sale', 1, '2026-08-24', 'NA40D8N007', NULL, NULL),
+(10210, 'PS5TS8410210', 'SIDL6W8003', 'JTMRXK9001', 'INDZSF4001', 'NA40D8N007', 'Puri Surya Jaya Tipe A Sidoarjo', 'Rumah dijual di kawasan Puri Surya Jaya Tipe A, Gedangan, Sidoarjo. Lingkungan cluster, akses tol dekat.', 1150000000.0000, 'Negotiable', 'Jl. Puri Surya Jaya Tipe A, Gedangan, Sidoarjo', 'Puri Surya Jaya', NULL, '61254', NULL, 3, 2, 2200, '90 m2', '120 m2', NULL, 2, 'Y', NULL, NULL, NULL, 'house', 'Sale', 1, '2026-08-24', 'NA40D8N007', NULL, NULL);
+INSERT INTO `properties` (`id`, `property_id`, `city_id`, `province_id`, `country_id`, `user_id`, `title`, `description`, `price`, `price_type`, `address`, `area`, `district`, `postal_code`, `furnished_status`, `bed_rooms`, `bath_rooms`, `electricity_capacity`, `building_area`, `land_area`, `floor_location`, `floor_quantity`, `kpr_status`, `kpr_dp_percent`, `kpr_installment_estimate`, `certificate_type`, `building_type`, `transaction_type`, `status`, `created_date`, `created_by`, `updated_date`, `updated_by`) VALUES
+(10211, 'PSPZE8I10211', 'SIDL6W8003', 'JTMRXK9001', 'INDZSF4001', 'NA40D8N007', 'Puri Surya Jaya Tipe C Sidoarjo', 'Rumah dijual di kawasan Puri Surya Jaya Tipe C, Gedangan, Sidoarjo. Lingkungan cluster, akses tol dekat.', 1480000000.0000, 'Negotiable', 'Jl. Puri Surya Jaya Tipe C, Gedangan, Sidoarjo', 'Puri Surya Jaya', NULL, '61254', NULL, 3, 2, 2200, '90 m2', '120 m2', NULL, 2, 'Y', NULL, NULL, NULL, 'house', 'Sale', 1, '2026-08-24', 'NA40D8N007', NULL, NULL),
+(10212, 'PSEBJC110212', 'SIDL6W8003', 'JTMRXK9001', 'INDZSF4001', 'NA40D8N007', 'Puri Surya Jaya Tipe B Sidoarjo', 'Rumah dijual di kawasan Puri Surya Jaya Tipe B, Gedangan, Sidoarjo. Lingkungan cluster, akses tol dekat.', 1275000000.0000, 'Negotiable', 'Jl. Puri Surya Jaya Tipe B, Gedangan, Sidoarjo', 'Puri Surya Jaya', NULL, '61254', NULL, 3, 2, 2200, '90 m2', '120 m2', NULL, 2, 'Y', NULL, NULL, NULL, 'house', 'Sale', 1, '2026-08-24', 'NA40D8N007', NULL, NULL),
+(10213, 'PSQ2UD310213', 'SIDL6W8003', 'JTMRXK9001', 'INDZSF4001', 'NA40D8N007', 'Puri Surya Jaya Tipe D Sidoarjo', 'Rumah dijual di kawasan Puri Surya Jaya Tipe D, Gedangan, Sidoarjo. Lingkungan cluster, akses tol dekat.', 1690000000.0000, 'Negotiable', 'Jl. Puri Surya Jaya Tipe D, Gedangan, Sidoarjo', 'Puri Surya Jaya', NULL, '61254', NULL, 3, 2, 2200, '90 m2', '120 m2', NULL, 2, 'Y', NULL, NULL, NULL, 'house', 'Sale', 1, '2026-08-24', 'NA40D8N007', NULL, NULL);
 
 -- --------------------------------------------------------
 
@@ -83254,7 +83294,23 @@ INSERT INTO `property_facilities` (`id`, `property_id`, `facility_id`, `facility
 (64585, 'NGZ5JCR10209', 'ACZKE0T001', NULL, '2026-08-24', 'NA40D8N007', NULL, NULL),
 (64586, 'NGZ5JCR10209', 'CJ2POEZ006', NULL, '2026-08-24', 'NA40D8N007', NULL, NULL),
 (64587, 'NGZ5JCR10209', 'SWIPNKS041', NULL, '2026-08-24', 'NA40D8N007', NULL, NULL),
-(64588, 'NGZ5JCR10209', 'SERZTB4002', NULL, '2026-08-24', 'NA40D8N007', NULL, NULL);
+(64588, 'NGZ5JCR10209', 'SERZTB4002', NULL, '2026-08-24', 'NA40D8N007', NULL, NULL),
+(64589, 'PS5TS8410210', 'ACZKE0T001', NULL, '2026-08-24', 'NA40D8N007', NULL, NULL),
+(64590, 'PS5TS8410210', 'CAROH76034', NULL, '2026-08-24', 'NA40D8N007', NULL, NULL),
+(64591, 'PS5TS8410210', 'SERZTB4002', NULL, '2026-08-24', 'NA40D8N007', NULL, NULL),
+(64592, 'PS5TS8410210', 'GAR3SYQ026', NULL, '2026-08-24', 'NA40D8N007', NULL, NULL),
+(64593, 'PSPZE8I10211', 'ACZKE0T001', NULL, '2026-08-24', 'NA40D8N007', NULL, NULL),
+(64594, 'PSPZE8I10211', 'CAROH76034', NULL, '2026-08-24', 'NA40D8N007', NULL, NULL),
+(64595, 'PSPZE8I10211', 'SERZTB4002', NULL, '2026-08-24', 'NA40D8N007', NULL, NULL),
+(64596, 'PSPZE8I10211', 'GAR3SYQ026', NULL, '2026-08-24', 'NA40D8N007', NULL, NULL),
+(64597, 'PSEBJC110212', 'ACZKE0T001', NULL, '2026-08-24', 'NA40D8N007', NULL, NULL),
+(64598, 'PSEBJC110212', 'CAROH76034', NULL, '2026-08-24', 'NA40D8N007', NULL, NULL),
+(64599, 'PSEBJC110212', 'SERZTB4002', NULL, '2026-08-24', 'NA40D8N007', NULL, NULL),
+(64600, 'PSEBJC110212', 'GAR3SYQ026', NULL, '2026-08-24', 'NA40D8N007', NULL, NULL),
+(64601, 'PSQ2UD310213', 'ACZKE0T001', NULL, '2026-08-24', 'NA40D8N007', NULL, NULL),
+(64602, 'PSQ2UD310213', 'CAROH76034', NULL, '2026-08-24', 'NA40D8N007', NULL, NULL),
+(64603, 'PSQ2UD310213', 'SERZTB4002', NULL, '2026-08-24', 'NA40D8N007', NULL, NULL),
+(64604, 'PSQ2UD310213', 'GAR3SYQ026', NULL, '2026-08-24', 'NA40D8N007', NULL, NULL);
 
 -- --------------------------------------------------------
 
@@ -93501,7 +93557,11 @@ INSERT INTO `property_images` (`id`, `property_id`, `name`, `url`) VALUES
 (10210, 'VG099HR10206', 'Apartment Main Image', '/assets/image_data/properties/apartment.png'),
 (10211, 'SGDE7BS10207', 'Apartment Main Image', '/assets/image_data/properties/apartment.png'),
 (10212, 'BG0ESR510208', 'Apartment Main Image', '/assets/image_data/properties/apartment.png'),
-(10213, 'NGZ5JCR10209', 'Apartment Main Image', '/assets/image_data/properties/apartment.png');
+(10213, 'NGZ5JCR10209', 'Apartment Main Image', '/assets/image_data/properties/apartment.png'),
+(10214, 'PS5TS8410210', 'House Main Image', '/assets/image_data/properties/house.png'),
+(10215, 'PSPZE8I10211', 'House Main Image', '/assets/image_data/properties/house.png'),
+(10216, 'PSEBJC110212', 'House Main Image', '/assets/image_data/properties/house.png'),
+(10217, 'PSQ2UD310213', 'House Main Image', '/assets/image_data/properties/house.png');
 
 -- --------------------------------------------------------
 
@@ -119282,7 +119342,11 @@ INSERT INTO `property_locations` (`id`, `property_id`, `location_id`, `created_d
 (25715, 'SGDE7BS10207', 'SUIXCEE986', '2026-08-24 15:29:09', 'NA40D8N007', NULL, NULL),
 (25716, 'SGDE7BS10207', 'PTBKRGS841', '2026-08-24 15:29:09', 'NA40D8N007', NULL, NULL),
 (25717, 'BG0ESR510208', 'BU6474F990', '2026-08-24 15:29:09', 'NA40D8N007', NULL, NULL),
-(25718, 'NGZ5JCR10209', 'NG3XHJ6988', '2026-08-24 15:29:09', 'NA40D8N007', NULL, NULL);
+(25718, 'NGZ5JCR10209', 'NG3XHJ6988', '2026-08-24 15:29:09', 'NA40D8N007', NULL, NULL),
+(25719, 'PS5TS8410210', 'PJROBDF1002', '2026-08-24 23:39:24', 'NA40D8N007', NULL, NULL),
+(25720, 'PSPZE8I10211', 'PJROBDF1002', '2026-08-24 23:39:24', 'NA40D8N007', NULL, NULL),
+(25721, 'PSEBJC110212', 'PJROBDF1002', '2026-08-24 23:39:24', 'NA40D8N007', NULL, NULL),
+(25722, 'PSQ2UD310213', 'PJROBDF1002', '2026-08-24 23:39:24', 'NA40D8N007', NULL, NULL);
 
 -- --------------------------------------------------------
 
@@ -119377,6 +119441,7 @@ CREATE TABLE `users` (
   `email` varchar(200) DEFAULT NULL,
   `catalog_summary` varchar(5) DEFAULT NULL,
   `refresh_token` text DEFAULT NULL,
+  `developer_property_id` varchar(30) DEFAULT NULL,
   `status` int(1) NOT NULL DEFAULT 1,
   `privilege` varchar(50) DEFAULT NULL,
   `fonnte_token` varchar(100) DEFAULT NULL COMMENT 'Fonnte token milik agent (untuk kirim WA via Fonnte)',
@@ -119396,14 +119461,14 @@ CREATE TABLE `users` (
 -- Dumping data untuk tabel `users`
 --
 
-INSERT INTO `users` (`id`, `user_id`, `name`, `birthdate`, `phone`, `username`, `password`, `email`, `catalog_summary`, `refresh_token`, `status`, `privilege`, `fonnte_token`, `kirimi_device_id`, `created_date`, `created_by`, `updated_date`, `update_by`, `ai_primary`, `trans_type`, `payment_type`, `rental_duration`, `rental_type`) VALUES
-(1, 'SA6EDRU001', 'NIGEL KUNCORO', '1998-05-04', '628213311936', 'nigel123', '$2b$10$Rld5zga/CswkKyQPgPi6GO./sa5.OuVwgApiGxbZmCRudUD9TNHD2', 'stefanus.nigel.anggriawan12345@gmail.com', 'ON', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJTQTZFRFJVMDAxIiwidXNlck5hbWUiOiJOSUdFTCBLVU5DT1JPIiwidXNlcm5hbWUiOiJuaWdlbDEyMyIsInByaXZpbGVnZSI6ImFnZW50IiwiaWF0IjoxNzg1MTQ3MTg1LCJleHAiOjE3ODUyMzM1ODV9.q-xgGJoZlzCKXhcLTDxBayJa_r6IaPM0CSFGmaQRSRk', 1, 'agent', 'm5HDmV4hAYRFBgTdkfDR', 'D-F3PQ5', '2026-05-22 03:26:55', 'Self-Register', '2026-07-27 10:13:05', 'nigel123', 'Default', 'Both', 'Both', 1, 'Week'),
-(2, 'LFGKT49002', 'LEO FELIX', '2000-05-25', '6282230587711', 'leon123', '$2b$10$fMaJoam0ON3K47vFTz46NOSWYm28122h9OygO4K1I04e96oPG3wXW', 'dokumen.nigel2@gmail.com', 'ON', NULL, 1, 'agent', 'PiBSZQXu6HKWhKkEDu9e', 'D-31CZ6', '2026-05-25 10:05:33', 'Self-Register', '2026-08-24 15:33:09', 'leon123', 'Default', 'Both', 'Both', 3, 'Day'),
-(3, 'CEMPL3Z003', 'CLARENCE MARIO', '1993-03-24', '0821-1136-7154', 'clarence123', '$2b$10$jvnn536K239gxQRcOqNIauJxZxTq9iBcJYLWDstvTItZGkAIsA07e', NULL, 'ON', NULL, 1, 'agent', NULL, NULL, '2026-05-26 01:56:29', 'Self-Register', '2026-06-29 06:22:00', 'clarence123', 'Default', 'Both', 'Both', NULL, NULL),
-(4, 'DTDE8RX004', 'DESY TALIM', '1995-08-27', '0821-1331-8191', 'desy54321', '$2b$10$PoQCO4FZRc.KNTJt/iZ8s.Qk5J.Ek7V.5ylhqFLQNQmr6YTWYrvoW', 'dokumen.nigel3@gmail.com', 'OFF', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJEVERFOFJYMDA0IiwidXNlck5hbWUiOiJERVNZIFRBTElNIiwidXNlcm5hbWUiOiJkZXN5NTQzMjEiLCJwcml2aWxlZ2UiOiJhZ2VudCIsImlhdCI6MTc4MzQxNDUxMiwiZXhwIjoxNzgzNTAwOTEyfQ.STbq1WLKVc3__zFeEh-P_iUKZHruQQYS98k78auqt0s', 1, 'agent', NULL, NULL, '2026-05-26 01:57:21', 'Self-Register', '2026-07-07 08:55:12', 'desy54321', 'Default', 'Both', 'Both', NULL, NULL),
-(5, 'ITJMESP005', 'OTNIEL TJANDRA ISHAK', '2000-05-12', '+62881036588874', 'otniel', '$2b$10$lIUrzLSMMu3QmBzKNKHVQ.TSmluhqm9uU7KH9Yl/17AzOguAuoIsK', NULL, 'OFF', NULL, 1, 'agent', NULL, NULL, '2026-05-26 01:58:48', 'Self-Register', '2026-07-03 07:18:29', 'otniel', 'Default', 'Both', 'Both', NULL, NULL),
-(6, 'IE1BGVY006', 'IFAN ELDY', '1998-04-16', '0881-0365-88874', 'ifaneldy', '$2b$10$FDHol/1mitgKFZwNmTZjIu1WgsRmRr28BTspMm5jlKxPlkbifhwFu', 'tasha.auw@gmail.com', 'OFF', NULL, 1, 'agent', NULL, NULL, '2026-05-26 03:18:16', 'Self-Register', '2026-07-15 08:58:35', 'ifaneldy', 'Default', 'Both', 'Both', 4, 'Week'),
-(10, 'NA40D8N007', 'NATASHA AUWLIANDY', '2000-02-17', '62881036588874', 'tasha', '$2b$10$pLSF7PcdNa20zb.7tdvQpuo0WGcd9GS5xT6Sp9Hcn5ODHFhLytZ8.', NULL, 'ON', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJOQTQwRDhOMDA3IiwidXNlck5hbWUiOiJOQVRBU0hBIEFVV0xJQU5EWSIsInVzZXJuYW1lIjoidGFzaGEiLCJwcml2aWxlZ2UiOiJhZ2VudCIsImlhdCI6MTc4NzU4NTU5NiwiZXhwIjoxNzg3NjcxOTk2fQ.p3hbm4E3K55hCWJln1aYrMDpDRtMgJTbKUAfxWH7HJc', 1, 'agent', NULL, 'D-3OCA6', '2026-08-24 14:19:01', 'Self-Register', '2026-08-24 15:33:16', 'tasha', 'Default', 'Both', 'Both', NULL, NULL);
+INSERT INTO `users` (`id`, `user_id`, `name`, `birthdate`, `phone`, `username`, `password`, `email`, `catalog_summary`, `refresh_token`, `developer_property_id`, `status`, `privilege`, `fonnte_token`, `kirimi_device_id`, `created_date`, `created_by`, `updated_date`, `update_by`, `ai_primary`, `trans_type`, `payment_type`, `rental_duration`, `rental_type`) VALUES
+(1, 'SA6EDRU001', 'NIGEL KUNCORO', '1998-05-04', '628213311936', 'nigel123', '$2b$10$Rld5zga/CswkKyQPgPi6GO./sa5.OuVwgApiGxbZmCRudUD9TNHD2', 'stefanus.nigel.anggriawan12345@gmail.com', 'ON', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJTQTZFRFJVMDAxIiwidXNlck5hbWUiOiJOSUdFTCBLVU5DT1JPIiwidXNlcm5hbWUiOiJuaWdlbDEyMyIsInByaXZpbGVnZSI6ImFnZW50IiwiaWF0IjoxNzg1MTQ3MTg1LCJleHAiOjE3ODUyMzM1ODV9.q-xgGJoZlzCKXhcLTDxBayJa_r6IaPM0CSFGmaQRSRk', 'PR69WTG007', 1, 'admin', 'm5HDmV4hAYRFBgTdkfDR', 'D-F3PQ5', '2026-05-22 03:26:55', 'Self-Register', '2026-08-25 00:02:20', 'seed-developer-properties', 'Default', 'Both', 'Both', 1, 'Week'),
+(2, 'LFGKT49002', 'LEO FELIX', '2000-05-25', '6282230587711', 'leon123', '$2b$10$fMaJoam0ON3K47vFTz46NOSWYm28122h9OygO4K1I04e96oPG3wXW', 'dokumen.nigel2@gmail.com', 'ON', NULL, 'XMBHA3Y003', 1, 'agent', 'PiBSZQXu6HKWhKkEDu9e', 'D-31CZ6', '2026-05-25 10:05:33', 'Self-Register', '2026-08-25 00:02:20', 'seed-developer-properties', 'Default', 'Both', 'Both', 3, 'Day'),
+(3, 'CEMPL3Z003', 'CLARENCE MARIO', '1993-03-24', '0821-1136-7154', 'clarence123', '$2b$10$jvnn536K239gxQRcOqNIauJxZxTq9iBcJYLWDstvTItZGkAIsA07e', NULL, 'ON', NULL, 'PR3MWOG006', 1, 'agent', NULL, NULL, '2026-05-26 01:56:29', 'Self-Register', '2026-08-25 00:02:20', 'seed-developer-properties', 'Default', 'Both', 'Both', NULL, NULL),
+(4, 'DTDE8RX004', 'DESY TALIM', '1995-08-27', '0821-1331-8191', 'desy54321', '$2b$10$PoQCO4FZRc.KNTJt/iZ8s.Qk5J.Ek7V.5ylhqFLQNQmr6YTWYrvoW', 'dokumen.nigel3@gmail.com', 'OFF', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJEVERFOFJYMDA0IiwidXNlck5hbWUiOiJERVNZIFRBTElNIiwidXNlcm5hbWUiOiJkZXN5NTQzMjEiLCJwcml2aWxlZ2UiOiJhZ2VudCIsImlhdCI6MTc4MzQxNDUxMiwiZXhwIjoxNzgzNTAwOTEyfQ.STbq1WLKVc3__zFeEh-P_iUKZHruQQYS98k78auqt0s', 'BRH8W2M005', 1, 'agent', NULL, NULL, '2026-05-26 01:57:21', 'Self-Register', '2026-08-25 00:02:20', 'seed-developer-properties', 'Default', 'Both', 'Both', NULL, NULL),
+(5, 'ITJMESP005', 'OTNIEL TJANDRA ISHAK', '2000-05-12', '+62881036588874', 'otniel', '$2b$10$lIUrzLSMMu3QmBzKNKHVQ.TSmluhqm9uU7KH9Yl/17AzOguAuoIsK', NULL, 'OFF', NULL, 'GPUJ0XL004', 1, 'agent', NULL, NULL, '2026-05-26 01:58:48', 'Self-Register', '2026-08-25 00:02:20', 'seed-developer-properties', 'Default', 'Both', 'Both', NULL, NULL),
+(6, 'IE1BGVY006', 'IFAN ELDY', '1998-04-16', '0881-0365-88874', 'ifaneldy', '$2b$10$FDHol/1mitgKFZwNmTZjIu1WgsRmRr28BTspMm5jlKxPlkbifhwFu', 'tasha.auw@gmail.com', 'OFF', NULL, 'EPCRIDE002', 1, 'agent', NULL, NULL, '2026-05-26 03:18:16', 'Self-Register', '2026-08-25 00:02:20', 'seed-developer-properties', 'Default', 'Both', 'Both', 4, 'Week'),
+(10, 'NA40D8N007', 'NATASHA AUWLIANDY', '2000-02-17', '62881036588874', 'tasha', '$2b$10$pLSF7PcdNa20zb.7tdvQpuo0WGcd9GS5xT6Sp9Hcn5ODHFhLytZ8.', NULL, 'ON', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJOQTQwRDhOMDA3IiwidXNlck5hbWUiOiJOQVRBU0hBIEFVV0xJQU5EWSIsInVzZXJuYW1lIjoidGFzaGEiLCJwcml2aWxlZ2UiOiJhZ2VudCIsImlhdCI6MTc4NzU4NTU5NiwiZXhwIjoxNzg3NjcxOTk2fQ.p3hbm4E3K55hCWJln1aYrMDpDRtMgJTbKUAfxWH7HJc', 'BRH8W2M005', 1, 'agent', NULL, 'D-3OCA6', '2026-08-24 14:19:01', 'Self-Register', '2026-08-25 00:02:20', 'seed-developer-properties', 'Default', 'Both', 'Both', NULL, NULL);
 
 -- --------------------------------------------------------
 
@@ -119493,6 +119558,17 @@ ALTER TABLE `customers`
   ADD KEY `customers_phone` (`phone`),
   ADD KEY `customers_status` (`status`),
   ADD KEY `customers_name` (`name`);
+
+--
+-- Indeks untuk tabel `developer_properties`
+--
+ALTER TABLE `developer_properties`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `developer_property_id` (`developer_property_id`),
+  ADD UNIQUE KEY `name` (`name`),
+  ADD KEY `developer_properties_developer_property_id` (`developer_property_id`),
+  ADD KEY `developer_properties_status` (`status`),
+  ADD KEY `developer_properties_name` (`name`);
 
 --
 -- Indeks untuk tabel `facilities`
@@ -119618,13 +119694,13 @@ ALTER TABLE `whatsapp_inbound_messages`
 -- AUTO_INCREMENT untuk tabel `chat_messages`
 --
 ALTER TABLE `chat_messages`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6057;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6129;
 
 --
 -- AUTO_INCREMENT untuk tabel `chat_sessions`
 --
 ALTER TABLE `chat_sessions`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=287;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=314;
 
 --
 -- AUTO_INCREMENT untuk tabel `cities`
@@ -119648,7 +119724,13 @@ ALTER TABLE `countries`
 -- AUTO_INCREMENT untuk tabel `customers`
 --
 ALTER TABLE `customers`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=470;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=525;
+
+--
+-- AUTO_INCREMENT untuk tabel `developer_properties`
+--
+ALTER TABLE `developer_properties`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
 
 --
 -- AUTO_INCREMENT untuk tabel `facilities`
@@ -119666,25 +119748,25 @@ ALTER TABLE `logs`
 -- AUTO_INCREMENT untuk tabel `properties`
 --
 ALTER TABLE `properties`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10210;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10214;
 
 --
 -- AUTO_INCREMENT untuk tabel `property_facilities`
 --
 ALTER TABLE `property_facilities`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=64589;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=64605;
 
 --
 -- AUTO_INCREMENT untuk tabel `property_images`
 --
 ALTER TABLE `property_images`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10214;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10218;
 
 --
 -- AUTO_INCREMENT untuk tabel `property_locations`
 --
 ALTER TABLE `property_locations`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=25719;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=25723;
 
 --
 -- AUTO_INCREMENT untuk tabel `provinces`
