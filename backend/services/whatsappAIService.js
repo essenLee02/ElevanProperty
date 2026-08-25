@@ -26,7 +26,8 @@ const {
 } = require('./aiProviderService');
 const { getWhatsappPropertyContext }                = require('../utils/whatsappPropertyContext');
 const { buildRecommendationContextForLLM,
-        extractPropertyFilters }                    = require('./propertyRecommendationService');
+        extractPropertyFilters,
+        humanBuildingType }                         = require('./propertyRecommendationService');
 const { getConversationHistory }                    = require('./sessionService');
 const { loadAIContextBlocks }                       = require('./aiContextService');
 const { splitCatalogReply }                         = require('../utils/replySplitter');
@@ -46,6 +47,9 @@ const { evaluateListingReadiness,
         buildListingReadinessContext }              = require('../utils/listingReadiness');
 const { getAgentIdentity,
         buildAgentIdentityContext }                 = require('./agentIdentityService');
+const { tryAreaAvailabilityAnswer,
+        customerAsksAvailability }                  = require('../utils/areaAvailabilityGate');
+const { resolveCityAndArea }                        = require('./areaAvailabilityService');
 
 // Jendela history untuk ekstraksi filter & state kualifikasi. Cukup besar agar
 // pesan pembuka (tipe/transaksi/lokasi) tidak keluar scope di alur panjang, tapi
@@ -479,6 +483,93 @@ async function _generateWhatsAppAIReplyCore(params) {
       provider      : 'terminology_gate',
       contextSource,
     };
+  }
+
+  // ── ★ M152: GERBANG KETERSEDIAAN AREA ★ ──────────────────────────────────
+  // Directive pemilik proyek (25 Agu 2026), dari transkrip produksi: customer
+  // minta SEWA apartemen di Pakuwon dan bertanya "apakah ada?" LIMA KALI. Bot
+  // tidak pernah menjawab — tiap giliran ia mengajukan pertanyaan interview
+  // berikutnya (satu di antaranya diulang 3x) — lalu diam-diam mengirim listing
+  // Bulak/Kalijudan/Karang Pilang, area yang tidak pernah diminta. Faktanya:
+  // Pakuwon punya 19 apartemen, SEMUANYA dijual, NOL disewakan.
+  //
+  // Ditempatkan tepat setelah gerbang istilah dan dengan alasan yang sama:
+  // buildQualifyReply() me-return lebih dulu selama salah satu info minimum
+  // belum lengkap — kondisi yang justru hampir selalu benar saat customer
+  // bertanya "ada tidak?" — sehingga jawaban apa pun yang ditaruh lebih dalam
+  // (di chatbotPrivateController atau di prompt LLM) tidak pernah tercapai.
+  // Kelas bug yang sama persis dengan M129 (lihat catatan gerbang istilah).
+  //
+  // ⛔ Aktif di KEDUA profil guardrail: ini mencegah AI MENGARANG ketersediaan
+  // (kelas fakta, seperti M129/M130/M132 yang sengaja dipertahankan), bukan
+  // mengatur gaya percakapan yang jadi wewenang platform AI.
+  try {
+    const isIdMsg = isIndonesian(message, history);
+    // require lokal, BUKAN di puncak file: aiPromptBuilderService berada di sisi
+    // lain pipeline dan me-require balik modul-modul di sekitarnya. Menariknya
+    // ke atas berisiko siklus require yang muncul sebagai export undefined saat
+    // runtime — jauh lebih mahal didiagnosis daripada satu require di jalur ini.
+    const { extractQualificationState } = require('./aiPromptBuilderService');
+    const qs = extractQualificationState(history, message) || {};
+    // Nama slot hulu tidak bisa dipercaya (qs.city pernah berisi 'pakuwon'),
+    // jadi kota vs area diputuskan dari tabel `cities`, bukan dari nama slot.
+    const { city: realCity, area: realArea } = await resolveCityAndArea([
+      qs.city, qs.district, filters.location, filters.landmark, qs.anchorPoint,
+    ]);
+    const txRaw   = qs.transactionType || filters.transactionType || '';
+    const typeRaw = qs.buildingType   || filters.buildingType    || '';
+    let   txDb    = /rent|sewa/i.test(txRaw) ? 'Rent' : (/sale|beli|jual/i.test(txRaw) ? 'Sale' : '');
+
+    // ⚠️ Cadangan: baca transaksi LANGSUNG dari teks customer bila slot kosong.
+    // extractQualificationState() memulai pemindaian dari pesan AI, sehingga
+    // apa pun yang dinyatakan di pesan customer PERTAMA tidak terlihat (bug
+    // yang sudah tercatat). Pada transkrip nyata kalimat pembukanya persis
+    // "Saya mau sewa apartemen" — jadi justru kasus yang paling penting yang
+    // hilang. Tanpa cadangan ini gerbang tidak pernah menyala di percakapan
+    // yang memicunya. Hanya membaca pesan CUSTOMER; teks AI memuat kata
+    // "sewa/beli" di pertanyaannya sendiri dan akan salah baca.
+    if (!txDb) {
+      // ⚠️ getConversationHistory() mengembalikan { role, message, ... } —
+      // field-nya `message`, BUKAN `content`, dan peran customer disimpan
+      // sebagai 'user' (lihat saveUserMessage di sessionService.js). Versi
+      // pertama membaca h.content dan menyaring 'customer' saja, jadi teksnya
+      // SELALU kosong dan cadangan ini tidak pernah bekerja — gagal senyap yang
+      // hanya ketahuan karena diuji lewat generateWhatsAppAIReply() sungguhan,
+      // bukan lewat fungsi dalam yang nyaman.
+      const custOnly = [
+        ...history
+          .filter((h) => /^(customer|user|human)$/i.test(String(h.role || '')))
+          .map((h) => h.message || h.content || ''),
+        message,
+      ].join(' \n ');
+      if (/\b(sewa|ngontrak|kontrak|rent(?:al)?)\b/i.test(custOnly)) txDb = 'Rent';
+      else if (/\b(beli|membeli|dijual|jual|purchase|buy)\b/i.test(custOnly)) txDb = 'Sale';
+    }
+    // properties.building_type memakai Kapital ('Apartment'), filters lowercase.
+    const typeDb  = typeRaw ? String(typeRaw).charAt(0).toUpperCase() + String(typeRaw).slice(1).toLowerCase() : '';
+
+    if (agentUserId && realArea && txDb && customerAsksAvailability(message)) {
+      const hit = await tryAreaAvailabilityAnswer({
+        userId: agentUserId, city: realCity, area: realArea,
+        buildingType: typeDb || undefined, transactionType: txDb,
+        // Label Indonesia ("apartemen", bukan "apartment") — pakai peta yang
+        // sudah ada supaya tidak lahir daftar tipe kedua yang bisa menyimpang.
+        typeLabel: typeRaw ? humanBuildingType(String(typeRaw).toLowerCase()) : 'properti',
+        message, isId: isIdMsg,
+      });
+      if (hit) {
+        console.log(`[WhatsAppAI] 📊 Gerbang ketersediaan: ${hit.verdict} untuk "${realArea}" (${txDb}) — dijawab dengan data katalog, alur interview dilewati.`);
+        return {
+          reply      : hit.reply,
+          replyParts : [hit.reply],
+          provider   : 'area_availability_gate',
+          contextSource,
+        };
+      }
+    }
+  } catch (availErr) {
+    // Fail-open: gerbang non-kritis tidak boleh menghentikan balasan.
+    console.warn('[WhatsAppAI] area availability gate failed (non-fatal):', availErr.message);
   }
 
   // ── ★ M133: GERBANG KUALIFIKASI TUNDUK PADA PROFIL GUARDRAIL ★ ───────────

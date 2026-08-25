@@ -2695,6 +2695,10 @@ module.exports = {
   searchProperties,
   formatPropertyRecommendation,
   extractPropertyFilters,
+  // Diekspor untuk gerbang ketersediaan (M152) supaya labelnya "apartemen",
+  // bukan "apartment". Sengaja dibagikan, bukan disalin: daftar tipe ganda
+  // adalah kelas bug yang sudah pernah menggigit (M27/M77).
+  humanBuildingType,
   isRecommendationRequest,
   buildRecommendationContextForLLM,
   detectBuildingType,

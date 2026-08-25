@@ -1733,14 +1733,21 @@ class ConversationQualifier {
         'near school', 'near office', 'near mall', 'near campus', 'near hospital',
         'near market', 'near station', 'near factory', 'near port',
       ]) || /\b(dekat|deket|near|di\s+jalan|di\s+sekitar)\s+\w/.test(custText),
+      // ⚠️ JANGAN kembali ke pencocokan substring literal di sini.
+      // Teks Q6 yang BENAR-BENAR dikirim adalah "Ada lokasi ATAU TEMPAT tertentu
+      // yang jadi patokan?" — sedangkan daftar lama mencari "ada lokasi tertentu
+      // yang jadi patokan". Sisipan dua kata itu membuat SEMUA pola meleset,
+      // aiAskedAnchorPoint tidak pernah true, dan Q6 diulang tanpa henti.
+      // Transkrip produksi 25 Agu 2026: pertanyaan yang sama persis dikirim 3x
+      // berturut-turut sampai customer menulis "Stop interview".
+      // Pola di bawah longgar terhadap sisipan kata, jadi tidak pecah lagi kalau
+      // kalimatnya diperhalus.
       aiAskedAnchorPoint: this.#has(aiText, [
         'lokasi patokan', 'ada patokan', 'dekat apa', 'near any', 'specific landmark',
         'dekat sekolah', 'dekat kantor', 'dekat mall',
-        // Q6 exact question text
-        'ada lokasi tertentu yang jadi patokan',
-        'ada lokasi tertentu',
-        'lokasi tertentu yang jadi patokan',
-      ]),
+      ]) || /\bjadi\s+patokan\b/i.test(aiText)
+        || /\b(lokasi|tempat)\b[^?]{0,40}\bpatokan\b/i.test(aiText)
+        || /\blandmark\b[^?]{0,40}\bnear\b/i.test(aiText),
 
       /* ── Q7: Area alternatif ──
        * A REFUSAL ("tidak ada", "cuma di X saja", "tetap di X") is just as much
