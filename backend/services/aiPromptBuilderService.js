@@ -683,6 +683,12 @@ function extractQualificationState(history = [], currentMessage = '') {
     useCase         : null,   // own-use | investasi | ibadah | kantor/usaha | liburan
     rentOutIntent   : false,  // investasi yang akan disewakan (kos/kontrakan) → tanya target penyewa
     aiAskedQ2b      : false,  // true when AI already asked Q2b — show ⏭️, NEVER repeat
+    // M140: true bila AI SUDAH pernah mengirim listing di sesi ini. Dipakai
+    // findNextQuestion() untuk memutuskan apakah giliran ini harus MENAMPILKAN
+    // listing (syarat minimum terpenuhi tapi belum pernah tampil) atau boleh
+    // melanjutkan pertanyaan pendalaman. Tanpa flag ini, gerbang "tampilkan
+    // listing" akan menyala TERUS setiap giliran dan alur tidak pernah maju.
+    listingsShown   : false,
     // Q2c ditanya TAPI customer menolak menyebut area ("mana saja", "terserah",
     // "belum tahu"). PENOLAKAN = JAWABAN: Q2c tidak boleh ditanya lagi, dan
     // baris "Area" tidak muncul di summary (tidak ada nilai untuk ditulis).
@@ -1228,6 +1234,21 @@ function extractQualificationState(history = [], currentMessage = '') {
     state.aiAskedQ2b = ACTIVE_ALL.some(m =>
       QS_AI_ROLES.has(m.role) && Q2B_ASKED_RE.test(m.message || '')
     );
+  }
+
+  // M140 — apakah AI sudah pernah MENGIRIM listing di sesi ini?
+  // Penanda: baris bernomor ("1." / "2.") yang membawa HARGA di pesan AI.
+  // Keduanya harus ada — pesan yang sekadar menyebut "Rp" (mis. menanyakan
+  // budget lewat 2 harga kontras di Q3) BUKAN listing, dan daftar bernomor
+  // tanpa harga (mis. menu pilihan) juga bukan.
+  {
+    const LISTING_LINE_RE = /^\s*\*?\d+[.)]\s+\S/m;
+    const PRICE_RE = /\bRp\s*[\d.,]|\b\d+([.,]\d+)?\s*(juta|jt|miliar|milyar|m)\b/i;
+    state.listingsShown = ACTIVE_ALL.some((m) => {
+      if (!QS_AI_ROLES.has(m.role)) return false;
+      const txt = String(m.message || '');
+      return LISTING_LINE_RE.test(txt) && PRICE_RE.test(txt);
+    });
   }
 
   // Merge accumulated Phase 1 anchor landmarks into ONE clean phrase:
@@ -2265,6 +2286,51 @@ Kalau sudah ada area/kecamatan tertentu, boleh sekalian disebut ya.` };
       ? `Misalnya ${areas.slice(0, 4).join(', ')}, atau area lainnya?`
       : 'Misalnya pusat kota, area selatan, atau kawasan tertentu?';
     return { q: 'Q2c', hint: `Di area atau kawasan mana di ${loc} yang Anda pertimbangkan? 📍 ${areaEx}` };
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     ⭐ M140 — GERBANG "TAMPILKAN LISTING DULU" (mengalahkan sisa interview)
+     ───────────────────────────────────────────────────────────────────────────
+     Directive pemilik proyek (25 Agu 2026), dari transkrip produksi NYATA:
+     customer bilang "Mau cari rumah di Citraland Surabaya" lalu "Rencana beli"
+     — tipe + transaksi + kota + area SUDAH lengkap — tapi AI malah lanjut
+     bertanya Q2b (sudah lihat berapa), Q3 (budget), Q8 (target waktu), Q4
+     (penghuni). Customer sampai memohon "Ada listing nya? Saya minta" dan TETAP
+     ditanya lagi. "Ini dilarang keras, karena customer tidak suka interview."
+
+     ⛔ KENAPA PERBAIKAN DOKUMEN SAJA (M139) TIDAK CUKUP: fungsi INI yang
+     menyuntikkan "pertanyaan berikutnya" ke DIREKTIF FINAL prompt (posisi 100%,
+     M62). Direktif bernomor itu MENGALAHKAN aturan di SKILL.md — persis
+     pelajaran lama "prompt outranks skill docs". Selama findNextQuestion masih
+     mengembalikan Q2b di sini, LLM akan menanyakan Q2b apa pun isi SKILL.md.
+     Jadi gerbangnya HARUS ada di kode, bukan cuma di dokumen.
+
+     Syarat minimum SAMA dengan utils/listingReadiness.js (M134): tipe +
+     transaksi + kota + lokasi spesifik. Budget SENGAJA tidak termasuk.
+     Lokasi spesifik boleh dari district (area), anchorPoint (patokan), atau
+     landmark — ketiganya sah, sejalan evaluateListingReadiness().
+
+     Menyala HANYA sekali: begitu listing sudah pernah tampil
+     (state.listingsShown), cascade lanjut seperti biasa untuk melengkapi brief.
+     Tanpa syarat itu, alur akan mandek menampilkan listing selamanya.
+  ═══════════════════════════════════════════════════════════════════════════ */
+  {
+    const hasSpecificLocation = Boolean(state.district || state.anchorPoint || state.landmark);
+    const minimumMet = Boolean(state.transactionType && state.buildingType && state.city && hasSpecificLocation);
+    if (minimumMet && !state.listingsShown) {
+      const humanType = _humanType[type] || 'properti';
+      const where = state.district || state.anchorPoint || state.landmark;
+      return {
+        q: 'SHOW_LISTINGS',
+        hint: `SYARAT MINIMUM SUDAH TERPENUHI (tipe + transaksi + kota + lokasi). `
+            + `JANGAN bertanya apa pun lagi giliran ini — TAMPILKAN 2 listing ${humanType} `
+            + `${isSewa ? 'sewa' : 'beli'} di ${where}, ${state.city} dari KATALOG NYATA AGENT INI, `
+            + `lalu tanya singkat apakah ada yang menarik. Bila katalog untuk kriteria itu KOSONG: `
+            + `katakan terus terang lalu tawarkan alternatif yang BENAR-BENAR ada di katalog agent `
+            + `(kota sama lebih dulu) — jangan mengarang listing dan jangan balik meng-interview. `
+            + `Budget/penghuni/tanggal TIDAK perlu ditanya sebelum listing tampil.`,
+      };
+    }
   }
 
   // Q2b — Riwayat pencarian (kecuali untuk booking hotel/kondotel dan properti komersial)
