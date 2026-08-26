@@ -88,24 +88,24 @@ INSERT INTO `chat_sessions` (`id`, `name`, `normalizedName`, `phone`, `normalize
 (20, 'Agent Assistant', 'agent assistant', '628213311936', '628213311936', NULL, NULL, 'kirimi_nigel_kuncoro', NULL, '2026-07-15 09:58:36', '2026-07-15 09:58:36'),
 (21, 'Lidya Veronika', 'lidya veronika', '120363423459038657', '120363423459038657', NULL, NULL, 'kirimi_leo_felix', NULL, '2026-07-17 04:00:47', '2026-07-17 04:00:47'),
 (22, 'Customer', 'customer', '120363300105016659', '120363300105016659', NULL, NULL, 'kirimi_leo_felix', NULL, '2026-07-20 03:01:44', '2026-07-20 03:01:44'),
-(25, 'Devyana Herman', 'devyana herman', '6282233564039', '6282233564039', NULL, NULL, 'kirimi_leo_felix', NULL, '2026-08-04 04:38:30', '2026-08-04 04:38:30'),
-(29, 'Yohana Advennia', 'yohana advennia', '6282257360240', '6282257360240', NULL, NULL, 'kirimi_leo_felix', NULL, '2026-08-04 09:18:52', '2026-08-04 09:18:52'),
-(68, 'Nia', 'nia', '082233556796', '6282233556796', 'Kediri', 'kediri', 'website_chatbot', '2026-08-12 04:45:22', '2026-08-12 03:59:12', '2026-08-12 04:45:22'),
-(69, 'Nia QA', 'nia qa', '62899000931131', '62899000931131', 'Surabaya', 'surabaya', 'website_chatbot', '2026-08-12 04:12:11', '2026-08-12 04:12:11', '2026-08-12 04:12:11'),
-(70, 'Nia QA', 'nia qa', '62899000984696', '62899000984696', 'Surabaya', 'surabaya', 'website_chatbot', '2026-08-12 04:13:09', '2026-08-12 04:13:04', '2026-08-12 04:13:09'),
-(71, 'Nia QA', 'nia qa', '62899000056053', '62899000056053', 'Surabaya', 'surabaya', 'website_chatbot', '2026-08-12 04:14:16', '2026-08-12 04:14:16', '2026-08-12 04:14:16'),
-(73, 'Nia QA', 'nia qa', '62899000176694', '62899000176694', 'Surabaya', 'surabaya', 'website_chatbot', '2026-08-12 04:16:21', '2026-08-12 04:16:16', '2026-08-12 04:16:21'),
-(74, 'Nia QA', 'nia qa', '62899000262337', '62899000262337', 'Surabaya', 'surabaya', 'website_chatbot', '2026-08-12 04:17:47', '2026-08-12 04:17:42', '2026-08-12 04:17:47'),
-(76, 'Valinda Puspasari', 'valinda puspasari', '6287777999426', '6287777999426', NULL, NULL, 'kirimi_leo_felix', NULL, '2026-08-12 06:14:57', '2026-08-12 06:14:57'),
-(77, 'Nia', 'nia', '62899000721060', '62899000721060', 'Surabaya', 'surabaya', 'website_chatbot', '2026-08-12 10:32:13', '2026-08-12 10:32:01', '2026-08-12 10:32:13'),
-(78, 'Nia', 'nia', '62899000800718', '62899000800718', 'Surabaya', 'surabaya', 'website_chatbot', '2026-08-12 10:33:29', '2026-08-12 10:33:20', '2026-08-12 10:33:29'),
-(99, 'Nigel ???', 'nigel ???', '628123456796', '628123456796', NULL, NULL, 'kirimi_leo_felix', '2026-08-15 05:56:34', '2026-08-15 03:11:51', '2026-08-15 05:56:34'),
-(102, 'Dimas A', 'dimas a', '120363008938', '120363008938', NULL, NULL, 'kirimi_leo_felix', NULL, '2026-08-15 03:26:35', '2026-08-15 03:26:35'),
-(104, 'Final Check', 'final check', '628999111222', '628999111222', NULL, NULL, 'kirimi_leo_felix', NULL, '2026-08-15 03:29:16', '2026-08-15 03:29:16'),
-(106, 'Uji Root', 'uji root', '628999000111', '628999000111', NULL, NULL, 'kirimi_whatsapp_python', '2026-08-17 15:35:45', '2026-08-16 15:53:48', '2026-08-17 15:35:45'),
-(281, 'Marli PAVLIN', 'marli pavlin', '120363378685518938', '120363378685518938', NULL, NULL, 'kirimi_natasha_auwliandy', NULL, '2026-08-24 15:30:04', '2026-08-24 15:30:04'),
-(287, 'Nigel 期凡努', 'nigel 期凡努', '6282233556796', '6282233556796', NULL, NULL, 'kirimi_natasha_auwliandy', NULL, '2026-08-24 15:50:16', '2026-08-24 15:50:16'),
-(298, 'Customer', 'customer', '62881036588874', '62881036588874', NULL, NULL, 'kirimi_natasha_auwliandy', NULL, '2026-08-24 16:27:27', '2026-08-24 16:27:27');
+(23, 'Devyana Herman', 'devyana herman', '6282233564039', '6282233564039', NULL, NULL, 'kirimi_leo_felix', NULL, '2026-08-04 04:38:30', '2026-08-04 04:38:30'),
+(24, 'Yohana Advennia', 'yohana advennia', '6282257360240', '6282257360240', NULL, NULL, 'kirimi_leo_felix', NULL, '2026-08-04 09:18:52', '2026-08-04 09:18:52'),
+(25, 'Nia', 'nia', '082233556796', '6282233556796', 'Kediri', 'kediri', 'website_chatbot', '2026-08-12 04:45:22', '2026-08-12 03:59:12', '2026-08-12 04:45:22'),
+(26, 'Nia QA', 'nia qa', '62899000931131', '62899000931131', 'Surabaya', 'surabaya', 'website_chatbot', '2026-08-12 04:12:11', '2026-08-12 04:12:11', '2026-08-12 04:12:11'),
+(27, 'Nia QA', 'nia qa', '62899000984696', '62899000984696', 'Surabaya', 'surabaya', 'website_chatbot', '2026-08-12 04:13:09', '2026-08-12 04:13:04', '2026-08-12 04:13:09'),
+(28, 'Nia QA', 'nia qa', '62899000056053', '62899000056053', 'Surabaya', 'surabaya', 'website_chatbot', '2026-08-12 04:14:16', '2026-08-12 04:14:16', '2026-08-12 04:14:16'),
+(29, 'Nia QA', 'nia qa', '62899000176694', '62899000176694', 'Surabaya', 'surabaya', 'website_chatbot', '2026-08-12 04:16:21', '2026-08-12 04:16:16', '2026-08-12 04:16:21'),
+(30, 'Nia QA', 'nia qa', '62899000262337', '62899000262337', 'Surabaya', 'surabaya', 'website_chatbot', '2026-08-12 04:17:47', '2026-08-12 04:17:42', '2026-08-12 04:17:47'),
+(31, 'Valinda Puspasari', 'valinda puspasari', '6287777999426', '6287777999426', NULL, NULL, 'kirimi_leo_felix', NULL, '2026-08-12 06:14:57', '2026-08-12 06:14:57'),
+(32, 'Nia', 'nia', '62899000721060', '62899000721060', 'Surabaya', 'surabaya', 'website_chatbot', '2026-08-12 10:32:13', '2026-08-12 10:32:01', '2026-08-12 10:32:13'),
+(33, 'Nia', 'nia', '62899000800718', '62899000800718', 'Surabaya', 'surabaya', 'website_chatbot', '2026-08-12 10:33:29', '2026-08-12 10:33:20', '2026-08-12 10:33:29'),
+(34, 'Nigel ???', 'nigel ???', '628123456796', '628123456796', NULL, NULL, 'kirimi_leo_felix', '2026-08-15 05:56:34', '2026-08-15 03:11:51', '2026-08-15 05:56:34'),
+(35, 'Dimas A', 'dimas a', '120363008938', '120363008938', NULL, NULL, 'kirimi_leo_felix', NULL, '2026-08-15 03:26:35', '2026-08-15 03:26:35'),
+(36, 'Final Check', 'final check', '628999111222', '628999111222', NULL, NULL, 'kirimi_leo_felix', NULL, '2026-08-15 03:29:16', '2026-08-15 03:29:16'),
+(37, 'Uji Root', 'uji root', '628999000111', '628999000111', NULL, NULL, 'kirimi_whatsapp_python', '2026-08-17 15:35:45', '2026-08-16 15:53:48', '2026-08-17 15:35:45'),
+(38, 'Marli PAVLIN', 'marli pavlin', '120363378685518938', '120363378685518938', NULL, NULL, 'kirimi_natasha_auwliandy', NULL, '2026-08-24 15:30:04', '2026-08-24 15:30:04'),
+(39, 'Nigel 期凡努', 'nigel 期凡努', '6282233556796', '6282233556796', NULL, NULL, 'kirimi_natasha_auwliandy', NULL, '2026-08-24 15:50:16', '2026-08-24 15:50:16'),
+(40, 'Customer', 'customer', '62881036588874', '62881036588874', NULL, NULL, 'kirimi_natasha_auwliandy', NULL, '2026-08-24 16:27:27', '2026-08-24 16:27:27');
 
 -- --------------------------------------------------------
 
@@ -941,10 +941,10 @@ CREATE TABLE `customers` (
 
 INSERT INTO `customers` (`id`, `user_id`, `customer_id`, `name`, `phone`, `email`, `ai_response`, `ask_name`, `status`, `created_date`, `created_by`, `updated_date`, `updated_by`) VALUES
 (1, 'SA6EDRU001', 'CLCSZ3Q001', 'Clarence', '6282233556796', 'dokumen.nigel2@gmail.com', 'ON', 'NO', 1, '2026-07-20', 'SA6EDRU001', '2026-07-20', 'SA6EDRU001'),
-(4, 'LFGKT49002', 'KEHTMLB002', 'Kezia', '6282233556796', NULL, 'ON', 'NO', 1, '2026-07-27', 'LFGKT49002', '2026-08-04', 'LFGKT49002'),
-(64, 'LFGKT49002', 'XX4LQGZ003', 'Maria', '6288805301123', NULL, 'ON', 'NO', 1, '2026-08-13', 'LFGKT49002', NULL, NULL),
-(74, 'LFGKT49002', 'NIECF79004', 'Nigel ???', '628123456796', NULL, 'ON', 'NO', 1, '2026-08-15', 'LFGKT49002', NULL, NULL),
-(76, 'LFGKT49002', 'FI5HO0C005', 'Final Check', '628999111222', NULL, 'ON', 'NO', 1, '2026-08-15', 'LFGKT49002', NULL, NULL);
+(2, 'LFGKT49002', 'KEHTMLB002', 'Kezia', '6282233556796', NULL, 'ON', 'NO', 1, '2026-07-27', 'LFGKT49002', '2026-08-04', 'LFGKT49002'),
+(3, 'LFGKT49002', 'XX4LQGZ003', 'Maria', '6288805301123', NULL, 'ON', 'NO', 1, '2026-08-13', 'LFGKT49002', NULL, NULL),
+(4, 'LFGKT49002', 'NIECF79004', 'Nigel ???', '628123456796', NULL, 'ON', 'NO', 1, '2026-08-15', 'LFGKT49002', NULL, NULL),
+(5, 'LFGKT49002', 'FI5HO0C005', 'Final Check', '628999111222', NULL, 'ON', 'NO', 1, '2026-08-15', 'LFGKT49002', NULL, NULL);
 
 -- --------------------------------------------------------
 
@@ -1520,11 +1520,11 @@ INSERT INTO `locations` (`id`, `location_id`, `name`, `city_id`, `location_type`
 (208, 'RRVQLAD208', 'RUMAH SAKIT RKZ', NULL, 'commercial', 1, '2026-06-29', 'SA6EDRU001', NULL, NULL),
 (209, 'GMZRSEI209', 'GRAND CITY MALL', NULL, 'commercial', 1, '2026-06-29', 'SA6EDRU001', NULL, NULL),
 (210, 'WM6U2CD210', 'WISATA MANGROVE', NULL, 'commercial', 1, '2026-06-29', 'SA6EDRU001', '2026-08-22', NULL),
-(0, 'DRN03UI211', 'DEPOT BU RUDY', NULL, 'commercial', 1, '2026-07-06', 'LFGKT49002', '2026-08-25', 'SA6EDRU001'),
-(0, 'MGOGJPJ212', 'MIE GACOAN', NULL, 'commercial', 1, '2026-07-06', 'LFGKT49002', '2026-08-25', 'SA6EDRU001'),
-(0, 'ASIZUA9213', 'AYCE ALL YOU CAN EAT SURABAYA', NULL, 'commercial', 1, '2026-07-06', 'LFGKT49002', '2026-08-25', 'SA6EDRU001'),
-(0, 'PC2LMG0214', 'Denpasar Barat', 'DEN27TQ073', 'area', 1, '2026-08-13', 'LFGKT49002', '2026-08-25', 'SA6EDRU001'),
-(0, 'TPFJ08X215', 'TUNJUNGAN PLAZA', NULL, 'commercial', 1, '2026-08-13', 'LFGKT49002', '2026-08-25', 'SA6EDRU001'),
+(211, 'DRN03UI211', 'DEPOT BU RUDY', NULL, 'commercial', 1, '2026-07-06', 'LFGKT49002', '2026-08-25', 'SA6EDRU001'),
+(212, 'MGOGJPJ212', 'MIE GACOAN', NULL, 'commercial', 1, '2026-07-06', 'LFGKT49002', '2026-08-25', 'SA6EDRU001'),
+(213, 'ASIZUA9213', 'AYCE ALL YOU CAN EAT SURABAYA', NULL, 'commercial', 1, '2026-07-06', 'LFGKT49002', '2026-08-25', 'SA6EDRU001'),
+(214, 'PC2LMG0214', 'Denpasar Barat', 'DEN27TQ073', 'area', 1, '2026-08-13', 'LFGKT49002', '2026-08-25', 'SA6EDRU001'),
+(215, 'TPFJ08X215', 'TUNJUNGAN PLAZA', NULL, 'commercial', 1, '2026-08-13', 'LFGKT49002', '2026-08-25', 'SA6EDRU001'),
 (0, 'GMFS1EO216', 'GALAXY MALL', NULL, 'commercial', 1, '2026-08-13', 'LFGKT49002', '2026-08-25', 'SA6EDRU001'),
 (0, 'CSUF49D217', 'CIPUTRA WORLD SURABAYA', NULL, 'commercial', 1, '2026-08-13', 'LFGKT49002', '2026-08-25', 'SA6EDRU001'),
 (0, 'MCL10GC218', 'MARVELL CITY', NULL, 'commercial', 1, '2026-08-13', 'LFGKT49002', '2026-08-25', 'SA6EDRU001'),
@@ -120498,91 +120498,91 @@ ALTER TABLE `whatsapp_inbound_messages`
 -- AUTO_INCREMENT untuk tabel `chat_messages`
 --
 ALTER TABLE `chat_messages`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=211;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
 
 --
 -- AUTO_INCREMENT untuk tabel `chat_sessions`
 --
 ALTER TABLE `chat_sessions`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=394;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
 
 --
 -- AUTO_INCREMENT untuk tabel `cities`
 --
 ALTER TABLE `cities`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=744;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
 
 --
 -- AUTO_INCREMENT untuk tabel `contacts`
 --
 ALTER TABLE `contacts`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=65;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
 
 --
 -- AUTO_INCREMENT untuk tabel `countries`
 --
 ALTER TABLE `countries`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=21;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
 
 --
 -- AUTO_INCREMENT untuk tabel `customers`
 --
 ALTER TABLE `customers`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=703;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
 
 --
 -- AUTO_INCREMENT untuk tabel `developer_properties`
 --
 ALTER TABLE `developer_properties`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
 
 --
 -- AUTO_INCREMENT untuk tabel `facilities`
 --
 ALTER TABLE `facilities`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=285;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
 
 --
 -- AUTO_INCREMENT untuk tabel `logs`
 --
 ALTER TABLE `logs`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=36;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
 
 --
 -- AUTO_INCREMENT untuk tabel `properties`
 --
 ALTER TABLE `properties`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10214;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
 
 --
 -- AUTO_INCREMENT untuk tabel `property_facilities`
 --
 ALTER TABLE `property_facilities`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=64610;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
 
 --
 -- AUTO_INCREMENT untuk tabel `property_images`
 --
 ALTER TABLE `property_images`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10218;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
 
 --
 -- AUTO_INCREMENT untuk tabel `property_locations`
 --
 ALTER TABLE `property_locations`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=32433;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
 
 --
 -- AUTO_INCREMENT untuk tabel `provinces`
 --
 ALTER TABLE `provinces`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=53;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
 
 --
 -- AUTO_INCREMENT untuk tabel `users`
 --
 ALTER TABLE `users`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=12;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=1;
 
 --
 -- AUTO_INCREMENT untuk tabel `whatsapp_inbound_messages`
