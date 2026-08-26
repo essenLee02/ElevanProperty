@@ -31,7 +31,7 @@
  * secara eksplisit dipertahankan pemilik proyek (24 Agu 2026).
  */
 
-const { checkAreaAvailability } = require('../services/areaAvailabilityService');
+const { checkAreaAvailability, fetchAreaListings } = require('../services/areaAvailabilityService');
 
 /** Customer bertanya "ada / apakah ada / punya ga" — pertanyaan KETERSEDIAAN. */
 const AVAILABILITY_RE = new RegExp([
@@ -82,6 +82,24 @@ function humanPrice(n) {
   return String(v);
 }
 
+/**
+ * "kutisari" / "KUTISARI" → "Kutisari".
+ *
+ * Nama area sampai ke gerbang ini lewat bermacam jalur: qs.district (apa adanya
+ * dari ketikan customer), detectLandmark() (HURUF BESAR semua, dari master
+ * lokasi), filters.landmark. Tanpa penyeragaman, balasan ke customer bisa
+ * berbunyi "apartemen dijual di *kutisari*" atau "*KUTISARI*" — terlihat seperti
+ * salah ketik pada pesan yang seharusnya rapi. Nama listing di kartu tetap
+ * memakai nilai asli dari database, yang dirapikan hanya kalimat gerbang.
+ */
+function titleCaseArea(s) {
+  return String(s || '')
+    .trim()
+    .split(/\s+/)
+    .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w))
+    .join(' ');
+}
+
 const txWord = (tx, isId) => (tx === 'Rent'
   ? (isId ? 'sewa' : 'rent')
   : (isId ? 'dijual' : 'for sale'));
@@ -92,8 +110,9 @@ const txWord = (tx, isId) => (tx === 'Rent'
  *
  * @returns {{reply:string, verdict:string, requestedCount:number|null}|null}
  */
-function composeAvailabilityReply(av, { area, typeLabel = 'properti', transactionType, isId = true, requestedCount = null }) {
+function composeAvailabilityReply(av, { area: areaRaw, typeLabel = 'properti', transactionType, isId = true, requestedCount = null }) {
   if (!av || !av.ok) return null;
+  const area = titleCaseArea(areaRaw);
   if (av.verdict === 'available') return null;          // ada stok → tidak perlu gerbang
 
   const alts = (av.alternativeAreas || []).filter((a) => a.count > 0);
@@ -158,10 +177,52 @@ async function tryAreaAvailabilityAnswer({
 }) {
   if (!userId || !area || !transactionType) return null;
   try {
+    const requestedCount = detectRequestedCount(message);
     const av = await checkAreaAvailability({ userId, city, area, buildingType, transactionType });
+
+    /* ── Stok ADA → LANGSUNG TAMPILKAN LISTING (M154) ──────────────────────
+     * Versi M152 mengembalikan null di sini, artinya alur interview lanjut.
+     * Transkrip 25 Agu 2026 menunjukkan akibatnya: customer minta listing
+     * ENAM KALI ("Saya minta listing dlu", "Kak, ini saya minta listing dlu")
+     * dan tiap kali dibalas pertanyaan berikutnya — budget, tanggal, penghuni,
+     * fasilitas, KPR, DP, kondisi unit, furnitur. Permintaan customer kalah
+     * dari agenda interview backend.
+     *
+     * Begitu tipe transaksi + tipe properti + kota + area sudah diketahui,
+     * tidak ada alasan menahan listing: itu justru informasi yang membuat
+     * customer bisa memutuskan. Slot sisanya (budget/tanggal/dst.) tetap bisa
+     * ditanyakan SETELAH customer melihat barangnya.
+     */
+    if (av.ok && av.verdict === 'available') {
+      const limit = requestedCount || DEFAULT_SHOWN;
+      const rows  = await fetchAreaListings({
+        userId, city, area, buildingType, transactionType, limit,
+      });
+      if (!rows.length) return null;                 // fail-open: biarkan alur normal
+
+      // Format kartu dipinjam dari ResponseBuilderWhatsApp supaya identik
+      // dengan listing yang dikirim jalur lain (bukan salinan format kedua).
+      // require lokal: chatbotPrivateController besar & saling me-require —
+      // menariknya ke puncak file berisiko siklus require.
+      const { ResponseBuilderWhatsApp } = require('../controllers/chatbotPrivateController');
+      const builder = new ResponseBuilderWhatsApp(isId ? 'id' : 'en');
+      const cards   = builder.renderListingCards(
+        rows.map((r) => (typeof r.toJSON === 'function' ? r.toJSON() : r)), isId ? 'id' : 'en', limit
+      );
+      if (!cards || !cards.trim()) return null;
+
+      const head = isId
+        ? `Ini ${rows.length} ${typeLabel} ${txWord(transactionType, true)} di *${titleCaseArea(area)}* ya, Kak — saya urutkan dari yang termurah 😊\n\n`
+        : `Here ${rows.length === 1 ? 'is' : 'are'} ${rows.length} ${typeLabel} ${txWord(transactionType, false)} in *${titleCaseArea(area)}*, sorted cheapest first 😊\n\n`;
+      const tail = isId
+        ? `\n\nAda yang menarik, Kak? Kalau mau saya carikan yang lebih spesifik, boleh sebutkan budget atau kebutuhan lainnya.`
+        : `\n\nAnything catch your eye? If you'd like something more specific, let me know your budget or other needs.`;
+
+      return { reply: head + cards + tail, verdict: 'listings-shown', requestedCount };
+    }
+
     return composeAvailabilityReply(av, {
-      area, typeLabel, transactionType, isId,
-      requestedCount: detectRequestedCount(message),
+      area, typeLabel, transactionType, isId, requestedCount,
     });
   } catch (err) {
     console.error('[AREA AVAILABILITY GATE ERROR]', err.message);

@@ -34,6 +34,28 @@ const ok = (label, cond, extra = '') => {
 const C = (m) => ({ role: 'customer', message: m });
 const A = (m) => ({ role: 'ai', message: m });
 
+/**
+ * Tanggal "25 Agustus" yang diketik customer akan di-resolve ke TAHUN BERAPA?
+ *
+ * ⚠️ Jangan hard-code tahunnya. Tes ini sempat menuliskan '25 Agustus 2026'
+ * apa adanya dan MENDADAK GAGAL pada 26 Agustus 2026 — bukan karena ada kode
+ * yang rusak, tapi karena 25 Agustus sudah LEWAT, sehingga inferYear() dengan
+ * benar menggulirkannya ke 2027. Tes yang kedaluwarsa sendiri seperti ini
+ * membakar waktu debugging untuk regresi yang tidak pernah ada.
+ *
+ * Aturannya sama dengan produksi: tanggal tanpa tahun yang sudah lewat tahun
+ * ini berarti tahun depan.
+ */
+function expectedAugust25() {
+  const now = new Date();
+  const thisYear = now.getFullYear();
+  const target = new Date(thisYear, 7, 25);       // 7 = Agustus (0-indexed)
+  const year = target < new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    ? thisYear + 1
+    : thisYear;
+  return `25 Agustus ${year}`;
+}
+
 console.log('\n== Group 1: transkrip nyata — GANTI KOTA via jawaban Q7 ==');
 {
   const history = [
@@ -66,7 +88,7 @@ console.log('\n== Group 1: transkrip nyata — GANTI KOTA via jawaban Q7 ==');
   ok('buildingType TETAP house (bukan reset ke Q1)', st.buildingType === 'house', st.buildingType);
   ok('city ter-UPDATE ke Sidoarjo', st.city === 'Sidoarjo', st.city);
   ok('budget TETAP (bukan hilang)', /50|42\.5|57\.5/.test(st.budget || ''), st.budget);
-  ok('moveInDate TETAP', st.moveInDate === '25 Agustus 2026', st.moveInDate);
+  ok('moveInDate TETAP', st.moveInDate === expectedAugust25(), st.moveInDate);
   ok('household TETAP', /2|berdua/.test(st.household || ''), st.household);
   ok('furnishing TETAP', st.furnishing === 'furnished', st.furnishing);
   ok('facilities TETAP', (st.facilities || []).length > 0, JSON.stringify(st.facilities));
@@ -118,7 +140,7 @@ console.log('\n== Group 3: GANTI TRANSAKSI (sewa → beli) ==');
   ok('buildingType TETAP house', st.buildingType === 'house');
   ok('city TETAP Surabaya', st.city === 'Surabaya', st.city);
   ok('anchorPoint TETAP', st.anchorPoint === 'dekat Pakuwon', st.anchorPoint);
-  ok('moveInDate TETAP', st.moveInDate === '25 Agustus 2026', st.moveInDate);
+  ok('moveInDate TETAP', st.moveInDate === expectedAugust25(), st.moveInDate);
   ok('household TETAP', /2|berdua/.test(st.household || ''), st.household);
   ok('budget DI-RESET (budget beli beda dgn budget sewa)', st.budget === null, st.budget);
   ok('financing DI-RESET (tanya metode pembayaran ulang)', st.financing === null, st.financing);

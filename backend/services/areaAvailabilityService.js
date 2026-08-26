@@ -236,11 +236,34 @@ async function checkAreaAvailability({ userId, city, area, buildingType, transac
  * @param {string[]} candidates urut dari yang paling dipercaya
  * @returns {Promise<{city:string|null, area:string|null}>}
  */
+/**
+ * Apakah string ini masuk akal sebagai NAMA TEMPAT, bukan kalimat?
+ *
+ * ⚠️ Penjaga wajib. Slot hulu kadang berisi KALIMAT MENTAH customer, bukan
+ * nama area. Terbukti di produksi: kandidat area berisi
+ * "Hi... Saya beli apartemen Surabaya, Kutisari" sehingga balasannya berbunyi
+ * "apartemen dijual di *Hi... Saya beli apartemen Surabaya, Kutisari* belum
+ * ada" — memalukan di depan customer, dan pencarian katalog pasti gagal karena
+ * tidak ada area bernama begitu.
+ *
+ * Nama tempat Indonesia praktis selalu ≤ 4 kata ("Pakuwon City", "Darmo
+ * Permai", "Dukuh Kupang Barat") dan tidak memuat tanda kalimat.
+ */
+function looksLikePlaceName(v) {
+  const s = String(v || '').trim();
+  if (!s || s.length > 40) return false;
+  if (/[?!]|\.{2,}|,/.test(s)) return false;            // tanda kalimat/daftar
+  if (s.split(/\s+/).length > 4) return false;          // terlalu panjang untuk nama area
+  // Kata kerja/intent yang menandakan ini kalimat, bukan tempat.
+  if (/\b(saya|aku|mau|ingin|cari|beli|sewa|minta|tolong|apakah|ada|butuh|hi|halo)\b/i.test(s)) return false;
+  return true;
+}
+
 async function resolveCityAndArea(candidates = []) {
   const seen = [];
   for (const raw of candidates) {
     const v = String(raw || '').trim();
-    if (v && !seen.some((s) => norm(s) === norm(v))) seen.push(v);
+    if (v && looksLikePlaceName(v) && !seen.some((s) => norm(s) === norm(v))) seen.push(v);
   }
   if (!seen.length) return { city: null, area: null };
 
@@ -255,8 +278,124 @@ async function resolveCityAndArea(candidates = []) {
   return { city, area };
 }
 
+/**
+ * Ambil listing NYATA untuk area+transaksi+tipe, TERMURAH DULU (M154).
+ *
+ * Directive pemilik proyek (26 Agu 2026):
+ *   "Ketika AI mendapatkan informasi tipe transaksi, tipe property, lokasi area
+ *    dan kota; AI langsung memberikan 2 listing-an sesuai info ke customer.
+ *    Kalau customer langsung minta 4 listing-an, AI langsung memberikan 4."
+ *
+ * Sebelumnya gerbang ketersediaan hanya bersuara saat stok KOSONG; saat stok
+ * ADA ia diam dan alur interview lanjut — persis keluhan customer yang minta
+ * listing enam kali dan tetap ditanyai budget/tanggal/penghuni.
+ *
+ * ⚠️ WAJIB mengembalikan bentuk TERNORMALISASI, bukan baris Sequelize mentah.
+ * Versi pertama fungsi ini memakai Property.findAll() dan hasilnya diumpankan
+ * ke renderListingCards() — kartu yang keluar rusak dan sempat lolos ke jalur
+ * balasan customer:
+ *     📍 Lokasi: -
+ *     💰 Estimasi Harga: *360000000.0000*     ← angka mentah, bukan "360 juta"
+ *     🏠 Tipe: Properti — Tersedia            ← tipe/transaksi gagal diterjemahkan
+ *     📐 Luas: bangunan -, tanah -
+ *     🏷️ Fasilitas: -                         ← fasilitas ada di tabel lain
+ * Penyebabnya: renderListingCards() menunggu bentuk hasil _queryProperties()
+ * (price sudah string "360 juta", facilities sudah digabung, imageUrl sudah
+ * di-resolve), sedangkan model Property mentah tidak punya satu pun di antaranya.
+ *
+ * Karena itu sumbernya sekarang getDbPropertiesForAgent() — katalog agent yang
+ * SUDAH ternormalisasi dan sudah di-cache (5 menit), jadi ini juga tidak
+ * menambah query DB per pesan. Penyaringan dilakukan di memori atas cache itu.
+ *
+ * @returns {Promise<Array>} properti ternormalisasi, siap dirender
+ */
+async function fetchAreaListings({ userId, city, area, buildingType, transactionType, limit = 2 }) {
+  if (!userId || !area) return [];
+  try {
+    // require lokal: propertyRecommendationService besar dan saling terkait —
+    // menariknya ke puncak file berisiko siklus require.
+    const { getDbPropertiesForAgent } = require('./propertyRecommendationService');
+    const rows = await getDbPropertiesForAgent(userId);
+    if (!Array.isArray(rows) || !rows.length) return [];
+
+    const wantArea = norm(area);
+    const wantType = norm(buildingType);      // 'Apartment' → 'apartment'
+    const wantTx   = norm(transactionType);   // 'Sale' → 'sale'
+    const wantCity = norm(city);
+
+    const matched = rows.filter((r) => {
+      if (wantArea && !norm(r.area).includes(wantArea)) return false;
+      if (wantType && norm(r.buildingType) !== wantType) return false;
+      if (wantTx   && norm(r.transactionType) !== wantTx) return false;
+      // Kota dicocokkan longgar: r.city/r.location kadang "SURABAYA", kadang
+      // kosong pada baris lama. Kalau kosong, jangan buang — area sudah cukup
+      // menyempitkan dan membuang baris valid lebih merugikan customer.
+      if (wantCity && norm(r.city) && norm(r.city) !== wantCity) return false;
+      return true;
+    });
+
+    // Termurah dulu — permintaan eksplisit pemilik proyek. priceValue numerik
+    // hasil normalisasi; baris tanpa harga ditaruh terakhir, bukan dianggap 0
+    // (harga 0 akan menempatkan listing "harga belum diisi" di posisi teratas).
+    matched.sort((a, b) => {
+      const pa = Number.isFinite(Number(a.priceValue)) && Number(a.priceValue) > 0 ? Number(a.priceValue) : Infinity;
+      const pb = Number.isFinite(Number(b.priceValue)) && Number(b.priceValue) > 0 ? Number(b.priceValue) : Infinity;
+      return pa - pb;
+    });
+
+    return matched.slice(0, Math.max(1, Math.min(Number(limit) || 2, 10)));
+  } catch (err) {
+    console.error('[FETCH AREA LISTINGS ERROR]', err.message);
+    return [];
+  }
+}
+
+/**
+ * Cari nama AREA milik agent yang benar-benar muncul di dalam teks (M155).
+ *
+ * Kenapa perlu: slot hulu tidak melihat area yang disebut di pesan PERTAMA
+ * customer. Transkrip 25 Agu 2026 dibuka dengan
+ *   "Hi... Saya mau beli apartemen di Surabaya, Kutisari"
+ * — keempat slot ada dalam satu kalimat, tapi filters.location hanya menangkap
+ * "Surabaya" dan tidak ada satu pun slot yang berisi "Kutisari". Akibatnya bot
+ * menjawab "di area atau kawasan mana di Surabaya?" — menanyakan hal yang baru
+ * saja disebut customer di kalimat yang sama. Itu langsung terbaca sebagai
+ * "tidak menyimak", dan memang begitu adanya.
+ *
+ * Dicocokkan ke daftar area NYATA milik agent (bukan tebak-tebakan dari
+ * potongan kalimat), dan yang TERPANJANG menang supaya "Pakuwon City" tidak
+ * kalah oleh "Pakuwon".
+ */
+async function findAreaInText({ userId, city, text }) {
+  const t = String(text || '').toLowerCase();
+  if (!userId || !t.trim()) return null;
+  try {
+    const cityId = await resolveCityId(city);
+    const rows = await Property.findAll({
+      where: {
+        user_id: userId, status: 1,
+        ...(cityId ? { city_id: cityId } : {}),
+        area: { [Op.ne]: null },
+      },
+      attributes: ['area'],
+      group: ['area'],
+      raw: true,
+    });
+    const hits = rows
+      .map((r) => String(r.area || '').trim())
+      .filter((a) => a && t.includes(a.toLowerCase()))
+      .sort((a, b) => b.length - a.length);
+    return hits[0] || null;
+  } catch (err) {
+    console.error('[FIND AREA IN TEXT ERROR]', err.message);
+    return null;
+  }
+}
+
 module.exports = {
   checkAreaAvailability,
+  fetchAreaListings,
+  findAreaInText,
   resolveCityAndArea,
   listAlternativeAreas,
   resolveCityId,

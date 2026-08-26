@@ -860,6 +860,20 @@ class ResponseBuilderWhatsApp {
       .join('\n\n');
   }
 
+  /**
+   * Versi PUBLIK dari #catalogListWhatsApp — supaya gerbang ketersediaan
+   * (utils/areaAvailabilityGate.js, M152/M154) bisa merender kartu listing
+   * dengan format yang SAMA PERSIS.
+   *
+   * Sengaja delegasi, bukan disalin: format kartu (baris kosong sesudah judul,
+   * "Estimasi Harga" bukan "Harga", Area/Alamat hanya bila ada) adalah hasil
+   * koreksi berulang dari pemilik proyek. Dua salinan format pasti melenceng
+   * seiring waktu — kelas bug M27/M77 yang sudah pernah menggigit proyek ini.
+   */
+  renderListingCards(properties = [], lang = 'en', limit = 6) {
+    return this.#catalogListWhatsApp(properties, lang, limit);
+  }
+
   #addFooter() {
     const isId = this.#lang === 'id';
     return isId

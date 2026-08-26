@@ -27,7 +27,8 @@ const {
 const { getWhatsappPropertyContext }                = require('../utils/whatsappPropertyContext');
 const { buildRecommendationContextForLLM,
         extractPropertyFilters,
-        humanBuildingType }                         = require('./propertyRecommendationService');
+        humanBuildingType,
+        detectLandmark }                            = require('./propertyRecommendationService');
 const { getConversationHistory }                    = require('./sessionService');
 const { loadAIContextBlocks }                       = require('./aiContextService');
 const { splitCatalogReply }                         = require('../utils/replySplitter');
@@ -49,7 +50,7 @@ const { getAgentIdentity,
         buildAgentIdentityContext }                 = require('./agentIdentityService');
 const { tryAreaAvailabilityAnswer,
         customerAsksAvailability }                  = require('../utils/areaAvailabilityGate');
-const { resolveCityAndArea }                        = require('./areaAvailabilityService');
+const { resolveCityAndArea, findAreaInText }        = require('./areaAvailabilityService');
 
 // Jendela history untuk ekstraksi filter & state kualifikasi. Cukup besar agar
 // pesan pembuka (tipe/transaksi/lokasi) tidak keluar scope di alur panjang, tapi
@@ -513,9 +514,29 @@ async function _generateWhatsAppAIReplyCore(params) {
     const qs = extractQualificationState(history, message) || {};
     // Nama slot hulu tidak bisa dipercaya (qs.city pernah berisi 'pakuwon'),
     // jadi kota vs area diputuskan dari tabel `cities`, bukan dari nama slot.
-    const { city: realCity, area: realArea } = await resolveCityAndArea([
+    // `detectLandmark(message)` ikut jadi kandidat — TANPA ini pesan pembuka
+    // "Saya mau beli apartemen di Surabaya, Kutisari" hanya menghasilkan
+    // city='Surabaya' dan area=null: qs.district kosong dan filters.landmark
+    // kosong pada giliran pertama, sehingga area yang JELAS-JELAS disebut
+    // customer di kalimat yang sama tidak pernah terbaca. Akibatnya di
+    // transkrip 25 Agu: bot balas "di area mana?" untuk area yang baru saja
+    // disebutkan. detectLandmark() membaca langsung dari master lokasi (1.738
+    // entri) dan menemukan "KUTISARI" dengan benar.
+    const { city: realCity, area: resolvedArea } = await resolveCityAndArea([
       qs.city, qs.district, filters.location, filters.landmark, qs.anchorPoint,
+      detectLandmark(message),
     ]);
+
+    // ⚠️ Cadangan terakhir: detectLandmark() hanya mengenali PATOKAN (mal,
+    // stasiun, wisata) — untuk "Kutisari" ia mengembalikan string kosong,
+    // karena Kutisari itu AREA/kawasan, bukan landmark. Diverifikasi langsung:
+    //   detectLandmark("...di Surabaya, Kutisari") === ""
+    //   findAreaInText(...)                        === "Kutisari"
+    // findAreaInText mencocokkan ke daftar area NYATA milik agent, jadi ini
+    // bukan tebakan — dan tanpa itu pesan pembuka yang sudah memuat keempat
+    // slot tetap dibalas "di area mana di Surabaya?" (keluhan pemilik proyek).
+    const realArea = resolvedArea
+      || await findAreaInText({ userId: agentUserId, city: realCity, text: message });
     const txRaw   = qs.transactionType || filters.transactionType || '';
     const typeRaw = qs.buildingType   || filters.buildingType    || '';
     let   txDb    = /rent|sewa/i.test(txRaw) ? 'Rent' : (/sale|beli|jual/i.test(txRaw) ? 'Sale' : '');
@@ -548,7 +569,34 @@ async function _generateWhatsAppAIReplyCore(params) {
     // properties.building_type memakai Kapital ('Apartment'), filters lowercase.
     const typeDb  = typeRaw ? String(typeRaw).charAt(0).toUpperCase() + String(typeRaw).slice(1).toLowerCase() : '';
 
-    if (agentUserId && realArea && txDb && customerAsksAvailability(message)) {
+    /* ── KAPAN GERBANG BOLEH BICARA (M155) ──────────────────────────────────
+     * Dua pemicu, bukan satu:
+     *
+     * (a) Customer BERTANYA ketersediaan/minta listing — sudah sejak M152.
+     *
+     * (b) Empat slot inti sudah lengkap (transaksi + tipe + kota + area),
+     *     WALAU customer tidak bertanya apa pun. Directive pemilik proyek
+     *     (26 Agu 2026): "Ketika AI mendapatkan informasi tipe transaksi, tipe
+     *     property, lokasi area dan kota; AI langsung memberikan 2 listing-an."
+     *
+     *     Ini menutup celah yang terlihat di transkrip 25 Agu: pesan PEMBUKA
+     *     "Hi... Saya mau beli apartemen di Surabaya, Kutisari" sudah memuat
+     *     keempat slot, tapi karena berbentuk PERNYATAAN (bukan pertanyaan),
+     *     gerbang diam dan bot malah bertanya "di area mana?" — area yang baru
+     *     saja disebut customer di kalimat yang sama.
+     *
+     * Penjaga `listingsAlreadyShown`: begitu kartu listing pernah terkirim,
+     * pemicu (b) berhenti supaya percakapan tidak mengulang blok listing yang
+     * sama tiap giliran. Pemicu (a) tetap hidup — kalau customer memang minta
+     * lagi ("minta 4 listing"), itu permintaan eksplisit dan harus dilayani.
+     */
+    const listingsAlreadyShown = history.some((h) => /^(ai|assistant)$/i.test(String(h.role || ''))
+      && /Estimasi Harga|Estimated Price/i.test(String(h.message || h.content || '')));
+    const fourSlotsKnown = Boolean(txDb && typeDb && realCity && realArea);
+    const gateShouldSpeak = customerAsksAvailability(message)
+      || (fourSlotsKnown && !listingsAlreadyShown);
+
+    if (agentUserId && realArea && txDb && gateShouldSpeak) {
       const hit = await tryAreaAvailabilityAnswer({
         userId: agentUserId, city: realCity, area: realArea,
         buildingType: typeDb || undefined, transactionType: txDb,
