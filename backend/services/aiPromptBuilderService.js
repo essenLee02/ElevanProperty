@@ -5,7 +5,9 @@ const { expandAbbreviations }                 = require('../utils/lazyChatNormal
 const { expandStandardFacilities }            = require('../utils/standardFacilities');
 const { detectCustomerFrustration } = require('../utils/propertyKeywordFilter');
 const { customerAsksPropertyData,
-        buildAnswerFirstDirective } = require('../utils/customerQuestionGuard');
+        buildAnswerFirstDirective,
+        customerNeedsDirectAnswer,
+        buildViewingRequestDirective } = require('../utils/customerQuestionGuard');
 const { getCityLandmarks }                    = require('../utils/locationLandmarks');
 
 /* ─── Qualification State Extractor ────────────────────────────────────────── */
@@ -184,14 +186,34 @@ function buildFinalDirective(state, identity = {}) {
   // katalog — yang salah murni direktif yang memaksa bertanya.
   // Selama satu giliran itu, direktif diganti "JAWAB DULU"; pertanyaan
   // berikutnya tetap disebut sebagai LANJUTAN opsional, bukan hilang.
-  const askedNow = identity.customerMessage
-    && customerAsksPropertyData(identity.customerMessage);
+  // M103 — TIGA kelas giliran yang WAJIB dijawab dulu, bukan hanya pertanyaan data:
+  //   'data'     → pertanyaan yang jawabannya ada di katalog (M142, sudah ada)
+  //   'viewing'  → permintaan/pertanyaan survei ("Apakah blh survei dlu?")
+  //   'redirect' → customer menyuruh berhenti ("Stop, Kak. Fokus ke survei dlu")
+  // Transkrip 26 Agu 2026: customer meminta survei ENAM KALI, tiap kali dibalas
+  // pertanyaan interview yang tidak berhubungan, karena hanya kelas 'data' yang
+  // bisa menunda baris "TANYAKAN SEKARANG" di posisi 100%.
+  const turnKind = identity.customerMessage
+    ? customerNeedsDirectAnswer(identity.customerMessage)
+    : null;
 
-  const nextLine = askedNow
+  const nextLine = turnKind === 'data'
     ? buildAnswerFirstDirective(identity.customerMessage, nq)
-    : (nq
-      ? `TANYAKAN SEKARANG → ${nq.q}: ${nq.hint}`
-      : 'Semua field wajib sudah ✅ → TAMPILKAN SUMMARY BRIEF sekarang.');
+    : (turnKind === 'viewing' || turnKind === 'redirect')
+      ? buildViewingRequestDirective(identity.customerMessage, turnKind, nq)
+      : (nq
+        ? `TANYAKAN SEKARANG → ${nq.q}: ${nq.hint}`
+        : 'Semua field wajib sudah ✅ → TAMPILKAN SUMMARY BRIEF sekarang.');
+
+  // ⚠️ Baris penutup ini TIDAK BOLEH menyuruh "ajukan pertanyaan di baris
+  // TANYAKAN SEKARANG" ketika baris itu SUDAH DIGANTI oleh direktif
+  // jawab-dulu — pada giliran itu tidak ada baris TANYAKAN SEKARANG sama
+  // sekali, sehingga instruksinya saling bertentangan DI POSISI 100% prompt
+  // (persis kelas masalah yang diperingatkan M62: yang di ujung paling
+  // dipatuhi, jadi kontradiksi di sini paling mahal).
+  const oneQuestionLine = turnKind
+    ? '⛔ Jawab dulu permintaan/pertanyaan customer di atas. JANGAN menambah\n   pertanyaan interview lain di giliran yang sama.'
+    : '⛔ Ajukan TEPAT SATU pertanyaan: yang tertulis di baris TANYAKAN SEKARANG.';
 
   // ── Anti-karangan nama area (M84) ─────────────────────────────────────────
   // Bug produksi 6 Agu 2026: customer hanya menyebut kota Malang; area tidak
@@ -255,7 +277,7 @@ ${nextLine}
    kualifikasi yang sedang berjalan.
 ⛔ JANGAN mulai "pencarian baru" / tanya "sewa atau beli?" kecuali baris
    SUDAH DIJAWAB di atas benar-benar kosong.
-⛔ Ajukan TEPAT SATU pertanyaan: yang tertulis di baris TANYAKAN SEKARANG.${noAreaLine}${sigLine}${catalogLine}
+${oneQuestionLine}${noAreaLine}${sigLine}${catalogLine}
 ═══════════════════════════════════════════════════════════`;
 }
 
@@ -1189,11 +1211,25 @@ function extractQualificationState(history = [], currentMessage = '') {
     if (state.transactionType === 'sale') {
       // Q_KPR — pembiayaan (MANDATORY untuk semua 12 tipe beli)
       if (!state.financing) {
-        const hasKpr  = /\b(kpr|kpa|kpt|kredit|mortgage|dp\s*\d+)\b/.test(text);
-        const hasCash = /\b(cash|tunai)\b/.test(text);
-        if (hasKpr && hasCash)  state.financing = 'kombinasi cash + KPR';
-        else if (hasKpr)        state.financing = 'KPR';
-        else if (hasCash)       state.financing = 'cash';
+        // ⚠️ PENUNDAAN BUKAN PILIHAN (M103).
+        // Bug produksi 26 Agu 2026: customer menulis "Urusan KPR nanti sj" —
+        // itu MENUNDA topik pembiayaan, bukan memilih KPR. Karena pola lama
+        // hanya mencari kata "kpr" di mana saja, financing di-set 'KPR', lalu
+        // findNextQuestion langsung menembak Q_KPR-a ("bank mana? DP berapa
+        // persen?") — persis hal yang baru saja diminta customer untuk DITUNDA.
+        // Deteksi penundaan HARUS didahulukan; slot dibiarkan ❓ supaya
+        // pertanyaannya muncul lagi NANTI, bukan terisi nilai palsu sekarang.
+        const isDeferral = /\b(?:nanti|ntar|belakangan|kemudian|besok)\b\s*(?:saja|sj|aja|dulu|dlu)?\b/i.test(text)
+          || /\b(?:urusan|soal|masalah|perkara)\b[^.?!]{0,20}\b(?:nanti|ntar|belakangan)\b/i.test(text)
+          || /\b(?:belum|blm)\b[^.?!]{0,15}\b(?:mikir|kepikiran|tahu|tau|putus|pasti)\b/i.test(text);
+
+        if (!isDeferral) {
+          const hasKpr  = /\b(kpr|kpa|kpt|kredit|mortgage|dp\s*\d+)\b/.test(text);
+          const hasCash = /\b(cash|tunai)\b/.test(text);
+          if (hasKpr && hasCash)  state.financing = 'kombinasi cash + KPR';
+          else if (hasKpr)        state.financing = 'KPR';
+          else if (hasCash)       state.financing = 'cash';
+        }
       }
       // Q_COND — kondisi (beli residensial): baru/ready | second | inden.
       // Jawaban GABUNGAN ("kondisi baru atau second") harus utuh — dulu hanya

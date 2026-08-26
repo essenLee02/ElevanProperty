@@ -108,10 +108,21 @@ console.log('\n== Group 4: direktif terpasang di buildFinalDirective (bukan cuma
   const src = fs.readFileSync(path.join(__dirname, '..', 'services', 'aiPromptBuilderService.js'), 'utf8');
   ok('aiPromptBuilderService me-require customerQuestionGuard',
     /require\('\.\.\/utils\/customerQuestionGuard'\)/.test(src));
-  ok('buildFinalDirective memakai customerAsksPropertyData',
-    /askedNow[\s\S]{0,120}customerAsksPropertyData\(identity\.customerMessage\)/.test(src));
-  ok('nextLine memilih buildAnswerFirstDirective saat customer bertanya',
-    /askedNow\s*\?\s*buildAnswerFirstDirective/.test(src));
+  // ⚠️ DIPERBARUI M103 (26 Agu 2026), dengan alasan tertulis.
+  // Asersi lama mengunci BENTUK KODE (`askedNow ? buildAnswerFirstDirective`),
+  // bukan perilakunya. M103 memperluas gerbang ini dari SATU kelas ('data')
+  // menjadi TIGA ('data' | 'viewing' | 'redirect') lewat
+  // customerNeedsDirectAnswer(), sehingga variabel `askedNow` berganti nama
+  // jadi `turnKind`. Perilaku M142 TIDAK berubah — pertanyaan data tetap
+  // memicu buildAnswerFirstDirective (diverifikasi ulang di Group 1–3 berkas
+  // ini, semuanya masih lulus). Asersi kini menguji MAKSUD-nya: gerbang
+  // terpasang, dan cabang 'data' tetap memanggil buildAnswerFirstDirective.
+  ok('buildFinalDirective memakai gerbang pertanyaan customer',
+    /customerNeedsDirectAnswer\(identity\.customerMessage\)/.test(src)
+    || /customerAsksPropertyData\(identity\.customerMessage\)/.test(src));
+  ok('cabang data memilih buildAnswerFirstDirective saat customer bertanya',
+    /===\s*'data'\s*\n?\s*\?\s*buildAnswerFirstDirective/.test(src)
+    || /askedNow\s*\?\s*buildAnswerFirstDirective/.test(src));
   ok('call-site meneruskan customerMessage: userMessage',
     /customerMessage:\s*userMessage/.test(src));
 }

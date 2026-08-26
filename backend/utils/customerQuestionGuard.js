@@ -69,6 +69,138 @@ function customerAsksPropertyData(message) {
   return DATA_TOPIC_RE.test(text);
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   M103 — KELAS KEDUA: PERMINTAAN PROSES, BUKAN PERTANYAAN DATA.
+   ═══════════════════════════════════════════════════════════════════════════
+   Transkrip produksi 26 Agu 2026 (beli rumah Sidoarjo / Puri Surya Jaya).
+   Customer meminta survei ENAM KALI dan TIDAK PERNAH dijawab:
+
+     11.54 "Saya mau survei dulu, Kak"           → AI: Q4 penghuni        ❌
+     11.54 "Apakah blh survei dlu?"              → (diabaikan)            ❌
+     11.55 "Saya mau lihat" dlu sih, Kak"        → AI: Q_FAC fasilitas    ❌
+     11.56 "Saya survei dlu; Kak"                → AI: Q_COND kondisi     ❌
+     11.57 "Kalau survei ke Puri Surya Jaya,
+            butuh brpa lama? Rumah saya di
+            Sidotopo; Kak"                       → AI: Q11 furnitur       ❌
+     11.58 "Stop, Kak. Fokus ke survei dlu"      → AI: Q5 red flags       ❌❌
+     11.58 "Saya mau survei. Apakah sy blh
+            survei ke Puri Surya Jaya?"          → AI: Q6 patokan         ❌
+
+   `customerAsksPropertyData()` TIDAK menangkap satu pun dari ini — dan itu
+   BENAR sesuai desainnya: fungsi itu khusus pertanyaan yang jawabannya ada di
+   KATALOG (alamat/harga/kamar). Permintaan di atas kelasnya beda:
+     • IZIN/NIAT   — "boleh survei?" → butuh jawaban YA + penjadwalan
+     • REDIRECT    — "Stop, fokus ke survei dlu" → customer MEMBATALKAN agenda
+                     interview AI secara eksplisit
+     • LOGISTIK    — "butuh berapa lama dari Sidotopo?" → AI TIDAK TAHU jarak
+                     tempuh; wajib jujur & serahkan ke agent, jangan menebak
+
+   Semuanya WAJIB dijawab lebih dulu. Membiarkan skrip interview menang atas
+   permintaan eksplisit customer adalah keluhan utama pemilik proyek:
+   "AI terlalu fokus pada agendanya pribadi… AI tetap acuh dan terus melakukan
+   interview sesuai agenda pribadinya sendiri."
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Customer MEMINTA/MENANYAKAN survei-viewing (izin, niat, atau jadwal).
+ *
+ * ⚠️ Sengaja TIDAK memakai QUESTION_CUE_RE sebagai syarat: "Saya mau survei
+ * dulu, Kak" adalah PERNYATAAN NIAT tanpa tanda tanya, tapi tetap wajib
+ * dijawab. Yang menentukan justru kata kerja survei + penanda niat/izin.
+ */
+const VIEWING_REQUEST_RE = new RegExp(
+  '\\b(?:mau|ingin|pengen|pingin|bisa|bisakah|boleh|blh|bolehkah|minta|rencana|niat)\\b'
+  + '[^.?!]{0,40}?'
+  + '\\b(?:survei|survey|surver|srvei|viewing|visit|lihat|liat|liht|cek|ngecek|datang|kunjung)\\b'
+  + '|'
+  + '\\b(?:survei|survey|viewing)\\b[^.?!]{0,30}?\\b(?:dulu|dlu|dl)\\b',
+  'i'
+);
+
+/**
+ * Customer secara EKSPLISIT menyuruh AI berhenti/berganti fokus.
+ * Ini sinyal terkuat yang bisa diberikan customer — mengabaikannya membuat
+ * percakapan terasa seperti bot yang tidak mendengarkan sama sekali.
+ */
+const FOCUS_REDIRECT_RE = new RegExp(
+  '\\b(?:stop|berhenti|udah|sudah|cukup|tunggu|bentar|sebentar)\\b[^.?!]{0,30}?'
+  + '\\b(?:dulu|dlu|ya|kak)?\\b'
+  + '[^.?!]{0,30}?\\b(?:fokus|fokuskan|bahas|urus|bicara)\\b'
+  + '|'
+  + '\\bfokus\\b[^.?!]{0,20}?\\b(?:ke|pada|dulu|dlu)\\b'
+  + '|'
+  + '\\b(?:jangan|jgn)\\b[^.?!]{0,25}?\\b(?:tanya|nanya|tanyakan)\\b'
+  + '|'
+  + '\\b(?:nanti|ntar)\\s+(?:saja|sj|aja|dulu|dlu)\\b',
+  'i'
+);
+
+/** Kata kerja survei/viewing dalam segala ejaan yang lazim di WhatsApp. */
+const VIEWING_VERB_RE = /\b(?:survei|survey|surver|srvei|viewing|visit|kunjungan)\b/i;
+
+/** @returns {boolean} customer meminta/menanyakan survei pada giliran ini. */
+function customerRequestsViewing(message) {
+  const text = String(message || '').trim();
+  if (!text) return false;
+  if (VIEWING_REQUEST_RE.test(text)) return true;
+
+  // BERTANYA TENTANG survei (bukan meminta) tetap wajib dijawab.
+  // Kasus produksi yang lolos pola di atas karena tidak ada kata niat maupun
+  // "dulu": "Kalau survei ke Puri Surya Jaya, butuh brpa lama? Rumah saya di
+  // Sidotopo; Kak" — pertanyaan LOGISTIK. Di produksi dijawab Q11 furnitur.
+  // Syaratnya tetap dua: ada tanda tanya/kata tanya DAN menyebut survei —
+  // jadi kalimat biasa yang kebetulan memuat "survei" tidak ikut tertangkap.
+  return QUESTION_CUE_RE.test(text) && VIEWING_VERB_RE.test(text);
+}
+
+/** @returns {boolean} customer menyuruh AI berhenti/ganti fokus. */
+function customerRedirectsFocus(message) {
+  const text = String(message || '').trim();
+  if (!text) return false;
+  return FOCUS_REDIRECT_RE.test(text);
+}
+
+/**
+ * Satu gerbang untuk "giliran ini WAJIB dijawab dulu, apa pun agendanya".
+ * @returns {'data'|'viewing'|'redirect'|null}
+ */
+function customerNeedsDirectAnswer(message) {
+  if (customerRedirectsFocus(message)) return 'redirect';
+  if (customerRequestsViewing(message)) return 'viewing';
+  if (customerAsksPropertyData(message)) return 'data';
+  return null;
+}
+
+/**
+ * Direktif untuk permintaan survei / redirect fokus.
+ * Sama seperti buildAnswerFirstDirective: deskriptif soal APA yang harus
+ * dilakukan, TIDAK mendikte kalimatnya (M131/M133).
+ */
+function buildViewingRequestDirective(message, kind = 'viewing', nextQuestion = null) {
+  const header = kind === 'redirect'
+    ? '❗ CUSTOMER MENYURUH BERHENTI & GANTI FOKUS — PATUHI SEKARANG.'
+    : '❗ CUSTOMER MEMINTA SURVEI/VIEWING — JAWAB & TINDAK LANJUTI DULU.';
+
+  const followUp = nextQuestion && nextQuestion.hint
+    ? `\n   Setelah itu, BOLEH lanjut satu pertanyaan: ${String(nextQuestion.hint).slice(0, 160)}`
+    : '';
+
+  return `${header}
+   Pesan customer: "${String(message).trim().slice(0, 200)}"
+   Yang HARUS dilakukan giliran ini:
+     1. Jawab permintaannya secara langsung ("Bisa, Kak" untuk permintaan survei).
+     2. Lanjutkan prosesnya — tanyakan KAPAN (tanggal), lalu jam pada giliran
+        berikutnya. Jadwal survei adalah data yang memang perlu dikumpulkan,
+        jadi ini BUKAN keluar jalur.
+   ⛔ DILARANG membalas dengan pertanyaan interview lain (fasilitas, furnitur,
+      penghuni, kondisi, red flags) sebelum permintaan ini dijawab. Di produksi
+      customer harus mengulang permintaan survei SAMPAI ENAM KALI karena
+      aturan ini tidak ada.
+   ⛔ Bila customer menanyakan JARAK/LAMA PERJALANAN ke lokasi: AI TIDAK punya
+      data itu — katakan terus terang akan dibantu agent, JANGAN menebak durasi
+      atau jarak.${followUp}`;
+}
+
 /**
  * Baris direktif pengganti "TANYAKAN SEKARANG → Qx" untuk giliran ini.
  *
@@ -101,4 +233,11 @@ module.exports = {
   DATA_TOPIC_RE,
   customerAsksPropertyData,
   buildAnswerFirstDirective,
+  // M103 — permintaan proses (survei) & redirect fokus
+  VIEWING_REQUEST_RE,
+  FOCUS_REDIRECT_RE,
+  customerRequestsViewing,
+  customerRedirectsFocus,
+  customerNeedsDirectAnswer,
+  buildViewingRequestDirective,
 };
