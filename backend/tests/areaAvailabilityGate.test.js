@@ -19,6 +19,7 @@ const {
   customerAsksAvailability,
   detectRequestedCount,
   composeAvailabilityReply,
+  composeBudgetEmptyReply,
   humanPrice,
 } = require('../utils/areaAvailabilityGate');
 
@@ -106,6 +107,46 @@ async function main() {
   }, { area: 'Pakuwon', typeLabel: 'apartemen', transactionType: 'Sale', isId: true });
   ok('mengembalikan null saat stok ada', available === null,
     available ? available.reply.slice(0, 60) : '');
+
+  /* ── 7b. Budget tidak cocok di area ini (M156) — jangan kirim ulang listing
+   *       yang sudah ditolak customer sebagai "kemahalan". Transkrip nyata
+   *       26 Agu 2026: customer minta 700-800 juta di Puri Surya Jaya (yang
+   *       cuma ada 1.15M/1.27M), gerbang lama mengirim ulang 2 unit yang sama
+   *       persis 3x — mengabaikan budget yang sudah disebut dua kali. ── */
+  console.log('\n7b) Budget disebutkan tapi tidak cocok di area ini (M156)');
+  const budgetEmpty = composeBudgetEmptyReply({
+    area: 'Puri Surya Jaya', typeLabel: 'rumah', transactionType: 'Sale', isId: true,
+    budgetLabel: 'Rp 700.000.000 - Rp 800.000.000',
+    altAreas: [
+      { area: 'Alam Djuanda', count: 3, minPrice: 720000000 },
+      { area: 'Alana Cemandi', count: 5, minPrice: 565800000 },
+    ],
+  });
+  ok('minta maaf, bukan mengirim ulang listing lama', /mohon maaf/i.test(budgetEmpty.reply));
+  ok('menyebut budget yang diminta customer', budgetEmpty.reply.includes('700.000.000'));
+  ok('menawarkan area lain yang benar-benar masuk budget',
+    /Alam Djuanda/.test(budgetEmpty.reply) && /Alana Cemandi/.test(budgetEmpty.reply));
+  ok('TIDAK langsung mengirim kartu listing area lain',
+    !/📐|Estimasi Harga|Fasilitas:/i.test(budgetEmpty.reply));
+  ok('tanpa alternatif → tetap bertanya, tidak diam',
+    /\?/.test(composeBudgetEmptyReply({
+      area: 'Puri Surya Jaya', typeLabel: 'rumah', transactionType: 'Sale', isId: true,
+      budgetLabel: 'Rp 700.000.000 - Rp 800.000.000', altAreas: [],
+    }).reply));
+
+  /* ── 7c. Frasa "diurutkan dari yang termurah" TIDAK BOLEH bocor ke customer —
+   *       itu detail internal penyortiran (permintaan pemilik proyek 27 Agu
+   *       2026: "itu rahasia backend saja, AI cukup tampilkan data saja").
+   *       Dicek langsung dari SUMBER modul (bukan tes yang menyalin logika)
+   *       supaya regresi tertangkap walau tidak ada DB tersambung. ── */
+  console.log('\n7c) Frasa "termurah" tidak boleh bocor ke balasan customer');
+  const gateSource = require('fs').readFileSync(
+    require('path').join(__dirname, '../utils/areaAvailabilityGate.js'), 'utf8'
+  );
+  ok('tidak ada "termurah" di kalimat balasan listings-shown',
+    !/saya urutkan dari yang termurah/i.test(gateSource));
+  ok('tidak ada "sorted cheapest first" di kalimat balasan listings-shown',
+    !/sorted cheapest first/i.test(gateSource));
 
   /* ── 8. Katalog nyata (butuh DB) ── */
   console.log('\n8) Terhadap katalog sungguhan');

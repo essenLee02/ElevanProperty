@@ -31,7 +31,9 @@
  * secara eksplisit dipertahankan pemilik proyek (24 Agu 2026).
  */
 
-const { checkAreaAvailability, fetchAreaListings } = require('../services/areaAvailabilityService');
+const {
+  checkAreaAvailability, fetchAreaListings, listAreasWithinBudget, resolveCityId,
+} = require('../services/areaAvailabilityService');
 
 /** Customer bertanya "ada / apakah ada / punya ga" — pertanyaan KETERSEDIAAN. */
 const AVAILABILITY_RE = new RegExp([
@@ -168,6 +170,42 @@ function composeAvailabilityReply(av, { area: areaRaw, typeLabel = 'properti', t
 }
 
 /**
+ * Balasan saat stok ADA di area ini, tapi tidak satu pun masuk budget yang
+ * customer sebutkan (M156). Beda dari composeAvailabilityReply — di sini
+ * area MEMANG punya stok, hanya HARGANYA yang tidak cocok, jadi framingnya
+ * soal budget, bukan soal ketersediaan area/transaksi.
+ */
+function composeBudgetEmptyReply({
+  area: areaRaw, typeLabel = 'properti', transactionType, isId = true,
+  requestedCount = null, budgetLabel, altAreas = [],
+}) {
+  const area = titleCaseArea(areaRaw);
+  const alts = (altAreas || []).filter((a) => a.count > 0);
+  const altLine = alts.length
+    ? alts.map((a) => {
+      const p = humanPrice(a.minPrice);
+      return `• *${a.area}* — ${a.count} unit${p ? `, mulai ${p}` : ''}`;
+    }).join('\n')
+    : '';
+
+  if (!isId) {
+    return {
+      verdict: 'budget-empty', requestedCount,
+      reply: `I'm sorry — I don't have any ${typeLabel} ${txWord(transactionType, false)} in ${area} within ${budgetLabel}.\n\n`
+           + (altLine ? `These areas do fit that budget:\n${altLine}\n\nWould you like to see any of these?`
+             : `Would you like to try a different budget, or another area?`),
+    };
+  }
+  return {
+    verdict: 'budget-empty', requestedCount,
+    reply: `Mohon maaf, Kak 🙏 Untuk *${typeLabel} ${txWord(transactionType, true)}* di *${area}* belum ada yang sesuai budget ${budgetLabel}.\n\n`
+         + (altLine
+           ? `Kalau budgetnya segitu, ada di area berikut:\n${altLine}\n\nMau saya carikan di salah satu area itu? 😊`
+           : `Mau saya cek budget lain, atau area lain? 😊`),
+  };
+}
+
+/**
  * Gerbang lengkap: cek katalog lalu susun balasan bila perlu.
  * Fail-open — error apa pun mengembalikan null supaya alur normal jalan terus.
  */
@@ -178,6 +216,12 @@ async function tryAreaAvailabilityAnswer({
   if (!userId || !area || !transactionType) return null;
   try {
     const requestedCount = detectRequestedCount(message);
+    // require lokal: propertyRecommendationService besar dan saling terkait —
+    // menariknya ke puncak file berisiko siklus require (sama pola dengan
+    // fetchAreaListings di areaAvailabilityService.js).
+    const { detectBudget } = require('../services/propertyRecommendationService');
+    const budget = detectBudget(message);
+    const hasBudget = budget && !budget.ambiguous && (Number.isFinite(budget.min) || Number.isFinite(budget.max));
     const av = await checkAreaAvailability({ userId, city, area, buildingType, transactionType });
 
     /* ── Stok ADA → LANGSUNG TAMPILKAN LISTING (M154) ──────────────────────
@@ -197,8 +241,27 @@ async function tryAreaAvailabilityAnswer({
       const limit = requestedCount || DEFAULT_SHOWN;
       const rows  = await fetchAreaListings({
         userId, city, area, buildingType, transactionType, limit,
+        minPrice: hasBudget ? budget.min : null,
+        maxPrice: hasBudget ? budget.max : null,
       });
-      if (!rows.length) return null;                 // fail-open: biarkan alur normal
+
+      if (!rows.length) {
+        // Budget disebutkan tapi TIDAK SATU PUN listing area ini yang cocok —
+        // jangan kirim ulang listing yang sudah ditolak customer sebagai
+        // "kemahalan" (transkrip nyata 26 Agu 2026: "700-800 juta" ditanyakan
+        // 2x, gerbang lama mengirim ulang 2 unit 1.15M/1.27M yang sama persis
+        // tiap kali). Cari area LAIN di kota yang sama yang masuk budget dulu.
+        if (!hasBudget) return null;               // fail-open: biarkan alur normal
+        const cityId = await resolveCityId(city);
+        const altAreas = await listAreasWithinBudget({
+          userId, cityId, buildingType, transactionType,
+          minPrice: budget.min, maxPrice: budget.max, excludeArea: area,
+        });
+        return composeBudgetEmptyReply({
+          area, typeLabel, transactionType, isId, requestedCount,
+          budgetLabel: budget.text, altAreas,
+        });
+      }
 
       // Format kartu dipinjam dari ResponseBuilderWhatsApp supaya identik
       // dengan listing yang dikirim jalur lain (bukan salinan format kedua).
@@ -211,9 +274,12 @@ async function tryAreaAvailabilityAnswer({
       );
       if (!cards || !cards.trim()) return null;
 
+      // ⚠️ Tidak menyebut "diurutkan dari yang termurah" — itu detail internal
+      // penyortiran, bukan informasi untuk customer (permintaan pemilik proyek,
+      // 27 Agu 2026: "itu rahasia backend saja, AI cukup tampilkan data saja").
       const head = isId
-        ? `Ini ${rows.length} ${typeLabel} ${txWord(transactionType, true)} di *${titleCaseArea(area)}* ya, Kak — saya urutkan dari yang termurah 😊\n\n`
-        : `Here ${rows.length === 1 ? 'is' : 'are'} ${rows.length} ${typeLabel} ${txWord(transactionType, false)} in *${titleCaseArea(area)}*, sorted cheapest first 😊\n\n`;
+        ? `Ini ${rows.length} ${typeLabel} ${txWord(transactionType, true)} di *${titleCaseArea(area)}* ya, Kak 😊\n\n`
+        : `Here ${rows.length === 1 ? 'is' : 'are'} ${rows.length} ${typeLabel} ${txWord(transactionType, false)} in *${titleCaseArea(area)}* 😊\n\n`;
       const tail = isId
         ? `\n\nAda yang menarik, Kak? Kalau mau saya carikan yang lebih spesifik, boleh sebutkan budget atau kebutuhan lainnya.`
         : `\n\nAnything catch your eye? If you'd like something more specific, let me know your budget or other needs.`;
@@ -233,6 +299,7 @@ async function tryAreaAvailabilityAnswer({
 module.exports = {
   tryAreaAvailabilityAnswer,
   composeAvailabilityReply,
+  composeBudgetEmptyReply,
   customerAsksAvailability,
   detectRequestedCount,
   humanPrice,

@@ -279,6 +279,49 @@ async function resolveCityAndArea(candidates = []) {
 }
 
 /**
+ * Area (kota yang sama) yang punya stok DI DALAM rentang budget yang diminta —
+ * dipakai saat area yang customer minta punya stok, tapi tidak satu pun masuk
+ * budgetnya (transkrip nyata 26 Agu 2026: customer minta 700-800 juta di Puri
+ * Surya Jaya yang cuma ada 1.15M/1.27M, lalu gerbang lama mengirim ulang DUA
+ * listing yang sama persis tiga kali — mengabaikan budget yang sudah disebutkan
+ * dua kali). Sama gaya dengan listAlternativeAreas (harga termurah dulu),
+ * tapi disaring rentang harga alih-alih hanya "punya stok".
+ */
+async function listAreasWithinBudget({
+  userId, cityId, buildingType, transactionType, minPrice, maxPrice, excludeArea, limit = MAX_ALT_AREAS,
+}) {
+  const priceWhere = {};
+  if (Number.isFinite(minPrice)) priceWhere[Op.gte] = minPrice;
+  if (Number.isFinite(maxPrice)) priceWhere[Op.lte] = maxPrice;
+  if (!Object.keys(priceWhere).length) return [];
+
+  const rows = await Property.findAll({
+    where: {
+      user_id: userId, status: 1,
+      ...(cityId ? { city_id: cityId } : {}),
+      ...(buildingType ? { building_type: buildingType } : {}),
+      ...(transactionType ? { transaction_type: transactionType } : {}),
+      area: { [Op.ne]: null },
+      price: priceWhere,
+    },
+    attributes: ['area', [fn('COUNT', col('id')), 'n'], [fn('MIN', col('price')), 'mn']],
+    group: ['area'],
+    order: [[literal('mn'), 'ASC']],
+    raw: true,
+  });
+
+  const skip = norm(excludeArea);
+  return rows
+    .filter((r) => r.area && String(r.area).trim())
+    .filter((r) => {
+      const a = norm(r.area);
+      return !skip || (!a.includes(skip) && !skip.includes(a));
+    })
+    .slice(0, limit)
+    .map((r) => ({ area: r.area, count: Number(r.n), minPrice: r.mn === null ? null : Number(r.mn) }));
+}
+
+/**
  * Ambil listing NYATA untuk area+transaksi+tipe, TERMURAH DULU (M154).
  *
  * Directive pemilik proyek (26 Agu 2026):
@@ -307,9 +350,13 @@ async function resolveCityAndArea(candidates = []) {
  * SUDAH ternormalisasi dan sudah di-cache (5 menit), jadi ini juga tidak
  * menambah query DB per pesan. Penyaringan dilakukan di memori atas cache itu.
  *
+ * @param {number} [minPrice] batas bawah budget customer (opsional)
+ * @param {number} [maxPrice] batas atas budget customer (opsional)
  * @returns {Promise<Array>} properti ternormalisasi, siap dirender
  */
-async function fetchAreaListings({ userId, city, area, buildingType, transactionType, limit = 2 }) {
+async function fetchAreaListings({
+  userId, city, area, buildingType, transactionType, limit = 2, minPrice = null, maxPrice = null,
+}) {
   if (!userId || !area) return [];
   try {
     // require lokal: propertyRecommendationService besar dan saling terkait —
@@ -322,6 +369,8 @@ async function fetchAreaListings({ userId, city, area, buildingType, transaction
     const wantType = norm(buildingType);      // 'Apartment' → 'apartment'
     const wantTx   = norm(transactionType);   // 'Sale' → 'sale'
     const wantCity = norm(city);
+    const hasMin = Number.isFinite(minPrice);
+    const hasMax = Number.isFinite(maxPrice);
 
     const matched = rows.filter((r) => {
       if (wantArea && !norm(r.area).includes(wantArea)) return false;
@@ -331,6 +380,14 @@ async function fetchAreaListings({ userId, city, area, buildingType, transaction
       // kosong pada baris lama. Kalau kosong, jangan buang — area sudah cukup
       // menyempitkan dan membuang baris valid lebih merugikan customer.
       if (wantCity && norm(r.city) && norm(r.city) !== wantCity) return false;
+      // Budget customer (mis. "700-800 juta") — bila disebutkan, JANGAN kirim
+      // ulang listing yang sudah ditolak customer sebagai "kemahalan" (M156).
+      if (hasMin || hasMax) {
+        const p = Number(r.priceValue);
+        if (!Number.isFinite(p) || p <= 0) return false;
+        if (hasMin && p < minPrice) return false;
+        if (hasMax && p > maxPrice) return false;
+      }
       return true;
     });
 
@@ -398,6 +455,7 @@ module.exports = {
   findAreaInText,
   resolveCityAndArea,
   listAlternativeAreas,
+  listAreasWithinBudget,
   resolveCityId,
   MAX_ALT_AREAS,
 };
