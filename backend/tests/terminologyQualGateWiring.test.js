@@ -50,6 +50,11 @@ async function main() {
       message: 'Kalau saya mau ngekos di Madiun, SHM itu apa sih maksudnya?',
       agentName: 'Test Agent',
       agentUserId: 'TEST_M132',
+      // M158: gerbang terminologi hanya MENYUSUN balasan di profil 'local'.
+      // Di profil 'platform' definisinya dikirim sebagai konteks dan platform
+      // AI yang menulis kalimatnya — jadi kontrak yang diuji di sini (backend
+      // membalas sendiri) memang kontrak profil 'local'.
+      agentAiPrimary: 'private',
     });
 
     ok('provider = terminology_gate (bukan diam-diam qualification kosong)',
@@ -71,6 +76,11 @@ async function main() {
       message: 'Blh tau SHM itu apa',
       agentName: 'Test Agent',
       agentUserId: 'TEST_M132',
+      // M158: gerbang terminologi hanya MENYUSUN balasan di profil 'local'.
+      // Di profil 'platform' definisinya dikirim sebagai konteks dan platform
+      // AI yang menulis kalimatnya — jadi kontrak yang diuji di sini (backend
+      // membalas sendiri) memang kontrak profil 'local'.
+      agentAiPrimary: 'private',
     });
     ok('provider = terminology_gate untuk pesan literal transkrip', result.provider === 'terminology_gate', result.provider);
     ok('balasan menjawab SHM', /kepemilikan/i.test(result.reply) && /selamanya/i.test(result.reply), result.reply.slice(0, 150));
@@ -87,6 +97,11 @@ async function main() {
       message: 'Mau ngekos di Madiun, ngomong-ngomong SHM sama KPR itu apa bedanya?',
       agentName: 'Test Agent',
       agentUserId: 'TEST_M132',
+      // M158: gerbang terminologi hanya MENYUSUN balasan di profil 'local'.
+      // Di profil 'platform' definisinya dikirim sebagai konteks dan platform
+      // AI yang menulis kalimatnya — jadi kontrak yang diuji di sini (backend
+      // membalas sendiri) memang kontrak profil 'local'.
+      agentAiPrimary: 'private',
     });
     ok('pertanyaan istilah (SHM, dicek lebih dulu dari KPR) tetap dijawab', /kepemilikan/i.test(result.reply), result.reply.slice(0, 150));
   }
@@ -98,6 +113,11 @@ async function main() {
       message: 'Saya mau sewa rumah di Malang',
       agentName: 'Test Agent',
       agentUserId: 'TEST_M132',
+      // M158: gerbang terminologi hanya MENYUSUN balasan di profil 'local'.
+      // Di profil 'platform' definisinya dikirim sebagai konteks dan platform
+      // AI yang menulis kalimatnya — jadi kontrak yang diuji di sini (backend
+      // membalas sendiri) memang kontrak profil 'local'.
+      agentAiPrimary: 'private',
     });
     ok('provider BUKAN terminology_gate untuk pesan non-istilah', result.provider !== 'terminology_gate', result.provider);
   }
@@ -114,11 +134,43 @@ async function main() {
       message: 'Rumah di Surabaya yang mau saya sewa, budget 5 juta/bulan, itu sertifikatnya SHM atau SHGB?',
       agentName: 'Test Agent',
       agentUserId: 'TEST_M132',
+      // M158: gerbang terminologi hanya MENYUSUN balasan di profil 'local'.
+      // Di profil 'platform' definisinya dikirim sebagai konteks dan platform
+      // AI yang menulis kalimatnya — jadi kontrak yang diuji di sini (backend
+      // membalas sendiri) memang kontrak profil 'local'.
+      agentAiPrimary: 'private',
     });
     ok('provider = terminology_gate walau info kualifikasi sudah lengkap di pesan yang sama',
       result.provider === 'terminology_gate', result.provider);
     ok('balasan tidak mengulang pertanyaan sewa/beli (info sudah ada)',
       !/rencananya untuk \*sewa\* atau \*beli\*/i.test(result.reply), result.reply.slice(0, 200));
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     Group 5 (M158) — KONTRAK PROFIL 'platform': BACKEND TIDAK BOLEH MENJAWAB
+     ══════════════════════════════════════════════════════════════════════════
+     Directive pemilik proyek (28 Agu 2026): saat AI_PRIMARY_PROVIDER memakai
+     platform AI, backend hanya menyiapkan guardrails + vektor + RAG + skills;
+     "code backend yang lain tidak boleh ikut campur ... menentukan keputusan".
+
+     Grup di atas menguji kontrak profil 'local' (backend menyusun balasan).
+     Grup ini mengunci KEBALIKANNYA, supaya perbaikan M158 tidak diam-diam
+     kembali: pertanyaan terminologi yang SAMA, dengan provider platform, tidak
+     boleh lagi dibalas oleh gerbang backend.
+  ══════════════════════════════════════════════════════════════════════════ */
+  console.log("\n== Group 5 (M158): profil 'platform' — gerbang backend TIDAK menyusun balasan ==");
+  {
+    const result = await generateWhatsAppAIReply({
+      session: session(),
+      message: 'Blh tau SHM itu apa',
+      agentName: 'Test Agent',
+      agentUserId: 'TEST_M132',
+      agentAiPrimary: 'kimi',        // → profil 'platform'
+    });
+    ok("provider BUKAN terminology_gate di profil 'platform'",
+      result.provider !== 'terminology_gate', result.provider);
+    ok("provider BUKAN area_availability_gate di profil 'platform'",
+      result.provider !== 'area_availability_gate', result.provider);
   }
 
   console.log(`\n${'='.repeat(60)}`);

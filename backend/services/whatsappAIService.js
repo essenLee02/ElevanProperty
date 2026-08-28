@@ -421,6 +421,39 @@ async function _generateWhatsAppAIReplyCore(params) {
     console.warn('[WhatsAppAI] anchor reconcile failed (non-fatal):', anchErr.message);
   }
 
+  /* ══════════════════════════════════════════════════════════════════════════
+     ★ M158 — PROFIL GUARDRAIL DIPUTUSKAN DI SINI, SEBELUM GERBANG APA PUN ★
+     ══════════════════════════════════════════════════════════════════════════
+     Directive pemilik proyek (28 Agu 2026):
+       "AI_PRIMARY_PROVIDER hanya menggunakan guardrails + vektor + RAG +
+        skills saja pada backend; code backend yang lain tidak boleh ikut
+        campur, cek, seleksi, analisa, mengelola, menentukan keputusan."
+
+     MASALAH STRUKTURAL YANG DIPERBAIKI
+     `guardProfile` dulu dihitung di ~baris 644 — SESUDAH gerbang batas layanan,
+     gerbang istilah (M132), dan gerbang ketersediaan area (M152) sudah sempat
+     MENYUSUN DAN MENGIRIM balasan. Ketiganya secara teknis TIDAK MUNGKIN
+     menghormati profil: keputusannya diambil sebelum profilnya diketahui.
+     Akibatnya, walau AI_PRIMARY_PROVIDER=kimi, yang menjawab customer sering
+     kali tetap backend — persis "util dan service lain yang ikut campur" yang
+     dikeluhkan pemilik proyek.
+
+     ATURAN BARU YANG DITEGAKKAN DI BAWAH
+       profil 'local'    → backend menyusun balasan (Private Agent). Tidak berubah.
+       profil 'platform' → backend HANYA menyiapkan bahan (guardrails, vektor,
+                           RAG, skor keyakinan, skill docs) lalu MENYERAHKAN
+                           keputusan & kata-katanya ke platform AI.
+
+     Fakta yang dulu dipakai gerbang untuk MENJAWAB tidak dibuang — ia berpindah
+     peran menjadi KONTEKS PROMPT (lihat gateFactsContext di bawah). Jadi model
+     tetap tidak bisa mengarang ketersediaan/istilah, tapi kalimatnya miliknya.
+  ══════════════════════════════════════════════════════════════════════════ */
+  const guardProfile = resolveGuardrailProfile(agentAiPrimary || session?.agentAiPrimary);
+  const backendMayCompose = guardProfile === 'local';
+
+  // Fakta hasil gerbang untuk profil 'platform' — dikumpulkan, TIDAK dikirim.
+  const gateFacts = [];
+
   // ── ★ GERBANG BATAS LAYANAN AGENT ★ ───────────────────────────────────────
   // Ditempatkan SEBELUM qualification gate dan SEBELUM percabangan LLM/Private
   // Agent — jadi SATU tempat melindungi KEDUA jalur. Menaruhnya di salah satu
@@ -477,7 +510,7 @@ async function _generateWhatsAppAIReplyCore(params) {
   // istilahnya saja — giliran berikutnya tetap berjalan normal ke AI/Private
   // Agent seperti biasa.
   const termAnswer = tryTerminologyAnswer(message);
-  if (termAnswer) {
+  if (termAnswer && backendMayCompose) {
     console.log('[WhatsAppAI] 📖 Pertanyaan istilah legal/sertifikat terdeteksi — dijawab sebelum melanjutkan qualification flow.');
     const combinedReply = qualResponse
       ? `${termAnswer}\n\n${qualResponse.reply}`
@@ -488,6 +521,12 @@ async function _generateWhatsAppAIReplyCore(params) {
       provider      : 'terminology_gate',
       contextSource,
     };
+  }
+  if (termAnswer && !backendMayCompose) {
+    // Profil 'platform': definisinya diberikan sebagai FAKTA, bukan balasan.
+    // Model yang memutuskan kapan & bagaimana menyampaikannya — tapi ia tidak
+    // perlu (dan tidak boleh) mengarang isi istilah legalnya sendiri.
+    gateFacts.push(`DEFINISI ISTILAH (pakai apa adanya bila relevan):\n${termAnswer}`);
   }
 
   // ── ★ M152: GERBANG KETERSEDIAAN AREA ★ ──────────────────────────────────
@@ -609,7 +648,7 @@ async function _generateWhatsAppAIReplyCore(params) {
         typeLabel: typeRaw ? humanBuildingType(String(typeRaw).toLowerCase()) : 'properti',
         message, isId: isIdMsg,
       });
-      if (hit) {
+      if (hit && backendMayCompose) {
         console.log(`[WhatsAppAI] 📊 Gerbang ketersediaan: ${hit.verdict} untuk "${realArea}" (${txDb}) — dijawab dengan data katalog, alur interview dilewati.`);
         return {
           reply      : hit.reply,
@@ -617,6 +656,14 @@ async function _generateWhatsAppAIReplyCore(params) {
           provider   : 'area_availability_gate',
           contextSource,
         };
+      }
+      if (hit && !backendMayCompose) {
+        // Profil 'platform': stok nyata disuntikkan sebagai FAKTA KATALOG.
+        // Ini justru inti "vektor + RAG" yang memang tugas backend — model
+        // mendapat angka yang benar (0 unit sewa di Pakuwon, 19 dijual) tanpa
+        // backend ikut menyusun kalimatnya.
+        console.log(`[WhatsAppAI] 📊 Ketersediaan "${realArea}" (${txDb}): ${hit.verdict} — dikirim sebagai konteks ke platform AI.`);
+        gateFacts.push(`KETERSEDIAAN NYATA DI KATALOG AGENT:\n${hit.reply}`);
       }
     }
   } catch (availErr) {
@@ -641,7 +688,7 @@ async function _generateWhatsAppAIReplyCore(params) {
   // SENGAJA DIPERTAHANKAN di kedua profil: itu mencegah LLM MENGARANG fakta
   // legal/numerik (kelas bug M84/M96), bukan mengatur gaya percakapan.
   // Dikonfirmasi ulang pemilik proyek 24 Agu 2026 ("keep the safety nets").
-  const guardProfile = resolveGuardrailProfile(agentAiPrimary || session?.agentAiPrimary);
+  // guardProfile sudah dihitung di awal fungsi (M158) — jangan hitung ulang.
 
   if (qualResponse && guardProfile === 'local') {
     console.log('[WhatsAppAI] 🛑 Qualification gate triggered — asking for missing info:', {
@@ -723,7 +770,22 @@ async function _generateWhatsAppAIReplyCore(params) {
   }
 
   // Append facility + city + landmark + coverage context to propertyCtx so it reaches all AI providers
-  const enrichedPropertyCtx = [propertyCtx, facilityContext, cityContext, locationContext, agentCoverageContext, agentIdentityContext, listingReadinessContext].filter(Boolean).join('\n\n');
+  /* M158 — fakta gerbang untuk profil 'platform'.
+   * Di profil 'local' array ini SELALU kosong (gerbang sudah membalas sendiri
+   * dan fungsi ini tidak pernah sampai ke sini). Di profil 'platform' berisi
+   * definisi istilah legal dan/atau angka ketersediaan nyata dari katalog —
+   * bahan yang membuat model tidak perlu menebak, tanpa backend ikut memilih
+   * kata-katanya. */
+  const gateFactsContext = gateFacts.length
+    ? ['════ FAKTA TERVERIFIKASI DARI BACKEND ════',
+      'Angka & definisi di bawah berasal langsung dari database agent.',
+      'Pakai sebagai sumber kebenaran; jangan menyebut angka lain.',
+      '',
+      gateFacts.join('\n\n'),
+      '══════════════════════════════════════════'].join('\n')
+    : '';
+
+  const enrichedPropertyCtx = [propertyCtx, facilityContext, cityContext, locationContext, agentCoverageContext, agentIdentityContext, listingReadinessContext, gateFactsContext].filter(Boolean).join('\n\n');
 
   // ── Step 3.6: RAG CONTEXT (opsional, RAG_ENABLED=OFF secara default) ──────
   // Melengkapi prompt dengan (a) pengetahuan jual-beli properti Indonesia yang

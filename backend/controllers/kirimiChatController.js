@@ -629,6 +629,26 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
     return;
   }
 
+  // ── M158: skor keyakinan untuk LOG ────────────────────────────────────────
+  // Directive pemilik proyek (28 Agu 2026): "Tampilkan guardrails score
+  // confidence-nya". Log lama hanya menulis "AI skip (bukan query properti)"
+  // tanpa angka — mustahil menilai apakah gerbang terlalu galak atau terlalu
+  // longgar tanpa membaca kode. Sekarang angkanya ikut tercetak.
+  //
+  // ⚠️ Skor ini DILAPORKAN, bukan dipakai memutuskan. Keputusan skip tetap
+  // milik gerbang lama yang sudah teruji; menukar pengambil keputusan dan
+  // sekaligus menambah pelaporan dalam satu langkah membuat regresi mustahil
+  // dilacak. Angka ini dulu dikumpulkan di produksi, baru boleh dipromosikan
+  // jadi pengambil keputusan setelah terbukti sejalan.
+  let confLabel = 'n/a';
+  try {
+    const { scoreConfidence } = require('../services/ragConfidenceService');
+    const conf = await scoreConfidence({ message, history: gateHistory });
+    confLabel = `${conf.score.toFixed(3)} (${conf.decision}) — ${conf.reason}`;
+  } catch (confErr) {
+    confLabel = `gagal dihitung: ${confErr.message}`;
+  }
+
   if (!isPropertyQuery && !isContinuation && !platformForwards) {
     // Off-topic DI TENGAH alur kualifikasi aktif ("Saya mau beli nasi jagung" di
     // sela Q1-Q12) → balas pengarahan ramah kembali ke properti. Pesan off-topic
@@ -661,6 +681,7 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
       console.log(`[KIRIMI]    Time     : ${ts}`);
       console.log(`[KIRIMI]    Message  : ${sanitizeLog(message, 120)}`);
       console.log(`[KIRIMI]    Guardrail: profil '${guardProfile}'`);
+      console.log(`[KIRIMI]    Confidence: ${confLabel}`);
       console.log(`[KIRIMI]    Status   : ⏭️  Tidak disimpan ke DB${redirectSent ? ', redirect terkirim' : ', AI skip (bukan query properti)'}`);
       console.log(D);
       console.log('');
