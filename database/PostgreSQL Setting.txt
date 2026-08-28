@@ -1,0 +1,41 @@
+PostgreSQL
+Host : localhost
+Port : 5432/5433
+Username : postgres
+Password : 217180404
+
+pgBouncer PostgreSQL
+Host : localhost
+Port : 6432
+Username : postgres
+Password : 217180404
+
+-----
+1. Login database PostgreSQL
+   psql -U <USERNAME> -h localhost -p 5432 -d <DATABASE_TABLE>
+   psql -U nigel_user -h localhost -p 5432 -d db_itg_assistance
+
+2. Buat user baru
+   CREATE USER <USERNAME> WITH PASSWORD <PASSWORD>;
+   CREATE USER nigel_user WITH PASSWORD 'Password123!';
+   
+   -> Cek user : SELECT rolname, rolcanlogin FROM pg_roles WHERE rolname = 'nigel_user';
+
+3. Berikan akses ke schema
+   GRANT USAGE ON SCHEMA <DATABASE_SCHEMA> TO <USERNAME>;
+   GRANT USAGE ON SCHEMA db_itg_assistance TO nigel_user;
+
+4. Berikan SELECT, INSERT, UPDATE ke semua table
+   GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA <DATABASE_SCHEMA> TO <USERNAME>;
+   GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA db_itg_assistance TO nigel_user;
+
+5. Supaya table baru otomatis bisa digunakan
+	ALTER DEFAULT PRIVILEGES
+	FOR ROLE postgres
+	IN SCHEMA db_itg_assistance
+	GRANT SELECT, INSERT, UPDATE
+	ON TABLES
+	TO nigel_user;
+6. Cara login di terminal
+   a. psql -U nigel_user -h localhost -p 5432 -d postgres
+   b. "C:\Program Files\PostgreSQL\18\bin\psql.exe" -U nigel_user -h localhost -p 5432 -d postgres

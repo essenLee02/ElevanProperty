@@ -73,7 +73,8 @@ const HISTORY_WINDOW = (() => {
  * AI_PRIMARY_PROVIDER di .env masih tertulis 'chatgpt', misalnya.
  *
  * Pemetaan:
- *   'chatgpt'|'claude'|'qwen'|'deepseek'|'kimi'  → apa adanya (provider asli menjawab)
+ *   'chatgpt'|'claude'|'qwen'|'deepseek'|'kimi'|'openrouter'
+ *                                                → apa adanya (provider asli menjawab)
  *   'private_agent'                              → 'private' (fallback ke Private Agent)
  *   'qualification'                               → null (gerbang info-minimum,
  *                                                    belum ada AI provider ATAU
@@ -86,7 +87,10 @@ const HISTORY_WINDOW = (() => {
  * @returns {string|null}
  */
 function normalizeAiResponderLabel(rawProvider) {
-  const KNOWN_PROVIDERS = new Set(['chatgpt', 'claude', 'qwen', 'deepseek', 'kimi']);
+  // 'openrouter' sempat tertinggal saat provider ke-6 ditambahkan: balasannya
+  // tercatat sebagai ai_responder = null, jadi laporan "provider mana yang
+  // menjawab" diam-diam salah untuk setiap percakapan lewat OpenRouter.
+  const KNOWN_PROVIDERS = new Set(['chatgpt', 'claude', 'qwen', 'deepseek', 'kimi', 'openrouter']);
   const p = String(rawProvider || '').toLowerCase().trim();
   if (KNOWN_PROVIDERS.has(p)) return p;
   if (p === 'private_agent') return 'private';

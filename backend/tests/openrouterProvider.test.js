@@ -11,6 +11,12 @@
 
 'use strict';
 
+// Konfigurasi OpenRouter dibaca dari process.env. Tanpa memuat .env di sini,
+// OPENROUTER_MODEL undefined dan cfg.model jadi '' — tes gagal padahal produksi
+// baik-baik saja (server.js memuat dotenv saat boot). Berkas tes lain di folder
+// ini sudah melakukan hal yang sama.
+require('dotenv').config();
+
 const {
   getOpenRouterConfig,
   checkOpenRouterConfig,
