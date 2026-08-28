@@ -107,6 +107,27 @@ const txWord = (tx, isId) => (tx === 'Rent'
   : (isId ? 'dijual' : 'for sale'));
 
 /**
+ * Baca ulang angka dari teks budget YANG SUDAH TERSIMPAN di state percakapan
+ * (mis. qs.budget = "Rp 600.000.000 - Rp 700.000.000"), dipakai sebagai
+ * CADANGAN saat pesan SAAT INI tidak menyebut budget sama sekali (M161).
+ *
+ * Bug nyata (transkrip uji coba 28 Agu 2026, "Tasha"): customer bilang budget
+ * 600-700 juta di pesan PERTAMA, lalu pesan-pesan berikutnya ("Driyorejo aja
+ * Kak") wajar sekali tidak mengulang angka itu. Karena `detectBudget(message)`
+ * hanya membaca pesan SAAT INI, gerbang menganggap budget "tidak diketahui"
+ * dan menampilkan SEMUA listing tanpa filter harga — termasuk yang 776.9 juta,
+ * jauh di atas budget yang baru saja disebutkan, seolah-olah cocok.
+ */
+function parsePersistedBudgetText(text) {
+  const m = String(text || '').match(/Rp\s*([\d.]+)(?:\s*-\s*Rp\s*([\d.]+))?/i);
+  if (!m) return null;
+  const min = m[1] ? Number(m[1].replace(/\./g, '')) : null;
+  const max = m[2] ? Number(m[2].replace(/\./g, '')) : min;
+  if (!Number.isFinite(min) && !Number.isFinite(max)) return null;
+  return { min: Number.isFinite(min) ? min : null, max: Number.isFinite(max) ? max : null, text };
+}
+
+/**
  * Susun balasan dari FAKTA. Mengembalikan null bila tidak ada yang perlu
  * dikoreksi (stok ada) — pemanggil lanjut ke alur normal.
  *
@@ -211,7 +232,7 @@ function composeBudgetEmptyReply({
  */
 async function tryAreaAvailabilityAnswer({
   userId, city, area, buildingType, transactionType,
-  typeLabel = 'properti', message = '', isId = true,
+  typeLabel = 'properti', message = '', isId = true, persistedBudgetText = '',
 }) {
   if (!userId || !area || !transactionType) return null;
   try {
@@ -220,7 +241,12 @@ async function tryAreaAvailabilityAnswer({
     // menariknya ke puncak file berisiko siklus require (sama pola dengan
     // fetchAreaListings di areaAvailabilityService.js).
     const { detectBudget } = require('../services/propertyRecommendationService');
-    const budget = detectBudget(message);
+    // M161: pesan SAAT INI didahulukan; qs.budget (state lintas-giliran) HANYA
+    // dipakai bila pesan saat ini sendiri tidak menyebut budget sama sekali —
+    // lihat catatan panjang di parsePersistedBudgetText() di atas untuk kasus
+    // nyata yang membuktikan celah ini (listing 776.9 juta ditawarkan kepada
+    // customer yang baru saja menyebut budget 600-700 juta).
+    const budget = detectBudget(message) || parsePersistedBudgetText(persistedBudgetText);
     const hasBudget = budget && !budget.ambiguous && (Number.isFinite(budget.min) || Number.isFinite(budget.max));
     const av = await checkAreaAvailability({ userId, city, area, buildingType, transactionType });
 
@@ -239,8 +265,12 @@ async function tryAreaAvailabilityAnswer({
      */
     if (av.ok && av.verdict === 'available') {
       const limit = requestedCount || DEFAULT_SHOWN;
+      // M160: bila checkAreaAvailability() mengoreksi salah ketik ("Chandramas"
+      // → "Candramas"), ambil listing untuk nama yang BENAR — bukan nama yang
+      // diketik customer, yang memang tidak ada satu unit pun di katalog.
+      const areaForListing = av.correctedArea || area;
       const rows  = await fetchAreaListings({
-        userId, city, area, buildingType, transactionType, limit,
+        userId, city, area: areaForListing, buildingType, transactionType, limit,
         minPrice: hasBudget ? budget.min : null,
         maxPrice: hasBudget ? budget.max : null,
       });
@@ -278,8 +308,8 @@ async function tryAreaAvailabilityAnswer({
       // penyortiran, bukan informasi untuk customer (permintaan pemilik proyek,
       // 27 Agu 2026: "itu rahasia backend saja, AI cukup tampilkan data saja").
       const head = isId
-        ? `Ini ${rows.length} ${typeLabel} ${txWord(transactionType, true)} di *${titleCaseArea(area)}* ya, Kak 😊\n\n`
-        : `Here ${rows.length === 1 ? 'is' : 'are'} ${rows.length} ${typeLabel} ${txWord(transactionType, false)} in *${titleCaseArea(area)}* 😊\n\n`;
+        ? `Ini ${rows.length} ${typeLabel} ${txWord(transactionType, true)} di *${titleCaseArea(areaForListing)}* ya, Kak 😊\n\n`
+        : `Here ${rows.length === 1 ? 'is' : 'are'} ${rows.length} ${typeLabel} ${txWord(transactionType, false)} in *${titleCaseArea(areaForListing)}* 😊\n\n`;
       const tail = isId
         ? `\n\nAda yang menarik, Kak? Kalau mau saya carikan yang lebih spesifik, boleh sebutkan budget atau kebutuhan lainnya.`
         : `\n\nAnything catch your eye? If you'd like something more specific, let me know your budget or other needs.`;
@@ -287,7 +317,24 @@ async function tryAreaAvailabilityAnswer({
       return { reply: head + cards + tail, verdict: 'listings-shown', requestedCount };
     }
 
-    return composeAvailabilityReply(av, {
+    /* M161: area yang diminta tidak ada / salah transaksi, TAPI budget sudah
+     * diketahui → alternatif yang ditawarkan HARUS ikut disaring budget, bukan
+     * sekadar "yang termurah di kota ini". Kasus nyata (uji coba "Tasha",
+     * Gresik 600-700jt, area "Bunga Melati" tak ada): tanpa ini gerbang
+     * menawarkan Driyorejo/Menganti dari harga TERMURAH KESELURUHAN — abai
+     * pada budget yang baru saja disebutkan.
+     */
+    let avForReply = av;
+    if (hasBudget && av.ok) {
+      const cityId = await resolveCityId(city);
+      const budgetAlts = await listAreasWithinBudget({
+        userId, cityId, buildingType, transactionType,
+        minPrice: budget.min, maxPrice: budget.max, excludeArea: area,
+      });
+      if (budgetAlts.length) avForReply = { ...av, alternativeAreas: budgetAlts };
+    }
+
+    return composeAvailabilityReply(avForReply, {
       area, typeLabel, transactionType, isId, requestedCount,
     });
   } catch (err) {

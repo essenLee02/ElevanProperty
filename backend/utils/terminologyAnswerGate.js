@@ -64,6 +64,37 @@ function tryTerminologyAnswer(userMessage) {
       re: /\bshm\b|sertifikat\s+hak\s+milik/,
       answer: 'SHM (Sertifikat Hak Milik) adalah bukti kepemilikan properti TERTINGGI dan TERKUAT, berlaku SELAMANYA tanpa batas waktu. Hanya WNI perorangan yang bisa memegang SHM.',
     },
+    /* ── M159: tiga jenis sertifikat yang SEBELUMNYA TIDAK DIKENALI ──────────
+     * Ditambahkan atas arahan pemilik proyek (28 Agu 2026) beserta uraiannya.
+     *
+     * ⚠️ KENAPA INI BUKAN SEKADAR MELENGKAPI KAMUS:
+     * tryTerminologyAnswer() dipakai ragConfidenceService sebagai OVERRIDE
+     * "pertanyaan istilah legal → selalu REDIRECT". Istilah yang tidak ada di
+     * daftar ini TIDAK mendapat override, dan skor terkalibrasinya jatuh jauh
+     * di bawah ambang 0.45. Diukur sebelum perbaikan:
+     *     "apa itu SHM?"         1.000  REDIRECT   (sudah ada di daftar)
+     *     "apa itu Surat Hijau"  0.042  SKIP  ← customer didiamkan
+     *     "apa itu HGU"          0.027  SKIP  ← customer didiamkan
+     *     "apa itu SHP"          0.027  SKIP  ← customer didiamkan
+     * Jadi kamus yang bolong = customer yang bertanya hal properti yang SAH
+     * justru dibungkam. Persis bahaya yang disebut pemilik proyek: "Jika orang
+     * tanya SHM dan score-nya rendah, itu bahaya."
+     *
+     * Urutan penting: 'surat hijau/ijo' dicek SEBELUM pola HGB umum karena
+     * solusinya memang sering berbentuk HGB di atas HPL.
+     */
+    {
+      re: /surat\s+hijau|surat\s+ijo|\bipt\b|izin\s+pemakaian\s+tanah/,
+      answer: 'Surat Hijau (Surat Ijo) adalah Izin Pemakaian Tanah (IPT) yang dikeluarkan pemerintah daerah (mis. Pemkot Surabaya) atas lahan milik pemerintah. Pemegangnya TIDAK memiliki tanah itu — statusnya menyewa/pinjam pakai dari pemda, bersifat sementara, dan ada retribusi tahunan. Karena tanahnya aset daerah, statusnya tidak bisa langsung dinaikkan jadi SHM; solusi yang kini sering ditawarkan pemda adalah HGB di atas Hak Pengelolaan Lahan (HPL) Pemkot agar dasar hukum pemakaiannya lebih jelas.',
+    },
+    {
+      re: /\bhgu\b|hak\s+guna\s+usaha/,
+      answer: 'HGU (Hak Guna Usaha) adalah hak mengusahakan tanah yang dikuasai negara, umumnya untuk pertanian, perkebunan, perikanan, atau peternakan, dengan syarat luas minimal tertentu. Berbeda dari SHGB yang untuk mendirikan bangunan, HGU menyasar pemanfaatan usaha atas tanahnya.',
+    },
+    {
+      re: /\bshp\b|hak\s+pakai|sertifikat\s+hak\s+pakai/,
+      answer: 'SHP (Sertifikat Hak Pakai) adalah hak untuk menggunakan dan/atau memungut hasil dari tanah yang dikuasai langsung oleh negara maupun tanah milik pihak lain. Cakupan haknya lebih terbatas dibanding SHM, dan sering dipakai untuk keperluan tertentu termasuk kepemilikan oleh WNA sesuai ketentuan yang berlaku.',
+    },
     {
       re: /\bajb\b|akta\s+jual\s+beli/,
       answer: 'AJB (Akta Jual Beli) adalah bukti sah pengalihan hak dalam transaksi jual-beli properti, dibuat oleh PPAT — wajib ada sebelum sertifikat bisa dibalik nama ke pembeli baru.',

@@ -131,6 +131,43 @@ async function main() {
   console.log('\n6) Ambang');
   ok('bawaan 0.45 sesuai directive pemilik proyek', THRESHOLD === 0.45, String(THRESHOLD));
 
+  /* ══════════════════════════════════════════════════════════════════════════
+     M159 — SERTIFIKAT & JARAK WAJIB LOLOS (bukan sekadar "sebaiknya")
+     ══════════════════════════════════════════════════════════════════════════
+     Arahan pemilik proyek (28 Agu 2026): "Jika orang tanya SHM dan score-nya
+     rendah, itu bahaya." Sebelum M159, TIGA jenis sertifikat tidak ada di kamus
+     terminologi sehingga tidak dapat override, dan skornya jatuh:
+         "apa itu Surat Hijau"  0.042  SKIP
+         "apa itu HGU"          0.027  SKIP
+         "apa itu SHP"          0.027  SKIP
+         "berapa jarak ... ke"  0.053  SKIP
+     Semuanya pertanyaan properti yang SAH tapi customer-nya dibungkam.
+     Tes ini mengunci agar kamus yang bolong tidak terulang diam-diam.
+  ══════════════════════════════════════════════════════════════════════════ */
+  console.log('\n== M159: pertanyaan sertifikat & jarak WAJIB diteruskan ==');
+  for (const q of [
+    'apa itu SHM?', 'SHGB itu apa', 'apa itu SHSRS', 'SHMSRS itu apa',
+    'apa itu SHP', 'Sertifikat Hak Pakai itu apa',
+    'apa itu HGU', 'Hak Guna Usaha itu apa',
+    'apa itu Surat Hijau', 'surat ijo itu apa',
+    'berapa jarak dari Kutisari ke Tunjungan Plaza?',
+    'berapa lama dari Gubeng ke bandara?',
+    'how far is it from Darmo to the airport?',
+  ]) {
+    const r = await scoreConfidence({ message: q, history: [] });
+    ok(`REDIRECT: "${q}"`, r.decision === 'REDIRECT', `${r.score.toFixed(3)} ${r.decision}`);
+  }
+
+  console.log('\n== M159: kontrol negatif tetap DIDIAMKAN ==');
+  for (const q of [
+    'resep nasi goreng enak',
+    'pinjaman online cepat cair',
+    '[unknown] @272502857138381',
+  ]) {
+    const r = await scoreConfidence({ message: q, history: [] });
+    ok(`SKIP: "${q}"`, r.decision === 'SKIP', `${r.score.toFixed(3)} ${r.decision}`);
+  }
+
   console.log(`\n${'='.repeat(60)}`);
   console.log(`RESULT: ${pass}/${pass + fail} passed${fail ? ` (${fail} FAILED)` : ' ALL PASS'}`);
   process.exit(fail === 0 ? 0 : 1);

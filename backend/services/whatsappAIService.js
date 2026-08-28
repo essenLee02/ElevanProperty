@@ -565,9 +565,19 @@ async function _generateWhatsAppAIReplyCore(params) {
     // transkrip 25 Agu: bot balas "di area mana?" untuk area yang baru saja
     // disebutkan. detectLandmark() membaca langsung dari master lokasi (1.738
     // entri) dan menemukan "KUTISARI" dengan benar.
+    // ⚠️ M160: URUTAN KANDIDAT DIBALIK — deteksi dari PESAN SAAT INI harus
+    // menang atas qs.district/qs.city (state lintas-giliran yang bisa BASI).
+    // Bug nyata (transkrip 28 Agu 2026): customer sebut "Chandramas", ditolak,
+    // pindah kota ke "Sidoarjo", lalu tanya "Di Buduran ada ta?" — tapi
+    // qs.district masih "Chandramas" dari 2 giliran sebelumnya dan menang
+    // duluan di daftar lama, sehingga gerbang TERUS mengulang jawaban
+    // Chandramas walau customer sudah jelas-jelas bertanya area lain.
+    // detectLandmark(message)/filters.landmark membaca pesan SAAT INI saja,
+    // jadi ditaruh paling depan; qs.* tetap jadi cadangan bila pesan saat ini
+    // sama sekali tidak menyebut area (mis. jawaban pendek "Ya benar").
     const { city: realCity, area: resolvedArea } = await resolveCityAndArea([
-      qs.city, qs.district, filters.location, filters.landmark, qs.anchorPoint,
-      detectLandmark(message),
+      detectLandmark(message), filters.landmark, qs.district, qs.city, qs.anchorPoint,
+      filters.location,
     ]);
 
     // ⚠️ Cadangan terakhir: detectLandmark() hanya mengenali PATOKAN (mal,
@@ -646,7 +656,7 @@ async function _generateWhatsAppAIReplyCore(params) {
         // Label Indonesia ("apartemen", bukan "apartment") — pakai peta yang
         // sudah ada supaya tidak lahir daftar tipe kedua yang bisa menyimpang.
         typeLabel: typeRaw ? humanBuildingType(String(typeRaw).toLowerCase()) : 'properti',
-        message, isId: isIdMsg,
+        message, isId: isIdMsg, persistedBudgetText: qs.budget || '',
       });
       if (hit && backendMayCompose) {
         console.log(`[WhatsAppAI] 📊 Gerbang ketersediaan: ${hit.verdict} untuk "${realArea}" (${txDb}) — dijawab dengan data katalog, alur interview dilewati.`);

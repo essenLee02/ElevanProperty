@@ -956,7 +956,7 @@ class FonnteChatController {
 
       const messages = await ChatMessage.findAll({
         where : { chatSessionId: sessionId },
-        order : [['createdAt', 'ASC']],
+        order : [['createdAt', 'ASC'], ['id', 'ASC']],  // M160: tiebreaker — createdAt presisi detik, id selalu monoton
         limit : Math.min(parseInt(limit) || 100, 500)
       });
 

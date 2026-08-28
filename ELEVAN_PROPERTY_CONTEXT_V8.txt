@@ -1,7 +1,32 @@
 ================================================================================
-  ELEVAN PROPERTY — COMPREHENSIVE PROJECT CONTEXT (V12)
+  ELEVAN PROPERTY — COMPREHENSIVE PROJECT CONTEXT (V13)
   Dibuat  : 15 Juni 2026
-  Update  : 24 Agustus 2026 (M132–M139: gerbang kualifikasi WhatsApp
+  Update  : 28 Agustus 2026 (M140–M158: ⭐⭐⭐ profil guardrail kini diputuskan
+            SEBELUM gerbang apa pun berjalan — backend tidak lagi diam-diam
+            menyusun balasan di profil 'platform'; fakta gerbang (istilah
+            legal, ketersediaan area) disuntik sebagai konteks prompt, bukan
+            dikirim langsung [M158]. RAG Confidence Score terkalibrasi 0..1,
+            ambang 0.45 sesuai directive — TAPI diukur terhadap skor gabungan
+            (slot+lexical+flow+vector), BUKAN cosine mentah (cosine mentah
+            tertinggi hanya 0.34, ambang 0.45 pada skor itu akan mendiamkan
+            SEMUA customer); 3 override tak-terkalahkan (jawaban atas
+            pertanyaan AI, permintaan listing eksplisit, istilah legal);
+            dilaporkan di log Kirimi, belum jadi pengambil keputusan [M157].
+            Gerbang ketersediaan area (M152–M156): jangan menebak area lain,
+            pisahkan "di X" vs "dekat X", listing langsung begitu 4 slot
+            lengkap walau berbentuk pernyataan bukan pertanyaan [M155]. Fix
+            regex Q6 yang meleset akibat 2 kata sisipan → pertanyaan terulang
+            7x [M154]. Perapian master data locations: 41 landmark diisi
+            kota, 89 kembaran dilebur, 85 baris mati dipakai ulang jadi area
+            nyata [M148–M151]. Keamanan: shared-secret webhook (fail-open),
+            8 titik toUpperCase() null-crash diperbaiki di 6 master
+            controller, label ai_responder 'openrouter' yang hilang [audit
+            25–28 Agu]. Sapuan berkala mencegah kebocoran memori Map pada
+            skala 10.000 agent. ⚠️ Saldo Kimi habis sejak beberapa hari —
+            semua balasan produksi jatuh ke Private Agent; banyak keluhan
+            "AI meng-interview terus" berakar di sini, bukan di kualitas LLM.
+            Lihat §PERUBAHAN BESAR V12→V13 untuk detail lengkap.)
+  Update sebelumnya : 24 Agustus 2026 (M132–M139: gerbang kualifikasi WhatsApp
             MEMBLOKIR M129 terminologi sertifikat setiap kali info belum
             lengkap — diperbaiki + pola "SHM itu apa" (word-order terbalik)
             [M132]; provider OpenRouter (6 opsi → 7, multi-vendor proxy)
@@ -3204,8 +3229,271 @@ PRINSIP DEBUG
   Nomor M berikutnya untuk sesi mendatang: **M132**.
 
 ================================================================================
-  END OF FILE — ELEVAN_PROPERTY_CONTEXT_V8.txt (V11 per header — nama berkas
-  fisik SENGAJA tidak di-rename ke _V11.txt, ikuti pola V8-judul/=V9-badan
-  yang sudah didokumentasikan di §Riwayat; lihat catatan penomoran di kepala
-  berkas ini bila membingungkan)
+  >> PERUBAHAN BESAR V12 -> V13 (25 -> 28 Agustus 2026) <<
+  M140-M158 — dari "backend menjawab" ke "backend menyiapkan, platform AI
+  menjawab", plus perapian master data lokasi & keamanan webhook.
+================================================================================
+
+  BACA INI DULU BILA HANYA PUNYA WAKTU SEBENTAR
+  Satu perubahan di sesi ini mengubah cara kerja seluruh jalur WhatsApp:
+  M158. Sisanya adalah perbaikan data & bug yang mendukungnya.
+
+  --------------------------------------------------------------------------
+  M158 (PALING PENTING) — PROFIL GUARDRAIL DIPUTUSKAN SEBELUM GERBANG APA PUN
+  --------------------------------------------------------------------------
+  Directive pemilik proyek (28 Agu 2026), dikutip apa adanya:
+    "AI_PRIMARY_PROVIDER hanya menggunakan guardrails + vektor + RAG + skills
+     (asset/skills/elevan-property-assistant) saja pada backend; code backend
+     yang lain tidak boleh ikut campur, cek, seleksi, analisa, mengelola,
+     menentukan keputusan. Selama ini ada util dan service lain yang ikut
+     campur. Itu dihentikan untuk pemakaian platform AI."
+
+  AKAR MASALAH (struktural, bukan sekadar lupa)
+  guardProfile dulu dihitung di ~baris 644 whatsappAIService.js — SESUDAH
+  tiga gerbang sempat MENYUSUN DAN MENGIRIM balasan:
+      - gerbang batas layanan agent
+      - gerbang istilah legal/sertifikat (M132)
+      - gerbang ketersediaan area (M152)
+  Ketiganya secara teknis MUSTAHIL menghormati profil: keputusan diambil
+  sebelum profilnya diketahui. Jadi walau AI_PRIMARY_PROVIDER=kimi, yang
+  menjawab customer sering tetap backend. Inilah "util yang ikut campur".
+
+  PERBAIKAN
+  Resolusi profil DIPINDAH ke awal fungsi, sebelum gerbang mana pun:
+      const guardProfile      = resolveGuardrailProfile(...)
+      const backendMayCompose = guardProfile === 'local'
+  Lalu tiap gerbang penyusun balasan dijaga dengan && backendMayCompose.
+
+  YANG PENTING: FAKTANYA TIDAK DIBUANG, HANYA BERUBAH PERAN
+  Di profil 'platform', hasil gerbang TIDAK dikirim ke customer — ia
+  dikumpulkan ke array gateFacts dan disuntikkan ke prompt sebagai blok
+  "FAKTA TERVERIFIKASI DARI BACKEND" (variabel gateFactsContext, ikut ke
+  enrichedPropertyCtx). Jadi:
+      - model TETAP tidak bisa mengarang ketersediaan/istilah legal
+        (0 unit sewa di Pakuwon, 19 dijual — angkanya dari DB),
+      - tapi KALIMAT dan KEPUTUSAN membalas/diam sepenuhnya milik model.
+  Ini menyelesaikan ketegangan lama antara "keep the safety nets" (24 Agu)
+  dan "backend jangan ikut campur" (28 Agu): jaring pengaman tetap ada,
+  tapi sebagai DATA, bukan sebagai penulis balasan.
+
+  KONTRAK RINGKAS PER PROFIL
+      profil 'local'    (ai_primary = 'private')
+          backend menyusun balasan penuh (Private Agent). TIDAK BERUBAH.
+      profil 'platform' (kimi/deepseek/qwen/openrouter/chatgpt/claude/kosong)
+          backend HANYA: guardrails + vektor + RAG + skor keyakinan + skills.
+          Sisanya diserahkan ke platform AI.
+
+  SKILL YANG DIPAKAI (directive 28 Agu 2026)
+      Kimi / DeepSeek / Qwen / OpenRouter
+          -> backend/asset/skills/elevan-property-assistant
+      Claude / ChatGPT
+          -> skill di platform masing-masing
+             (platform.claude.com/workspaces/default/skills,
+              platform.openai.com/storage/skills)
+
+  BUKTI PERILAKU (diuji lewat generateWhatsAppAIReply(), pintu masuk nyata)
+      PLATFORM (kimi)  -> provider = private_agent   (gerbang TIDAK membajak;
+                          jatuh ke Private Agent hanya karena saldo Kimi habis)
+      LOCAL  (private) -> provider = area_availability_gate
+  Dikunci oleh tests/terminologyQualGateWiring.test.js Group 5 (12/12).
+
+  --------------------------------------------------------------------------
+  M157 — RAG CONFIDENCE SCORE (services/ragConfidenceService.js)
+  --------------------------------------------------------------------------
+  Ambang keputusan 0.45 (RAG_CONFIDENCE_THRESHOLD): < 0.45 = SKIP (diam /
+  balasan default, 0 RAG 0 AI); >= 0.45 = REDIRECT (lanjut ke platform AI).
+
+  TEMUAN PENGUKURAN YANG MENGUBAH DESAIN — JANGAN DIULANG DARI NOL
+  Skor cosine MENTAH dari embedding hashing-trick lokal, diukur di indeks
+  produksi 27 Agu 2026:
+      ON-TOPIC  0.3369  "Apakah ada apartemen di Kutisari?"
+      ON-TOPIC  0.3331  "Saya mau beli rumah di Surabaya"
+      ON-TOPIC  0.1213  "apa itu SHM?"
+      OFF-TOPIC 0.2078  "resep nasi goreng enak"
+  Dua kesimpulan:
+   (1) TIDAK ADA yang menembus 0.45 -> ambang 0.45 pada skor MENTAH akan
+       mendiamkan 100% customer. Ini hasil ukur, bukan dugaan.
+   (2) Urutannya tidak dapat dipercaya: "apa itu SHM?" (0.12) DI BAWAH
+       "resep nasi goreng enak" (0.21).
+  Karena itu 0.45 dipertahankan sebagai AMBANG, tapi yang diukur adalah SKOR
+  TERKALIBRASI 0..1 — gabungan berbobot:
+      slot 0.40 (entitas properti dikenali) | lexical 0.30 (kosakata properti)
+      flow 0.20 (konteks percakapan)        | vector 0.10 (cosine RAG)
+  Bobot vektor sengaja KECIL karena pengukuran di atas.
+
+  TIGA OVERRIDE (tidak bisa dikalahkan rata-rata)
+  Kalibrasi pertama lolos 5/5 off-topic tapi HANYA 3/8 on-topic — ia
+  mendiamkan "Kutisari", "2 kamar", "Bsk jam 10", "Saya minta listing".
+  Sinyal berbobot 0.20 secara matematis tak akan pernah mencapai 0.45
+  sendirian, jadi menaikkan bobot hanya menunda masalah. Solusinya override:
+      (a) membalas pertanyaan AI sebelumnya  -> sah karena KONTEKS
+      (b) permintaan listing eksplisit       -> pakai customerAsksAvailability()
+      (c) pertanyaan istilah legal           -> pakai tryTerminologyAnswer()
+  Override hanya MENAIKKAN ke REDIRECT, tidak pernah menurunkan ke SKIP.
+  Hasil akhir: 12/12 on-topic diteruskan, 6/6 off-topic didiamkan.
+  Jarak populasi: on-topic terburuk 0.583 vs off-topic terbaik 0.067.
+
+  FAIL-OPEN ADALAH ATURAN
+  Saat modul ditulis, DUA dari tiga namespace RAG masih KOSONG
+  (property_knowledge & agent_catalog; hanya skill_docs terisi). Kalau
+  kegagalan infrastruktur boleh menghasilkan skor rendah, satu indeks yang
+  belum ter-build akan mendiamkan SELURUH customer di semua agent. Jadi:
+  error / indeks kosong / modul mati -> skor 1.0 (LANJUT), bukan 0.
+  Sinyal yang null DIKELUARKAN dari rata-rata, bobotnya dinormalisasi ulang.
+
+  STATUS: dihitung & DILAPORKAN di log Kirimi (baris "Confidence:"), BELUM
+  jadi pengambil keputusan. Keputusan skip masih milik gerbang lama yang
+  sudah teruji — menukar pengambil keputusan sekaligus menambah pelaporan
+  dalam satu langkah membuat regresi mustahil dilacak.
+  Contoh nyata dari log produksi 28 Agu:
+      "[unknown] @272502857138381" -> 0.037 (SKIP)
+      slot=0.00 lexical=0.00 flow=0.00 vector=0.37
+  Tes: tests/ragConfidence.test.js (32/32).
+
+  --------------------------------------------------------------------------
+  M152-M156 — GERBANG KETERSEDIAAN AREA (jangan menebak, jangan mengarang)
+  --------------------------------------------------------------------------
+  Transkrip produksi 25 Agu 2026: customer minta SEWA apartemen di Pakuwon,
+  bertanya "apakah ada?" LIMA KALI, tidak pernah dijawab; satu pertanyaan
+  interview diulang 3x; lalu bot mengirim listing Bulak/Kalijudan seolah itu
+  Pakuwon. Fakta katalog: Pakuwon punya 19 apartemen, SEMUANYA dijual, NOL
+  disewakan.
+
+  services/areaAvailabilityService.js + utils/areaAvailabilityGate.js
+    - checkAreaAvailability() -> verdict available | wrong-transaction |
+      area-empty, plus alternativeAreas (hanya yang BENAR-BENAR ada stok,
+      diurut TERMURAH dulu).
+    - "DI Pakuwon" TIDAK SAMA DENGAN "DEKAT Pakuwon". Versi pertama
+      menggabungkan kolom properties.area DAN tautan property_locations ->
+      melaporkan "2 unit sewa di Pakuwon" padahal NOL (dua unit itu di Bulak
+      yang kebetulan bertanda patokan "Pakuwon City"). Keduanya kini DIPISAH:
+      exact (kolom area, boleh disebut "di") vs nearby (patokan, hanya boleh
+      disebut "dekat").
+    - fetchAreaListings() WAJIB mengembalikan bentuk TERNORMALISASI
+      (getDbPropertiesForAgent), bukan baris Sequelize mentah. Versi pertama
+      memakai Property.findAll() dan kartunya rusak:
+          Estimasi Harga: *360000000.0000*   Tipe: Properti - Tersedia
+      karena renderListingCards() menunggu price sudah string & facilities
+      sudah digabung.
+
+  M155 — dua pemicu, bukan satu:
+      (a) customer BERTANYA ketersediaan/minta listing, ATAU
+      (b) empat slot inti lengkap (transaksi+tipe+kota+area) walau berbentuk
+          PERNYATAAN. Pesan pembuka "Hi... Saya mau beli apartemen di
+          Surabaya, Kutisari" sudah memuat keempatnya; tanpa (b) bot balas
+          "di area mana?" untuk area yang baru saja disebut.
+      Penjaga listingsAlreadyShown mencegah blok listing berulang tiap giliran.
+      detectLandmark(message) ikut jadi kandidat area — tanpa itu "Kutisari"
+      tidak pernah terbaca pada giliran pertama.
+
+  M156 — budget disebut tapi tidak cocok di area itu -> JANGAN kirim ulang
+  listing yang sudah ditolak "kemahalan"; minta maaf + tawarkan area lain
+  yang masuk budget.
+
+  --------------------------------------------------------------------------
+  M154 — PERTANYAAN Q6 TERULANG 7 KALI (deteksi "sudah ditanya" meleset)
+  --------------------------------------------------------------------------
+  aiAskedAnchorPoint mencocokkan substring literal
+  "ada lokasi tertentu yang jadi patokan", sedangkan teks yang BENAR-BENAR
+  dikirim berbunyi "Ada lokasi ATAU TEMPAT tertentu yang jadi patokan?".
+  Sisipan dua kata membuat SEMUA pola meleset -> slot tidak pernah ditandai
+  -> Q6 diulang tanpa henti (transkrip 25 Agu: 7x sampai customer menulis
+  "Stop berulang"). Diganti regex yang toleran sisipan kata.
+  PELAJARAN: deteksi "sudah ditanya" JANGAN pakai substring literal dari
+  kalimat yang bisa diperhalus sewaktu-waktu.
+
+  --------------------------------------------------------------------------
+  PHANTOM RESTART — PENYEBAB SEBENARNYA TRANSKRIP 25 AGU MALAM
+  --------------------------------------------------------------------------
+  Semua perbaikan M152-M155 sudah ada di disk tapi TIDAK PERNAH TERMUAT:
+  nodemon crash-loop EADDRINUSE :::5055, sementara proses node lama
+  (PID 1888) tetap memegang port dan MELAYANI KODE LAMA sepanjang malam.
+  SEBELUM menduga bug logika, BUKTIKAN kode mana yang hidup:
+      netstat -ano | grep ":5055" | grep LISTENING
+      tasklist //FI "PID eq <pid>"
+  Ini kejadian kedua kelas ini di proyek. Port guard + build stamp di /health
+  masih layak dipertimbangkan.
+
+  --------------------------------------------------------------------------
+  M148-M151 — PERAPIAN MASTER DATA locations
+  --------------------------------------------------------------------------
+  - Picker "Lokasi/Patokan Terdekat" (GET /api/location/nearby-options):
+    area & landmark WAJIB sekota dengan properti; hanya baris TANPA kota +
+    tipe commercial/kosong yang bebas kota (Alfamart/Indomaret/stasiun).
+    Properti WAJIB punya kota dulu; ganti kota -> patokan area/landmark yang
+    tak lagi sah DIBUANG dari form, patokan generik dipertahankan.
+    Kolom picker: Lokasi | Tipe | Kota (Status dibuang — selalu "Aktif").
+  - 41 landmark diisi kotanya (PURA TANAH LOT->TABANAN, PANTAI KUTA->BADUNG,
+    UBUD->GIANYAR, CANDI BOROBUDUR->MAGELANG, TUGU PAHLAWAN->SURABAYA, dst.)
+  - 22 kategori generik (MASJID SETEMPAT, TAMAN KOTA, VIHARA) -> commercial
+    tanpa kota. Dibiarkan sebagai landmark tanpa kota = tidak muncul di
+    picker mana pun.
+  - 79 + 10 kembaran dilebur (link property_locations dipindah dulu, baru
+    status=3). Termasuk 10 kawasan yang nyangkut di kota payung "JAKARTA"
+    (Kemang/SCBD/Menteng/Kelapa Gading) — lolos dedup pertama karena
+    city_id-nya BEDA sehingga tidak bentrok unique index (name, city_id).
+  - 85 baris status=3 DIPAKAI ULANG jadi area nyata di kota yang benar-benar
+    punya properti (KEDIRI 3->11, GUNUNGKIDUL 0->10, KULON PROGO 0->10, dst.)
+  - SISA MASALAH: mayoritas dari ~290 kota yang punya properti masih NOL
+    area terdaftar (ASMAT 59 properti/0 area, TARAKAN 58/0, ...). 2 baris
+    status=3 sengaja dibiarkan — kehabisan nama area NYATA, tidak dikarang.
+  - DANAU TOBA sengaja tidak diberi kota (membentang 7 kabupaten).
+
+  --------------------------------------------------------------------------
+  KEAMANAN (audit 25-28 Agu 2026)
+  --------------------------------------------------------------------------
+  - middleware/verifyWebhookSecret.js — 8 endpoint webhook WhatsApp dulu
+    HANYA dilindungi rate-limit; siapa pun yang tahu URL bisa memalsukan
+    pesan customer (membakar kredit LLM / mengotori lead). Ketiga gateway
+    TIDAK menandatangani payload, jadi dipakai shared secret sendiri.
+    SENGAJA FAIL-OPEN bila WEBHOOK_SHARED_SECRET belum di-set — menyalakan
+    penegakan tanpa memperbarui URL di 3 dashboard eksternal akan
+    MEMATIKAN seluruh trafik WhatsApp masuk.
+    Aktifkan: isi WEBHOOK_SHARED_SECRET, lalu tambahkan ?token=<nilai> pada
+    URL webhook di dashboard Kirimi, Fonnte, dan TimelinesAI.
+  - 8 titik updatedBy.toUpperCase() / createdBy.toUpperCase() TANPA guard
+    null di 6 master controller (city/country/province/facility/location/
+    developerProperty) — crash bila req.user kosong. Salinan yang sudah
+    diperbaiki dan yang belum HIDUP BERDAMPINGAN di berkas yang sama:
+    bukti langsung bahwa 7 master controller adalah copy-paste yang menyimpang.
+  - normalizeAiResponderLabel() tidak mengenal 'openrouter' -> setiap balasan
+    OpenRouter tercatat ai_responder = null (laporan provider diam-diam salah).
+  - XSS pada 6 ListView (v-html + tableModal) SUDAH diperbaiki sebelumnya —
+    escapeHtml() membungkus tiap sel & action value. Diverifikasi ulang.
+
+  --------------------------------------------------------------------------
+  SKALA 10.000 AGENT — KEBOCORAN MEMORI YANG DIPERBAIKI
+  --------------------------------------------------------------------------
+  utils/ambiguityStrikes.js & utils/sessionAnchors.js memakai Map ber-TTL,
+  tapi TTL hanya diperiksa SAAT key yang sama dibaca lagi. Customer yang chat
+  sekali lalu hilang meninggalkan entri PERMANEN — tidak ada yang pernah
+  membacanya lagi untuk memicu penghapusan. Ditambah sapuan berkala
+  (setInterval 10 menit, .unref() supaya tidak menahan proses keluar).
+  messageDedup.js sudah punya batas nyata (MAX_ENTRIES) -> tidak diubah.
+
+  --------------------------------------------------------------------------
+  HUTANG TEKNIS YANG BELUM DIKERJAKAN (jangan dianggap selesai)
+  --------------------------------------------------------------------------
+  1. 7 master controller mengulang bentuk CRUD 6-metode yang identik
+     (~2.700 baris). Base class MasterCrudController + polymorphism belum
+     dibuat — DITUNDA SENGAJA karena menyentuh kode produksi luas dan perlu
+     verifikasi UI per-controller, bukan karena tidak perlu.
+  2. chatbotPrivateController.js 5.200 baris — belum diaudit isinya.
+  3. 6 ListView Vue mengulang pola tabel/paginasi/modal yang sama.
+  4. property_knowledge & agent_catalog: indeks RAG masih KOSONG.
+  5. Saldo Kimi HABIS ("account suspended due to insufficient balance") —
+     selama ini setiap balasan produksi jatuh ke Private Agent. Banyak keluhan
+     "AI meng-interview terus" berakar di sini: LLM-nya memang tidak pernah
+     jalan. Ganti AI_PRIMARY_PROVIDER ke provider yang punya saldo, atau isi
+     ulang, sebelum menilai kualitas jawaban LLM.
+  6. ragConfidenceService belum dipromosikan jadi pengambil keputusan.
+  7. OPENROUTER_API_KEY pernah dikirim dalam bentuk plaintext di chat
+     (28 Agu 2026) — WAJIB dirotasi di openrouter.ai.
+
+
+================================================================================
+  END OF FILE — ELEVAN_PROPERTY_CONTEXT_V8.txt (V13 per header — nama berkas
+  fisik SENGAJA tidak di-rename ke _V13.txt, ikuti pola V8-judul/=badan-lebih-
+  baru yang sudah didokumentasikan di §Riwayat; lihat catatan penomoran di
+  kepala berkas ini bila membingungkan)
 ================================================================================

@@ -263,6 +263,29 @@ async function scoreConfidence({ message, history = [] } = {}) {
       } catch (_) { /* fail-open */ }
     }
 
+    if (!override) {
+      /* (d) M159 — PERTANYAAN JARAK / WAKTU TEMPUH.
+       * Arahan pemilik proyek (28 Agu 2026): "Jika ada orang yang tanya jarak
+       * lokasi atau waktu lokasi yang dibutuhkan, RAG dan guardrails masih bisa
+       * confidence dengan baik, agar pertanyaannya bisa dilempar ke platform AI."
+       *
+       * Kalimat seperti "berapa jarak dari Kutisari ke Tunjungan Plaza?" tidak
+       * menyebut transaksi maupun tipe properti, jadi sinyal slot & leksikal
+       * nyaris nol. Diukur sebelum perbaikan: 0.053 → SKIP. Padahal ini
+       * pertanyaan pembeli yang sangat wajar (seberapa jauh dari kantor/sekolah)
+       * dan proyek ini SUDAH punya jawabannya (fitur estimasi jarak M130).
+       *
+       * Dua bagian wajib ada bersamaan supaya "berapa lama KPR-nya?" tidak ikut
+       * tertangkap: kata ukuran jarak/waktu DAN penanda arah lokasi (ke/dari/
+       * menuju/sampai).
+       */
+      const DIST_RE = /\b(jarak|berapa\s+jauh|seberapa\s+jauh|berapa\s+lama|waktu\s+tempuh|berapa\s+menit|berapa\s+km|berapa\s+kilometer|how\s+far|how\s+long|distance|travel\s+time)\b/i;
+      const DIR_RE  = /\b(ke|dari|menuju|sampai|hingga|to|from)\b/i;
+      if (DIST_RE.test(text) && DIR_RE.test(text)) {
+        override = 'pertanyaan jarak/waktu tempuh ke lokasi';
+      }
+    }
+
     const score = override ? 1 : blend(signals);
     const decision = score >= THRESHOLD ? 'REDIRECT' : 'SKIP';
 

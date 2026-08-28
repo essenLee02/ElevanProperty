@@ -37,6 +37,33 @@ const MAX_ALT_AREAS = 6;
 const norm = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
 
 /**
+ * Jarak edit Levenshtein — dipakai untuk koreksi salah ketik nama area (M160).
+ *
+ * Directive pemilik proyek (28 Agu 2026), lewat contoh kasus eksplisit:
+ * "Chandramas" (ketikan customer) vs "Candramas" (nama asli di database) —
+ * beda satu huruf 'h'. Aturan lama menganggap ini AREA YANG TIDAK ADA dan
+ * meminta maaf + menawarkan area lain sama sekali, padahal customer jelas
+ * memaksudkan area yang memang ada, hanya salah ketik.
+ */
+function levenshtein(a, b) {
+  const s = String(a || ''); const t = String(b || '');
+  const m = s.length; const n = t.length;
+  if (!m) return n;
+  if (!n) return m;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const row = [i];
+    for (let j = 1; j <= n; j++) {
+      row[j] = s[i - 1] === t[j - 1]
+        ? prev[j - 1]
+        : 1 + Math.min(prev[j - 1], prev[j], row[j - 1]);
+    }
+    prev = row;
+  }
+  return prev[n];
+}
+
+/**
  * Transaksi lawan. Dipakai untuk menjawab "sewa tidak ada, tapi ADA yang dijual".
  * Nilai mengikuti kolom properties.transaction_type ('Sale' / 'Rent').
  */
@@ -190,6 +217,43 @@ async function checkAreaAvailability({ userId, city, area, buildingType, transac
       return { ...base, ok: true, exact, verdict: 'available' };
     }
 
+    /* ── KOREKSI SALAH KETIK (M160) ──────────────────────────────────────────
+     * Directive pemilik proyek (28 Agu 2026): "Chandramas" (ketikan customer)
+     * vs "Candramas" (nama asli di database) — beda satu huruf. Sebelum
+     * menyerah dan bilang "area ini belum ada", cek dulu apakah nama yang
+     * diketik customer SANGAT MIRIP salah satu area yang benar-benar ada
+     * di katalog agent (jarak edit kecil relatif panjang nama) — kalau ya,
+     * itu salah ketik, BUKAN area yang berbeda, dan customer harus langsung
+     * melihat listingnya, bukan ditanya-tanya lagi.
+     *
+     * Ambang: jarak edit <= 2 DAN <= 30% panjang nama yang diketik, supaya
+     * nama pendek ("Waru" vs "Waru2") tidak salah cocok dengan nama pendek
+     * lain yang kebetulan mirip tapi memang beda tempat.
+     */
+    const catalogAreas = await listAlternativeAreas({
+      userId, cityId, buildingType, transactionType, excludeArea: '',
+    });
+    if (catalogAreas.length) {
+      const wantNorm = norm(area);
+      let best = null; let bestDist = Infinity;
+      for (const c of catalogAreas) {
+        const d = levenshtein(wantNorm, norm(c.area));
+        if (d < bestDist) { bestDist = d; best = c; }
+      }
+      const threshold = Math.max(1, Math.floor(wantNorm.length * 0.3));
+      if (best && bestDist > 0 && bestDist <= Math.min(2, threshold)) {
+        const corrected = await countIn({
+          userId, cityId, area: best.area, buildingType, transactionType,
+        });
+        if (corrected.count > 0) {
+          return {
+            ...base, ok: true, exact: corrected, verdict: 'available',
+            correctedArea: best.area, originalArea: area,
+          };
+        }
+      }
+    }
+
     // Nol untuk transaksi yang diminta → apakah area ini punya stok dengan
     // transaksi LAIN? Inilah kasus Pakuwon: sewa nol, dijual 19.
     let crossTransaction = null;
@@ -290,10 +354,20 @@ async function resolveCityAndArea(candidates = []) {
 async function listAreasWithinBudget({
   userId, cityId, buildingType, transactionType, minPrice, maxPrice, excludeArea, limit = MAX_ALT_AREAS,
 }) {
+  // ⚠️ M161 — BUG SERIUS DITEMUKAN & DIPERBAIKI: `Op.gte`/`Op.lte` adalah
+  // SYMBOL milik Sequelize, dan Object.keys() TIDAK PERNAH mengembalikan
+  // properti ber-key Symbol (butuh Object.getOwnPropertySymbols()). Baris lama
+  // `if (!Object.keys(priceWhere).length) return [];` karena itu SELALU true
+  // — fungsi ini SELALU mengembalikan array kosong sejak ditulis (M156, 26 Agu
+  // 2026), apa pun nilai minPrice/maxPrice-nya. Ditemukan lewat uji coba nyata
+  // (skenario "Tasha", Gresik 600-700jt): 8 area BENAR-BENAR punya stok dalam
+  // rentang itu, tapi gerbang tetap melaporkan "tidak ada alternatif" karena
+  // fungsi pemasoknya mati total secara diam-diam. Diganti dengan boolean biasa.
+  let hasPriceFilter = false;
   const priceWhere = {};
-  if (Number.isFinite(minPrice)) priceWhere[Op.gte] = minPrice;
-  if (Number.isFinite(maxPrice)) priceWhere[Op.lte] = maxPrice;
-  if (!Object.keys(priceWhere).length) return [];
+  if (Number.isFinite(minPrice)) { priceWhere[Op.gte] = minPrice; hasPriceFilter = true; }
+  if (Number.isFinite(maxPrice)) { priceWhere[Op.lte] = maxPrice; hasPriceFilter = true; }
+  if (!hasPriceFilter) return [];
 
   const rows = await Property.findAll({
     where: {

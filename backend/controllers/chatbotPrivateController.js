@@ -29,7 +29,8 @@ const { buildRecommendationContextForLLM,
         detectUseCase,
         isNonResidentialUse,
         useCaseLabel,
-        searchProperties }                    = require('../services/propertyRecommendationService');
+        searchProperties,
+        detectLandmark }                      = require('../services/propertyRecommendationService');
 const { getRumah123Listings,
         mapBuildingTypeToApify,
         mapTransactionTypeToApify,
@@ -55,6 +56,16 @@ const _languageKeywords = require('../utils/languageKeywords');
 // cache-then-async-refresh design (never blocks the synchronous qualification flow).
 const { getCachedCityLandmarks, warmCityLandmarksCache } = require('../services/googlePlacesService');
 const { HTTP } = require('../config/httpStatus');
+
+// M160 — gerbang ketersediaan area & coverage per-agent NYATA. Dipakai di
+// generateResponseForTerminalMassege() supaya Private Agent (satu-satunya
+// jalur yang benar-benar aktif saat ini karena saldo Kimi habis, lihat M158)
+// TIDAK LAGI menginterview tanpa henti untuk area yang sudah jelas tidak ada
+// di katalog agent, dan TIDAK LAGI menyarankan area dari daftar statis
+// (locationLandmarks.js) yang bisa sama sekali tidak sesuai katalog nyata.
+const { tryAreaAvailabilityAnswer, customerAsksAvailability } = require('../utils/areaAvailabilityGate');
+const { resolveCityAndArea } = require('../services/areaAvailabilityService');
+const { getAgentCoverage, getAgentAreaNames } = require('../services/agentCoverageService');
 
 /**
  * Landmark examples for a city, preferring the curated static map (fast, hand-picked)
@@ -2414,7 +2425,7 @@ class ConversationQualifier {
    * mode = 'summary' → Ask full Q0–Q12 (used by both catalog and summary modes)
    * mode = 'catalog' → (legacy, no longer used) same as 'summary' but skips Q5–Q12
    */
-  static getNextQuestion(profile, lang = 'id', priceAnchors = null, mode = 'catalog') {
+  static getNextQuestion(profile, lang = 'id', priceAnchors = null, mode = 'catalog', agentAreaOptions = null) {
     const isId = lang === 'id';
     const tx   = profile.transactionType;  // 'rent' | 'sale' | ''
     const type = profile.buildingType;     // 'house' | 'apartment' | ...
@@ -2476,8 +2487,18 @@ class ConversationQualifier {
     // district is already known. Landmark examples are city-specific (Q2c & Q6 share
     // the same LOCATION_LANDMARKS map — see top of file — so adding a new city there
     // automatically wires up both questions).
+    //
+    // ⚠️ M160 — agentAreaOptions (area NYATA milik agent, dari database) SELALU
+    // didahulukan atas cityLandmarks (daftar statis lintas-agent). Directive
+    // pemilik proyek (28 Agu 2026): "AI cek area mana saja yang dimiliki oleh
+    // agent... jangan hardcode." Contoh nyata: locationLandmarks.js menyarankan
+    // "Gedangan, Waru, Buduran, Krian" untuk SEMUA agent yang jualan Sidoarjo —
+    // padahal Natasha nol listing di ketiganya. Statis dipertahankan HANYA
+    // sebagai fallback saat agent belum punya data untuk kota ini (fail-open;
+    // agent baru tidak boleh sama sekali tidak dapat contoh area).
     const isCommercialType  = ['shophouse', 'office', 'warehouse', 'store'].includes(type);
-    const cityLandmarks     = getCityLandmarks(loc);
+    const hasAgentAreas     = Array.isArray(agentAreaOptions) && agentAreaOptions.length > 0;
+    const cityLandmarks     = hasAgentAreas ? agentAreaOptions : getCityLandmarks(loc);
     // Booking (hotel/kondotel/villa) & customer yang sudah menyebut patokan lokasi
     // (anchorPoint, mis. "dekat PTC") TIDAK ditanya area lagi — redundant dengan Q6.
     if (loc && !profile.hasDistrict && !profile.aiAskedDistrict
@@ -2666,9 +2687,9 @@ class ConversationQualifier {
 
       /* ── Q6: Anchor point (only if not surfaced in Q2) ── */
       if (!profile.hasAnchorPoint && !profile.aiAskedAnchorPoint && loc) {
-        // Sebut landmark LOKAL kota customer (mal, kawasan, wisata) bila tersedia di
-        // LOCATION_LANDMARKS — jauh lebih relevan daripada contoh generik untuk semua kota.
-        const marks = getCityLandmarks(loc);
+        // M160: area NYATA milik agent didahulukan atas daftar statis —
+        // lihat catatan panjang di Q2c untuk alasannya (sama persis di sini).
+        const marks = hasAgentAreas ? agentAreaOptions : getCityLandmarks(loc);
         if (marks && marks.length) {
           const sample = marks.slice(0, 3).join(', ');
           return isId
@@ -4517,7 +4538,7 @@ class ChatbotPrivateService {
    * @param {Error}    params.externalError
    */
   static async generateResponseForTerminalMassege({
-    session, history = [], userMessage = '', agentName = '',
+    session, history = [], userMessage = '', agentName = '', agentUserId = '',
     recommendationContext = null, externalError = null
   }) {
     const skillInfo = this.loadSkillInfo();
@@ -4568,6 +4589,143 @@ class ChatbotPrivateService {
     const distReply = this.#tryDistanceAnswer(userMessage, filters?.location);
     if (distReply) return this.#wrap(distReply, { skillInfo });
 
+    /* ── M161: customer minta alamat/jarak untuk SURVEI properti yang BARU
+     * SAJA ditampilkan ("ke lokasi rumah itu", bukan menyebut kota tujuan) ──
+     * Kasus nyata (uji coba "Tasha"): setelah melihat listing Driyorejo
+     * (alamat sudah tercetak di kartu), customer tanya "Berapa jarak dan
+     * alamatnya ke lokasi rumah itu? Saya mau survei" — #tryDistanceAnswer()
+     * BENAR menolak menghitung jarak (tidak ada dua nama kota, dan itu memang
+     * di luar kemampuannya — distanceEstimationService butuh dua kota
+     * eksplisit, by design, bukan bug). Tapi respons yang keluar HANYA
+     * "Maaf, saya akan cek dahulu, nanti saya infokan" — padahal ALAMATNYA
+     * SUDAH ADA di kartu yang baru saja dikirim 1 giliran sebelumnya. AI
+     * gagal memakai data yang sudah dimilikinya sendiri.
+     *
+     * Fix: kalau pesan customer memang menanyakan alamat/lokasi untuk
+     * keperluan survei/viewing (bukan pertanyaan jarak antar-kota yang valid),
+     * dan pesan AI TERAKHIR memuat baris "🏡 Alamat:", kutip ulang alamat itu
+     * langsung — tidak perlu menghitung apa pun, datanya sudah ada.
+     */
+    {
+      // ⚠️ TANPA \b setelah "alamat" — customer sering menulis "alamatnya"
+      // (alamat+nya menyatu, tanpa spasi), dan \balamat\b gagal cocok karena
+      // tidak ada batas kata di antara "alamat" dan "nya".
+      const wantsAddress = /\balamat|\blokasi\b|\bdimana\b|\bdi\s*mana\b/i.test(userMessage)
+        && /\bsurvei\b|\bviewing\b|\blihat\s+langsung\b|\bitu\b|\btersebut\b|\bnya\b/i.test(userMessage);
+      if (wantsAddress) {
+        const lastAi = [...history].reverse().find((h) => h.role === 'ai' || h.role === 'assistant');
+        const addrLines = String(lastAi?.message || '').match(/🏡\s*Alamat:\s*[^\n]+/g);
+        if (addrLines && addrLines.length) {
+          const body = addrLines.map((l) => l.replace(/🏡\s*Alamat:\s*/, '').trim());
+          const reply = lang === 'id'
+            ? `Baik, Kak, ini alamatnya ya 🏡\n${body.map((a) => `• ${a}`).join('\n')}\n\nUntuk estimasi jarak & waktu tempuh yang presisi, boleh sebutkan Kakak berangkat dari kota/area mana? 📍`
+            : `Sure, here's the address 🏡\n${body.map((a) => `• ${a}`).join('\n')}\n\nFor an accurate distance/travel time estimate, could you tell me which city or area you'll be coming from? 📍`;
+          return this.#wrap(reply, { skillInfo, filters });
+        }
+      }
+
+      // ⚠️ FALLBACK ASLI DIPERTAHANKAN UTUH — dulu hidup di DALAM
+      // #tryDistanceAnswer() sendiri, sehingga fungsi itu SELALU truthy untuk
+      // apa pun yang "terlihat seperti" pertanyaan jarak, dan blok
+      // wantsAddress di atas TIDAK PERNAH tercapai. Sekarang #tryDistanceAnswer()
+      // murni: null berarti "bukan pertanyaan jarak" ATAU "tidak bisa dihitung".
+      // Untuk kasus KEDUA (mis. kota fiktif "Antah Berantah") — yang genuinely
+      // tidak berkaitan dengan alamat listing — kalimat lama tetap dipakai di
+      // sini, memakai detektor yang sama (looksLikeDistanceQuestion) supaya
+      // pesan yang BUKAN pertanyaan jarak sama sekali tidak ikut kena.
+      const { looksLikeDistanceQuestion } = require('../services/distanceEstimationService');
+      if (looksLikeDistanceQuestion(userMessage)) {
+        const reply = lang === 'id'
+          ? 'Maaf, saya akan cek dahulu, nanti saya akan infokan ke Anda ya 🙏'
+          : "Sorry, let me check on that and get back to you 🙏";
+        return this.#wrap(reply, { skillInfo, filters });
+      }
+    }
+
+    /* ── M160: customer MENOLAK tawaran area alternatif → tutup dengan sopan ──
+     * Case script pemilik proyek (28 Agu 2026), langkah 7-8: setelah gerbang
+     * menawarkan area lain dan customer menjawab "Tidak mau, Kak" — AI wajib
+     * mengakhiri obrolan dengan sopan, BUKAN mengulang tawaran yang sama atau
+     * melanjutkan interview Q-flow seolah tidak terjadi apa-apa.
+     *
+     * Deteksi memakai frasa penutup gerbang sendiri ("Mau saya carikan di ...")
+     * sebagai penanda "pesan AI terakhir adalah tawaran gerbang ini" — jadi
+     * penolakan HANYA dianggap menutup obrolan bila memang menjawab tawaran
+     * gerbang, bukan menolak hal lain yang sedang dibahas.
+     */
+    {
+      const lastAi = [...history].reverse().find((h) => h.role === 'ai' || h.role === 'assistant');
+      const lastAiOfferedAlt = lastAi && /mau saya carikan di/i.test(String(lastAi.message || ''));
+      const declineRe = /\b(tidak|tdk|nggak|gak|ga|enggak)\s*(mau|jadi|usah|perlu)\b|\bbatal\b/i;
+      if (lastAiOfferedAlt && declineRe.test(userMessage) && !detectLandmark(userMessage)) {
+        const closing = lang === 'id'
+          ? `Baik, Kak. Terima kasih sudah menghubungi saya 🙏 Kalau nanti ada kebutuhan properti lagi, jangan sungkan untuk chat saya kembali ya 😊`
+          : `Understood, thank you for reaching out 🙏 Whenever you need help with a property again, feel free to message me anytime 😊`;
+        return this.#wrap(closing, { skillInfo, filters, provider: 'area_availability_gate_closing' });
+      }
+    }
+
+    /* ══════════════════════════════════════════════════════════════════════
+       M160 — GERBANG KETERSEDIAAN AREA, JUGA DI JALUR PRIVATE AGENT
+       ══════════════════════════════════════════════════════════════════════
+       Transkrip produksi 28 Agu 2026: customer minta rumah di "Buduran"
+       (Sidoarjo), bertanya "ada ta?" dan "Minta 3 listing" BERKALI-KALI,
+       tidak pernah dijawab — Private Agent terus menjalankan Q3-Q11
+       (budget/tanggal/penghuni/fasilitas/KPR/kondisi/furnitur) sampai
+       customer menulis "Stop tanya", "Fokus", "Anda memberikan pilihan
+       rekomendasi, namun anda terus interview".
+
+       AKAR MASALAH: gerbang ketersediaan (M152-M158) hidup di
+       whatsappAIService.js dan HANYA berjalan sebelum memanggil LLM. Saat
+       AI_PRIMARY_PROVIDER pakai platform (kimi/dst.) dan LLM itu gagal —
+       yang SAAT INI SELALU terjadi karena saldo Kimi habis, lihat catatan
+       M158 — alur jatuh ke generateResponseForTerminalMassege() ini, yang
+       TIDAK PERNAH menerima hasil gerbang itu. Private Agent menjalankan
+       Q-flow-nya sendiri dari nol, buta terhadap fakta ketersediaan yang
+       sudah dihitung sesaat sebelumnya. Diperparah oleh bug terpisah:
+       parameter `agentUserId` DIKIRIM oleh whatsappAIService.js tapi TIDAK
+       PERNAH didestrukturisasi di sini — nilainya selalu undefined sampai
+       diperbaiki bersamaan dengan ini.
+
+       Ditempatkan SETELAH #tryTerminologyAnswer/#tryDistanceAnswer (pola
+       yang sama: gerbang FAKTA yang harus dicek TIDAK BERSYARAT, sebelum
+       guard off-topic) dan SEBELUM guard off-topic, supaya "Di Buduran ada
+       ta?" tidak sempat dianggap kalimat biasa.
+
+       Fail-open MUTLAK: agentUserId kosong (mis. jalur web chat lama yang
+       belum mengirimkannya) atau area belum jelas → lewati, alur normal
+       jalan seperti sebelumnya.
+    ══════════════════════════════════════════════════════════════════════ */
+    try {
+      if (agentUserId) {
+        const qs = extractQualificationState(history, userMessage) || {};
+        // ⚠️ Deteksi dari PESAN SAAT INI didahulukan atas qs.district/qs.city
+        // (state lintas-giliran yang bisa BASI) — lihat catatan sama di
+        // whatsappAIService.js (bug "Chandramas" nyangkut walau customer
+        // sudah pindah tanya "Buduran" dua giliran kemudian).
+        const { city: availCity, area: availArea } = await resolveCityAndArea([
+          detectLandmark(userMessage), filters?.landmark, qs.district, qs.city, qs.anchorPoint,
+          filters?.location,
+        ]);
+        const txRaw = qs.transactionType || filters?.transactionType || '';
+        const txDb  = /rent|sewa/i.test(txRaw) ? 'Rent' : (/sale|beli|jual/i.test(txRaw) ? 'Sale' : '');
+        const typeRaw = qs.buildingType || filters?.buildingType || '';
+        const typeDb  = typeRaw ? String(typeRaw).charAt(0).toUpperCase() + String(typeRaw).slice(1).toLowerCase() : '';
+
+        if (availArea && txDb) {
+          const hit = await tryAreaAvailabilityAnswer({
+            userId: agentUserId, city: availCity, area: availArea,
+            buildingType: typeDb || undefined, transactionType: txDb,
+            typeLabel: typeRaw ? PropertyFormatter.humanBuildingType(typeRaw, lang) : 'properti',
+            message: userMessage, isId: lang === 'id', persistedBudgetText: qs.budget || '',
+          });
+          if (hit) return this.#wrap(hit.reply, { skillInfo, filters, provider: 'area_availability_gate' });
+        }
+      }
+    } catch (availErr) {
+      console.warn('[PrivateAgent] area availability gate gagal (non-fatal):', availErr.message);
+    }
+
     // ── Guard: off-topic pesan (bukan properti sama sekali) ──────────────────
     if (!aiAskedLast && LanguageDetector.isOffTopic(userMessage)) {
       const knowledgeReply = await this.#tryKnowledgeAnswer(userMessage);
@@ -4598,6 +4756,26 @@ class ChatbotPrivateService {
 
     // ── Build customer profile dari seluruh percakapan ───────────────────────
     const profile = ConversationQualifier.buildProfile(history, userMessage, filters);
+
+    /* ── M160: area NYATA milik agent untuk Q2c/Q6 — bukan daftar hardcode ──
+     * locationLandmarks.js menyarankan "Gedangan, Waru, Buduran, Krian" untuk
+     * SETIAP agent yang jualan di Sidoarjo, terlepas dari area mana yang
+     * SUNGGUHAN ada di katalog masing-masing agent. Diverifikasi langsung:
+     * agent Natasha nol listing di ketiga area itu; area aslinya justru
+     * Candramas/Ketajen/dst. getAgentAreaNames() membaca coverage yang SUDAH
+     * dihitung dari database (agentCoverageService, TTL 5 menit), bukan query
+     * baru per pesan. Fail-open: agent baru/belum ada listing di kota itu →
+     * kosong → getNextQuestion() jatuh ke daftar statis/Google seperti biasa.
+     */
+    let agentAreaOptions = null;
+    try {
+      if (agentUserId && profile.location) {
+        const coverage = await getAgentCoverage(agentUserId);
+        agentAreaOptions = getAgentAreaNames(
+          coverage, profile.location, profile.buildingType, profile.transactionType
+        );
+      }
+    } catch (_) { /* fail-open: biarkan getNextQuestion() pakai fallback statis */ }
 
     // ── Date ask-directive (rules 25/35) from deterministic customerDateParser ──
     // The qualification-state extractor runs parseCustomerDate() on the move-in /
@@ -4678,7 +4856,7 @@ class ChatbotPrivateService {
       }
 
       const nextQuestion = ConversationQualifier.getNextQuestion(
-        profile, lang, priceAnchors, 'summary'
+        profile, lang, priceAnchors, 'summary', agentAreaOptions
       );
 
       if (nextQuestion) {
@@ -4720,7 +4898,7 @@ class ChatbotPrivateService {
 
     // ── Full Q flow — same question depth as summary mode ────────────────────
     const nextQuestion = ConversationQualifier.getNextQuestion(
-      profile, lang, priceAnchors, 'summary'
+      profile, lang, priceAnchors, 'summary', agentAreaOptions
     );
     if (nextQuestion) {
       console.log(`[PrivateAgent/CatalogMode] Asking Q (aiCount=${profile.aiCount})`);
@@ -4894,15 +5072,26 @@ class ChatbotPrivateService {
    *   (fallback tujuan bila customer hanya sebut SATU kota — asalnya sendiri)
    * @returns {string|null}
    */
+  /**
+   * ⚠️ M161 — TIDAK LAGI mengembalikan kalimat "saya cek dahulu" di SINI.
+   * Versi lama memulangkan teks fallback itu begitu `looksLikeDistanceQuestion()`
+   * bernilai true, TERLEPAS dari apakah jaraknya benar-benar bisa dihitung.
+   * Akibatnya nilai baliknya SELALU truthy untuk pesan semacam "berapa jarak
+   * ke lokasi rumah itu?" — pemanggil langsung mengirim fallback itu dan
+   * TIDAK PERNAH sempat mencoba mengutip alamat yang sudah diketahui dari
+   * kartu listing sebelumnya (lihat pengecekan alamat tepat sesudah pemanggilan
+   * method ini). Sekarang: null berarti "tidak bisa dihitung, coba cara lain
+   * dulu" — kalimat fallback dipindah ke pemanggil, sebagai upaya TERAKHIR.
+   *
+   * @returns {string|null} teks jarak/waktu tempuh bila BENAR-BENAR terhitung,
+   *   null bila tidak (baik karena bukan pertanyaan jarak, maupun karena tidak
+   *   ada dua nama kota yang bisa dipakai menghitung).
+   */
   static #tryDistanceAnswer(userMessage, propertyCity = null) {
     try {
       const { looksLikeDistanceQuestion, tryAnswerDistanceQuery } = require('../services/distanceEstimationService');
       if (!looksLikeDistanceQuestion(userMessage)) return null;
-
-      const answer = tryAnswerDistanceQuery(userMessage, { propertyCity });
-      if (answer) return answer;
-
-      return 'Maaf, saya akan cek dahulu, nanti saya akan infokan ke Anda ya 🙏';
+      return tryAnswerDistanceQuery(userMessage, { propertyCity }) || null;
     } catch (_err) {
       return null; // fail-open — jangan pernah biarkan fitur ini memutus balasan
     }

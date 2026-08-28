@@ -209,8 +209,57 @@ function buildAgentCoverageContext(coverage, filters = {}) {
 /** Kosongkan cache (dipakai tes & setelah seed/import katalog). */
 function clearAgentCoverageCache() { _cache.clear(); }
 
+/**
+ * Nama area NYATA milik agent ini di suatu kota — pengganti daftar hardcode
+ * di locationLandmarks.js untuk Q2c/Q6 pada Private Agent (M160).
+ *
+ * Directive pemilik proyek (28 Agu 2026): "Pemberian saran area tidak boleh
+ * hardcode; harusnya AI cek area mana saja yang dimiliki oleh agent... AI cek
+ * model/Property.js... Berikan max 4 saja area sesuai di database agent."
+ *
+ * Transkrip nyata yang jadi bukti: locationLandmarks.js menyarankan "Gedangan,
+ * Waru, Buduran, Krian" untuk Sidoarjo — nama kota di Jawa Timur yang benar,
+ * tapi agent Natasha TIDAK PUNYA satu pun listing di area itu (0 hasil untuk
+ * ketiganya, dikonfirmasi query langsung). Area asli yang dimiliki agent ini
+ * di Sidoarjo justru Candramas/Ketajen/Permata Kwangsan/dst.
+ *
+ * @param {object|null} coverage  hasil getAgentCoverage()
+ * @param {string} cityName
+ * @param {string} [buildingType]  bila kosong, digabung semua tipe di kota itu
+ * @param {string} [transactionType]
+ * @param {number} [max=4]
+ * @returns {string[]}  bisa kosong bila agent belum punya data untuk kota ini
+ *   — pemanggil WAJIB fallback ke daftar statis (fail-open), BUKAN menyimpulkan
+ *   agent tidak punya listing sama sekali di kota itu.
+ */
+function getAgentAreaNames(coverage, cityName, buildingType = '', transactionType = '', max = 4) {
+  if (!coverage || !coverage.cities || !cityName) return [];
+  const wantCity = String(cityName).trim().toLowerCase();
+  const entry = [...coverage.cities.entries()]
+    .find(([name]) => name.toLowerCase() === wantCity || name.toLowerCase().includes(wantCity) || wantCity.includes(name.toLowerCase()));
+  if (!entry) return [];
+
+  const wantType = String(buildingType || '').toLowerCase();
+  const wantTx   = String(transactionType || '').toLowerCase();
+  const areaCounts = new Map(); // areaName → count gabungan lintas-tipe yang cocok
+
+  for (const t of entry[1].types.values()) {
+    if (wantType && String(t.buildingType).toLowerCase() !== wantType) continue;
+    if (wantTx && String(t.transactionType).toLowerCase() !== wantTx) continue;
+    for (const [areaName, a] of t.areas) {
+      areaCounts.set(areaName, (areaCounts.get(areaName) || 0) + a.count);
+    }
+  }
+
+  return [...areaCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, max)
+    .map(([name]) => name);
+}
+
 module.exports = {
   getAgentCoverage,
   buildAgentCoverageContext,
+  getAgentAreaNames,
   clearAgentCoverageCache,
 };

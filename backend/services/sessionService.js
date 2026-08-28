@@ -95,9 +95,23 @@ async function findOrCreateSession(name, phone, locationOrSource = '', sourceMay
 }
 
 async function getConversationHistory(sessionId, limit = 12) {
+  // ⚠️ M160: `id DESC` DITAMBAHKAN sebagai tiebreaker kedua — TEMUAN NYATA,
+  // bukan kehati-hatian teoretis. `chat_messages.createdAt` adalah DATETIME
+  // MySQL polos (presisi DETIK, bukan milidetik). Customer yang mengetik dua
+  // pesan berurutan dalam detik yang sama (sangat umum — transkrip produksi
+  // 28 Agu 2026 penuh pesan beruntun: "Minta listing" lalu "Sya ini dr td
+  // minta listing" dalam hitungan detik) menghasilkan createdAt yang IDENTIK.
+  // ORDER BY createdAt SAJA pada baris yang timestamp-nya sama TIDAK dijamin
+  // urutan insersi oleh MySQL — diverifikasi langsung: sebuah transkrip 4
+  // giliran percakapan kembali dari query ini dalam urutan ACAK, bukan
+  // kronologis. Setiap detektor yang bergantung pada "pesan AI TERAKHIR"
+  // (lastAiMessageAsksQuestion, extractQualificationState, gerbang
+  // ketersediaan area M152-M160, dst.) rusak diam-diam saat ini terjadi.
+  // `id` autoincrement SELALU monoton mengikuti urutan insersi terlepas dari
+  // presisi timestamp, jadi dipakai sebagai tiebreaker pasti.
   const messages = await ChatMessage.findAll({
     where: { chatSessionId: sessionId },
-    order: [['createdAt', 'DESC']],
+    order: [['createdAt', 'DESC'], ['id', 'DESC']],
     limit
   });
 
