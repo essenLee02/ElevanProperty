@@ -16,28 +16,38 @@ maintain this picture by re-reading the conversation before every reply (see
 SKILL.md rule 10). Treat it as a mental checklist, not something to print for
 the customer.
 
-### The four minimum fields
+### The four minimum listing slots
 
-Before starting the Q1–Q14 interview in earnest, check whether the
-conversation already carries these four — extract whatever is present rather
-than asking from zero:
+These four — and **only** these four — gate the first listings (SKILL.md §4). Before asking
+anything, check what the conversation already carries and extract it rather than asking from
+zero:
 
 ```
-① buildingType    — house / villa / apartment / …
-② transactionType — sewa (rent) | beli → sale
-③ location        — city or area
-④ budget          — numeric range OR affordability preference
+① buildingType     — house / villa / apartment / kos / ruko / …
+② transactionType  — sewa (rent) | beli → sale
+③ city             — Surabaya / Gresik / Sidoarjo / …
+④ specificLocation — area (Kebomas) OR landmark (dekat PTC) OR commercial anchor (dekat Alfamart)
 ```
 
-If even one is already known from what the customer said, don't treat this as
-a cold start — go straight to whichever of Q1–Q14 is still unanswered.
+**Area and landmark are ONE slot.** ④ is satisfied by whichever the customer offers first —
+naming an area does not oblige you to also collect a landmark, nor the reverse. For the same
+reason, after a city change, the ONE question is the landmark/anchor in the new city (Q6);
+the other three slots carry over untouched (§Mid-flow changes).
 
-**Budget is satisfied by** `terjangkau` / `murah` / `affordable` / `yang paling murah` for the
-purpose of this early cold-start check (deciding whether to run the full interview at all).
-This does not mean the number itself is optional forever — see the Q3a rule below: a bare
-affordability word with zero digits anywhere still needs one follow-up question for a real
-Rupiah figure before the final summary. "✓ Budget: Terjangkau" with no number is close to
-useless for an agent trying to match a listing.
+⚠️ **budget is never a precondition for showing listings.** Budget used to occupy slot ④ here,
+and that was wrong: it made the model interrogate price before it had shown a single property —
+exactly the interview-first behaviour SKILL.md §4 withdraws. Budget, bedrooms, move-in date,
+facilities and decision-maker are collected *after* the listings, conversationally, or when the
+customer's own reaction makes one relevant ("kok mahal" → then budget).
+
+If even one of the four is already known from what the customer said, don't treat this as a
+cold start — go straight to whichever slot is still missing.
+
+**For the final brief, budget still needs a real number.** `terjangkau` / `murah` /
+`affordable` / `yang paling murah` is enough to keep the conversation moving, but see the Q3a
+rule below: a bare affordability word with zero digits anywhere still needs one follow-up
+question for a real Rupiah figure before the final summary. "✓ Budget: Terjangkau" with no
+number is close to useless for an agent trying to match a listing.
 
 ### The checklist to keep in mind
 
