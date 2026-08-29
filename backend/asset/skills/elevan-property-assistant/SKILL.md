@@ -279,7 +279,6 @@ counterpart.
 | `docs/12-facilities-reference.md` | Facility vocabulary, Q_FAC, standard-facilities fallback |
 | `docs/13-locations-and-landmarks.md` | Anchor recognition, landmark categories, per-city examples |
 | `docs/14-legalitas-pajak-kpr.md` | Certificates, tax and financing terminology (SHM/SHGB/AJB/KPR) |
-| `docs/16-counterpart-roles-and-division-routing.md` | Counterpart roles, desk routing (Sales/Procurement/HRD/IT/Admin) **and the complaint playbook** |
 
 ---
 

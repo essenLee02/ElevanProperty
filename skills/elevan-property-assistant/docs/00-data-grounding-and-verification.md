@@ -127,4 +127,3 @@ Nine questions. Any "no" means edit the message, not send it.
 - `08-catalog-and-recommendations.md` — catalog-only sourcing, matching and the reply templates
 - `04-qualification-flow.md` — the state block and the summary-brief rules
 - `05-answer-completeness-and-reask.md` — what counts as answered, and the anti-loop rule
-- `16-counterpart-roles-and-division-routing.md` — complaints and non-property handovers

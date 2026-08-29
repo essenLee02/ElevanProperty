@@ -186,7 +186,6 @@ when the conversation actually raises that topic.
 | `docs/12-facilities-reference.md` | Facilities — vocabulary, Q_FAC, standard fallback |
 | `docs/13-locations-and-landmarks.md` | Locations — anchors, landmarks, per-city examples |
 | `docs/14-legalitas-pajak-kpr.md` | Certificates, tax, KPR (doc 09 §3a always applies) |
-| `docs/16-counterpart-roles-and-division-routing.md` | Supplier / applicant / visitor / insurance / IT — **and complaints** |
 
 ---
 

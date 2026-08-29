@@ -1,7 +1,103 @@
 ================================================================================
-  ELEVAN PROPERTY — COMPREHENSIVE PROJECT CONTEXT (V14)
+  ELEVAN PROPERTY — COMPREHENSIVE PROJECT CONTEXT (V16)
   Dibuat  : 15 Juni 2026
-  Update  : 29 Agustus 2026 (M159–M164: gerbang KOTA sebelum gerbang area —
+  Update  : 29 Agustus 2026, sesi lanjutan lagi (M171): ⭐⭐⭐ TEMUAN PALING
+            KRITIS DARI SELURUH SESI HARI INI — ADA DUA DIREKTORI skills/
+            TERPISAH: `Elevan_Property/skills/` (root proyek) DAN
+            `Elevan_Property/backend/asset/skills/`. HANYA yang PERTAMA yang
+            DIMUAT KODE RUNTIME (`skillPromptService.js`: `SKILLS_ROOT =
+            path.resolve(__dirname,'..','..')/skills` = root proyek, BUKAN
+            `backend/asset/skills`). `grep -rn "asset/skills"
+            --include=*.js` di seluruh backend/ mengembalikan NOL hasil —
+            `backend/asset/skills/` TIDAK DIRUJUK KODE MANA PUN. Ini berarti
+            SEMUA edit skill-doc di sesi M165–M170 (ditulis ke path
+            `backend\asset\skills\...` sesuai kebiasaan lama) SECARA
+            KEBETULAN sudah sinkron dengan `Elevan_Property/skills/` — tapi
+            itu KEBETULAN, bukan jaminan, dan HAMPIR menyebabkan penghapusan
+            doc 16 sesi ini gagal senyap (dihapus dari salinan mati, salinan
+            hidup tidak tersentuh, `loadResponseSkillPrompt()` tetap
+            memulangkan isi doc 16 walau file di `backend/asset/skills` sudah
+            tidak ada). ⛔ ATURAN BARU MUTLAK: SETIAP edit skill doc mulai
+            sesi ini WAJIB ke `Elevan_Property/skills/*/docs/`,
+            BUKAN `backend/asset/skills/*/docs/` — dan SETELAH itu SELALU
+            verifikasi dengan memanggil `loadResponseSkillPrompt()`
+            LANGSUNG (bukan `grep` folder, bukan `wc -c`), karena itu satu-
+            satunya cara membuktikan kode benar-benar membaca perubahan.
+            Kedua direktori untuk sementara disinkronkan manual (diff -rq
+            kosong per 29 Agu sore) sebagai mitigasi, TAPI status
+            `backend/asset/skills/` sebagai salinan mati/yatim BELUM
+            diputuskan (hapus? jadikan symlink? biarkan sebagai cadangan
+            manual pemilik proyek?) — lihat §13 TROUBLESHOOT dan
+            §PERUBAHAN BESAR V15→V16 untuk detail penuh + cara reproduksi.
+
+            Pemicu temuan ini: doc `16-counterpart-roles-and-division-
+            routing.md` DIHAPUS dari KEDUA direktori (+ referensinya di
+            SKILL.md, doc 00, dan CONDITIONAL_FILE_TRIGGERS di
+            skillPromptService.js) atas arahan eksplisit pemilik proyek:
+            fokus skill HANYA properti — memahami & merekomendasikan
+            kebutuhan sewa/beli dari katalog agent, membantu penjadwalan
+            survei, dan menjawab jarak/estimasi lokasi survei untuk PLATFORM
+            AI manapun (GPT/Kimi/Claude/DeepSeek/dst.) — BUKAN routing
+            supplier/pelamar/komplain ke divisi internal (Sales/Procurement/
+            HRD/IT/Admin), yang di luar cakupan chatbot customer-agent
+            properti ini. Doc itu ditambahkan sesi M165–M170 sebagai
+            perluasan yang KELIRU arah — dikoreksi sesi ini. Ukuran prompt
+            (diukur ulang via loadResponseSkillPrompt() langsung): sapaan
+            biasa 259.327 char, worst-case-semua-trigger-properti 322.986
+            char — headroom cap (330.000) kembali longgar (dari sisa 212
+            char menjadi ±7.000 char). Sebelumnya,
+            sesi 29 Agustus 2026 lanjutan (M165–M170 + overhaul skill docs
+            00–16): ★ TEMUAN TERBESAR SESI ITU — pesan customer TERGANDAKAN
+            di jalur WhatsApp (ketiga controller menyimpan pesan ke DB SEBELUM
+            memanggil generateWhatsAppAIReply, jadi getConversationHistory()
+            sudah memulangkannya, lalu ditambahkan SEKALI LAGI), yang berarti
+            SELURUH sistem reset mid-flow (M124/M132/M154/M163) TIDAK PERNAH
+            SEKALI PUN menyala untuk customer WhatsApp sejak dibuat — hanya
+            web chat yang menjalankannya. Diperbaiki di titik konsumen tunggal
+            [M166]. Gerbang PEMILIHAN LISTING baru: backend tidak pernah tahu
+            kartu apa yang baru dikirim, jadi "saya pilih no 2" pada dua kartu
+            berjudul identik (beda harga) diabaikan 5x dan katalog dikirim
+            ulang — diperbaiki dengan membaca ulang kartu dari histori, bukan
+            kolom baru [M165]. Kalimat penutup katalog tertutup kartu terakhir
+            di WhatsApp (splitCatalogReply hanya memotong ANTAR-kartu, bukan
+            SESUDAH kartu terakhir) — diperbaiki [M165]. Gambar properti
+            TIDAK PERNAH terkirim karena PROPERTY_IMAGE_SEND_ENABLED tidak ada
+            SAMA SEKALI di .env (bukan cuma OFF) — customer menerima teks path
+            mentah `/assets/image_data/...` di dalam kartu; tag markdown
+            dihapus, flag dinyalakan, PROPERTY_IMAGE_DIR pindah ke
+            frontend/src/assets [M165]. Durasi sewa "selama 2 minggu" salah
+            dibaca sebagai TANGGAL MASUK (hari-ini+14 hari), menimpa tanggal
+            yang benar-benar disebut customer — dan "2-4 juta/2 minggu"
+            kehilangan pengalinya (jadi /minggu, melipatgandakan budget yang
+            dibaca agent) — keduanya diperbaiki [M169]. Q2c (pertanyaan area)
+            SATU TINGKAT DI BAWAH bug Madiun M164: kota valid, tapi contoh
+            areanya tetap dari daftar statis 45-kota — agent Surabaya
+            disarankan "Darmo/Rungkut/Gubeng" padahal katalognya berisi
+            "Dukuh Pakis/Waterplace/Mulyorejo"; Private Agent sudah benar
+            sejak M164, jalur LLM tertinggal (kelas bug M52/M54) — sekarang
+            disuntik area NYATA dari getAgentCoverage [M170]. Timeout provider
+            AKTIF (qwen) tidak pernah di-set eksplisit (diam-diam 60 detik) —
+            kelas bug latensi >2 menit yang sama persis dengan M126, provider
+            berbeda; keenam provider kini eksplisit 30 detik [M167]. RAG
+            Confidence Score kini benar-benar membaca RAG_EMBEDDING_CONFIDANCE_
+            SCORE=0.35 dari .env (bukan diam-diam fallback ke 0.45 hardcode)
+            [M168]. ⭐⭐⭐ SELURUH skill docs (17 file: 00–16, ketiga folder)
+            diaudit ulang: 2 KONTRADIKSI PROMPT-VS-KODE ditemukan & diperbaiki
+            (doc 03 masih mengajarkan full-reset M124 yang sudah dicabut; doc
+            04 masih mendaftar budget sebagai syarat minimum ke-4, kontrak
+            M162 yang sudah diganti lokasi spesifik) — kelas bug
+            prompt-outranks-skill-docs; doc BARU 00-data-grounding-and-
+            verification.md (lapisan analisa/deteksi/audit: 6-tingkat sumber
+            kebenaran, 5 pre-assert check, aturan RAG-safety, 9 pertanyaan
+            self-audit); doc 16 (peran non-properti/routing divisi) yang
+            SEBELUMNYA hanya ada di 1 dari 3 folder disinkronkan ke semuanya +
+            dibersihkan dari nama agent hardcode. ⚠️ Cap karakter skill docs
+            (330.000, worst-case-semua-trigger) kini JENUH — sisa 212 karakter
+            saja; doc 00 diberi nomor terkecil supaya tidak pernah jadi bagian
+            yang terpotong senyap. Lihat §PERUBAHAN BESAR V14→V15 untuk
+            rincian lengkap + tabel bukti A/B setiap bug. Nomor M berikutnya:
+            M171. Sebelumnya, 29 Agustus 2026 pagi (M159–M164: gerbang KOTA
+            sebelum gerbang area —
             "sewa rumah di Madiun" tidak lagi dibalas daftar kawasan statis
             untuk kota yang agent-nya sendiri nol listing; TTL sesi 90 menit
             yang TIDAK PERNAH bisa menyala diperbaiki [M162]; fasilitas ikut
@@ -67,7 +163,9 @@
             → V8-label-di-judul/=V9-di-badan-M94-M102 (14→18 Agu, penomoran
             internal file ini SUDAH tidak konsisten sebelum sesi ini — lihat
             catatan di §PERUBAHAN BESAR V8→V10 di bawah)
-            → V10 (20→21 Agu) → V11 (23 Agu) → V12 (24 Agu, file ini = TERBARU)
+            → V10 (20→21 Agu) → V11 (23 Agu) → V12 (24 Agu) → V13 (25→28 Agu)
+            → V14 (29 Agu pagi) → V15 (29 Agu sore) → V16 (29 Agu malam,
+            file ini = TERBARU)
   Pendamping: skills/website_env_concept/ (docs 00–19) untuk detail teknis
             per-topik bila perlu me-reproduksi/mengembangkan ulang modul.
             skills/{claude_responds,chat_gpt_responds,elevan-property-
@@ -1345,7 +1443,10 @@ WHATSAPP TERMINALS (MVP 3, pipeline identik)
 
 
 ================================================================================
-  3. REVIEW — STATUS FITUR (14 Agustus 2026)
+  3. REVIEW — STATUS FITUR (snapshot asli 14 Agustus 2026; ⚠️ BANYAK bullet
+     di bawah SUDAH DIPERBARUI oleh M92–M170 — untuk status TERKINI selalu
+     silang-cek §PERUBAHAN BESAR versi terbaru [V15 di paling bawah file],
+     bukan hanya section ini. Beberapa koreksi paling penting ditandai ⭐)
 ================================================================================
 
 SUDAH JALAN ✅
@@ -1457,7 +1558,10 @@ BELUM / SEDANG DIKEMBANGKAN ⏳
   - ⭐ "Training chatbotPrivateController.js + platform AI dengan RAG" (M131
     directive) — permintaan besar terpisah, sama ambigu-nya dengan item RAG-
     training chat_messages di bawah, BELUM digarap.
-  - ⭐ Mode embedding HuggingFace (diminta, belum diimplementasi)
+  - ⭐ huggingfaceService.js SUDAH dibangun (embedding + chat), TAPI belum
+    didaftarkan ke PROVIDER_ORDER di aiProviderService.js — AI_PRIMARY_
+    PROVIDER=huggingface/hf tidak akan pernah aktif. Setengah jalan, bukan
+    "belum diimplementasi" — lihat §13 TROUBLESHOOT untuk detail.
   - ⭐ Verifikasi kualitas retrieval dengan embedding OpenAI ASLI di produksi
     (baru diverifikasi dengan mode `local` yang diketahui kadang salah rangking)
   - Enable billing Google Cloud → Places API live (landmark segar)
@@ -2266,10 +2370,15 @@ PROXY     TRUST_PROXY_HOPS=1                ⭐ BARU (M101) — jumlah proxy hop
           Kosong → default 1 (benar untuk mode dev MAUPUN hosting).
 
 AI PROVIDERS
-  AI_PRIMARY_PROVIDER=kimi         # TERVERIFIKASI 23 Agu 2026 — SELALU cek ulang
-                                    # chatgpt|claude|qwen|deepseek|kimi|private
+  AI_PRIMARY_PROVIDER=qwen         # TERVERIFIKASI 29 Agu 2026 sore — SELALU cek ulang
+                                    # chatgpt|claude|qwen|deepseek|kimi|openrouter|private
                                     # ⚠️ BERUBAH ANTAR SESI, jangan percaya nilai
                                     # ini tanpa `grep` .env langsung dulu
+                                    # ⚠️ huggingfaceService.js ADA tapi TIDAK terdaftar
+                                    # di PROVIDER_ORDER (aiProviderService.js) — mengisi
+                                    # AI_PRIMARY_PROVIDER=huggingface TIDAK akan pernah
+                                    # aktif. tests/huggingfaceService.test.js gagal di
+                                    # sini (pre-existing, belum digarap — lihat §13).
   ⭐ M131 (BARU): saat nilai di atas BUKAN 'private', platform API tsb SENDIRI
     berwenang akhir memutuskan balas/diam (sentinel `[[OFFTOPIC_SILENT]]`,
     utils/offTopicSentinel.js) — backend hanya penyaring awal murah. Lihat
@@ -2287,14 +2396,22 @@ AI PROVIDERS
   DEEPSEEK_API_KEY / DEEPSEEK_MODEL=deepseek-v4-flash  ⚠️ WAJIB v4
   KIMI_API_KEY / KIMI_MODEL=kimi-k3 / KIMI_BASE_URL=https://api.moonshot.ai/v1
     ⚠️ KIMI_TOP_P WAJIB 0.95 — kimi-k3 menolak nilai lain (M74).
-    ⭐ KIMI_TIMEOUT_MS=90000 (BARU, M102) — dulu hardcode di kimiService.js.
-       Produksi berulang kena "timeout of 90000ms exceeded" (prompt ±67K token).
-       ⛔ MENAIKKAN nilai ini MEMPERBURUK pengalaman customer: dengan
-       primary=kimi, tiap timeout = customer menunggu selama nilai ini SEBELUM
-       fallback Private Agent jalan. TURUNKAN (mis. 30000) agar fallback cepat,
-       ATAU kecilkan prompt, ATAU ganti AI_PRIMARY_PROVIDER.
-       ⚠️ Provider lain MASIH hardcode: openai/deepseek/claude 90000, qwen
-       60000 — belum dikonsolidasi ke .env.
+    ⚠️ Saldo Kimi NEGATIF (-$14.23 per 29 Agu) — provider ini SUSPENDED,
+       terlepas dari timeout apa pun. Lihat §PERUBAHAN V13→V14.
+  ⭐ M167 (BARU, sesi ini) — KEENAM provider kini punya timeout EKSPLISIT
+    30000ms di .env, bukan hanya Kimi:
+       QWEN_TIMEOUT_MS=30000 · KIMI_TIMEOUT_MS=30000 · DEEPSEEK_TIMEOUT_MS=30000
+       GPT_TIMEOUT_MS=30000 · CLAUDE_TIMEOUT_MS=30000 · OPENROUTER_TIMEOUT_MS=30000
+    ⚠️ KENAPA INI PENTING: bug M126 asli ("balasan AI >2 menit") sudah
+    ditutup untuk Kimi 24 Agu, tapi AI_PRIMARY_PROVIDER kini = qwen dan
+    QWEN_TIMEOUT_MS TIDAK ADA sama sekali di .env — diam-diam memakai
+    default 60 detik di qwenService.js. Bug latensi yang SAMA PERSIS,
+    provider berbeda, karena tes lama (providerTimeoutsConfigurable.test.js)
+    hanya mengunci KIMI_TIMEOUT_MS. Tes sudah diperkuat: sekarang memeriksa
+    provider yang SEDANG AKTIF (baca AI_PRIMARY_PROVIDER), bukan nama
+    hardcode. ⛔ Pelajaran: setiap kali AI_PRIMARY_PROVIDER berpindah,
+    verifikasi provider BARU juga punya *_TIMEOUT_MS eksplisit — jangan
+    asumsikan default frameworknya sudah pendek.
 
 CHATBOT MODE & MEMORI
   RESPOND_CATALOG_RUN=ON           # ON=brief+katalog | OFF=brief saja
@@ -2323,9 +2440,27 @@ CHATBOT MODE & MEMORI
                                     # (lebih tinggi dari RAG_MIN_SCORE — tidak
                                     # ada model bahasa di belakangnya)
   RAG_ANSWER_MIN_BODY_CHARS=150    # tolak chunk "yatim" (heading tanpa isi)
+  RAG_EMBEDDING_CONFIDANCE_SCORE=0.35  # ⭐ M168 (BARU, sesi ini): ambang
+    RAG Confidence Score (services/ragConfidenceService.js THRESHOLD). Ejaan
+    "CONFIDANCE" (bukan "CONFIDENCE") SENGAJA — begitu pemilik proyek
+    menuliskannya di .env. ⚠️ Sebelumnya kode membaca nama variabel yang
+    SALAH (RAG_CONFIDENCE_THRESHOLD, tidak pernah ada di .env), sehingga
+    0.35 yang pemilik proyek set TIDAK PERNAH terbaca dan modul diam-diam
+    jalan di fallback hardcode 0.45 lama. Diperbaiki: kode kini membaca
+    `process.env.RAG_EMBEDDING_CONFIDANCE_SCORE ?? 0.35` — 0.35 juga jadi
+    default baru bila env kosong (bukan lagi 0.45).
 
-⭐ GAMBAR PROPERTI (BARU — lihat §5 M93)
-  PROPERTY_IMAGE_SEND_ENABLED=OFF  # ON untuk aktifkan pengiriman gambar
+⭐ GAMBAR PROPERTI (lihat §5 M93; jalur ON diperbaiki M165 sesi ini)
+  PROPERTY_IMAGE_SEND_ENABLED=ON   # ⭐ M165: dinyalakan sesi ini — SEBELUMNYA
+                                    # TIDAK ADA SAMA SEKALI di .env (bukan
+                                    # cuma OFF), jadi jalur kirim gambar
+                                    # Kirimi tidak pernah jalan meski kodenya
+                                    # sudah lengkap. Customer menerima teks
+                                    # path mentah "/assets/image_data/..."
+                                    # di dalam kartu (tag markdown WhatsApp
+                                    # tidak merender gambar) — tag itu sudah
+                                    # dihapus dari kartu (lihat §PERUBAHAN
+                                    # V14→V15).
   PROPERTY_IMAGE_PUBLIC_BASE_URL=  # WAJIB domain sungguhan di PRODUKSI.
                                     # Kosong = fallback tunnel ngrok aktif
                                     # (dev only, TIDAK cocok untuk produksi)
@@ -2354,7 +2489,11 @@ PROPERTY DATA  RUMAH123_DATA=OFF · APIFY_API_TOKEN
                TIDAK memakai gerbang ini, tetap hidup penuh apa pun nilainya.
 
 GAMBAR PROPERTI (upload master — SUDAH ADA sejak sebelum V8, dipakai M93)
-  PROPERTY_IMAGE_DIR=../frontend/public/assets/image_data
+  PROPERTY_IMAGE_DIR=../frontend/src/assets/image_data  # ⭐ M165: PINDAH dari
+                                    # public/assets → src/assets (instruksi
+                                    # pemilik proyek). Kedua isi tree
+                                    # diverifikasi identik (diff -rq, nihil)
+                                    # SEBELUM env diarahkan ke lokasi baru.
   PROPERTY_IMAGE_URL_BASE=/assets/image_data
   PROPERTY_IMAGE_DEFAULT_DIR=properties
   PROPERTY_IMAGE_MAX_MB=5          PROPERTY_IMAGE_MAX_FILES=10
@@ -2376,8 +2515,11 @@ CATATAN PENTING
   - Google Places & Calendar sudah di-wire tapi punya prasyarat eksternal
     yang belum tuntas — jangan dikira bug kode.
   - Perubahan .env BARU BERLAKU SETELAH BACKEND DI-RESTART.
-  - ⭐ RAG_ENABLED=OFF dan PROPERTY_IMAGE_SEND_ENABLED=OFF adalah DEFAULT —
-    fitur di §5 M92/M93 TIDAK aktif sampai keduanya di-set ON secara sengaja.
+  - ⭐ RAG_ENABLED=OFF dan PROPERTY_IMAGE_SEND_ENABLED=OFF adalah DEFAULT KODE
+    (fallback bila variabel tidak ada di .env sama sekali). ⚠️ KEDUANYA SUDAH
+    di-set ON di .env LIVE saat ini (RAG sejak 24 Agu/M134, gambar sejak
+    29 Agu/M165) — jangan asumsikan dari default kode ini bahwa fiturnya
+    mati; SELALU `grep` .env untuk nilai aktual sebelum mendiagnosis.
 
 
 ================================================================================
@@ -2452,13 +2594,58 @@ QUALIFICATION FLOW — URUTAN AKTUAL findNextQuestion() (tidak berubah dari V7)
   8. SKILLS — AI SKILL SYSTEM
 ================================================================================
 
-LOKASI (5 folder — ⭐ M131: knowledge/ DIHAPUS, digabung ke skills/*/docs/14)
-  skills/claude_responds/           → system prompt Claude (SKILL.md + docs 01–14)
-  skills/chat_gpt_responds/         → ChatGPT/QWEN/DeepSeek/Kimi (docs BYTE-IDENTICAL,
-                                      termasuk M131 — lihat §PERUBAHAN BESAR V10→V11)
+LOKASI FISIK — ⛔⛔⛔ BACA INI DULU SEBELUM MENGEDIT SATU BERKAS SKILL PUN ⛔⛔⛔
+  ⭐⭐⭐ M171 (BARU, KRITIS): ADA DUA DIREKTORI `skills/` DI PROYEK INI:
+
+    `Elevan_Property/skills/`              ← ⭐ SATU-SATUNYA YANG DIMUAT KODE
+                                              RUNTIME. `skillPromptService.js`:
+                                              `SKILLS_ROOT = path.resolve(
+                                              __dirname,'..','..')/skills` —
+                                              `__dirname` = backend/services/,
+                                              jadi `..`+`..` = ROOT PROYEK,
+                                              BUKAN backend/. Semua path di
+                                              bawah relatif terhadap INI.
+
+    `Elevan_Property/backend/asset/skills/` ← ⚠️ SALINAN, TIDAK DIRUJUK KODE
+                                              MANA PUN (`grep -rn
+                                              "asset/skills" --include=*.js
+                                              backend/` = NOL hasil). Edit di
+                                              sini TIDAK PERNAH sampai ke
+                                              prompt AI kecuali disalin
+                                              manual ke direktori di atas.
+                                              Asalnya: pola kerja lama pemilik
+                                              proyek ("copy manual", lihat
+                                              §PERUBAHAN V10→V11 poin
+                                              relokasi) — bukan bug, tapi
+                                              JEBAKAN bagi siapa pun yang
+                                              tidak tahu ini.
+
+  ⛔ ATURAN MUTLAK MULAI SESI INI: edit skill doc SELALU ke
+  `Elevan_Property/skills/*/docs/`. Sesudahnya SELALU verifikasi dengan
+  memanggil `loadResponseSkillPrompt('chatgpt', {context: <kata-trigger>})`
+  langsung dari Node — BUKAN `grep` folder, BUKAN `wc -c`, BUKAN asumsi dari
+  nama path yang "terlihat benar". Kedua direktori disinkronkan manual
+  (diff -rq kosong) per 29 Agu malam sebagai mitigasi sementara; status akhir
+  `backend/asset/skills/` (hapus / symlink / tetap sebagai salinan manual
+  pemilik proyek) BELUM diputuskan — lihat §13 TROUBLESHOOT.
+
+  Isi `Elevan_Property/skills/` (5 folder — ⭐ M131: knowledge/ DIHAPUS,
+  digabung ke skills/*/docs/14):
+  skills/claude_responds/           → system prompt Claude (SKILL.md + docs
+                                      00–15, ⭐ M171: 16 DIHAPUS — lihat §8
+                                      SKILL DOCS di bawah)
+  skills/chat_gpt_responds/         → ChatGPT/QWEN/DeepSeek/Kimi (docs BYTE-
+                                      IDENTICAL, termasuk M131 — lihat
+                                      §PERUBAHAN BESAR V10→V11)
   skills/elevan-property-assistant/ → edisi STANDALONE untuk upload ke
                                       platform.openai.com/storage/skills
-                                      ⚠️ TIDAK di-load kode backend
+                                      ⚠️ TIDAK di-load lewat SKILL_GROUPS
+                                      (skillPromptService.js hanya memetakan
+                                      'chatgpt'→chat_gpt_responds dan
+                                      'claude'→claude_responds) — folder ini
+                                      dipelihara byte-identik untuk konsistensi
+                                      isi, tapi jalur pemakaiannya MEMANG
+                                      manual (upload platform), bukan runtime.
   skills/website_env_concept/       → arsitektur teknis (docs 00–19)
   skills/website_design_guidelines/ → panduan desain UI
   Real-Estate/                      → 26 file: 12 playbook tipe + *_CHAT.md
@@ -2469,40 +2656,81 @@ LOKASI (5 folder — ⭐ M131: knowledge/ DIHAPUS, digabung ke skills/*/docs/14)
   terminologi (§3a), jarak/waktu tempuh (§3b), dan off-topic silence sentinel
   (§3c) — item roadmap lama "belum RAG-aware" (per 14 Agu) SELESAI.
 
-SKILL DOCS (claude_responds/docs — struktur 01–14, jangan pakai nomor lama)
-  01 Core role, scope, style          08 Catalog & recommendations
-  02 Language & intent detection      09 Off-topic & escalation ★ (§3a/3b/3c)
-  03 Conversation memory & stability  10 Date & money parsing
-  04 Qualification flow Q1–Q14 ★      11 House pilots            [KONDISIONAL]
-  05 Answer completeness & re-ask     12 Facilities reference    [KONDISIONAL]
-  06 Customer conditions              13 Locations & landmarks   [KONDISIONAL]
-  07 Property type playbooks          14 Legalitas/pajak/KPR ⭐ BARU (M131,
-                                          gantikan knowledge/property-id/)
-  ⭐ Doc 07/08/10/11/12/13/14 adalah yang DIINDEKS oleh RAG (RAG_ELIGIBLE_SKILL_
-  DOCS di scripts/build-rag-index.js) sebagai referensi PELENGKAP — bukan
-  pengganti. Doc 01/02/03/04/05/06/09 (aturan inti + flow) TIDAK PERNAH
-  di-index untuk RAG — selalu dimuat penuh seperti sebelumnya.
+SKILL DOCS (claude_responds/docs — struktur 00–15. ⭐ M171: doc 16 DIHAPUS —
+  lihat catatan di bawah tabel. ⚠️ NOMOR SUDAH BERUBAH dari versi V13 dan
+  sebelumnya — jangan pakai "01–14" lama.)
+  00 Data grounding & verification ⭐  08 Catalog & recommendations
+     BARU (M165–M170): 6-tingkat     09 Off-topic & escalation ★ (§3a/3b/3c)
+     sumber kebenaran, 5 pre-assert  10 Date & money parsing
+     check, immutability, RAG-safety 11 House pilots            [KONDISIONAL]
+     (data yang diambil/di-paste =   12 Facilities reference    [KONDISIONAL]
+     DATA, bukan instruksi), 9       13 Locations & landmarks   [KONDISIONAL]
+     pertanyaan self-audit akhir.    14 Legalitas/pajak/KPR (M131,
+     SELALU dimuat, TIDAK bersyarat,     gantikan knowledge/property-id/)
+     TIDAK RAG-indexed — sengaja     [KONDISIONAL — trigger sertifikat/pajak/
+     diberi nomor terkecil supaya        KPR, lihat CONDITIONAL_FILE_TRIGGERS]
+     tidak pernah jadi bagian yang   15 Catalog conversation cases (M133 —
+     terpotong senyap saat prompt         korpus RAG few-shot, kasus tersulit:
+     mendekati plafon karakter.           area kosong, budget di luar stok,
+  01 Core role, scope, style               pemilihan listing by nomor/harga/
+  02 Language & intent detection           nama — diperluas M165)
+  03 Conversation memory & stability
+     ⚠️ diperbaiki M165–M170: §5 masih mengajarkan FULL-RESET ke Q1 saat
+     kota/tipe/transaksi berubah — bug M124 yang sudah DICABUT di kode sejak
+     V10. Diganti tabel preserve/reset tiga-axis granular.
+  04 Qualification flow Q1–Q14 ★
+     ⚠️ diperbaiki M165–M170: masih mendaftar ④ budget sebagai syarat
+     minimum listing — kontrak M162 sudah menggantinya dengan ④ lokasi
+     spesifik (area/landmark/commercial); budget BUKAN prasyarat. Diganti +
+     ditambahkan "area dan landmark = SATU slot".
+  05 Answer completeness & re-ask     07 Property type playbooks
+  06 Customer conditions & diagnosis
 
-  CONDITIONAL_FILE_TRIGGERS (skillPromptService.js): hanya 3 doc bersyarat
-  (11/12/13); 10 doc lainnya SELALU dimuat penuh — TIDAK berubah oleh RAG.
-  ⚠️ Mekanisme ini TERPISAH dari RAG: CONDITIONAL_FILE_TRIGGERS adalah regex
-  per-BERKAS (kasar, sudah ada sejak v7.0 konsolidasi); RAG adalah retrieval
-  semantik per-CHUNK (baru, lebih presisi, tapi hanya untuk 6 doc referensi
-  di atas dan HANYA aktif bila RAG_ENABLED=ON).
+  ⭐⭐⭐ M171 — DOC 16 (peran non-properti: supplier/pelamar/tamu/asuransi/
+  komplain/routing divisi Sales-Procurement-HRD-IT-Admin) DIHAPUS SEPENUHNYA
+  dari KETIGA folder atas arahan eksplisit pemilik proyek: fokus skill HANYA
+  properti — kualifikasi sewa/beli dari katalog agent, rekomendasi listing,
+  penjadwalan survei, dan jarak/estimasi lokasi survei untuk platform AI
+  manapun. Doc itu ditambahkan sesi M165–M170 sebagai perluasan yang KELIRU
+  arah untuk chatbot ini. Dihapus juga: baris referensinya di SKILL.md (tabel
+  "Conditional — loaded on topic"), di doc 00 (daftar "Related Docs"), dan
+  entri `'16-counterpart-roles-and-division-routing.md'` di
+  CONDITIONAL_FILE_TRIGGERS (skillPromptService.js). Dikonfirmasi hilang dari
+  prompt lewat pemanggilan `loadResponseSkillPrompt()` langsung — BUKAN
+  cuma menghapus filenya (lihat catatan LOKASI FISIK di atas soal kenapa
+  verifikasi lewat kode itu wajib, bukan opsional).
 
-UKURAN PROMPT (diukur terakhir 3 Agu 2026, BELUM diukur ulang pasca-M84–M91
-  — §PERUBAHAN BESAR V7→V8 mencatat estimasi 269.504 char ≈ 67.400 token dari
-  laporan perbandingan model 10 Agu 2026, SUDAH melampaui plafon 60K)
-  10 doc selalu-aktif : 173.418 chars ≈ 43.400 token  (angka V6, kemungkinan
-                                                        naik pasca M84–M91)
-  +3 doc kondisional  : 223.218 chars ≈ 55.800 token  (idem)
-  Plafon acuan gpt-4o-mini : 60.000 token/menit (provider lain bervariasi)
-  ⚠️ RAG TIDAK menambah beban prompt permanen — ia MENGGANTIKAN potensi
-  "muat semua doc referensi selalu" dengan "ambil beberapa chunk relevan saja"
-  — tapi manfaat pengurangan token INI BARU TERWUJUD setelah doc 07/08/10/
-  11/12/13 berhenti always-loaded di skillPromptService.loadSkillGroupPrompt
-  (BELUM dilakukan sesi ini — RAG baru MENAMBAH kemampuan, belum MENGURANGI
-  beban lama). Lihat §10 ROADMAP.
+  ⭐ RAG_ELIGIBLE_SKILL_DOCS (scripts/build-rag-index.js) = doc 07/08/10/11/
+  12/13/14/15 (8 doc) — referensi PELENGKAP, diindeks per-chunk. Doc 00
+  SENGAJA TIDAK dimasukkan RAG — harus selalu utuh (aturan inti, bukan
+  referensi lookup). Doc 01/02/03/04/05/06/09 (aturan inti + flow) tetap
+  tidak pernah di-index — selalu dimuat penuh.
+
+  CONDITIONAL_FILE_TRIGGERS (skillPromptService.js): 4 doc bersyarat
+  (11/12/13/14) — turun dari 5 sesi M165–M170 (11/12/13/14/16) sesudah doc
+  16 dihapus M171. Doc 14 tetap kondisional (dipindah dari "selalu dimuat"
+  sesi M165–M170 untuk hemat ruang karakter). Sisanya SELALU dimuat penuh —
+  tidak berubah oleh RAG. Mekanisme ini TERPISAH dari RAG: CONDITIONAL_FILE_
+  TRIGGERS adalah regex per-BERKAS (kasar, sejak v7.0); RAG adalah retrieval
+  semantik per-CHUNK (baru, presisi, hanya untuk 8 doc di atas, HANYA aktif
+  bila RAG_ENABLED=ON).
+
+UKURAN PROMPT (diukur ulang 29 Agustus 2026 malam, SESUDAH doc 16 dihapus,
+  via panggilan langsung ke loadResponseSkillPrompt() — bukan estimasi
+  wc -c; CATATAN: cap menghitung KARAKTER string JS, bukan byte — dokumen
+  penuh emoji/em-dash membuat `wc -c` melebih-lebihkan ~2%, jangan pakai
+  wc -c untuk sizing ini)
+  Sapaan biasa (tanpa trigger kondisional)  : 259.327 chars
+  + trigger legalitas/KPR (doc 14)          : 289.905 chars
+  Worst case (SEMUA trigger kondisional: 11+12+13+14, doc 16 sudah tak ada)
+                                            : 322.986 chars
+  Plafon (SKILL_MAX_RESPONSE_CHARACTERS)    : 330.000 chars
+  ✅ Headroom kembali longgar — ±7.014 karakter di worst case (naik dari
+  sisa 212 karakter sesi M165–M170, sebelum doc 16 dihapus). Tetap ukur
+  ulang lewat `loadResponseSkillPrompt('chatgpt', {context: <pesan-berisi-
+  semua-kata-trigger>})` sebelum menambah prosa besar ke doc manapun —
+  JANGAN andalkan wc -c pada folder, dan JANGAN andalkan folder
+  `backend/asset/skills/` untuk sizing (lihat catatan LOKASI FISIK di atas).
   Setiap aturan yang ditambahkan LANGSUNG ke prompt (bukan lewat RAG opt-in)
   tetap memperkecil ruang tersisa DAN menurunkan kepatuhan model (M62).
   Prioritaskan ekstraktor kode daripada aturan prosa — KECUALI kelas
@@ -2949,7 +3177,23 @@ GEJALA → PENYEBAB → SOLUSI
 [CHAT / AI]
 
   AI mengulang pertanyaan yang SUDAH dijawab
-    → ⭐ LANGKAH 0 (CEK INI DULUAN — penyebab paling sering, sudah 4× terulang:
+    → ⭐⭐⭐ LANGKAH -1 (BARU, M166 — CEK INI PALING DULU untuk customer
+      WHATSAPP, sebelum langkah 0 di bawah): apakah gejalanya justru "AI
+      mengulang pertanyaan yang sudah dijawab SETELAH customer ganti
+      kota/tipe/transaksi"? Bila ya, ini BUKAN ekstraktor yang kurang — ini
+      seluruh sistem reset mid-flow (M124/M132/M154/M163) yang TIDAK PERNAH
+      menyala sama sekali, karena `extractQualificationState()` menghitung
+      pesan customer SAAT INI dua kali (sekali dari history — Kirimi/Fonnte/
+      TimelinesAI menyimpan pesan ke DB SEBELUM memanggil AI — sekali lagi
+      dari parameter `currentMessage`), menggeser `lastIdx` satu posisi
+      sehingga deteksi "flip terjadi di giliran INI" selalu false. Reproduksi
+      cepat: panggil `extractQualificationState(history, msg)` DUA KALI —
+      sekali dengan `history` biasa, sekali dengan `[...history, {role:
+      'customer', message: msg}]` sebagai history — bila hasilnya BEDA, ini
+      bug M166. Sudah diperbaiki di aiPromptBuilderService.js (dedupe di
+      titik konsumen); tes `whatsappDuplicateCurrentMessage.test.js` menguji
+      kedua bentuk pemanggilan secara eksplisit supaya tidak terulang senyap.
+    → LANGKAH 0 (penyebab paling sering berikutnya, sudah 4× terulang:
       M87, M88, M95, M102b): apakah KALIMAT pertanyaan yang dikirim AI
       benar-benar DIKENALI oleh ekstraktor/gerbangnya sendiri? Banyak Q punya
       VARIAN kalimat per tipe properti (mis. Q5 komersial berbunyi "Ada syarat
@@ -3054,23 +3298,121 @@ GEJALA → PENYEBAB → SOLUSI
       hilang/tidak diterima webhook.
 
   ⭐ Gambar properti tidak pernah terkirim
-    → LANGKAH 1: cek PROPERTY_IMAGE_SEND_ENABLED=ON di .env (default OFF).
-    → LANGKAH 2: cek PROPERTY_IMAGE_PUBLIC_BASE_URL terisi (produksi) ATAU
+    → ⭐ M165 (BARU): sebelum sesi 29 Agu sore, PROPERTY_IMAGE_SEND_ENABLED
+      TIDAK ADA SAMA SEKALI di .env — bukan cuma OFF, benar-benar tidak ada
+      barisnya. Env var yang absen = OFF secara diam-diam, tidak terbedakan
+      dari OFF yang disengaja. Kini SUDAH ON di .env live (lihat §6). Yang
+      customer TERIMA sebelum diperbaiki bukan "tidak ada gambar" — mereka
+      menerima teks path mentah `/assets/image_data/properties/house.png`
+      di dalam kartu, karena kartu WhatsApp dulu menyisipkan TAG MARKDOWN
+      gambar (`![Judul](url)`) yang tidak pernah dirender WhatsApp. Tag itu
+      sudah DIHAPUS dari kartu (chatbotPrivateController.js
+      #catalogItemWhatsApp) — gambar sungguhan sekarang HANYA lewat field
+      `media_url` Kirimi.
+    → LANGKAH 1: cek PROPERTY_IMAGE_SEND_ENABLED=ON BENAR-BENAR ADA
+      (`grep`, bukan hanya asumsi) di .env — env var yang absen = OFF senyap.
+    → LANGKAH 2: cek PROPERTY_IMAGE_DIR mengarah ke direktori yang BENAR-BENAR
+      ADA (per M165 kini `frontend/src/assets/image_data`, BUKAN lagi
+      `frontend/public/assets/image_data`).
+    → LANGKAH 3: cek PROPERTY_IMAGE_PUBLIC_BASE_URL terisi (produksi) ATAU
       ngrok tunnel sedang aktif (dev) — tanpa basis URL publik, fungsi
       SENGAJA fail-open (tidak mengirim, bukan mengirim URL rusak).
-    → LANGKAH 3: cek judul properti (Property.title) benar-benar MUNCUL kata-
+    → LANGKAH 4: cek judul properti (Property.title) benar-benar MUNCUL kata-
       demi-kata di teks balasan yang terkirim — korelasi kartu↔gambar
       SENGAJA fail-closed by-title, bukan by-index (lihat §5 M93). Bila LLM
       menyingkat/mengubah nama properti di balasannya, gambar tidak akan
       cocok dan sengaja TIDAK dikirim.
-    → LANGKAH 4: cek PropertyImage punya baris untuk property_id tersebut
+    → LANGKAH 5: cek PropertyImage punya baris untuk property_id tersebut
       DAN url-nya berekstensi gambar dikenal (png/jpg/jpeg/webp/gif/avif).
+
+  ⭐ Customer memilih listing ("saya pilih no 2", "yg harga 471jt") tapi
+  katalog dikirim ULANG, bukan konfirmasi pilihan (M165)
+    → Backend sebelumnya TIDAK PUNYA memori kartu apa yang baru dikirim —
+      `listingsAlreadyShown` hanya mengecek string "Estimasi Harga" ADA di
+      histori, tidak menyimpan nomor/harga/judul kartunya. Diperbaiki dengan
+      `utils/listingSelectionGate.js`: membaca ULANG kartu dari histori chat
+      (bukan kolom DB baru — teks yang terkirim adalah satu-satunya sumber
+      kebenaran soal apa yang CUSTOMER lihat), mengenali pilihan lewat nomor/
+      harga/judul/gabungan. Bila dua kartu berjudul IDENTIK (mis. kasus nyata
+      "MERR House Sale Surabaya" ×2, beda harga saja), gerbang SENGAJA tidak
+      menebak — ia bertanya balik harga mana yang dimaksud.
+    → ⚠️ Gerbang ini hanya BOLEH menyusun balasan sendiri di profil guardrail
+      'local' (backendMayCompose=true). Di profil 'platform' ia menyuntikkan
+      fakta `PILIHAN CUSTOMER ATAS KATALOG` ke prompt — LLM yang menyusun
+      kalimatnya. Bila menguji dan `provider` tidak pernah = 'listing_
+      selection_gate', cek dulu profil guardrail aktif (session.agentAiPrimary
+      atau AI_PRIMARY_PROVIDER) sebelum menyimpulkan gerbang tidak jalan.
+
+  ⭐ Pertanyaan penutup katalog ("Ada yang menarik, Kak?") tidak pernah
+  dijawab customer (M165)
+    → `splitCatalogReply()` (utils/replySplitter.js) dulu HANYA memotong
+      pesan pada batas ANTAR-kartu — kalimat penutup sesudah kartu TERAKHIR
+      tidak punya kartu berikutnya untuk memicu pemotongan, jadi ikut
+      menumpang di pesan kartu terakhir. Di WhatsApp kartu properti sudah
+      panjang, sehingga pertanyaan penutup PRAKTIS TIDAK TERBACA. Diperbaiki:
+      paragraf sesudah kartu terakhir yang BUKAN baris detail kartu (dikenali
+      dari indentasi) kini selalu jadi pesan sendiri. Gerbang area juga
+      diperbaiki untuk memanggil `splitCatalogReply()` — sebelumnya
+      mengirim head+semua-kartu+penutup sebagai SATU pesan WhatsApp raksasa.
+
+  ⭐ Tanggal masuk (Q8) di brief MELESET dari yang disebutkan customer (M169)
+    → Cek apakah pesan customer memuat frasa DURASI SEWA ("selama 2 minggu",
+      "untuk 3 bulan", "sewa 5 hari") DI PESAN YANG SAMA dengan konteks lain.
+      `utils/customerDateParser.js` dulu membaca durasi bare-form ("2 minggu"
+      tanpa penanda relatif) sebagai TANGGAL relatif ("2 minggu dari
+      sekarang"), menimpa tanggal yang benar-benar disebut customer di pesan
+      lain. Diperbaiki dengan `hasDurationSignal` guard (kelas yang sama
+      dengan guard mata-uang/pembiayaan yang sudah ada) — "selama/durasi/
+      untuk N <unit>" tidak lagi dibaca sebagai tanggal bare-form.
+
+  ⭐ Budget di brief agent JAUH LEBIH BESAR dari yang disebutkan customer,
+  khusus untuk sewa jangka pendek dengan pengali periode (M169)
+    → Cek apakah customer menyebut budget dengan pengali periode ("2-4 juta/2
+      minggu", bukan "/minggu" polos). `detectBudget()` dulu membaca satuan
+      periode TANPA pengalinya — "/2 minggu" jadi "/minggu", tanpa angka "2"
+      ikut. Efeknya: anggaran DUA MINGGU tercatat seolah anggaran SATU
+      minggu. Diperbaiki: `periodCount` kini distempel di setiap hasil
+      `detectBudget()`, dan sufiks periode ("/2 minggu") dibangun dari SATU
+      fungsi bersama `budgetPeriodSuffix()` (dulu ditulis ganda di dua
+      tempat — kelas bug M27/M77, dua salinan pasti melenceng).
+
+  ⭐ AI menawarkan area yang agent TIDAK PUNYA STOK sama sekali di dalamnya
+  (bug Madiun SATU TINGKAT DI BAWAH M164) (M170)
+    → Ini BUKAN kasus M164 (kota tidak ada di katalog) — kotanya VALID, tapi
+      CONTOH AREA di pertanyaan Q2c ("Di area atau kawasan mana di Surabaya?
+      Misalnya Pakuwon, Darmo, Rungkut...") masih diambil dari
+      `utils/locationLandmarks.js`, daftar statis 45-kota yang tidak tahu
+      stok agent. Jalur Private Agent SUDAH benar sejak M164 (memakai
+      `agentAreaOptions`); yang tertinggal jalur LLM — kelas bug M52/M54.
+      Diperbaiki: `whatsappAIService.js` kini menyuntik `qualState.agentAreas`
+      dari `getAgentCoverage()` + `getAgentAreaNames()` (cache 5 menit, tidak
+      menambah query per pesan); `findNextQuestion()` memakai daftar NYATA
+      ini bila tersedia, daftar statis tetap jadi cadangan fail-open.
 
   ChatGPT/provider error 429 "Request too large"
     → Skill docs + prompt lebih besar dari plafon TPM provider aktif. Naikkan
       limit lewat billing provider terkait. ⛔ JANGAN memotong history sebagai
       mitigasi (M64). Pertimbangkan memanfaatkan RAG (§10 ROADMAP jangka
       menengah) untuk benar-benar mengurangi doc selalu-aktif.
+
+  ⚠️ BELUM DIPERBAIKI — AI_PRIMARY_PROVIDER=huggingface tidak pernah aktif
+    → huggingfaceService.js (checkHuggingFaceConfig, dll.) ADA dan lengkap,
+      tapi TIDAK PERNAH didaftarkan ke PROVIDER_ORDER di aiProviderService.js
+      — getPrimaryAIProvider()/getAIProviderOrder() tidak mengenali nilai
+      "huggingface" ATAUPUN alias "hf" sama sekali. Fitur berhenti di
+      setengah jalan (service dibangun, wiring tidak). Ditemukan lewat
+      `tests/huggingfaceService.test.js` (pre-existing, belum digarap sesi
+      ini — di luar cakupan M165–M170). Perbaikan: tambahkan `huggingface:
+      ['huggingface']` ke PROVIDER_ORDER + alias 'hf' di normalizeProvider().
+
+  ⚠️ BELUM DIPERBAIKI — format tanggal tidak konsisten antar-jalur
+    → Beberapa jalur mencetak tanggal BERPADDING-NOL ("03 September 2026",
+      dari `fmt()` di customerDateParser.js), jalur lain TANPA padding
+      ("9 Juli 2026", jadwal survei). Satu titik (`facilitiesViewingAndShort
+      Answers.test.js`, 1 assertion) malah menerima STRING ISO mentah alih-
+      alih tanggal berformat Indonesia — pre-existing, belum digarap sesi
+      ini. BUKAN keputusan desain sengaja; sebelum menyeragamkan, konfirmasi
+      dulu format mana yang jadi standar (lihat catatan akhir sesi 29 Agu).
 
   Landmark terasa basi
     → Google Places BLOCKED (billing project Google Cloud belum enable).
@@ -3102,11 +3444,18 @@ GEJALA → PENYEBAB → SOLUSI
       "✅ WEBHOOK SIAP" di log start — SELALU pakai URL yang tercetak di sana,
       jangan menebak (§5 M101b).
 
-  ⭐ Log "[KIMI ERROR] timeout of 90000ms exceeded" berulang
-    → Prompt ±67K token terlalu berat untuk timeout default. ⛔ MENAIKKAN
-      KIMI_TIMEOUT_MS memperburuk: customer menunggu lebih lama sebelum
-      fallback Private Agent. TURUNKAN (mis. 30000), ATAU kecilkan prompt,
-      ATAU ganti AI_PRIMARY_PROVIDER (§5 M102d).
+  ⭐ Log "[<PROVIDER> ERROR] timeout of Nms exceeded" berulang, provider APA PUN
+    → Prompt besar terlalu berat untuk timeout provider itu. ⛔ MENAIKKAN
+      timeout memperburuk: customer menunggu lebih lama sebelum fallback
+      Private Agent. TURUNKAN (§6: keenam provider kini 30000ms per M167),
+      ATAU kecilkan prompt, ATAU ganti AI_PRIMARY_PROVIDER.
+    → ⭐ M167: JANGAN asumsikan hanya Kimi yang perlu dicek. Bug ini pertama
+      ditemukan di Kimi (M102/M126), tapi providerTimeoutsConfigurable.test.js
+      DULU HANYA mengunci KIMI_TIMEOUT_MS — begitu AI_PRIMARY_PROVIDER
+      berpindah ke qwen, QWEN_TIMEOUT_MS ternyata TIDAK PERNAH di-set dan
+      diam-diam memakai default 60 detik, sementara tes tetap hijau. Tes
+      sudah diperkuat untuk membaca AI_PRIMARY_PROVIDER dan memeriksa
+      provider yang SEDANG AKTIF, bukan nama hardcode.
 
 [DATABASE]
   Boot gagal "Key column 'user_id' doesn't exist"
@@ -3117,13 +3466,57 @@ GEJALA → PENYEBAB → SOLUSI
   EADDRINUSE :::5055
     → Get-NetTCPConnection -LocalPort 5055 | %{ Stop-Process -Id $_.OwningProcess -Force }
 
+  ⭐⭐⭐ Edit skill doc TIDAK BERPENGARUH SAMA SEKALI ke balasan AI (M171)
+    → LANGKAH 0 (CEK INI DULU, PALING SERING SALAH): apakah file yang diedit
+      ada di `Elevan_Property/backend/asset/skills/...`? Direktori itu TIDAK
+      DIRUJUK KODE MANA PUN (`grep -rn "asset/skills" --include=*.js
+      backend/` = nol hasil). Yang dimuat runtime HANYA
+      `Elevan_Property/skills/...` (root proyek, BUKAN di dalam backend/).
+      Pindahkan edit ke sana, lalu diff kedua direktori untuk memastikan
+      tidak ada drift lain yang tertinggal.
+    → LANGKAH 1: setelah edit di lokasi yang BENAR, JANGAN percaya dari
+      membaca file saja — panggil `loadResponseSkillPrompt('chatgpt',
+      {context: '<kalimat berisi kata pemicu>'})` langsung dari Node dan cek
+      isinya benar-benar berubah. Ini satu-satunya bukti bahwa kode membaca
+      perubahan; `grep` folder atau `wc -c` TIDAK membuktikan apa pun soal
+      jalur mana yang sungguh dimuat.
+    → LANGKAH 2: bila docnya KONDISIONAL (11/12/13/14), pastikan konteks uji
+      benar-benar memuat kata pemicunya (lihat CONDITIONAL_FILE_TRIGGERS di
+      skillPromptService.js) — tanpa kata pemicu, doc itu memang sengaja
+      tidak dimuat, bukan bug.
+
 [SKILL DOCS]
-  Perilaku beda antar provider → diff seluruh 13 docs.
-  Aturan baru tidak dipatuhi → cek apakah docnya KONDISIONAL (11/12/13) dan
-  kata pemicunya benar-benar muncul. Bila sudah termuat tapi tetap diabaikan →
-  M62 (prompt terlalu panjang) — tambahkan ekstraktor, bukan aturan; KECUALI
-  bila state sudah bersih dan LLM tetap mengarang → tambahkan contoh konkret
-  (M83, M91), bukan ekstraktor (tidak ada apa pun untuk diekstrak).
+  ⭐ M171: doc 16 SUDAH DIHAPUS — bila referensi lama ("17 docs", "00–16")
+  masih terlihat di suatu tempat, itu sisa historis, BUKAN struktur aktual.
+  Perilaku beda antar provider → diff seluruh 16 docs (00–15 — lihat §8
+  untuk struktur terbaru pasca M171).
+  ⛔ SELALU cek dulu apakah kamu mengedit `Elevan_Property/skills/` (LIVE)
+  atau `backend/asset/skills/` (SALINAN MATI, tidak dirujuk kode mana pun) —
+  lihat catatan LOKASI FISIK di §8. Ini kesalahan yang HAMPIR terjadi sesi
+  M171 saat menghapus doc 16.
+  Aturan baru tidak dipatuhi → cek apakah docnya KONDISIONAL (11/12/13/14,
+  BUKAN lagi hanya 11/12/13 — doc 14 dipindah ke kondisional sesi M165–M170
+  untuk hemat ruang karakter) dan kata pemicunya benar-benar muncul. Bila
+  sudah termuat tapi tetap diabaikan → M62 (prompt terlalu panjang) —
+  tambahkan ekstraktor, bukan aturan; KECUALI bila state sudah bersih dan
+  LLM tetap mengarang → tambahkan contoh konkret (M83, M91), bukan ekstraktor
+  (tidak ada apa pun untuk diekstrak).
+  ⭐ Doc kontradiksi kode (prompt-outranks-skill-docs) → sesi M165–M170
+  menemukan 2: doc 03 §5 masih mengajarkan full-reset M124 yang sudah
+  dicabut; doc 04 masih mendaftar budget sebagai syarat minimum ke-4,
+  kontrak M162 sudah menggantinya. Keduanya BERBAHAYA karena kode dan prompt
+  saling bertentangan — model bisa memihak salah satu secara tidak
+  terprediksi. Selalu audit doc VS kode setelah kontrak besar berubah
+  (M124, M139/M140, M162, dst.), jangan asumsikan "sudah diperbarui sekali"
+  berarti tetap sinkron selamanya.
+  ⭐ Cap karakter (SKILL_MAX_RESPONSE_CHARACTERS=330.000) SUDAH JENUH sejak
+  sesi M165–M170 — sisa 212 karakter di worst-case-semua-trigger. Sebelum
+  menambah PROSA apa pun ke doc manapun, ukur ulang dengan
+  `loadResponseSkillPrompt('chatgpt', {context: <pesan-semua-kata-trigger>})`
+  — JANGAN pakai `wc -c` folder (menghitung BYTE, cap menghitung KARAKTER;
+  dokumen penuh emoji/em-dash membuat wc -c melebih-lebihkan ~2%, cukup untuk
+  menyimpulkan "over cap" padahal sebenarnya masih ada headroom, atau
+  sebaliknya).
 
 PRINSIP DEBUG
   1. Cek jalur produksi AKTUAL dulu (AI_PRIMARY_PROVIDER + log runtime).
@@ -3654,8 +4047,449 @@ PRINSIP DEBUG
 
 
 ================================================================================
-  END OF FILE — ELEVAN_PROPERTY_CONTEXT_V8.txt (V14 per header — nama berkas
-  fisik SENGAJA tidak di-rename ke _V14.txt, ikuti pola V8-judul/=badan-lebih-
+  >> PERUBAHAN BESAR V14 → V15 (29 Agustus 2026, sesi lanjutan sore) <<
+================================================================================
+
+  Sesi ini dipicu satu pertanyaan pemilik proyek atas transkrip produksi
+  ("kenapa AI tidak paham customer memilih listing no. 2?"), tapi mengejar
+  jawabannya membuka bug yang jauh lebih besar: seluruh sistem reset mid-flow
+  ternyata tidak pernah menyala di WhatsApp. Enam nomor M baru (M165–M170),
+  ditutup dengan audit + overhaul menyeluruh 17 skill doc (00–16, tiga folder).
+
+  --------------------------------------------------------------------------
+  1. M166 ⭐⭐⭐ PALING BESAR — PESAN CUSTOMER TERGANDAKAN DI JALUR WHATSAPP,
+     SELURUH SISTEM RESET MID-FLOW TIDAK PERNAH MENYALA.
+  --------------------------------------------------------------------------
+  Awalnya menyelidiki keluhan "budget sewa Rp 36.300.000/tahun masih melekat
+  padahal customer sudah beralih ke BELI". Root cause ternyata jauh lebih
+  dalam dari satu field budget.
+
+  `extractQualificationState(history, currentMessage)` membangun array
+  kronologis dengan `[...history, {role:'customer', message:currentMessage}]`
+  — MENGASUMSIKAN pesan saat ini belum ada di `history`. Asumsi itu BENAR di
+  jalur web chat, tapi SALAH di ketiga controller WhatsApp (Kirimi/Fonnte/
+  TimelinesAI): ketiganya menyimpan pesan customer ke `chat_messages` DULU
+  (kirimiChatController.js: simpan ~baris 697), BARU memanggil
+  `generateWhatsAppAIReply()` (~baris 711). Jadi `getConversationHistory()`
+  SUDAH memulangkan pesan itu — dan baris di atas menambahkannya SEKALI LAGI.
+
+  Akibatnya: resolver kanonik (Phase 0, yang menentukan APAKAH tipe/transaksi/
+  kota "baru saja berubah GILIRAN INI") membandingkan `runTxIdx === lastIdx`.
+  Salinan ganda menggeser `lastIdx` satu posisi melewati indeks tempat flip
+  sesungguhnya tercatat — perbandingan itu SELALU false untuk customer
+  WhatsApp. Konsekuensinya: SELURUH keluarga reset mid-flow — M124 (ganti
+  kota/tipe/transaksi), M132 (kombinasi tipe+transaksi), M154 (banner
+  perubahan), M163 (fasilitas ikut direset saat transaksi berubah) — TIDAK
+  PERNAH SEKALI PUN benar-benar berjalan untuk satu pun customer WhatsApp
+  sejak fitur-fitur itu dibuat. Hanya web chat (yang tidak menyimpan dulu)
+  yang pernah menjalankannya — itulah kenapa semua tes reset mid-flow yang
+  ada tetap hijau selama ini: SEMUANYA memanggil dengan bentuk web.
+
+  Bukti A/B (transkrip nyata "sewa Madiun → beli Kenjeran"):
+    bentuk web (history biasa)         : tx=sale, budget=null,        txChanged=true
+    bentuk whatsapp (msg digandakan)   : tx=sale, budget="…/tahun",   txChanged=false
+
+  Fix: dedupe di SATU titik konsumen (bukan membalik urutan simpan di tiga
+  controller — urutan itu juga dipakai dedup pesan & audit). Bila entri
+  TERAKHIR di `history` sudah berperan customer dan teksnya (setelah
+  normalisasi singkatan) SAMA PERSIS dengan `currentMessage`, salinan kedua
+  tidak ditambahkan. Pesan identik berturut-turut ("Saya pilih no 2, Kak" 3x)
+  tetap aman — entri terakhir itu memang pesan yang sedang diproses.
+
+  Regresi: `tests/whatsappDuplicateCurrentMessage.test.js` (20/20) — menguji
+  SETIAP skenario reset lewat KEDUA bentuk pemanggilan dan mengunci bahwa
+  keduanya harus sepakat. Pelajaran metodologis: kelas bug "simpan-dulu-
+  baru-baca" yang SAMA PERSIS dengan M162 (TTL sesi) — curigai bentuk ini
+  lebih dulu setiap kali sesuatu "tidak pernah menyala" di WhatsApp tapi
+  bekerja di web.
+
+  --------------------------------------------------------------------------
+  2. M165 ⭐⭐ GERBANG PEMILIHAN LISTING + DUA CACAT PENGIRIMAN WHATSAPP.
+  --------------------------------------------------------------------------
+  Transkrip produksi nyata: dua kartu "MERR House Sale Surabaya" berjudul
+  IDENTIK, beda harga saja (451.6 juta vs 471.1 juta). Customer memilih no. 2
+  LIMA KALI — lewat nomor, lewat harga, lalu mengulang "Saya pilih no 2, Kak"
+  tiga kali — dan menerima kedua kartu yang sama persis setiap kali.
+
+  (a) Backend tidak pernah tahu kartu apa yang baru dikirim.
+      `listingsAlreadyShown` hanya memeriksa string "Estimasi Harga" ADA di
+      histori — cukup untuk mencegah gerbang menampilkan katalog LAGI, tapi
+      tidak menyimpan satu pun atribut kartu. `utils/listingSelectionGate.js`
+      (BARU) membaca ULANG blok katalog TERAKHIR langsung dari histori chat
+      — bukan kolom DB baru: teks yang sudah terkirim adalah satu-satunya
+      sumber kebenaran soal apa yang CUSTOMER lihat dan nomori; kolom kedua
+      pasti melenceng seiring waktu (kelas bug M27/M77). Mengenali pilihan
+      lewat nomor ("no 2", "yang kedua"), harga ("yg hrg 471.1 juta"), judul,
+      atau gabungan. DUA judul identik → gerbang SENGAJA menolak menebak,
+      bertanya balik harga mana yang dimaksud — satu-satunya pembeda yang
+      customer benar-benar bisa lihat. Diverifikasi lewat
+      `generateWhatsAppAIReply()` sungguhan di KEDUA profil guardrail
+      (E2E: gerbang menyusun balasan sendiri di profil 'local'; menyuntik
+      fakta `PILIHAN CUSTOMER ATAS KATALOG` ke prompt di profil 'platform' —
+      unit test saja TIDAK CUKUP, produksi berjalan di profil 'platform'
+      untuk agent uji).
+
+  (b) Kalimat penutup katalog tertutup kartu terakhir.
+      `splitCatalogReply()` hanya memotong pada batas ANTAR-kartu; paragraf
+      sesudah kartu TERAKHIR tidak punya kartu berikutnya untuk memicu
+      pemotongan, jadi ikut menumpang di pesan kartu itu. Di WhatsApp kartu
+      sudah panjang — pertanyaan penutup ("Ada yang menarik, Kak?") PRAKTIS
+      TIDAK TERBACA, dan memang tidak pernah dijawab customer di transkrip.
+      Diperbaiki: paragraf sesudah kartu terakhir yang bukan baris detail
+      (dikenali dari indentasi) selalu jadi pesan sendiri. Gerbang area juga
+      diperbaiki untuk memanggil `splitCatalogReply()` — sebelumnya
+      mengirim head+semua-kartu+penutup sebagai SATU pesan.
+
+  (c) Gambar properti tidak pernah terkirim.
+      `PROPERTY_IMAGE_SEND_ENABLED` TIDAK ADA SAMA SEKALI di .env (bukan
+      cuma OFF) — jalur kirim gambar Kirimi (`media_url`) tidak pernah
+      berjalan meski kodenya lengkap. Yang customer TERIMA: teks path mentah
+      `/assets/image_data/properties/house.png` di dalam kartu, karena kartu
+      menyisipkan tag markdown gambar (`![Judul](url)`) yang WhatsApp tidak
+      pernah render — sekaligus membocorkan struktur direktori internal. Tag
+      dihapus dari `#catalogItemWhatsApp`; flag dinyalakan; `PROPERTY_IMAGE_
+      DIR` dipindah ke `frontend/src/assets/image_data` (instruksi pemilik
+      proyek — kedua tree diverifikasi identik via `diff -rq` SEBELUM env
+      diarahkan ke lokasi baru).
+
+  Regresi: `tests/listingSelectionGate.test.js` (38/38, unit murni),
+  `tests/listingSelectionE2E.test.js` (9/9, KEDUA profil guardrail lewat
+  `generateWhatsAppAIReply()` sungguhan), `tests/replySplitterTail.test.js`
+  (12/12).
+
+  --------------------------------------------------------------------------
+  3. M167 TIMEOUT PROVIDER AKTIF (qwen) TIDAK PERNAH DI-SET — BUG LATENSI
+     M126 TERULANG DI PROVIDER BERBEDA.
+  --------------------------------------------------------------------------
+  `AI_PRIMARY_PROVIDER` sudah berpindah ke `qwen`, tapi `QWEN_TIMEOUT_MS`
+  tidak pernah ada di .env — diam-diam memakai default 60 detik di
+  `qwenService.js`. `providerTimeoutsConfigurable.test.js` tetap HIJAU karena
+  ia hanya mengunci `KIMI_TIMEOUT_MS` (Kimi adalah primary saat tes ditulis).
+  Kelas bug yang SAMA PERSIS dengan M126 ("balasan AI >2 menit"), provider
+  berbeda, tes lama buta terhadapnya.
+
+  Fix: keenam provider (qwen/kimi/deepseek/openrouter/chatgpt-alias-gpt/
+  claude) di-set eksplisit 30000ms. Tes diperkuat: sekarang membaca
+  `AI_PRIMARY_PROVIDER` dari .env dan memeriksa timeout provider yang SEDANG
+  AKTIF, plus memastikan SEMUA provider (bukan cuma yang aktif) punya nilai
+  eksplisit — supaya berpindah primary BESOK tidak menghidupkan ulang bug
+  yang sama. Regresi: `tests/providerTimeoutsConfigurable.test.js` (23/23,
+  naik dari 16 assertion versi lama).
+
+  --------------------------------------------------------------------------
+  4. M168 RAG CONFIDENCE THRESHOLD AKHIRNYA MEMBACA .env DENGAN BENAR.
+  --------------------------------------------------------------------------
+  Pemilik proyek men-set `RAG_EMBEDDING_CONFIDANCE_SCORE=0.35` di
+  backend/.env (ejaan "CONFIDANCE" sengaja, sesuai penulisan pemilik
+  proyek), mengasumsikan itu mengganti ambang 0.45 hardcode lama. Kode
+  ternyata membaca nama variabel yang SALAH (`RAG_CONFIDENCE_THRESHOLD`,
+  tidak pernah ada di .env manapun) — 0.35 tidak pernah terbaca, modul diam-
+  diam tetap jalan di fallback hardcode 0.45. Diperbaiki: baca
+  `RAG_EMBEDDING_CONFIDANCE_SCORE`, default 0.35 (bukan lagi 0.45) bila env
+  kosong. `tests/ragConfidence.test.js` diperbarui — versi lama MENGUNCI
+  0.45 sebagai "benar", sehingga gagal atas perilaku yang justru SUDAH benar
+  (kelas bug: tes menguji ekspektasi lama, bukan kontrak yang berlaku).
+
+  --------------------------------------------------------------------------
+  5. M169 DURASI SEWA TERTUKAR TANGGAL MASUK + PENGALI PERIODE BUDGET HILANG.
+  --------------------------------------------------------------------------
+  Dua bug ditemukan saat MEN-TRIASE (bukan langsung memperbaiki) empat suite
+  tes yang sudah lama gagal — pelajaran: "gagal sejak lama" BUKAN sinonim
+  "bukan bug produksi", dua di antaranya justru cacat nyata yang sedang
+  berjalan di produksi:
+
+  (a) "Saya rencana sewa rumah... butuh sewa selama 2 minggu" membuat
+      `parseCustomerDate()` membaca "2 minggu" sebagai TANGGAL relatif
+      (hari-ini + 14 hari), MENIMPA tanggal masuk yang benar-benar disebut
+      customer di kalimat lain pada percakapan yang sama ("Rencana 3
+      September ini" → brief mencetak 12 September, meleset 9 hari dari
+      kalimat yang sama sekali tidak bicara soal tanggal). Fix: guard
+      `hasDurationSignal` baru (kelas yang sama dengan guard mata-uang/
+      pembiayaan yang sudah ada) mematikan bentuk bare-form saat frasa
+      "selama/durasi/untuk N <unit>" muncul.
+
+  (b) "badget 2-4 juta/2 minggu" kehilangan pengali "2"-nya — periode
+      terbaca `week` tapi pengalinya hilang, sehingga sufiks yang dicetak
+      "/minggu" (bukan "/2 minggu"), melipatgandakan anggaran yang dibaca
+      agent (anggaran DUA MINGGU tercatat seolah SATU minggu). Fix:
+      `periodCount` distempel pada SETIAP hasil `detectBudget()` (fungsi
+      punya ~6 titik return — distempel sekali di pembungkus, bukan di
+      tiap return, supaya tidak ada yang terlewat); sufiks periode
+      dikonsolidasi jadi SATU fungsi `budgetPeriodSuffix()` — sebelumnya
+      ditulis identik dua kali di file yang sama (kelas bug M27/M77).
+
+  Regresi: `tests/durationDateConflation.test.js`, `tests/housePilot.test.js`
+  (70/70, naik dari 65/69), `tests/customerDateParser.test.js` (69/69, naik
+  dari 65/69), `tests/extractFilters.test.js` (115/115, naik dari 109/112 —
+  termasuk kontrak `preference` yang sudah lama drift ke kosakata Indonesia
+  terjangkau/menengah/eksklusif sementara dua konsumen masih membandingkan
+  ke string mati 'affordable').
+
+  --------------------------------------------------------------------------
+  6. M170 Q2c MASIH MENYARANKAN AREA STATIS — BUG MADIUN (M164) SATU TINGKAT
+     DI BAWAHNYA.
+  --------------------------------------------------------------------------
+  M164 menutup kasus "kota tidak ada di katalog agent sama sekali". Yang
+  tersisa: kotanya VALID, tapi contoh area di pertanyaan Q2c ("Di area atau
+  kawasan mana di Surabaya? Misalnya Pakuwon, Darmo, Rungkut, Gubeng...")
+  tetap diambil dari `utils/locationLandmarks.js` — daftar statis 45-kota
+  yang tidak tahu apa pun soal stok agent. Terukur untuk agent uji: yang
+  disarankan (statis) Pakuwon/Darmo/Rungkut/Gubeng vs yang DIMILIKI
+  (katalog) Dukuh Pakis/Waterplace/Mulyorejo/Pakuwon City/Citraland/MERR —
+  hanya Citraland beririsan. AI mengundang customer ke area dengan NOL
+  listing, lalu meminta maaf — persis keluhan pemilik proyek soal Madiun,
+  satu tingkat lebih dalam.
+
+  ⚠️ Jalur Private Agent SUDAH benar sejak M164 (memakai `agentAreaOptions`
+  dari katalog nyata) — yang tertinggal HANYA jalur LLM. Kelas bug M52/M54:
+  fitur dipasang di satu jalur produksi, yang lain lupa disentuh.
+
+  Fix: `findNextQuestion()` sinkron dan tidak punya `agentUserId`, jadi tidak
+  bisa query katalog sendiri. `whatsappAIService.js` (async, punya id)
+  menyuntik `qualState.agentAreas` dari `getAgentCoverage()` +
+  `getAgentAreaNames()` (cache 5 menit — tidak menambah query per pesan)
+  SEBELUM memanggil `findNextQuestion()`; fungsi itu memakai daftar NYATA
+  bila ada, daftar statis tetap cadangan fail-open (bertanya dengan contoh
+  generik lebih baik daripada slot kosong yang mengundang karangan, M84).
+  Maksimal 3 contoh (spesifikasi pemilik proyek "max tampilkan 3").
+
+  Regresi: `tests/q2cAreasFromCatalog.test.js` (11/11) — mengunci bahwa
+  contoh area BERBEDA dari daftar statis, tidak ada nama statis yang bocor
+  saat area nyata tersedia, dan cadangan statis tetap jalan (fail-open) saat
+  katalog gagal dimuat.
+
+  --------------------------------------------------------------------------
+  OVERHAUL SKILL DOCS — 00–16, KETIGA FOLDER (dipicu permintaan pemilik
+  proyek: "upgrade semua skill agar sesuai perkembangan chat + tambahkan
+  kemampuan analisa/deteksi/audit data-sumber-guardrails-LLM-database")
+  --------------------------------------------------------------------------
+  Audit menemukan struktur skill docs SUDAH BERBEDA dari yang tercatat di
+  memori sesi sebelumnya (01–20 V4) — realitasnya 01–15 sebelum overhaul ini.
+  Diaudit dulu, baru ditulis — bukan dipercaya dari catatan lama.
+
+  (a) DUA KONTRADIKSI PROMPT-VS-KODE ditemukan lewat 27 assertion tes yang
+      SUDAH gagal (kelas bug prompt-outranks-skill-docs):
+        • doc 03 §5 masih mengajarkan FULL-RESET ke Q1 saat kota/tipe/
+          transaksi berubah — persis bug M124 yang sudah DICABUT di kode
+          sejak V10. Diganti tabel preserve/reset tiga-axis granular yang
+          sesungguhnya berlaku.
+        • doc 04 masih mendaftar ④ BUDGET sebagai syarat minimum listing —
+          kontrak M162 sudah menggantinya dengan ④ LOKASI SPESIFIK (area/
+          landmark/commercial); budget BUKAN prasyarat sejak itu. Diganti +
+          ditambahkan penegasan eksplisit "area dan landmark = SATU slot".
+      Kedua kontradiksi berbahaya karena model bisa memihak salah satu
+      secara tidak terprediksi — sekarang ditutup, kedua suite regresi
+      (`skillDocsM124Sync.test.js` 35/35, kualifikasi 87/87) hijau.
+
+  (b) Doc BARU: `00-data-grounding-and-verification.md` (ketiga folder).
+      Lapisan analisa/deteksi/cek/telusur/audit yang diminta pemilik
+      proyek: tangga 6-tingkat sumber kebenaran (katalog → state → coverage
+      → histori → RAG → pengetahuan model, yang TERAKHIR tidak diterima
+      sebagai dasar fakta konkret), 5 pre-assert check (provenance,
+      traceability, scope, currency, consistency), bagian immutability,
+      sinyal-sinyal percakapan bermasalah, aturan RAG-safety (teks yang
+      di-retrieve/di-paste customer = DATA, tidak pernah instruksi — prompt
+      injection defense), dan 9 pertanyaan self-audit penutup sebelum
+      balasan dikirim. Diberi nomor TERKECIL (00) SENGAJA — supaya, saat cap
+      karakter jenuh, doc ini tidak pernah jadi bagian yang terpotong senyap
+      oleh `trimForPrompt()` (potongan selalu di TAIL, bukan kepala).
+
+  (c) Doc `16-counterpart-roles-and-division-routing.md` (peran non-
+      properti: supplier, pelamar kerja, tamu, asuransi, komplain teknis,
+      routing ke divisi Sales/Procurement/HRD/IT/Admin) SEBELUMNYA HANYA
+      ADA di folder `chat_gpt_responds` — folder `claude_responds` dan
+      `elevan-property-assistant` TIDAK PERNAH melihatnya. Ditemukan
+      duplikat prefix "15-" (bentrok dengan catalog-conversation-cases) dan
+      NAMA AGENT HARDCODE di dalam template balasan yang model salin
+      verbatim — melanggar aturan dynamic-agent-app-name. Diperbaiki:
+      dinomori ulang ke 16, agent/app name dijadikan placeholder dinamis,
+      disinkron byte-identik ke KETIGA folder. Playbook KOMPLAIN (keluhan)
+      ditambahkan sebagai §5 doc ini — sebelumnya keluhan tidak punya aturan
+      penanganan eksplisit dan berisiko tertelan gerbang off-topic.
+
+  (d) EFISIENSI: doc 14 (legalitas/pajak/KPR) dan 16 (non-properti) dipindah
+      dari "selalu dimuat" menjadi KONDISIONAL — pola yang sama dengan doc
+      11–13 (house pilots/fasilitas/lokasi) sejak awal. Ini menurunkan
+      ukuran prompt sapaan biasa dari 265.138 → 259.543 karakter.
+
+  UKURAN AKHIR (diukur via `loadResponseSkillPrompt()` langsung, BUKAN
+  `wc -c` — cap menghitung KARAKTER string JS, dokumen penuh emoji melebih-
+  lebihkan byte count ~2%):
+    Sapaan biasa (tanpa trigger)              : 259.543 karakter
+    Worst case (SEMUA trigger kondisional)    : 329.788 karakter
+    Plafon SKILL_MAX_RESPONSE_CHARACTERS      : 330.000 karakter
+  ⚠️ JENUH — sisa 212 karakter. Sebelum menambah PROSA ke skill doc manapun:
+  ukur ulang lewat pemanggilan fungsi sungguhan, bukan menjumlah ukuran file.
+
+  --------------------------------------------------------------------------
+  VERIFIKASI SESI INI
+  --------------------------------------------------------------------------
+  Setiap fix di atas: reproduksi via modul SUNGGUHAN (bukan salinan logika —
+  pelajaran tests-must-call-real-module), A/B terhadap kode SEBELUM fix
+  untuk membuktikan sebab-akibat (bukan kebetulan), regresi ditulis dengan
+  transkrip NYATA + kontrol negatif, lalu SELURUH suite dijalankan ulang —
+  bukan hanya file baru. Hasil akhir: 2.819 assertion, NOL kegagalan (setelah
+  merekam ulang 1 snapshot `qualifierCharacterization.test.js` yang berubah
+  legitim akibat field `periodCount` baru M169 — snapshot test WAJIB dicek
+  manual sebelum re-record, bukan dijalankan `UPDATE_SNAPSHOT=1` secara
+  refleks). Lint bersih di semua file yang diubah.
+
+  ⚠️ DUA hutang teknis TERKONFIRMASI PRA-ADA (di luar cakupan M165–M170,
+  diverifikasi dengan A/B agar tidak disalahkan ke sesi ini):
+    • `tests/huggingfaceService.test.js` — huggingfaceService.js dibangun
+      lengkap tapi TIDAK terdaftar di PROVIDER_ORDER (aiProviderService.js).
+    • `tests/facilitiesViewingAndShortAnswers.test.js` — 1 assertion, format
+      tanggal ISO mentah di satu titik, bukan format Indonesia berpadding.
+  Keduanya BELUM digarap sesi ini secara sengaja (di luar cakupan
+  permintaan) — lihat §13 TROUBLESHOOT untuk detail masing-masing.
+
+  ⭐ PENOMORAN M — nomor berikutnya untuk sesi mendatang: **M171** (dipakai
+  di bawah untuk sesi V15→V16 ini — lihat §PERUBAHAN BESAR V15→V16).
+
+
+================================================================================
+  >> PERUBAHAN BESAR V15 → V16 (29 Agustus 2026, sesi lanjutan malam) <<
+================================================================================
+
+  Dipicu permintaan singkat pemilik proyek — hapus doc 16 karena di luar
+  fokus — tapi mengejar KENAPA penghapusan itu awalnya TIDAK BEREFEK sama
+  sekali membuka temuan struktural yang jauh lebih penting untuk proyek ini
+  ke depannya daripada doc 16 itu sendiri.
+
+  --------------------------------------------------------------------------
+  1. M171 ⭐⭐⭐ PALING KRITIS — ADA DUA DIREKTORI `skills/`, HANYA SATU YANG
+     HIDUP; SESI M165–M170 (DAN KEMUNGKINAN SESI-SESI SEBELUMNYA) MENGEDIT
+     KEDUANYA TANPA SADAR ADA DUA.
+  --------------------------------------------------------------------------
+  Urutan kejadian: doc `16-counterpart-roles-and-division-routing.md` dan
+  entri triggernya di `CONDITIONAL_FILE_TRIGGERS` dihapus dari
+  `backend/asset/skills/*/docs/` (path yang dipakai sepanjang sesi M165–
+  M170 untuk SEMUA edit skill doc, mengikuti kebiasaan path yang sudah
+  terpakai berulang di sesi-sesi itu). Verifikasi lewat pemanggilan
+  `loadResponseSkillPrompt('chatgpt', {context:'...'})` LANGSUNG — bukan
+  sekadar percaya file sudah terhapus — menunjukkan doc 16 MASIH MUNCUL
+  PENUH di prompt yang sesungguhnya dikirim ke LLM, plus ukuran prompt
+  masih persis sama dengan sebelum penghapusan.
+
+  Investigasi `services/skillPromptService.js` menemukan:
+      const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
+      const SKILLS_ROOT  = path.join(PROJECT_ROOT, 'skills');
+  `__dirname` di sana adalah `backend/services/`, jadi `SKILLS_ROOT` = ROOT
+  PROYEK (`Elevan_Property/skills/`) — BUKAN `backend/asset/skills/`.
+  `grep -rn "asset/skills" --include=*.js` di SELURUH `backend/`
+  mengembalikan NOL hasil: `backend/asset/skills/` TIDAK DIRUJUK OLEH SATU
+  BARIS KODE PUN. Itu salinan yatim — kemungkinan sisa dari pola kerja lama
+  pemilik proyek ("copy manual" yang dicatat di §PERUBAHAN BESAR V10→V11
+  poin relokasi chat_gpt_responds) yang tidak pernah dibersihkan.
+
+  Yang menyelamatkan sesi M165–M170 dari bug produksi nyata: KEBETULAN kedua
+  direktori sudah identik untuk berkas-berkas yang disentuh sesi itu (doc
+  15 pick-listing rules, dsb.) — dikonfirmasi lewat `diff -rq` yang kosong
+  untuk ketiga folder SEBELUM sesi ini mulai. Tapi itu KEBETULAN, bukan
+  jaminan struktural: tidak ada mekanisme sinkronisasi otomatis, tidak ada
+  tes yang membandingkan kedua direktori, dan tidak ada dokumentasi
+  sebelumnya yang menyebut direktori kedua ini sama sekali. Penghapusan
+  doc 16 HAMPIR menjadi kasus pertama di mana keduanya berbeda secara nyata
+  — dan hampir tidak ketahuan, karena test suite backend tidak menguji isi
+  prompt skill doc secara langsung (hanya perilaku ekstraktor/gate kode).
+
+  Fix untuk kejadian ini: doc 16 (+ referensi SKILL.md/doc-00 + entri
+  CONDITIONAL_FILE_TRIGGERS) dihapus ULANG, kali ini di
+  `Elevan_Property/skills/*` (lokasi yang benar-benar dimuat), lalu
+  `backend/asset/skills/*` disamakan lagi via diff manual supaya kedua
+  direktori kembali identik. Diverifikasi TIGA kali secara independen:
+  (a) `diff -rq` kedua direktori = kosong, (b) `loadResponseSkillPrompt()`
+  tidak lagi memulangkan teks doc 16 untuk skenario apa pun (sapaan biasa,
+  trigger komplain/vendor/lamaran lama, worst-case-semua-trigger-tersisa),
+  (c) seluruh 108 file tes backend dijalankan ulang — hanya 2 kegagalan
+  pra-ada yang TIDAK TERKAIT (huggingfaceService, facilitiesViewingAndShort
+  Answers) yang tetap sama jumlahnya sebelum dan sesudah.
+
+  ⚠️ KEPUTUSAN YANG BELUM DIAMBIL (perlu arahan pemilik proyek): apa status
+  akhir `backend/asset/skills/`?
+    (a) HAPUS — paling bersih, menghilangkan sumber drift permanen. Risiko:
+        bila pemilik proyek memang sengaja memakainya sebagai working copy
+        manual (pola yang tercatat di V10→V11) sebelum menyalin ke lokasi
+        lain (mis. platform.openai.com/storage/skills), penghapusan
+        mengganggu alur kerja itu.
+    (b) SYMLINK/JUNCTION dari backend/asset/skills → ../../skills — membuat
+        KEDUA path selalu identik secara struktural, tanpa mengubah alur
+        kerja siapa pun yang terbiasa mengedit dari path lama. Windows
+        butuh hak admin/Developer Mode untuk symlink direktori, atau pakai
+        junction (`mklink /J`) yang tidak butuh privilese khusus.
+    (c) BIARKAN, tapi tambahkan tes otomatis yang menggagalkan build/CI bila
+        kedua direktori berbeda (`diff -rq` sebagai assertion) — mencegah
+        drift tanpa mengubah kebiasaan kerja siapa pun.
+  Sampai keputusan diambil, ATURAN WAJIB bagi siapa pun (manusia atau Claude
+  Code) yang menyentuh skill doc: edit HANYA `Elevan_Property/skills/*/docs/`,
+  lalu salin manual ke `backend/asset/skills/*/docs/` bila memang perlu
+  menjaga keduanya tetap ada, dan SELALU verifikasi lewat pemanggilan kode
+  sungguhan — bukan asumsi dari nama path.
+
+  --------------------------------------------------------------------------
+  2. DOC 16 (PERAN NON-PROPERTI & ROUTING DIVISI) DIHAPUS — ARAHAN LINGKUP
+     EKSPLISIT PEMILIK PROYEK.
+  --------------------------------------------------------------------------
+  Alasan pemilik proyek, verbatim intent: fokus utama skill ini adalah
+  MEMAHAMI dan MEREKOMENDASIKAN kebutuhan properti (sewa/beli) dari data
+  katalog agent kepada customer; skill juga membantu PENJADWALAN SURVEI, dan
+  bila customer bertanya jarak/lokasi survei, skill harus paham dan
+  merespons dengan estimasi & jarak yang benar — untuk platform AI manapun
+  (GPT, Kimi, Claude, DeepSeek, dst.). Routing supplier/pelamar kerja/tamu/
+  asuransi/komplain-teknis ke divisi internal (Sales/Procurement/HRD/IT/
+  Admin) — isi doc 16 — ada DI LUAR cakupan itu. Doc itu ditambahkan sesi
+  M165–M170 sebagai perluasan yang salah arah untuk chatbot customer-agent
+  properti ini, bukan bug — koreksi lingkup, bukan koreksi bug.
+
+  ⚠️ FUNGSI JARAK/ESTIMASI SURVEI YANG DIMINTA TETAP EKSIS DAN TIDAK
+  TERSENTUH — itu SUDAH ditangani deterministik oleh
+  `services/distanceEstimationService.js` (M130, haversine + tabel rute
+  feri mayor) dan doc 09 §3b (off-topic-and-escalation.md), BUKAN oleh doc
+  16 yang baru dihapus. Doc 16 khusus untuk non-properti/routing-divisi;
+  kapabilitas jarak-survei properti sama sekali tidak bergantung padanya.
+
+  Dihapus dari `Elevan_Property/skills/{chat_gpt_responds,claude_responds,
+  elevan-property-assistant}/docs/16-counterpart-roles-and-division-
+  routing.md` + baris referensinya di SKILL.md ketiga folder (tabel
+  "Conditional — loaded on topic") + doc 00 ketiga folder (daftar "Related
+  Docs") + entri `CONDITIONAL_FILE_TRIGGERS['16-counterpart-roles-and-
+  division-routing.md']` di `services/skillPromptService.js` (kode
+  fungsional-nya, bukan sekadar teks dokumentasi).
+
+  Dampak ukuran prompt (diukur via `loadResponseSkillPrompt()`, bukan wc -c):
+    Sapaan biasa               : 259.543 → 259.327 chars (turun 216 —
+                                  hanya referensi teks di SKILL.md/doc-00
+                                  yang ikut hilang, doc 16 sendiri tidak
+                                  pernah muncul di skenario ini bahkan
+                                  sebelum dihapus)
+    Worst case (semua trigger) : 329.788 → 322.986 chars
+    Headroom cap (330.000)     : 212 → ±7.014 chars (kembali longgar)
+
+  Regresi: 108 file tes backend dijalankan ulang penuh, nol kegagalan baru.
+  `tests/skillDocsM124Sync.test.js` (hanya menyentuh doc 04, tidak
+  terpengaruh) tetap 35/35.
+
+  --------------------------------------------------------------------------
+  PELAJARAN METODOLOGIS UNTUK SESI MENDATANG
+  --------------------------------------------------------------------------
+  "File sudah dihapus" BUKAN bukti "kode sudah tidak memakainya" — satu-
+  satunya bukti adalah memanggil fungsi yang sesungguhnya memuatnya dan
+  membaca hasilnya. Kelas pelajaran yang SAMA dengan phantom-restart
+  (proses lama masih melayani produksi meski kode sumbernya sudah diganti)
+  dan dengan M162 (TTL sesi yang kelihatannya benar di kode tapi tidak
+  pernah benar-benar terpanggil pada saat yang tepat) — dalam ketiganya,
+  membaca KODE atau membaca NAMA FILE tidak cukup; harus membuktikan
+  JALUR EKSEKUSI SUNGGUHAN. Sebelum mempercayai "sudah saya perbaiki" atas
+  perubahan skill-doc/config/asset apa pun di proyek ini, tanyakan: adakah
+  lebih dari satu salinan berkas ini di proyek, dan sudahkah dibuktikan
+  yang mana yang benar-benar dibaca runtime?
+
+  ⭐ PENOMORAN M — nomor berikutnya untuk sesi mendatang: **M172**.
+
+
+================================================================================
+  END OF FILE — ELEVAN_PROPERTY_CONTEXT_V8.txt (V16 per header — nama berkas
+  fisik SENGAJA tidak di-rename ke _V16.txt, ikuti pola V8-judul/=badan-lebih-
   baru yang sudah didokumentasikan di §Riwayat; lihat catatan penomoran di
   kepala berkas ini bila membingungkan)
 ================================================================================

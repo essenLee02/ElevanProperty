@@ -132,15 +132,12 @@ const CONDITIONAL_FILE_TRIGGERS = {
   // 09 §3a still carries the always-on handling rule for these terms, so a trigger miss
   // degrades to "answer it from doc 09" rather than to silence.
   '14-legalitas-pajak-kpr.md': /\b(shm|shgb|shsrs|hgb|ajb|ppjb|ppat|girik|imb|pbg|slf|sertifikat|certificate|legalitas|legality|notaris|notary|pajak|tax|bphtb|pph|kpr|mortgage|dp\b|uang\s*muka|cicilan|angsuran|tenor|bunga|akad|balik\s*nama|over\s*kredit)\b/i,
-
-  // Non-property counterpart lanes (supplier, applicant, visitor, insurance, IT fault).
-  // Near-disjoint from the property vocabulary above, so it almost never stacks with
-  // 11-14 in the same message — which is what keeps the all-inclusive worst case under
-  // SKILL_MAX_RESPONSE_CHARACTERS. Kept deliberately broad: an over-trigger costs only
-  // budget on that one message, while a miss sends a supplier or applicant into the
-  // off-topic guard.
-  '16-counterpart-roles-and-division-routing.md': /\b(supplier|suplai|vendor|distributor|penawaran|menawarkan|proposal|kerja\s*sama|lowongan|loker|lamaran|melamar|pelamar|karir|career|cv\b|resume|magang|internship|rekrut|recruit|hrd|asuransi|insurance|bpjs|kunjungan|audiensi|studi\s*banding|error|eror|bug|tidak\s*bisa\s*(login|dibuka)|komplain|keluhan|complaint|refund|pengembalian\s*dana)\b/i,
 };
+// ⚠️ M171 (29 Agu 2026): doc 16-counterpart-roles-and-division-routing.md
+// DIHAPUS atas arahan pemilik proyek — fokus skill HANYA properti (kualifikasi
+// sewa/beli, rekomendasi katalog, jadwal & jarak survei), bukan routing
+// supplier/pelamar/komplain ke divisi internal. Entrinya di sini juga
+// dihapus; lihat §PERUBAHAN BESAR V15→V16 di ELEVAN_PROPERTY_CONTEXT_V8.txt.
 
 function isConditionalFile(filePath) {
   const name = path.basename(filePath).toLowerCase();

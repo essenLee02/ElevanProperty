@@ -55,7 +55,8 @@
         "min": 3000000,
         "max": 8000000,
         "period": "night",
-        "preference": "menengah"
+        "preference": "menengah",
+        "periodCount": 1
       },
       "buildingType": "villa",
       "location": "Malang",
@@ -72,7 +73,8 @@
         "text": "Rp 2.000.000 - Rp 4.000.000",
         "min": 2000000,
         "max": 4000000,
-        "period": "month"
+        "period": "month",
+        "periodCount": 1
       },
       "buildingType": "house",
       "customerStatedBudget": true,
