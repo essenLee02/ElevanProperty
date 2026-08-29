@@ -591,6 +591,70 @@ function stripInvestmentIntentPhrases(text) {
   );
 }
 
+/* ══════════════════════════════════════════════════════════════════════════════
+   ⭐ M162 — DETEKTOR KANONIK TIPE & TRANSAKSI (satu-satunya salinan)
+   ──────────────────────────────────────────────────────────────────────────────
+   Resolver "apa tipe properti / transaksi yang disebut di kalimat ini" DULU
+   ditulis TIGA KALI, dan ketiganya sudah menyimpang di produksi:
+
+     1. services/aiPromptBuilderService.js → typeOfP0 / txOfP0   (Fase 0)
+     2. controllers/chatbotPrivateController.js → _typeOfP0 / _txOfP0
+     3. (Fase 1 di aiPromptBuilderService, inline)
+
+   Salinan #2 bahkan memuat komentar "SAME as the twin in aiPromptBuilderService
+   … Never re-implement this regex separately" — komentar yang sudah tidak benar
+   saat dibaca: salinan itu kehilangan varian `ngekos|ngekost|ngekosan|indekost`
+   pada tipe, DAN kehilangan `kos|kost|kosan|ngekos|indekos|booking|book|pesan|
+   reservasi` pada transaksi. Artinya, di Private Agent, "mau ngekos di Depok"
+   tidak terbaca sebagai boarding_house/rent sama sekali, sementara di jalur LLM
+   terbaca benar. Persis kelas bug yang sudah pernah mahal di proyek ini
+   (ngekos-detection: satu regex disalin ke 5 tempat → harus diperbaiki 5 kali).
+
+   Urutan pengecekan PENTING dan bukan selera: yang paling spesifik lebih dulu
+   (kondotel sebelum hotel & apartemen; mansion sebelum rumah; ruko sebelum
+   toko), karena beberapa kata saling bersarang.
+
+   ⛔ JANGAN menyalin isi fungsi ini ke modul lain. Import dari sini.
+════════════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Tipe properti yang disebut dalam sebuah teks.
+ * @param {string} txt
+ * @returns {string|null} 'house'|'apartment'|'villa'|'hotel'|'kondotel'|
+ *   'boarding_house'|'shophouse'|'store'|'office'|'warehouse'|'mansion'|'others'|null
+ */
+function detectCanonicalType(txt = '') {
+  const w = stripCommercialUsePhrases(
+    stripMovingFromPhrases(stripAmbiguousRumah(stripNearPhrases(String(txt || '').toLowerCase())))
+  );
+  if (/\bkondotel\b|\bcondotel\b/.test(w))                                    return 'kondotel';
+  if (/\bmansion\b|\brumah\s+mewah\b/.test(w))                                return 'mansion';
+  if (/\bvill?a\b/.test(w))                                                   return 'villa';
+  if (/\bapartemen\b|\bapartment\b/.test(w))                                  return 'apartment';
+  if (/\bhotel\b|\bpenginapan\b/.test(w))                                     return 'hotel';
+  if (/\bkos\b|\bkost\b|\bkosan\b|\bkostan\b|\bngekos\b|\bngekost\b|\bngekosan\b|\bindekos\b|\bindekost\b/.test(w)) return 'boarding_house';
+  if (/\bruko\b|\brukan\b/.test(w))                                           return 'shophouse';
+  if (/\btoko\b|\bkios\b|\bwarung\b|\bretail\b/.test(w))                      return 'store';
+  if (/\bkantor\b|\boffice\b/.test(w))                                        return 'office';
+  if (/\bgudang\b|\bwarehouse\b/.test(w))                                     return 'warehouse';
+  if (/\brumah\b(?!\s+(?:makan|sakit|tangga|ibadah|duka|produksi|tahanan|susun|potong|kos))|\bhouse\b|\bkontrakan\b/.test(w)) return 'house';
+  if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(w))          return 'others';
+  return null;
+}
+
+/**
+ * Tipe transaksi yang disebut dalam sebuah teks.
+ * "booking/pesan/reservasi" dihitung sebagai frame SEWA (hotel/kondotel/villa).
+ * @param {string} txt
+ * @returns {'rent'|'sale'|null}
+ */
+function detectCanonicalTransaction(txt = '') {
+  const w = stripInvestmentIntentPhrases(String(txt || '').toLowerCase());
+  if (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|kos|kost|kosan|kostan|ngekos|ngekost|ngekosan|indekos|indekost|rent|rental|lease|booking|book|pesan|reservasi)\b/.test(w)) return 'rent';
+  if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase|invest|investasi)\b/.test(w)) return 'sale';
+  return null;
+}
+
 /**
  * Detect that the customer intends to USE the property commercially (as an office /
  * business). Returns 'kantor' | 'usaha' | '' . Kept for backward compatibility.
@@ -1466,6 +1530,15 @@ function detectBudget(message = '') {
 const CUSTOMER_ROLES = new Set(['user', 'customer']);
 const AI_ROLES       = new Set(['assistant', 'ai']);
 
+// Penanda summary brief — HARUS sama dengan SUMMARY_RE_P0 di
+// aiPromptBuilderService.js. Dua ekstraktor yang memotong sesi di titik berbeda
+// akan melaporkan kota/budget yang berbeda untuk percakapan yang sama.
+const SUMMARY_BRIEF_RE = /[✓✔]\s*Rencana\s*:/i;
+
+// ⛔ JANGAN menyalin daftar field "yang dilupakan saat ganti kota/transaksi/tipe"
+// ke file ini. Satu tabel, satu tempat — lihat utils/contextSwitchPolicy.js.
+const { applyFilterSwitchPolicy, isGenuineCityChange } = require('../utils/contextSwitchPolicy');
+
 function extractFromHistory(history = []) {
   // Window harus cukup besar untuk menampung SATU sesi kualifikasi penuh (Q1–Q12 +
   // Q14). Sebelumnya .slice(-8) terlalu kecil: pada percakapan ≥9 pesan, pesan
@@ -1474,7 +1547,21 @@ function extractFromHistory(history = []) {
   // pembuka di akhir alur. History sudah dibatasi ~24 pesan oleh pemanggil; di sini
   // kita pakai 24 pesan customer terakhir (deteksi ganti-tipe per-pesan tetap jalan
   // di loop untuk mencegah warisan dari pencarian lama).
-  const recentUserMsgs = (history || [])
+  //
+  // ⭐ M154: SEBELUM di-slice, history dipotong di BOUNDARY SESI — pesan customer
+  // pertama SETELAH summary brief terakhir. extractQualificationState() sudah
+  // melakukan ini sejak lama ("Boundary A"), ekstraktor ini TIDAK — sehingga satu
+  // nomor WhatsApp yang memakai sesi yang sama selamanya membawa kota/budget/
+  // landmark dari pencarian yang SUDAH SELESAI ke pencarian berikutnya, dan dua
+  // ekstraktor melaporkan lokasi yang berbeda untuk percakapan yang sama.
+  const _all = history || [];
+  const _lastSummaryIdx = _all.reduce(
+    (idx, m, i) => (AI_ROLES.has(m.role) && SUMMARY_BRIEF_RE.test(m.message || '') ? i : idx),
+    -1
+  );
+  const _scoped = _lastSummaryIdx >= 0 ? _all.slice(_lastSummaryIdx + 1) : _all;
+
+  const recentUserMsgs = _scoped
     .filter((item) => CUSTOMER_ROLES.has(item.role))
     .slice(-40);   // ≤40 pesan customer: cukup untuk kualifikasi terpanjang (customer sering 1–3 kata/pesan)
 
@@ -1491,17 +1578,40 @@ function extractFromHistory(history = []) {
   for (const histMsg of recentUserMsgs) {
     const h = extractSingleMessageFilters(histMsg.message || '');
 
-    // Jika tipe properti berubah ke tipe yang berbeda dalam percakapan yang sama,
-    // reset transactionType supaya tidak mewarisi tx dari konteks pencarian lama.
-    // Contoh: riwayat "sewa hotel" lalu customer berubah ke "mau rumah"
-    //         → tx 'rent' dari hotel tidak boleh diwarisi ke pencarian rumah.
-    if (h.buildingType && accumulated.buildingType && h.buildingType !== accumulated.buildingType) {
-      accumulated.transactionType = '';
-      accumulated.location        = '';  // lokasi lama juga direset — bisa jadi beda kota
-      accumulated.budget          = null;
-      accumulated.facilities      = [];  // fasilitas pencarian lama tidak diwarisi
-      accumulated.landmark        = '';  // patokan lama juga direset — beda kota, beda landmark
-    }
+    // ── M154: kebijakan ingat/lupa saat customer berganti axis di tengah alur ──
+    //
+    // ⚠️ BLOK INI DULU ADALAH RESET TOTAL. Begitu tipe properti berubah, ia
+    // menghapus transactionType, location, budget, facilities DAN landmark
+    // sekaligus — persis perilaku destruktif yang SUDAH DIPERBAIKI di ekstraktor
+    // satunya (extractQualificationState) pada M124/M132, tapi tidak pernah ikut
+    // diperbaiki di sini. Efeknya bukan sekadar "filter kurang lengkap":
+    // evaluateListingReadiness() membaca filter INI, lalu melaporkan ke prompt
+    // "SYARAT MINIMUM LISTING: BELUM TERPENUHI — masih kurang: kota, area/
+    // kawasan" di prompt yang SAMA yang juga menampilkan "✅ Kota [Q2]: Surabaya"
+    // dari ekstraktor satunya. LLM menerima dua fakta yang berlawanan dan
+    // menuruti yang berbentuk perintah → menanyakan ULANG kota & area yang baru
+    // saja dijawab. Itulah sumber mekanis dari pertanyaan berulang saat customer
+    // mengganti tipe properti.
+    //
+    // Spec pemilik proyek: GANTI PROPERTI → "Kota dibuat sama", "transaksi
+    // dibuat sama", "landmark masih sama". Hanya budget & fasilitas (yang memang
+    // terikat tipe) yang boleh dilupakan. Tabelnya ada di utils/contextSwitchPolicy.js.
+    const _typeChanged = Boolean(h.buildingType && accumulated.buildingType
+                                 && h.buildingType !== accumulated.buildingType);
+    const _txChanged   = Boolean(h.transactionType && accumulated.transactionType
+                                 && h.transactionType !== accumulated.transactionType);
+    // Ganti KOTA hanya dihitung bila pesannya memang MENGGANTI lokasi pencarian
+    // (cue/refinement, lihat _shouldOverwriteLocation) DAN kotanya benar-benar
+    // beda (bukan "Jakarta" → "Jakarta Selatan"). Tanpa dua guard ini, kota yang
+    // disebut sambil lalu ("orang Surabaya") akan menghapus landmark yang sah.
+    const _cityChanged = Boolean(
+      h.location && accumulated.location
+      && isGenuineCityChange(accumulated.location, h.location)
+      && _shouldOverwriteLocation(accumulated.location, h.location, histMsg.message || '')
+    );
+    applyFilterSwitchPolicy(accumulated, {
+      typeChanged: _typeChanged, txChanged: _txChanged, cityChanged: _cityChanged,
+    });
 
     if (h.buildingType)          accumulated.buildingType    = h.buildingType;
     if (h.transactionType)       accumulated.transactionType = h.transactionType;
@@ -1627,23 +1737,42 @@ function extractPropertyFilters(message = '', history = []) {
   const accumulated = extractFromHistory(history);
 
   // Current message wins on each field.
-  // Transactiontype dari history TIDAK dibuang kecuali current message secara eksplisit
-  // mengganti tipe properti ke tipe yang BERBEDA (indikasi pencarian baru).
-  // Contoh yang diizinkan untuk inherit tx:
-  //   history: "beli rumah"   → tx=sale
-  //   current: "di Surabaya"  → current.tx='', current.type=''  → masih inherit 'sale'
-  // Contoh yang direset:
-  //   history: "sewa hotel"   → tx=rent, type=hotel
-  //   current: "mau rumah"    → current.type=house (berbeda!) → tx direset ke ''
+  //
+  // ⭐ M154: perubahan axis yang terjadi di PESAN SAAT INI tidak pernah terlihat
+  // oleh extractFromHistory() (pesan itu belum ada di `history`), jadi kebijakan
+  // ingat/lupa harus diterapkan sekali lagi di sini — dengan tabel yang SAMA.
+  //
+  // ⚠️ transactionType TIDAK LAGI dikosongkan saat tipe berubah. Aturan lama
+  // ("history: sewa hotel" + "current: mau rumah" → tx dibuang) langsung
+  // bertentangan dengan spec pemilik proyek GANTI PROPERTI item 3, "transaksi
+  // dibuat sama", dan dengan resolver kanonik di aiPromptBuilderService yang
+  // memang MEMPERTAHANKAN transaksi pada ganti-tipe. Selama keduanya berbeda,
+  // prompt bisa memuat "✅ Tipe transaksi: Sewa" sekaligus readiness
+  // "masih kurang: sewa atau beli" → AI menanyakan ulang sewa/beli yang sudah
+  // dijawab. Sekarang satu aturan saja, di utils/contextSwitchPolicy.js.
   const typeChangedToNew = Boolean(
     current.buildingType &&
     accumulated.buildingType &&
     current.buildingType !== accumulated.buildingType
   );
+  const txChangedToNew = Boolean(
+    current.transactionType &&
+    accumulated.transactionType &&
+    current.transactionType !== accumulated.transactionType
+  );
+  const cityChangedToNew = Boolean(
+    current.location &&
+    accumulated.location &&
+    isGenuineCityChange(accumulated.location, current.location) &&
+    _shouldOverwriteLocation(accumulated.location, current.location, message)
+  );
+  applyFilterSwitchPolicy(accumulated, {
+    typeChanged: typeChangedToNew, txChanged: txChangedToNew, cityChanged: cityChangedToNew,
+  });
 
   const merged = {
     buildingType:   current.buildingType    || accumulated.buildingType    || '',
-    transactionType:current.transactionType || (typeChangedToNew ? '' : accumulated.transactionType) || '',
+    transactionType:current.transactionType || accumulated.transactionType || '',
     // Lokasi current hanya menang bila memang mengganti/merinci lokasi (punya cue
     // atau refinement); kota yang kebetulan disebut di pesan terakhir tidak menimpa
     // lokasi pencarian yang sudah mapan. Lihat _shouldOverwriteLocation.
@@ -2729,6 +2858,10 @@ module.exports = {
   stripNearPhrases,
   stripAmbiguousRumah,
   stripInvestmentIntentPhrases,
+  // M162 — detektor kanonik tipe/transaksi (satu-satunya salinan; lihat komentar
+  // di atas definisinya sebelum tergoda menulis regex serupa di modul lain).
+  detectCanonicalType,
+  detectCanonicalTransaction,
   stripMovingFromPhrases,
   detectCommercialUse,
   detectUseCase,

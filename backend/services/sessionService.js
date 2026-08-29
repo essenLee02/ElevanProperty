@@ -122,8 +122,40 @@ async function getConversationHistory(sessionId, limit = 12) {
   // nol dan status dorman pasca-summary ikut ter-reset. Idle-based (jeda sejak
   // pesan terakhir), BUKAN umur pesan — percakapan panjang yang masih aktif
   // tidak kehilangan awal obrolannya.
+  //
+  // ⚠️ M162 — BUG FATAL DITEMUKAN: TTL INI TIDAK PERNAH BISA MENYALA SAMA
+  // SEKALI, UNTUK SATU PUN PESAN WHATSAPP NYATA.
+  //
+  // kirimiChatController.js (dan Fonnte/TimelinesAI — arsitekturnya sengaja
+  // "identik") menyimpan pesan customer YANG SEDANG DIPROSES ke chat_messages
+  // SEBELUM memanggil generateWhatsAppAIReply() — yang di dalamnya barulah
+  // getConversationHistory() ini dipanggil. Akibatnya `messages[0]` (baris
+  // ter-DESC) SELALU pesan yang BARU SAJA disimpan itu sendiri, dengan
+  // createdAt ≈ sekarang. `idleMs = Date.now() - messages[0].createdAt` karena
+  // itu SELALU mendekati nol — TIDAK PEDULI seberapa lama jeda sesungguhnya
+  // sebelum pesan itu tiba. TTL 90 menit menjadi kode mati yang tidak pernah
+  // benar-benar mengevaluasi apa pun.
+  //
+  // DIBUKTIKAN LANGSUNG dari transkrip produksi nyata 28 Agu 2026: sesi id=1
+  // idle 97,6 menit (13:28:44 → 15:06:21, MELEBIHI TTL 90 menit) TAPI slot
+  // "Candramas/Sidoarjo" dari obrolan lama tetap bocor ke pertanyaan customer
+  // yang sama sekali baru ("Hello, Saya mau cari rumah di Madiun") — gerbang
+  // ketersediaan area (M152-M161) terus-menerus menjawab soal "Candramas"
+  // yang TIDAK PERNAH disebut customer di pesan manapun pada percakapan itu.
+  //
+  // PERBAIKAN: bila baris TERATAS dibuat dalam beberapa detik terakhir (jendela
+  // aman untuk "ini kemungkinan besar pesan yang baru saja disimpan pemanggil,
+  // bukan riwayat sungguhan"), jeda idle dihitung dari baris SEBELUMNYA —
+  // yaitu giliran nyata terakhir sebelum pesan yang sedang diproses ini tiba.
+  // Ini otomatis benar untuk KEDUA pola pemanggil: yang menyimpan pesan
+  // customer lebih dulu (WhatsApp) MAUPUN yang tidak (jalur lain yang mungkin
+  // memanggil fungsi ini murni untuk riwayat, tanpa pesan "baru" apa pun).
   if (messages.length) {
-    const idleMs = Date.now() - new Date(messages[0].createdAt).getTime();
+    const JUST_SAVED_WINDOW_MS = 10 * 1000;
+    const now = Date.now();
+    const newestAgeMs = now - new Date(messages[0].createdAt).getTime();
+    const refIdx = (newestAgeMs < JUST_SAVED_WINDOW_MS && messages.length > 1) ? 1 : 0;
+    const idleMs = now - new Date(messages[refIdx].createdAt).getTime();
     if (idleMs > _cookieTtlMs()) {
       console.log(`[SessionService] History session ${sessionId} dilupakan (idle ${Math.round(idleMs / 60000)} mnt > TTL ${Math.round(_cookieTtlMs() / 60000)} mnt) — mulai fresh.`);
       return [];

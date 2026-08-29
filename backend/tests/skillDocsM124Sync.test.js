@@ -42,5 +42,42 @@ const a = fs.readFileSync(path.join(ROOT, 'skills', 'claude_responds', 'docs', '
 const b = fs.readFileSync(path.join(ROOT, 'skills', 'chat_gpt_responds', 'docs', '04-qualification-flow.md'), 'utf8');
 ok('claude_responds & chat_gpt_responds doc 04 BYTE-IDENTICAL (setelah update M124)', a === b);
 
+/* ══════════════════════════════════════════════════════════════════════════
+ * M154 — doc 03 juga harus disinkronkan.
+ *
+ * ⚠️ Tes ini SEMULA hanya memeriksa doc 04, dan itu tidak cukup. doc
+ * 03-conversation-memory.md §"Reset" MASIH berdiri dengan kalimat pra-M124:
+ *
+ *     "**Reset** — changing **building type**, **transaction type**, or **city**
+ *      discards Q2–Q12 and restarts from Q1."
+ *
+ * Jadi selama ini doc 04 mengajarkan aturan granular yang BENAR sementara doc
+ * 03 — di folder yang sama, dimuat ke prompt yang sama — mengajarkan reset-total
+ * yang justru sudah diperbaiki di kode. LLM membaca keduanya. Menguji satu
+ * dokumen saja membuat perbaikan terlihat selesai padahal instruksi lawannya
+ * masih hidup di berkas sebelah (pelajaran prompt-outranks-skill-docs).
+ * ══════════════════════════════════════════════════════════════════════════ */
+FOLDERS.forEach((f) => {
+  const doc = fs.readFileSync(path.join(ROOT, 'skills', f, 'docs', '03-conversation-memory.md'), 'utf8');
+
+  // ⚠️ Sasarannya adalah kalimat PERINTAH-nya, bukan setiap kemunculan katanya:
+  // blok penjelasan yang baru sengaja MENGUTIP aturan lama ("dulu tertulis
+  // sebaliknya…") supaya kesalahannya tidak diam-diam kembali. Mencocokkan teks
+  // kutipan itu akan membuat tes gagal justru karena dokumennya sudah benar.
+  ok(`${f}: doc 03 TIDAK LAGI memerintahkan reset-total ("**Reset** — changing …")`,
+    !/\*\*Reset\*\* — changing \*\*building type\*\*/.test(doc));
+  ok(`${f}: doc 03 menegaskan perubahan mid-flow BUKAN wipe ke Q1`,
+    /GRANULAR, never a Q1 wipe/i.test(doc));
+  ok(`${f}: doc 03 memuat tabel tiga sumbu`,
+    /\|\s*\*\*City\*\*\s*\|/.test(doc) && /\|\s*\*\*Transaction\*\*\s*\|/.test(doc)
+    && /\|\s*\*\*Property type\*\*\s*\|/.test(doc));
+  ok(`${f}: doc 03 menyatakan durasi sewa & red flag bertahan saat ganti tipe`,
+    /\*\*Property type\*\*[^\n]*lease duration[^\n]*red flags/.test(doc));
+});
+
+const c3 = fs.readFileSync(path.join(ROOT, 'skills', 'claude_responds', 'docs', '03-conversation-memory.md'), 'utf8');
+const g3 = fs.readFileSync(path.join(ROOT, 'skills', 'chat_gpt_responds', 'docs', '03-conversation-memory.md'), 'utf8');
+ok('claude_responds & chat_gpt_responds doc 03 BYTE-IDENTICAL', c3 === g3);
+
 console.log(`\nRESULT: ${pass}/${total}`);
 process.exit(pass === total ? 0 : 1);

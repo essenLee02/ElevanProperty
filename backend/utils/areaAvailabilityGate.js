@@ -32,7 +32,7 @@
  */
 
 const {
-  checkAreaAvailability, fetchAreaListings, listAreasWithinBudget, resolveCityId,
+  checkAreaAvailability, checkCityAvailability, fetchAreaListings, listAreasWithinBudget, resolveCityId,
 } = require('../services/areaAvailabilityService');
 
 /** Customer bertanya "ada / apakah ada / punya ga" — pertanyaan KETERSEDIAAN. */
@@ -196,6 +196,35 @@ function composeAvailabilityReply(av, { area: areaRaw, typeLabel = 'properti', t
  * area MEMANG punya stok, hanya HARGANYA yang tidak cocok, jadi framingnya
  * soal budget, bukan soal ketersediaan area/transaksi.
  */
+/**
+ * Balasan saat kota yang disebut customer TIDAK ADA sama sekali di katalog
+ * agent — kelas kegagalan satu tingkat DI ATAS "area tidak ada" (M164).
+ *
+ * Directive pemilik proyek (29 Agu 2026), contoh eksplisit:
+ *   customer: "Hello.. Saya mau sewa rumah di Madiun"
+ *   AI (BENAR): "Mohon maaf, Kak. Saya punya listing di kota lain; seperti
+ *                Surabaya, Gresik dan Sidoarjo. Apakah berminat?"
+ * BUKAN bertanya "di area mana di Madiun?" — kota itu sendiri yang tidak ada,
+ * jadi tidak ada gunanya bertanya area di dalamnya sama sekali.
+ */
+function composeCityEmptyReply({ city, typeLabel = 'properti', transactionType, isId = true, alternativeCities = [] }) {
+  const names = (alternativeCities || []).map((c) => c.city);
+  if (!isId) {
+    return {
+      verdict: 'city-empty',
+      reply: names.length
+        ? `I'm sorry — I don't have any ${typeLabel} listings in ${city} yet. I do have listings in ${names.join(', ')}. Would you be interested in one of those instead?`
+        : `I'm sorry — I don't have any ${typeLabel} listings in ${city} yet, and I don't currently have stock in any other city either.`,
+    };
+  }
+  return {
+    verdict: 'city-empty',
+    reply: names.length
+      ? `Mohon maaf, Kak 🙏 Saya belum punya listing *${typeLabel}* di *${city}*. Saya punya listing di kota lain; seperti ${names.join(', ')}. Apakah berminat? 😊`
+      : `Mohon maaf, Kak 🙏 Saya belum punya listing *${typeLabel}* di *${city}*, dan saat ini belum ada stok di kota lain juga.`,
+  };
+}
+
 function composeBudgetEmptyReply({
   area: areaRaw, typeLabel = 'properti', transactionType, isId = true,
   requestedCount = null, budgetLabel, altAreas = [],
@@ -230,6 +259,30 @@ function composeBudgetEmptyReply({
  * Gerbang lengkap: cek katalog lalu susun balasan bila perlu.
  * Fail-open — error apa pun mengembalikan null supaya alur normal jalan terus.
  */
+/**
+ * Gerbang KOTA (M164) — dipanggil SEBELUM gerbang area, dan sebelum Q2c
+ * ("di area mana?") pernah ditanyakan. Menjawab null bila kota memang ada di
+ * katalog agent (pemanggil lanjut seperti biasa), atau bila cek gagal
+ * (fail-open — jangan sampai gerbang non-kritis mematikan seluruh alur).
+ *
+ * @returns {Promise<{reply:string, verdict:'city-empty'}|null>}
+ */
+async function tryCityAvailabilityAnswer({
+  userId, city, buildingType, transactionType, typeLabel = 'properti', isId = true,
+}) {
+  if (!userId || !city) return null;
+  try {
+    const chk = await checkCityAvailability({ userId, city, buildingType, transactionType });
+    if (!chk.ok || chk.available) return null;   // kota ADA, atau cek gagal → lanjut normal
+    return composeCityEmptyReply({
+      city, typeLabel, transactionType, isId, alternativeCities: chk.alternativeCities,
+    });
+  } catch (err) {
+    console.error('[CITY AVAILABILITY GATE ERROR]', err.message);
+    return null;
+  }
+}
+
 async function tryAreaAvailabilityAnswer({
   userId, city, area, buildingType, transactionType,
   typeLabel = 'properti', message = '', isId = true, persistedBudgetText = '',
@@ -344,6 +397,8 @@ async function tryAreaAvailabilityAnswer({
 }
 
 module.exports = {
+  tryCityAvailabilityAnswer,
+  composeCityEmptyReply,
   tryAreaAvailabilityAnswer,
   composeAvailabilityReply,
   composeBudgetEmptyReply,

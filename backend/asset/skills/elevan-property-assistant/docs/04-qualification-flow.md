@@ -341,10 +341,53 @@ ID: Oke, mau *[sewa/beli] [Tipe]*. 📍 Di kota atau area mana yang Anda pertimb
 EN: Got it, *[rent/buy] a [Type]*. 📍 Which city or area are you considering?
 ```
 
+### Q2 → Q2c gate — does the agent even sell in this city?
+
+> ⚠️ **Check this BEFORE asking Q2c — skipping it caused a real bug (M164, 29 Agu 2026).** A
+> customer asked for a house in Madiun; the agent had **zero** listings there. Q2c still fired,
+> asking *"area mana di Madiun? Misalnya Pahlawan Street Center, Kartoharjo…"* The customer asked
+> *"Anda punya listing dimana?"* four times and kept getting the same Madiun question — the city
+> itself was never real, so no area inside it could be either.
+
+**The rule:** once transaction type + property type + a city are known, **check your conversation
+context for a `KATALOG NYATA AGENT` (or equivalent real-catalog) block before asking Q2c.**
+
+```
+Block lists this city         → proceed to Q2c normally (§ below), using THAT city's
+                                 real areas from the block — never doc 13 §6 alone.
+Block does NOT list this city → do NOT ask Q2c. Apologise, name up to 3 cities the
+                                 block DOES show stock in, and ask if the customer is
+                                 interested in one of those instead.
+No catalog block available    → proceed to Q2c as normal (nothing to check against —
+                                 doc 13's curated table is the fallback it exists for).
+```
+
+```
+ID (kota tidak ada di katalog):
+Mohon maaf, Kak 🙏 Saya belum punya listing *[Tipe]* di *[Kota yang diminta]*. Saya
+punya listing di kota lain; seperti [kota A], [kota B], [kota C]. Apakah berminat? 😊
+```
+
+- **Never guess** from memory or from doc 13's curated table — that table is wording examples
+  for a *confirmed* city, never proof the agent sells there.
+- **Maximum 3 alternative cities**, even if the agent has more — pick the ones with the most
+  relevant stock (same transaction + type) if visible, otherwise the first/most prominent ones.
+- If the customer accepts ("Mau.", "Boleh", "Oke") without naming which city, ask **"Mau di kota
+  mana, Kak?"** — a plain follow-up, not a repeat of the same offer.
+- If the customer declines ("Tidak mau", "gak usah"), close warmly and stop — don't keep
+  re-offering or drift into another qualification question.
+- If the customer names one of the offered cities (or any other city), treat it exactly like a
+  fresh Q2 answer and re-run this same check for the new city before Q2c.
+
+This is the **same discipline** as §1 of doc 08 ("never invent a listing") — a city that isn't in
+the agent's real catalog is exactly as fictional as a listing that isn't. Both come from the same
+root cause: answering from what *sounds* plausible instead of what the data actually shows.
+
 ### Q2c — District / area inside the city
 
 **Fires when** a city is known and no district was named yet — for **every** city, not just the
 big ones. **Does not fire for** commercial types or hotel/kondotel booking. **Fires BEFORE Q2b.**
+**Fires only after the gate above confirms the agent has stock in this city.**
 
 > ⚠️ **This used to be limited to a short list of large cities, and that caused a real
 > production bug (M84).** A customer asked for a house in **Malang**; Malang was not on the

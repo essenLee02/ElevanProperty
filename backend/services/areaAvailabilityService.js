@@ -199,6 +199,84 @@ async function listAlternativeAreas({ userId, cityId, buildingType, transactionT
  *   verdict: 'available'|'wrong-transaction'|'area-empty'|'unknown'
  * }>}
  */
+
+/** Berapa kota alternatif ditawarkan bila kota yang diminta customer kosong (spec pemilik proyek). */
+const MAX_ALT_CITIES = 3;
+
+/**
+ * "Apakah agent ini punya listing SAMA SEKALI di kota ini?" — cek yang HARUS
+ * dilakukan SEBELUM Q2c (pertanyaan area) diajukan (M164).
+ *
+ * Kasus nyata yang membuktikan celah ini (29 Agu 2026): customer bilang "mau
+ * sewa rumah di Madiun" — Natasha TIDAK PUNYA satu pun listing di Madiun (kota
+ * itu bahkan tidak ada di baris manapun properties.city_id miliknya), tapi
+ * Q2c tetap bertanya "Di area atau kawasan mana di Madiun?" lengkap dengan
+ * empat nama kawasan Madiun dari daftar statis (locationLandmarks.js).
+ * Customer bertanya "Anda punya listing dimana?" empat kali berturut-turut
+ * dan tetap dibalas "Untuk Rumah sewa di Kartoharjo belum ada" — AI tidak
+ * pernah mengaku bahwa KOTA-nya sendiri yang tidak ada, bukan cuma areanya.
+ *
+ * M160 (sesi sebelumnya) memperbaiki kasus "kota BENAR, area SALAH" (Sidoarjo
+ * vs Buduran). Fungsi ini menutup kasus satu tingkat di atasnya: "kota itu
+ * sendiri sama sekali tidak ada di katalog agent."
+ *
+ * @param {string} userId agent pemilik katalog
+ * @param {string} city   nama kota yang disebut/diduga dari pesan customer
+ * @param {string} [buildingType]
+ * @param {string} [transactionType]
+ * @returns {Promise<{
+ *   ok: boolean,
+ *   available: boolean,
+ *   alternativeCities: Array<{city:string, count:number}>
+ * }>}
+ *   available:true → kota ini ADA di katalog, pemanggil lanjut ke gerbang area
+ *   seperti biasa. available:false → kota ini TIDAK ADA sama sekali; jangan
+ *   tanyakan area apa pun untuknya, tawarkan alternativeCities.
+ */
+async function checkCityAvailability({ userId, city, buildingType, transactionType }) {
+  const base = { ok: false, available: true, alternativeCities: [] };
+  if (!userId || !city) return base;
+
+  try {
+    // require lokal: agentCoverageService & areaAvailabilityService saling
+    // dipakai lintas modul — hindari siklus require di puncak file.
+    const { getAgentCoverage } = require('./agentCoverageService');
+    const coverage = await getAgentCoverage(userId);
+    if (!coverage || !coverage.cities || !coverage.cities.size) return { ...base, ok: true };
+
+    const wantCity = String(city).trim().toLowerCase();
+    const hasCity = [...coverage.cities.keys()].some((name) =>
+      name.toLowerCase() === wantCity || name.toLowerCase().includes(wantCity) || wantCity.includes(name.toLowerCase()));
+    if (hasCity) return { ...base, ok: true };
+
+    // Kota tidak ada — susun alternatif NYATA. Diprioritaskan kota yang punya
+    // stok untuk tipe+transaksi yang SAMA dengan permintaan customer (bila
+    // sudah diketahui); kalau tidak ada satu pun yang cocok tepat, jatuh ke
+    // total listing kota itu — lebih baik menyebut kota yang benar-benar ada
+    // daripada diam karena filter terlalu ketat.
+    const wantType = String(buildingType || '').toLowerCase();
+    const wantTx   = String(transactionType || '').toLowerCase();
+
+    const scored = [...coverage.cities.entries()].map(([name, entry]) => {
+      let matchCount = 0;
+      for (const t of entry.types.values()) {
+        if (wantType && String(t.buildingType).toLowerCase() !== wantType) continue;
+        if (wantTx && String(t.transactionType).toLowerCase() !== wantTx) continue;
+        matchCount += t.count;
+      }
+      return { city: name, count: matchCount || entry.total, exact: matchCount > 0 };
+    });
+
+    scored.sort((a, b) => (b.exact - a.exact) || (b.count - a.count));
+    const alternativeCities = scored.slice(0, MAX_ALT_CITIES).map((s) => ({ city: s.city, count: s.count }));
+
+    return { ok: true, available: false, alternativeCities };
+  } catch (err) {
+    console.error('[CITY AVAILABILITY ERROR]', err.message);
+    return base;   // fail-open: jangan sampai gerbang non-kritis mematikan balasan
+  }
+}
+
 async function checkAreaAvailability({ userId, city, area, buildingType, transactionType }) {
   const base = {
     ok: false, area: area || '', city: city || null,
@@ -524,6 +602,8 @@ async function findAreaInText({ userId, city, text }) {
 }
 
 module.exports = {
+  checkCityAvailability,
+  MAX_ALT_CITIES,
   checkAreaAvailability,
   fetchAreaListings,
   findAreaInText,

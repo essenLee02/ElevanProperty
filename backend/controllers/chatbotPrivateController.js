@@ -30,7 +30,11 @@ const { buildRecommendationContextForLLM,
         isNonResidentialUse,
         useCaseLabel,
         searchProperties,
-        detectLandmark }                      = require('../services/propertyRecommendationService');
+        detectLandmark,
+        detectLocation,
+        // M162 — detektor kanonik tipe/transaksi, dibagi dengan jalur LLM.
+        detectCanonicalType,
+        detectCanonicalTransaction }          = require('../services/propertyRecommendationService');
 const { getRumah123Listings,
         mapBuildingTypeToApify,
         mapTransactionTypeToApify,
@@ -63,7 +67,7 @@ const { HTTP } = require('../config/httpStatus');
 // TIDAK LAGI menginterview tanpa henti untuk area yang sudah jelas tidak ada
 // di katalog agent, dan TIDAK LAGI menyarankan area dari daftar statis
 // (locationLandmarks.js) yang bisa sama sekali tidak sesuai katalog nyata.
-const { tryAreaAvailabilityAnswer, customerAsksAvailability } = require('../utils/areaAvailabilityGate');
+const { tryCityAvailabilityAnswer, tryAreaAvailabilityAnswer, customerAsksAvailability } = require('../utils/areaAvailabilityGate');
 const { resolveCityAndArea } = require('../services/areaAvailabilityService');
 const { getAgentCoverage, getAgentAreaNames } = require('../services/agentCoverageService');
 
@@ -1346,34 +1350,30 @@ class ConversationQualifier {
     //   stripAmbiguousRumah       — "rumah makan/sakit/…" is not a house
     //   stripMovingFromPhrases    — "pindah dari apartemen" is the home being LEFT
     //   stripCommercialUsePhrases — "dipakai kantor"/"buat usaha" is a USE, not a type
-    const _typeOfP0 = (txt) => {
-      const w = stripCommercialUsePhrases(
-        stripMovingFromPhrases(stripAmbiguousRumah(stripNearPhrases((txt || '').toLowerCase())))
-      );
-      if (/\bvill?a\b/.test(w))                                              return 'villa';
-      if (/\bapartemen\b|\bapartment\b/.test(w))                             return 'apartment';
-      if (/\bmansion\b|\brumah mewah\b/.test(w))                            return 'mansion';
-      if (/\brumah\b(?!\s+(?:makan|sakit|tangga|ibadah|duka|produksi|tahanan|susun|potong|kos))|\bhouse\b|\bkontrakan\b/.test(w))                      return 'house';
-      if (/\bhotel\b|\bpenginapan\b/.test(w))                               return 'hotel';
-      if (/\bkondotel\b|\bcondo\b/.test(w))                                 return 'kondotel';
-      if (/\bkos\b|\bkost\b|\bkosan\b|\bindekos\b/.test(w))                return 'boarding_house';
-      if (/\bruko\b|\brukan\b/.test(w))                                     return 'shophouse';
-      if (/\bkantor\b/.test(w))                                             return 'office';
-      if (/\bgudang\b/.test(w))                                             return 'warehouse';
-      if (/\btoko\b|\bretail\b/.test(w))                                  return 'store';
-      if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(w))  return 'others';
-      return null;
-    };
+    /* ⭐ M162 — regex-nya DIHAPUS dari sini, bukan diperbaiki di tempat.
+     *
+     * Komentar di atas sudah menyatakan salinan ini "SAME as the twin in
+     * aiPromptBuilderService … Never re-implement this regex separately".
+     * Kenyataannya sudah TIDAK sama saat diperiksa (M162):
+     *   • tipe   : kehilangan ngekos/ngekost/ngekosan/indekost/kostan,
+     *              kehilangan kios/warung, dan `kondotel` diperiksa SESUDAH
+     *              `hotel` (urutan spesifik-dulu yang sengaja dipakai kembarnya);
+     *   • transaksi: kehilangan kos/kost/kosan/ngekos/indekos DAN seluruh frame
+     *              booking (booking/book/pesan/reservasi).
+     * Akibatnya "mau ngekos di Depok" terbaca benar di jalur LLM tapi TIDAK
+     * terbaca sama sekali di Private Agent — dua jalur, dua kesimpulan, dari
+     * satu pesan customer yang sama.
+     *
+     * Sekarang keduanya memanggil satu fungsi yang sama. ⛔ Jangan menulis
+     * ulang regexnya di sini lagi. */
+    const _typeOfP0 = detectCanonicalType;
     // stripInvestmentIntentPhrases — a BUYER's plan ("buat investasi, mau
     // disewakan lagi") is describing what they'll do with it after buying, not
     // flipping sale→rent. Indonesian causative "disewakan"/"sewakan" ("rent it
     // out") is intent, not "sewa" ("I rent").
-    const _txOfP0 = (txt) => {
-      const w = stripInvestmentIntentPhrases((txt || '').toLowerCase());
-      if (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|rent|rental|lease)\b/.test(w)) return 'rent';
-      if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase)\b/.test(w))                     return 'sale';
-      return null;
-    };
+    // M162 — lihat catatan di _typeOfP0 di atas. Satu salinan, di
+    // propertyRecommendationService.detectCanonicalTransaction.
+    const _txOfP0 = detectCanonicalTransaction;
 
     // ── Boundary A: first customer message after the last summary brief ──────
     const lastSumIdxP0 = history.reduce(
@@ -4642,26 +4642,46 @@ class ChatbotPrivateService {
       }
     }
 
-    /* ── M160: customer MENOLAK tawaran area alternatif → tutup dengan sopan ──
-     * Case script pemilik proyek (28 Agu 2026), langkah 7-8: setelah gerbang
-     * menawarkan area lain dan customer menjawab "Tidak mau, Kak" — AI wajib
-     * mengakhiri obrolan dengan sopan, BUKAN mengulang tawaran yang sama atau
-     * melanjutkan interview Q-flow seolah tidak terjadi apa-apa.
+    /* ── M160/M164: customer MENJAWAB tawaran gerbang (area ATAU kota) ────────
+     * Case script pemilik proyek (28-29 Agu 2026): setelah gerbang menawarkan
+     * alternatif dan customer TOLAK ("Tidak mau, Kak") → tutup obrolan dengan
+     * sopan. Setelah gerbang KOTA menawarkan kota lain dan customer SETUJU
+     * ("Mau.") → lanjutkan bertanya "Mau di kota mana?", BUKAN mengulang
+     * tawaran kota yang sama persis (bug nyata 29 Agu 2026: "Mau." dibalas
+     * ulang "Saya punya listing di kota lain... Surabaya, Sidoarjo, Gresik"
+     * — identik dengan balasan sebelumnya, seolah jawaban customer diabaikan).
      *
-     * Deteksi memakai frasa penutup gerbang sendiri ("Mau saya carikan di ...")
-     * sebagai penanda "pesan AI terakhir adalah tawaran gerbang ini" — jadi
-     * penolakan HANYA dianggap menutup obrolan bila memang menjawab tawaran
-     * gerbang, bukan menolak hal lain yang sedang dibahas.
+     * Deteksi memakai frasa penutup gerbang sendiri sebagai penanda "pesan AI
+     * terakhir adalah tawaran gerbang ini" — supaya tolak/setuju HANYA
+     * dianggap menjawab tawaran gerbang, bukan hal lain yang sedang dibahas.
      */
     {
       const lastAi = [...history].reverse().find((h) => h.role === 'ai' || h.role === 'assistant');
-      const lastAiOfferedAlt = lastAi && /mau saya carikan di/i.test(String(lastAi.message || ''));
+      const lastAiMsg = String(lastAi?.message || '');
+      const lastAiOfferedAreaAlt = /mau saya carikan di/i.test(lastAiMsg);
+      const lastAiOfferedCityAlt = /saya punya listing di kota lain/i.test(lastAiMsg);
       const declineRe = /\b(tidak|tdk|nggak|gak|ga|enggak)\s*(mau|jadi|usah|perlu)\b|\bbatal\b/i;
-      if (lastAiOfferedAlt && declineRe.test(userMessage) && !detectLandmark(userMessage)) {
+      const acceptRe  = /\b(mau|ya|iya|yap|yoi|ok|oke|okay|boleh|silakan|silahkan|tentu|sip|gas|lanjut)\b/i;
+
+      if ((lastAiOfferedAreaAlt || lastAiOfferedCityAlt) && declineRe.test(userMessage) && !detectLandmark(userMessage)) {
         const closing = lang === 'id'
           ? `Baik, Kak. Terima kasih sudah menghubungi saya 🙏 Kalau nanti ada kebutuhan properti lagi, jangan sungkan untuk chat saya kembali ya 😊`
           : `Understood, thank you for reaching out 🙏 Whenever you need help with a property again, feel free to message me anytime 😊`;
         return this.#wrap(closing, { skillInfo, filters, provider: 'area_availability_gate_closing' });
+      }
+
+      // ⚠️ HANYA untuk tawaran KOTA — tawaran area SUDAH menampilkan nama-nama
+      // area sebagai pilihan langsung (customer tinggal menyebutnya), jadi
+      // "setuju tanpa menyebut pilihan" tidak butuh follow-up terpisah di sana.
+      // detectLocation() (bukan resolveCityAndArea, yang mengharapkan kandidat
+      // yang SUDAH diekstrak, bukan kalimat mentah) mengecek apakah customer
+      // SEKALIAN menyebut nama kota di pesan yang sama ("Mau, Surabaya") —
+      // kalau ya, biarkan gerbang kota di atas yang menangani kota barunya,
+      // jangan dobel dengan follow-up generik ini.
+      if (lastAiOfferedCityAlt && !declineRe.test(userMessage) && acceptRe.test(userMessage)
+          && !detectLandmark(userMessage) && !detectLocation(userMessage)) {
+        const followUp = lang === 'id' ? `Mau di kota mana, Kak? 🏙️` : `Which city would you like, Kak? 🏙️`;
+        return this.#wrap(followUp, { skillInfo, filters, provider: 'city_availability_gate_followup' });
       }
     }
 
@@ -4711,6 +4731,27 @@ class ChatbotPrivateService {
         const txDb  = /rent|sewa/i.test(txRaw) ? 'Rent' : (/sale|beli|jual/i.test(txRaw) ? 'Sale' : '');
         const typeRaw = qs.buildingType || filters?.buildingType || '';
         const typeDb  = typeRaw ? String(typeRaw).charAt(0).toUpperCase() + String(typeRaw).slice(1).toLowerCase() : '';
+
+        /* ── M164: KOTA dicek SEBELUM area — mencegah Q2c bertanya area di
+         * kota yang agent ini bahkan tidak punya. Transkrip nyata 29 Agu 2026:
+         * customer bilang "sewa rumah di Madiun" (Natasha NOL listing di
+         * Madiun sama sekali) — Q2c tetap menjalankan daftar kawasan statis
+         * untuk Madiun (locationLandmarks.js) seolah-olah kotanya valid.
+         * Customer bertanya "Anda punya listing dimana?" empat kali dan tetap
+         * dibalas soal area yang tidak pernah ia sebut. `availCity` di sini
+         * SUDAH tervalidasi sebagai nama kota nyata (resolveCityAndArea hanya
+         * mengisi city bila cocok baris tabel `cities`) — cukup aman dicek
+         * langsung ke katalog agent tanpa menunggu area disebut.
+         */
+        if (availCity && (txDb || typeDb)) {
+          const cityHit = await tryCityAvailabilityAnswer({
+            userId: agentUserId, city: availCity,
+            buildingType: typeDb || undefined, transactionType: txDb || undefined,
+            typeLabel: typeRaw ? PropertyFormatter.humanBuildingType(typeRaw, lang) : 'properti',
+            isId: lang === 'id',
+          });
+          if (cityHit) return this.#wrap(cityHit.reply, { skillInfo, filters, provider: 'city_availability_gate' });
+        }
 
         if (availArea && txDb) {
           const hit = await tryAreaAvailabilityAnswer({

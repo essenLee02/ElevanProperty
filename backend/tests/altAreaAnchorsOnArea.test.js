@@ -53,11 +53,21 @@ console.log('── Group 1: Q7 anchors on the AREA, not the city ──');
 
 console.log('\n── Group 2: fallback when no area is known ──');
 {
-  // Without a district, Q2c fires first to obtain the area — so Q7 normally has an
-  // anchor by the time it runs. Assert that Q2c (area question) comes before Q7.
+  /* ⚠️ DIPERBARUI M162. Versi lama menuntut Q2c ("di area mana?") walau
+   * READY_FOR_Q7 SUDAH memuat anchorPoint 'dekat sekolah, cafe'. Itu
+   * mengabadikan bug: slot minimum ke-4 menurut utils/listingReadiness.js
+   * adalah LOKASI SPESIFIK — district ATAU patokan ATAU landmark — jadi
+   * customer yang sudah menyebut patokan TIDAK boleh ditanya areanya lagi
+   * (Private Agent sudah menggerbangi Q2c dengan !hasAnchorPoint sejak lama).
+   * Yang benar diuji di sini: tanpa nama area, Q7 jatuh ke jangkar KOTA. */
   const n = findNextQuestion({ ...READY_FOR_Q7, district: null });
-  ok('asks for the AREA (Q2c) before Q7', n && n.q === 'Q2c', `got ${n && n.q}`);
-  ok('Q2c keeps the city as the container', /di \*Surabaya\*/i.test(n.hint || ''), n && n.hint);
+  ok('patokan sudah ada → TIDAK menanyakan area lagi, lanjut Q7', n && n.q === 'Q7', `got ${n && n.q}`);
+  ok('Q7 jatuh ke jangkar KOTA saat area belum diketahui', /Selain \*Surabaya\*/i.test(n.hint || ''), n && n.hint);
+
+  // Tanpa patokan MAUPUN area → slot ke-4 benar-benar kosong → Q2c wajib muncul.
+  const n2 = findNextQuestion({ ...READY_FOR_Q7, district: null, anchorPoint: null });
+  ok('tanpa area DAN tanpa patokan → Q2c', n2 && n2.q === 'Q2c', `got ${n2 && n2.q}`);
+  ok('Q2c keeps the city as the container', /di \*Surabaya\*/i.test(n2.hint || ''), n2 && n2.hint);
 }
 
 console.log('\n── Group 3: refusal is recorded against the AREA ──');

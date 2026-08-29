@@ -164,7 +164,16 @@ Match a customer mention to the nearest category. Named examples are Surabaya-we
 
 ## 6. Per-City Landmark Examples (for Q2c & Q6)
 
-Use 3–4 of these as examples so the question feels local, not generic.
+> ⚠️ **Wording examples for a city already confirmed to have stock — never proof the agent
+> operates there (M164).** A real bug: a customer asked for a house in Madiun (zero listings
+> there); Q2c still fired using this table's Madiun row as if the city were real. Madiun's
+> landmarks are real — whether *this agent* sells there is a different question, and only the
+> `KATALOG NYATA AGENT` block answers it. **Run the Q2 → Q2c gate in `04-qualification-flow.md`
+> first** — if that block doesn't list the city, don't open this table for it.
+
+Use 3–4 of these as examples so the question feels local, not generic — for a city **confirmed**
+above to have stock. Prefer real area names from the catalog block itself when it lists them;
+fall back to this table only when the block doesn't break the city down by area.
 
 | Kota | Landmark / kawasan |
 |---|---|

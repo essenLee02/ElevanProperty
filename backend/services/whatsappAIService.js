@@ -48,7 +48,8 @@ const { evaluateListingReadiness,
         buildListingReadinessContext }              = require('../utils/listingReadiness');
 const { getAgentIdentity,
         buildAgentIdentityContext }                 = require('./agentIdentityService');
-const { tryAreaAvailabilityAnswer,
+const { tryCityAvailabilityAnswer,
+        tryAreaAvailabilityAnswer,
         customerAsksAvailability }                  = require('../utils/areaAvailabilityGate');
 const { resolveCityAndArea, findAreaInText }        = require('./areaAvailabilityService');
 
@@ -187,16 +188,35 @@ function agentSignature(agentName, isId) {
  * Check apakah customer sudah memberikan 4 info minimum:
  *   1) Tipe properti   (buildingType)
  *   2) Tipe transaksi  (transactionType)
- *   3) Lokasi          (location)
- *   4) Range harga     (budget)
+ *   3) Kota            (location)
+ *   4) LOKASI SPESIFIK (district / area / landmark)
+ *
+ * ⚠️ M162 — SLOT KE-4 BUKAN LAGI BUDGET.
+ * Directive pemilik proyek (M134, 24 Agu 2026) sudah menetapkan slot ke-4 =
+ * lokasi spesifik, dan `utils/listingReadiness.js` menuliskannya sejak saat itu
+ * — docstring-nya bahkan menyebut "Sebelumnya buildQualifyReply() mensyaratkan
+ * type+tx+kota+BUDGET". Tapi FUNGSI INI tidak pernah ikut diubah, jadi dua
+ * komponen backend berbeda pendapat tentang slot yang sama:
+ *
+ *   • listingReadiness  → "Masih kurang: area/kawasan atau patokan lokasi."
+ *   • buildQualifyReply → "Untuk beli Rumah di Surabaya, kisaran harga berapa?"
+ *
+ * Dan yang MENANG adalah fungsi ini, karena ia `return` LEBIH DULU — sebelum
+ * blok readiness sempat sampai ke prompt. Hasilnya di produksi (profil 'local'
+ * / Private Agent, catalog mode ON): customer yang sudah menyebut tipe +
+ * transaksi + kota + area tetap ditanya BUDGET, padahal directive-nya eksplisit
+ * "budget BUKAN syarat menampilkan listing; customer lazim menyesuaikan harga
+ * SETELAH melihat pilihan."
+ *
+ * Budget TIDAK dihapus dari alur — ia tetap ditanya oleh Q3 di
+ * findNextQuestion()/ConversationQualifier, dengan teknik dua-harga-kontras
+ * yang memang dirancang untuk itu. Yang dihapus hanyalah perannya sebagai
+ * PALANG PINTU sebelum listing boleh tampil.
  *
  * Jika ada yang kurang → kembalikan pertanyaan yang sopan & informatif.
  * Jika semua lengkap   → kembalikan null (lanjut ke AI provider).
  *
- * Pertanyaan bersifat KUMULATIF — satu pesan bisa menanyakan ≥ 1 info
- * jika banyak yang kurang (untuk efisiensi konversasi).
- *
- * @param {object} filters   - Hasil extractPropertyFilters()
+ * @param {object} filters   - Hasil extractPropertyFilters() (+ enrichment M162)
  * @param {string} message   - Pesan customer terbaru
  * @param {string} agentName - Nama agent (untuk tanda tangan)
  * @param {string} contextSource
@@ -204,12 +224,16 @@ function agentSignature(agentName, isId) {
  * @returns {{ reply, provider, contextSource } | null}
  */
 function buildQualifyReply(filters, message, agentName, contextSource, history = [], catalogMode = null) {
-  const { buildingType: type, transactionType: tx, location: loc, budget: bud } = filters;
+  const { buildingType: type, transactionType: tx, location: loc } = filters;
+  // Slot ke-4. Dibaca lewat evaluateListingReadiness() — SATU definisi, dipakai
+  // gerbang ini DAN blok fakta di prompt, supaya keduanya tidak bisa menyimpang
+  // lagi seperti sebelum M162.
+  const spec = evaluateListingReadiness(filters).have.specificLocation;
   // Nama perusahaan dari APP_NAME env (bisa diubah di .env). JANGAN hardcode.
   const appName = process.env.APP_NAME || 'Elevan Property';
 
   // Semua 4 info sudah ada → proceed to AI
-  if (type && tx && loc && bud) return null;
+  if (type && tx && loc && spec) return null;
 
   // ── RESPOND_CATALOG_RUN=OFF (Q1–Q12 Summary Mode) ─────────────────────────
   //
@@ -237,7 +261,7 @@ function buildQualifyReply(filters, message, agentName, contextSource, history =
   const sig = agentSignature(agentName, id);
 
   // Hitung berapa yang sudah diketahui
-  const known   = [type, tx, loc, bud].filter(Boolean).length;
+  const known   = [type, tx, loc, spec].filter(Boolean).length;
   const txWord  = tx === 'rent'
     ? (id ? 'sewa'  : 'rent')
     : (tx === 'sale' || tx === 'purchase')
@@ -249,17 +273,22 @@ function buildQualifyReply(filters, message, agentName, contextSource, history =
   let question;
 
   // ── KASUS 1: Belum ada info sama sekali / hanya type yang ada ─────────────
-  if (!tx && !loc && !bud) {
+  // ⚠️ M162: bullet ke-4 dulu berbunyi "Kisaran harga yang Anda siapkan?".
+  // Itu meminta customer menyiapkan angka SEBELUM ia melihat satu pun listing —
+  // urutan yang dilarang directive M134 dan yang paling sering membuat customer
+  // berhenti membalas. Diganti dengan lokasi spesifik, slot yang memang
+  // dibutuhkan untuk MENCARI. Budget menyusul lewat Q3 (dua harga kontras).
+  if (!tx && !loc && !spec) {
     if (!type) {
       // Benar-benar kosong
       question = id
-        ? `Halo! 😊 Terima kasih sudah menghubungi *${appName}*.\n\nSaya dengan senang hati akan membantu Anda menemukan properti yang tepat. Sebelum saya carikan pilihan terbaik, boleh saya tanyakan beberapa hal?\n\n1️⃣ Apakah Anda sedang cari untuk *sewa* atau *beli*?\n2️⃣ Tipe properti apa yang Anda inginkan?\n   _Rumah, Apartemen, Villa, Kos-kosan, Ruko, Kantor, Gudang, dll_ 🏡\n3️⃣ Di *kota* mana? _(Contoh: Surabaya, Malang, Bali)_\n4️⃣ Kisaran harga yang Anda siapkan?\n\nSemakin lengkap infonya, semakin tepat rekomendasi yang bisa saya berikan 🙏`
-        : `Hello! 😊 Thank you for reaching out to *${appName}*.\n\nI'd love to help you find the perfect property. Before I start searching, may I ask a few things?\n\n1️⃣ Are you looking to *rent* or *buy*?\n2️⃣ What type of property do you have in mind?\n   _House, Apartment, Villa, Boarding House, Shophouse, Office, Warehouse, etc._ 🏡\n3️⃣ Which city or area?\n4️⃣ What's your price range?\n\nThe more details you share, the better I can match your needs 🙏`;
+        ? `Halo! 😊 Terima kasih sudah menghubungi *${appName}*.\n\nSaya dengan senang hati akan membantu Anda menemukan properti yang tepat. Sebelum saya carikan pilihan terbaik, boleh saya tanyakan beberapa hal?\n\n1️⃣ Apakah Anda sedang cari untuk *sewa* atau *beli*?\n2️⃣ Tipe properti apa yang Anda inginkan?\n   _Rumah, Apartemen, Villa, Kos-kosan, Ruko, Kantor, Gudang, dll_ 🏡\n3️⃣ Di *kota* mana? _(Contoh: Surabaya, Malang, Bali)_\n4️⃣ Area/kawasan atau patokan lokasinya di mana? _(Contoh: Pakuwon, dekat PTC)_\n\nSemakin lengkap infonya, semakin tepat rekomendasi yang bisa saya berikan 🙏`
+        : `Hello! 😊 Thank you for reaching out to *${appName}*.\n\nI'd love to help you find the perfect property. Before I start searching, may I ask a few things?\n\n1️⃣ Are you looking to *rent* or *buy*?\n2️⃣ What type of property do you have in mind?\n   _House, Apartment, Villa, Boarding House, Shophouse, Office, Warehouse, etc._ 🏡\n3️⃣ Which city?\n4️⃣ Which area or nearby landmark?\n\nThe more details you share, the better I can match your needs 🙏`;
     } else {
       // Type diketahui, sisanya kosong
       question = id
-        ? `Terima kasih! 😊 Untuk *${typeLbl}* yang Anda cari, saya butuh beberapa informasi tambahan:\n\n1️⃣ Apakah rencananya untuk *sewa* atau *beli*?\n2️⃣ Di *kota* mana? _(Contoh: Surabaya, Malang, Bali)_\n3️⃣ Kisaran harga yang diinginkan? _(Contoh: 5-10 juta/bulan, atau di bawah 1 miliar)_\n\nSilakan ceritakan kebutuhannya, saya siap bantu! 🏡`
-        : `Thank you! 😊 For the *${typeLbl}* you're looking for, I need a bit more information:\n\n1️⃣ Are you planning to *rent* or *buy*?\n2️⃣ Which city or area?\n3️⃣ What's your price range? _(e.g., 5–10 million/month, or under 1 billion)_\n\nPlease share the details and I'll find the best match! 🏡`;
+        ? `Terima kasih! 😊 Untuk *${typeLbl}* yang Anda cari, saya butuh beberapa informasi tambahan:\n\n1️⃣ Apakah rencananya untuk *sewa* atau *beli*?\n2️⃣ Di *kota* mana? _(Contoh: Surabaya, Malang, Bali)_\n3️⃣ Area/kawasan atau patokan lokasinya? _(Contoh: Pakuwon, dekat PTC)_\n\nSilakan ceritakan kebutuhannya, saya siap bantu! 🏡`
+        : `Thank you! 😊 For the *${typeLbl}* you're looking for, I need a bit more information:\n\n1️⃣ Are you planning to *rent* or *buy*?\n2️⃣ Which city?\n3️⃣ Which area or nearby landmark?\n\nPlease share the details and I'll find the best match! 🏡`;
     }
   }
 
@@ -288,15 +317,15 @@ function buildQualifyReply(filters, message, agentName, contextSource, history =
       : `Great! Looking to *${txWord} a ${typeLbl}*. 📍\n\nWhich *city*?\n_(e.g., Surabaya, Malang, Bali, South Jakarta)_`;
   }
 
-  // ── KASUS 5: Hanya budget yang belum diketahui ────────────────────────────
-  // M127: satu pertanyaan, tanpa basa-basi "Hampir lengkap!" dan tanpa paragraf
-  // tambahan "kalau belum ada angka pasti..." — sama seperti simplifikasi
-  // KASUS 2/3/4 (M125). Petunjuk "terjangkau/menengah ke atas" tetap dikenali
-  // oleh detectBudget() bila customer menjawab begitu tanpa perlu dipancing.
-  else if (!bud) {
+  // ── KASUS 5: Hanya LOKASI SPESIFIK yang belum diketahui ───────────────────
+  // ⚠️ M162: cabang ini DULU menanyakan BUDGET. Lihat docstring fungsi — budget
+  // bukan lagi palang pintu sebelum listing boleh tampil; ia ditanya belakangan
+  // lewat Q3 (dua harga kontras) oleh findNextQuestion()/ConversationQualifier.
+  // M127 tetap berlaku: SATU pertanyaan, tanpa basa-basi "Hampir lengkap!".
+  else if (!spec) {
     question = id
-      ? `Untuk *${txWord} ${typeLbl} di ${loc}*, kisaran harga berapa yang Anda inginkan? 💰\n_(Contoh: 3-7 juta/bulan, di bawah 500 juta, atau 1-2 miliar)_`
-      : `For *${txWord}ing a ${typeLbl} in ${loc}*, what's your price range? 💰\n_(e.g., 3–7 million/month, under 500 million, or 1–2 billion)_`;
+      ? `Baik, *${txWord} ${typeLbl} di ${loc}*. 📍\n\nDi area/kawasan mana, atau ada patokan lokasi tertentu?\n_(Contoh: area Pakuwon, dekat PTC, dekat kampus)_`
+      : `Great — *${txWord} a ${typeLbl} in ${loc}*. 📍\n\nWhich area or neighbourhood, or is there a nearby landmark?\n_(e.g., Pakuwon area, near PTC, near campus)_`;
   }
 
   if (!question) return null;
@@ -408,6 +437,46 @@ async function _generateWhatsAppAIReplyCore(params) {
     filters = extractPropertyFilters(message, history);
   } catch (err) {
     console.warn('[WhatsAppAI] Filter extraction failed:', err.message);
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     ★ M162 — SLOT LOKASI SPESIFIK DISATUKAN DENGAN RESOLVER KANONIK ★
+     ══════════════════════════════════════════════════════════════════════════
+     `utils/listingReadiness.evaluateListingReadiness()` membaca
+     `filters.district || filters.area || filters.landmark`. Masalahnya:
+     extractPropertyFilters() TIDAK PERNAH mengisi `district` MAUPUN `area` —
+     dua dari tiga field itu selalu `undefined`. Satu-satunya yang terisi,
+     `landmark`, berasal dari detectLandmark() yang mencocokkan ke tabel
+     `locations`; nama kawasan yang diketik customer tapi belum ada di master
+     data (atau cache yang belum hangat di proses baru) menghasilkan '' .
+
+     Akibatnya, untuk transkrip "Mau cari rumah di Citraland Surabaya":
+       • extractQualificationState → district = 'Citraland'  → blok state
+         menulis "✅ Area [Q2c]: Citraland".
+       • evaluateListingReadiness  → specificLocation = ''    → blok readiness
+         menulis "SYARAT MINIMUM LISTING: BELUM TERPENUHI. Masih kurang:
+         area/kawasan atau patokan lokasi. … Tanyakan yang kurang, SATU per
+         pesan."
+     Kedua blok masuk ke SATU prompt. Yang berbentuk PERINTAH menang, dan AI
+     menanyakan ulang area yang baru saja disebut customer. Ini persis kelas
+     bug yang M154 hilangkan untuk kota/transaksi/tipe — field lokasi spesifik
+     saja yang belum ikut disatukan.
+
+     Perbaikannya BUKAN menyalin regex area ke ekstraktor kedua (pelajaran
+     ngekos: satu regex di 5 tempat = 5 perbaikan), melainkan MEMINJAM hasil
+     resolver kanonik yang memang sudah dihitung di pipeline ini.
+     Fail-open: kegagalan apa pun → filters dibiarkan apa adanya.
+  ══════════════════════════════════════════════════════════════════════════ */
+  let qualState = {};
+  try {
+    // require lokal — alasan sama dengan call-site M152 di bawah: menariknya ke
+    // puncak file berisiko siklus require yang muncul sebagai export undefined.
+    const { extractQualificationState } = require('./aiPromptBuilderService');
+    qualState = extractQualificationState(history, message) || {};
+    if (!filters.district && qualState.district)    filters.district = qualState.district;
+    if (!filters.landmark && qualState.anchorPoint) filters.landmark = qualState.anchorPoint;
+  } catch (qsErr) {
+    console.warn('[WhatsAppAI] enrich lokasi spesifik gagal (fail-open):', qsErr.message);
   }
 
   // ── STICKY ANCHORS (anti-reset) ──────────────────────────────────────────
@@ -553,8 +622,10 @@ async function _generateWhatsAppAIReplyCore(params) {
     // lain pipeline dan me-require balik modul-modul di sekitarnya. Menariknya
     // ke atas berisiko siklus require yang muncul sebagai export undefined saat
     // runtime — jauh lebih mahal didiagnosis daripada satu require di jalur ini.
-    const { extractQualificationState } = require('./aiPromptBuilderService');
-    const qs = extractQualificationState(history, message) || {};
+    // M162: dihitung SEKALI di Step 3 (qualState) — jangan panggil ulang
+    // extractQualificationState() di sini. Dua pemanggilan atas input yang sama
+    // hanya membuang waktu DAN membuka celah dua salinan state yang berbeda.
+    const qs = qualState || {};
     // Nama slot hulu tidak bisa dipercaya (qs.city pernah berisi 'pakuwon'),
     // jadi kota vs area diputuskan dari tabel `cities`, bukan dari nama slot.
     // `detectLandmark(message)` ikut jadi kandidat — TANPA ini pesan pembuka
@@ -621,6 +692,40 @@ async function _generateWhatsAppAIReplyCore(params) {
     }
     // properties.building_type memakai Kapital ('Apartment'), filters lowercase.
     const typeDb  = typeRaw ? String(typeRaw).charAt(0).toUpperCase() + String(typeRaw).slice(1).toLowerCase() : '';
+
+    /* ── ★ M164: GERBANG KOTA — dicek SEBELUM gerbang area ★ ─────────────────
+     * Transkrip produksi 29 Agu 2026: customer bilang "sewa rumah di Madiun"
+     * — Natasha NOL listing di Madiun sama sekali (kotanya sendiri tidak ada
+     * di katalog, bukan cuma areanya). Tanpa gerbang ini, alur lanjut ke Q2c
+     * ("di area mana di Madiun?") memakai daftar kawasan STATIS
+     * (locationLandmarks.js) seolah kotanya valid — customer bertanya "Anda
+     * punya listing dimana?" empat kali dan tetap dibalas soal area yang
+     * tidak pernah ia sebut.
+     *
+     * `realCity` di sini SUDAH tervalidasi sebagai nama kota nyata
+     * (resolveCityAndArea hanya mengisi city bila cocok baris tabel `cities`),
+     * jadi aman dicek langsung ke katalog agent tanpa menunggu area disebut.
+     */
+    if (realCity && (txDb || typeDb)) {
+      const cityHit = await tryCityAvailabilityAnswer({
+        userId: agentUserId, city: realCity,
+        buildingType: typeDb || undefined, transactionType: txDb || undefined,
+        typeLabel: typeRaw ? humanBuildingType(String(typeRaw).toLowerCase()) : 'properti',
+        isId: isIdMsg,
+      });
+      if (cityHit && backendMayCompose) {
+        console.log(`[WhatsAppAI] 🏙️ Gerbang kota: "${realCity}" tidak ada di katalog agent — dijawab dengan kota alternatif nyata.`);
+        return {
+          reply      : cityHit.reply,
+          replyParts : [cityHit.reply],
+          provider   : 'city_availability_gate',
+          contextSource,
+        };
+      }
+      if (cityHit && !backendMayCompose) {
+        gateFacts.push(`KETERSEDIAAN KOTA (fakta katalog agent):\n${cityHit.reply}`);
+      }
+    }
 
     /* ── KAPAN GERBANG BOLEH BICARA (M155) ──────────────────────────────────
      * Dua pemicu, bukan satu:
@@ -702,11 +807,14 @@ async function _generateWhatsAppAIReplyCore(params) {
 
   if (qualResponse && guardProfile === 'local') {
     console.log('[WhatsAppAI] 🛑 Qualification gate triggered — asking for missing info:', {
-      hasType  : !!filters.buildingType,
-      hasTx    : !!filters.transactionType,
-      hasLoc   : !!filters.location,
-      hasBudget: !!filters.budget,
-      profile  : guardProfile,
+      hasType    : !!filters.buildingType,
+      hasTx      : !!filters.transactionType,
+      hasCity    : !!filters.location,
+      // M162: slot ke-4 = lokasi spesifik, BUKAN budget. Budget tetap dicatat
+      // untuk diagnosis, tapi tidak lagi menentukan gerbang ini.
+      hasSpecific: !!(filters.district || filters.area || filters.landmark),
+      budgetKnown: !!filters.budget,
+      profile    : guardProfile,
     });
     return qualResponse;
   }

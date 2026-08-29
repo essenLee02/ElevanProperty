@@ -1,7 +1,14 @@
 ================================================================================
-  ELEVAN PROPERTY — COMPREHENSIVE PROJECT CONTEXT (V13)
+  ELEVAN PROPERTY — COMPREHENSIVE PROJECT CONTEXT (V14)
   Dibuat  : 15 Juni 2026
-  Update  : 28 Agustus 2026 (M140–M158: ⭐⭐⭐ profil guardrail kini diputuskan
+  Update  : 29 Agustus 2026 (M159–M164: gerbang KOTA sebelum gerbang area —
+            "sewa rumah di Madiun" tidak lagi dibalas daftar kawasan statis
+            untuk kota yang agent-nya sendiri nol listing; TTL sesi 90 menit
+            yang TIDAK PERNAH bisa menyala diperbaiki [M162]; fasilitas ikut
+            ditinjau ulang saat transaksi berubah sendirian [M163]; 3 istilah
+            sertifikat yang hilang dari kamus ditambahkan [M159]; lihat
+            §PERUBAHAN BESAR V13→V14. Sebelumnya, 28 Agustus 2026 (M140–M158:
+            ⭐⭐⭐ profil guardrail kini diputuskan
             SEBELUM gerbang apa pun berjalan — backend tidak lagi diam-diam
             menyusun balasan di profil 'platform'; fakta gerbang (istilah
             legal, ketersediaan area) disuntik sebagai konteks prompt, bukan
@@ -3490,10 +3497,165 @@ PRINSIP DEBUG
   7. OPENROUTER_API_KEY pernah dikirim dalam bentuk plaintext di chat
      (28 Agu 2026) — WAJIB dirotasi di openrouter.ai.
 
+================================================================================
+  >> PERUBAHAN BESAR V13 → V14 (29 Agustus 2026) <<
+  M159-M164 — gerbang KOTA (bukan cuma area), TTL sesi yang ternyata mati
+  total, dan fasilitas yang bocor lintas transaksi.
+================================================================================
+
+  --------------------------------------------------------------------------
+  M164 -- GERBANG KOTA: cek SEBELUM Q2c, bukan cuma di dalam kota yang benar
+  --------------------------------------------------------------------------
+  Transkrip nyata 29 Agu 2026: "Hello.. Saya mau sewa rumah di Madiun."
+  Natasha NOL listing di Madiun -- kotanya sendiri tidak ada di satu pun
+  baris properties.city_id miliknya (dikonfirmasi query langsung: hanya
+  SURABAYA/SIDOARJO/GRESIK). Tapi Q2c tetap bertanya "Di area atau kawasan
+  mana di Madiun? Misalnya Pahlawan Street Center, Kartoharjo, Manguharjo..."
+  -- empat nama kawasan dari daftar statis (locationLandmarks.js), seolah
+  kotanya valid. Customer bertanya "Anda punya listing dimana?" EMPAT KALI
+  berturut-turut dan tetap dibalas pertanyaan area yang sama.
+
+  M160 (sehari sebelumnya) memperbaiki kelas "kota BENAR, area SALAH"
+  (Sidoarjo vs Buduran). M164 menutup kelas SATU TINGKAT DI ATASNYA: kotanya
+  sendiri tidak ada sama sekali -- jadi bertanya area di dalamnya tidak
+  pernah masuk akal, terlepas seberapa detail area itu di-derivasi dari DB.
+
+  services/areaAvailabilityService.js -- checkCityAvailability()
+    Baca agentCoverageService.getAgentCoverage() (cache yang SUDAH ada,
+    tidak nambah query DB baru). Kota tidak ada di situ -> verdict
+    available:false + max 3 kota alternatif NYATA, diprioritaskan yang
+    stoknya cocok tipe+transaksi yang diminta.
+
+  Dipasang SEBELUM Q2c di DUA jalur:
+    - controllers/chatbotPrivateController.js (jalur Private Agent, yang
+      SAAT INI aktif untuk hampir semua traffic -- lihat catatan Kimi/Qwen
+      di bawah)
+    - services/whatsappAIService.js (jalur platform AI -- fakta disuntik ke
+      gateFacts, bukan langsung dibalas, mengikuti pola M158)
+
+  Follow-up accept/decline: customer bilang "Mau." tanpa menyebut kota ->
+  AI bertanya "Mau di kota mana, Kak?" (BUKAN mengulang tawaran yang sama --
+  bug terpisah yang ditemukan saat verifikasi: follow-up affirmatif tadinya
+  tidak dikenali sama sekali). Customer bilang "Tidak mau" -> tutup sopan,
+  pola yang sama dengan penolakan tawaran area (M160).
+
+  Hasil verifikasi (replay transkrip asli lewat generateWhatsAppAIReply()):
+    "Hello.. Saya mau sewa rumah di Madiun"
+      -> "Mohon maaf, Kak. Saya belum punya listing Rumah di Madiun. Saya
+          punya listing di kota lain; seperti Surabaya, Sidoarjo, Gresik.
+          Apakah berminat?"
+    "Mau." -> "Mau di kota mana, Kak?"
+    "Di Surabaya" -> lanjut Q2c NORMAL dengan area asli Natasha di Surabaya
+                     (bukan lagi daftar statis Madiun)
+
+  --------------------------------------------------------------------------
+  M162 -- BUG PALING DALAM SESI INI: TTL SESI TIDAK PERNAH BISA MENYALA
+  --------------------------------------------------------------------------
+  ⭐⭐⭐ Ditemukan saat menyelidiki KENAPA "Candramas" (dari obrolan lama,
+  tidak pernah disebut sama sekali di percakapan baru) muncul di jawaban AI
+  untuk pertanyaan "Hello, Saya mau cari rumah di Madiun" yang genuinely baru.
+
+  Akar masalah: kirimiChatController.js (dan Fonnte/TimelinesAI, arsitektur
+  SENGAJA "identik") menyimpan pesan customer ke chat_messages SEBELUM
+  memanggil generateWhatsAppAIReply() -- yang di dalamnya getConversationHistory()
+  menghitung "idle sejak pesan terakhir" dari baris TER-DESC. Baris itu
+  SELALU pesan yang BARU SAJA disimpan itu sendiri (createdAt kira-kira
+  sekarang). idleMs = Date.now() - messages[0].createdAt karena itu SELALU
+  mendekati nol -- TIDAK PEDULI seberapa lama jeda sesungguhnya sebelum
+  pesan itu tiba. TTL 90 menit (CHATBOT_COOKIE_TTL_MINUTES) menjadi kode
+  mati yang tidak pernah benar-benar dievaluasi, UNTUK SATU PUN PESAN
+  WHATSAPP NYATA sejak fitur ini ditulis.
+
+  Dibuktikan langsung: sesi id=1 (transkrip WhatsApp nyata Nigel) idle 97,6
+  menit (13:28:44 -> 15:06:21, MELEBIHI TTL 90 menit) tapi slot
+  "Candramas/Sidoarjo" dari obrolan lama tetap bocor ke pertanyaan customer
+  yang sama sekali baru soal Madiun.
+
+  Perbaikan (services/sessionService.js, getConversationHistory()): bila
+  baris teratas dibuat dalam 10 detik terakhir (jendela aman untuk "ini
+  kemungkinan besar pesan yang baru saja disimpan pemanggil"), jeda idle
+  dihitung dari baris SEBELUMNYA -- giliran nyata terakhir sebelum pesan
+  yang sedang diproses ini tiba. Otomatis benar untuk kedua pola pemanggil
+  (yang menyimpan pesan dulu MAUPUN yang tidak).
+
+  PELAJARAN: sebuah TTL/expiry check yang "sudah ada sejak lama" bukan bukti
+  ia pernah benar-benar menyala di produksi. Verifikasi dengan reproduksi
+  yang meniru URUTAN PANGGILAN NYATA (simpan pesan dulu, baru fetch
+  history), bukan hanya memanggil fungsinya secara terisolasi.
+
+  --------------------------------------------------------------------------
+  M163 -- GANTI TRANSAKSI SENDIRIAN: fasilitas ikut ditinjau ulang
+  --------------------------------------------------------------------------
+  Directive pemilik proyek (28 Agu 2026): matriks lengkap "apa yang diingat,
+  apa yang ditanya ulang" saat customer mengubah kota/transaksi/tipe
+  properti di tengah percakapan. Sebagian besar SUDAH diimplementasikan
+  sejak M124/M132/M154 -- satu celah konkret ditemukan: state.facilities
+  HANYA di-reset saat typeChangedNow (ganti tipe properti), TIDAK saat
+  txChanged SENDIRIAN (ganti transaksi, tipe tetap). Customer yang bilang
+  "mau beli rumah, kolam renang pribadi" lalu "ganti rencana, sewa aja deh"
+  membawa serta wishlist "kolam renang pribadi" ke pencarian sewa yang tidak
+  relevan.
+
+  services/aiPromptBuilderService.js -- blok txChanged sekarang juga
+  me-null-kan state.facilities, konsisten dengan compoundReset (tipe+
+  transaksi berubah bareng) yang SUDAH melakukan ini. Ganti-kota SENDIRIAN
+  TETAP TIDAK menyentuh fasilitas (spec eksplisit: "Fasilitas sama").
+
+  --------------------------------------------------------------------------
+  M159 -- 3 istilah sertifikat hilang dari kamus (bahaya nyata pada RAG confidence)
+  --------------------------------------------------------------------------
+  utils/terminologyAnswerGate.js dulu hanya mengenali SHM/SHGB/SHSRS/PPJB/
+  AJB -- SHP, HGU, dan Surat Hijau/Ijo TIDAK ADA. Fungsi ini dipakai GANDA:
+  jawaban langsung DAN override skor keyakinan RAG (ragConfidenceService).
+  Istilah yang tidak dikenali gate ini TIDAK dapat override, jadi jatuh ke
+  skor mentahnya:
+      "apa itu Surat Hijau"  0.042 SKIP  (seharusnya REDIRECT)
+      "apa itu HGU"          0.027 SKIP
+      "apa itu SHP"          0.027 SKIP
+  Ditambahkan ketiganya (uraian dari pemilik proyek, termasuk detail Surat
+  Hijau -> solusi HGB di atas HPL Pemkot). Ditambahkan juga override untuk
+  pertanyaan jarak/waktu tempuh (kata jarak/waktu + kata arah ke/dari), yang
+  sebelumnya sama-sama jatuh ke skor rendah (0,053) tanpa alasan.
+
+  --------------------------------------------------------------------------
+  KOREKSI CATATAN LAMA -- status provider AI (per 29 Agu 2026)
+  --------------------------------------------------------------------------
+  Catatan V13 sebelumnya HANYA menyebut Kimi habis saldo. Diperiksa ulang
+  hari ini: Qwen (AI_PRIMARY_PROVIDER saat ini) JUGA habis kuota gratis
+  (403 AllocationQuota.FreeTierOnly), DeepSeek JUGA insufficient balance.
+  Dari 6 provider platform, HANYA OpenRouter yang terverifikasi masih bisa
+  dipanggil (HTTP 200). Tidak ada rantai fallback lintas-provider
+  (PROVIDER_ORDER di aiProviderService.js memetakan tiap primary hanya ke
+  dirinya sendiri) -- jadi SEMUA traffic saat ini jatuh ke Private Agent.
+  Ini penting dipahami sebelum menilai kualitas balasan LLM: LLM-nya
+  memang tidak pernah benar-benar berjalan sampai salah satu dari ini
+  diperbaiki (isi ulang saldo, atau ganti AI_PRIMARY_PROVIDER=openrouter).
+
+  --------------------------------------------------------------------------
+  DOKUMENTASI SKILL DIPERBARUI (Case 4 pemilik proyek, 29 Agu 2026)
+  --------------------------------------------------------------------------
+  asset/skills/elevan-property-assistant/docs/04-qualification-flow.md dan
+  13-locations-and-landmarks.md ditambahkan bagian baru: "Q2 -> Q2c gate --
+  does the agent even sell in this city?" -- mendokumentasikan aturan M164
+  untuk platform AI (Kimi/Qwen/ChatGPT/Claude/dst.) sendiri, supaya begitu
+  salah satu provider berfungsi kembali, ia TIDAK mengulangi kesalahan
+  Madiun yang sama. Disinkron byte-identik ke claude_responds dan
+  chat_gpt_responds (batas ukuran ~330KB per skill diperiksa ulang: semua
+  di bawah 330.000 byte setelah disinkron).
+
+  --------------------------------------------------------------------------
+  HUTANG TEKNIS -- diperbarui
+  --------------------------------------------------------------------------
+  Item 5 pada daftar V13 (di atas) SUDAH TERKONFIRMASI meluas ke Qwen &
+  DeepSeek, bukan cuma Kimi -- lihat "KOREKSI CATATAN LAMA" di atas.
+  Item lain (7 master controller belum di-OOP-kan, chatbotPrivateController.js
+  5.200+ baris belum diaudit penuh, RAG property_knowledge/agent_catalog
+  masih kosong) BELUM berubah statusnya.
+
 
 ================================================================================
-  END OF FILE — ELEVAN_PROPERTY_CONTEXT_V8.txt (V13 per header — nama berkas
-  fisik SENGAJA tidak di-rename ke _V13.txt, ikuti pola V8-judul/=badan-lebih-
+  END OF FILE — ELEVAN_PROPERTY_CONTEXT_V8.txt (V14 per header — nama berkas
+  fisik SENGAJA tidak di-rename ke _V14.txt, ikuti pola V8-judul/=badan-lebih-
   baru yang sudah didokumentasikan di §Riwayat; lihat catatan penomoran di
   kepala berkas ini bila membingungkan)
 ================================================================================

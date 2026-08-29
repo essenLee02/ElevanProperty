@@ -1,5 +1,5 @@
 const { loadProjectSkillPrompt } = require('./skillPromptService');
-const { detectBudget, detectFacilities, stripCommercialUsePhrases, stripNearPhrases, stripAmbiguousRumah, stripInvestmentIntentPhrases, stripMovingFromPhrases, detectUseCase, isNonResidentialUse, detectLocation, isKnownLocationName } = require('./propertyRecommendationService');
+const { detectBudget, detectFacilities, stripCommercialUsePhrases, stripNearPhrases, stripAmbiguousRumah, stripInvestmentIntentPhrases, stripMovingFromPhrases, detectUseCase, isNonResidentialUse, detectLocation, isKnownLocationName, detectCanonicalType, detectCanonicalTransaction } = require('./propertyRecommendationService');
 const { parseCustomerDate, isDontKnowDateAnswer, WAITING_THE_UPDATE } = require('../utils/customerDateParser');
 const { expandAbbreviations }                 = require('../utils/lazyChatNormalizer');
 const { expandStandardFacilities }            = require('../utils/standardFacilities');
@@ -9,6 +9,9 @@ const { customerAsksPropertyData,
         customerNeedsDirectAnswer,
         buildViewingRequestDirective } = require('../utils/customerQuestionGuard');
 const { getCityLandmarks }                    = require('../utils/locationLandmarks');
+// ⛔ Teks banner ganti-kota/transaksi/tipe TIDAK boleh ditulis ulang di file ini.
+// Satu tabel spec dipakai bersama ekstraktor filter — lihat utils/contextSwitchPolicy.js.
+const { buildSwitchBanners }                  = require('../utils/contextSwitchPolicy');
 
 /* ─── Qualification State Extractor ────────────────────────────────────────── */
 /* Scans full conversation history to build a per-question answered/unanswered  */
@@ -830,30 +833,12 @@ function extractQualificationState(history = [], currentMessage = '') {
     // messages don't flip type; investment-intent phrasing doesn't flip tx;
     // location flips require BOTH sides to be a known city name, non-substring
     // of each other — M51 guard against "gang sempit" misread as a city).
-    const typeOfP0 = (txt) => {
-      const w = stripCommercialUsePhrases(
-        stripMovingFromPhrases(stripAmbiguousRumah(stripNearPhrases((txt || '').toLowerCase())))
-      );
-      if (/\bkondotel\b|\bcondotel\b/.test(w))                             return 'kondotel';
-      if (/\bmansion\b|\brumah\s+mewah\b/.test(w))                        return 'mansion';
-      if (/\bvill?a\b/.test(w))                                            return 'villa';
-      if (/\bapartemen\b|\bapartment\b/.test(w))                           return 'apartment';
-      if (/\bhotel\b|\bpenginapan\b/.test(w))                             return 'hotel';
-      if (/\bkos\b|\bkost\b|\bkosan\b|\bkostan\b|\bngekos\b|\bngekost\b|\bngekosan\b|\bindekos\b|\bindekost\b/.test(w))              return 'boarding_house';
-      if (/\bruko\b|\brukan\b/.test(w))                                   return 'shophouse';
-      if (/\btoko\b|\bkios\b|\bwarung\b|\bretail\b/.test(w))             return 'store';
-      if (/\bkantor\b|\boffice\b/.test(w))                                           return 'office';
-      if (/\bgudang\b|\bwarehouse\b/.test(w))                                           return 'warehouse';
-      if (/\brumah\b(?!\s+(?:makan|sakit|tangga|ibadah|duka|produksi|tahanan|susun|potong|kos))|\bhouse\b|\bkontrakan\b/.test(w))                   return 'house';
-      if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(w)) return 'others';
-      return null;
-    };
-    const txOfP0 = (txt) => {
-      const w = stripInvestmentIntentPhrases((txt || '').toLowerCase());
-      if (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|kos|kost|kosan|kostan|ngekos|ngekost|ngekosan|indekos|indekost|rent|rental|lease|booking|book|pesan|reservasi)\b/.test(w)) return 'rent';
-      if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase|invest|investasi)\b/.test(w))                                   return 'sale';
-      return null;
-    };
+    // ⭐ M162: regex-nya TIDAK lagi ditulis di sini. Detektor kanonik hidup di
+    // propertyRecommendationService.detectCanonicalType/Transaction — satu
+    // salinan yang juga dipakai Private Agent, supaya kedua jalur tidak bisa
+    // lagi berbeda pendapat soal "ngekos" (lihat komentar di definisinya).
+    const typeOfP0 = detectCanonicalType;
+    const txOfP0   = detectCanonicalTransaction;
     const locOfP0 = (txt) => detectLocation(txt || '');
 
     let runType = null, runTypeIdx = -1;
@@ -2122,6 +2107,10 @@ function extractQualificationState(history = [], currentMessage = '') {
     if (compoundReset) {
       const cityAlsoChanged = locChangedNow;
       state.cityChangedFromHistory = cityAlsoChanged;
+      // M154: dipakai buildSwitchBanners() untuk memilih banner COMPOUND
+      // (tipe+transaksi sekaligus) alih-alih dua banner axis-tunggal yang saling
+      // bertumpuk dan membingungkan.
+      state.txChangedFromHistory   = true;
 
       // Selalu dibuang saat tipe+transaksi berubah bersamaan — kombinasi
       // tipe×transaksi ini sepenuhnya baru, jadi budget/pembayaran/detail
@@ -2179,6 +2168,14 @@ function extractQualificationState(history = [], currentMessage = '') {
       const cityChanged = locChangedNow;
 
       state.cityChangedFromHistory = cityChanged;
+      // ⭐ M154: sinyal ganti-transaksi SEBELUMNYA TIDAK PERNAH DIEKSPOR.
+      // txChanged mereset budget/financing/kprDetails/leaseDuration tapi tidak
+      // meninggalkan jejak apa pun di state, sehingga tidak ada banner yang bisa
+      // menjelaskannya ke LLM (ganti-kota dan ganti-tipe punya banner; transaksi
+      // tidak). LLM hanya melihat budget & metode pembayaran tiba-tiba kembali ❓
+      // tanpa sebab, menyimpulkan alur mengulang dari awal, lalu ikut menanyakan
+      // ulang kota/landmark/tanggal yang masih ✅ — persis looping yang dikeluhkan.
+      state.txChangedFromHistory = txChanged;
 
       if (txChanged) {
         // Ganti transaksi: budget & payment method depend on sewa vs. beli —
@@ -2190,6 +2187,16 @@ function extractQualificationState(history = [], currentMessage = '') {
         state.financing       = null;
         state.kprDetails      = null;
         state.leaseDuration   = null;
+        // ⚠️ M163 (spec pemilik proyek, 28 Agu 2026, "Ganti transaksi" item 7):
+        // "Fasilitas diperhatikan skill tipe transaksi atas tipe properti" —
+        // fasilitas standar/prioritas untuk RUMAH DIJUAL (mis. carport, garasi)
+        // tidak selalu sama relevansinya untuk RUMAH DISEWA jangka pendek (mis.
+        // customer sewa 3 bulan biasanya tidak menaruh bobot yang sama pada
+        // "kolam renang pribadi" seperti pembeli). Sebelumnya HANYA typeChangedNow
+        // yang me-reset state.facilities — ganti transaksi SENDIRIAN (tipe
+        // properti tetap) tidak menyentuhnya sama sekali, jadi fasilitas lama
+        // ikut terbawa ke transaksi baru tanpa pernah ditinjau ulang.
+        state.facilities      = null;
       }
 
       if (cityChanged) {
@@ -2206,8 +2213,30 @@ function extractQualificationState(history = [], currentMessage = '') {
       if (typeChangedNow) {
         state.budget            = null;
         state.household         = null;
-        state.redFlags          = null;
-        state.leaseDuration     = null;
+        // ⚠️ M154: `redFlags` dan `leaseDuration` DIHAPUS dari daftar reset ini.
+        //
+        // Keduanya melanggar monotonisitas: cabang compoundReset di atas — yang
+        // resetnya JAUH LEBIH LUAS (tipe DAN transaksi berubah sekaligus) —
+        // secara eksplisit MEMPERTAHANKAN redFlags/preferences (bila kota tidak
+        // ikut berubah) dan SELALU mempertahankan leaseDuration. Reset yang
+        // lebih sempit tidak boleh membuang lebih banyak daripada reset yang
+        // lebih luas; itu bukan keputusan bisnis, itu inkonsistensi.
+        //
+        // Secara makna juga salah:
+        //   • redFlags/preferences terikat LOKASI ("hindari banjir", "jangan
+        //     dekat kuburan", "mau yang sejuk") — bukan terikat tipe properti.
+        //     Ganti-kota (axis yang memang mengubah lokasi) justru TIDAK
+        //     mereset redFlags, jadi ganti-tipe mereset justru arah yang salah.
+        //     Lebih buruk lagi: `preferences` tidak ikut di-null di sini, jadi
+        //     summary tersisa separuh — "Prefer: sejuk" bertahan sementara
+        //     "Hindari: banjir" hilang. M89b sengaja memisahkan dua baris itu
+        //     karena maknanya berlawanan; membuang salah satunya saja membuat
+        //     brief ke agent menyesatkan.
+        //   • leaseDuration terikat TRANSAKSI, bukan tipe — spec pemilik proyek
+        //     menaruh "tanyakan durasi sewa" di bawah GANTI TRANSAKSI item 8,
+        //     dan daftar GANTI PROPERTI tidak menyebutnya sama sekali. Customer
+        //     yang sudah bilang "sewa 1 tahun" lalu beralih apartemen→rumah
+        //     tetap menyewa 1 tahun; menanyakannya lagi = pertanyaan berulang.
         state.furnishing        = null;
         state.facilities        = null;
         state.apartmentPref     = null;
@@ -2332,13 +2361,70 @@ Kalau sudah ada area/kecamatan tertentu, boleh sekalian disebut ya.` };
   // yang memang sudah ada untuk keperluan ini dan sudah dipakai Private Agent.
   // Kota yang tidak ada di map tetap ditanya, hanya dengan contoh generik:
   // lebih baik bertanya daripada membiarkan slot kosong yang mengundang karangan.
-  if (!state.district && !state.q2cDeclined && state.city && !isBooking && !isCommercial) {
+  /* ═══════════════════════════════════════════════════════════════════════════
+     ⭐ M162 — SLOT MINIMUM KE-4 = "LOKASI SPESIFIK", BUKAN "district"
+     ───────────────────────────────────────────────────────────────────────────
+     `utils/listingReadiness.js` (M134) sudah menyatakan slot ke-4 terisi bila
+     SALAH SATU dari district / area / landmark ada. Gerbang Q2c di bawah dulu
+     hanya melihat `state.district`, sehingga dua bug nyata muncul sekaligus:
+
+     (1) PERTANYAAN BERULANG. Customer bilang "sewa rumah di Surabaya dekat
+         Bandara Juanda" → anchorPoint terisi, district null → AI tetap bertanya
+         "Di area atau kawasan mana di Surabaya?" untuk lokasi yang BARU SAJA
+         disebut. Private Agent (ConversationQualifier.getNextQuestion) sudah
+         benar sejak lama — ia menggerbangi Q2c dengan `!profile.hasAnchorPoint`.
+         Jalur LLM-lah yang tertinggal, jadi ini penyeragaman, bukan aturan baru.
+
+     (2) GERBANG SHOW_LISTINGS (M140) TIDAK PERNAH TERCAPAI pada kasus itu.
+         Gerbangnya ada di BAWAH blok ini dan syaratnya memakai
+         `district || anchorPoint || landmark` — tapi `return` Q2c di sini
+         mendahuluinya. Kelas bug yang sama dengan "terminology gate before
+         qual gate": aturan yang benar, ditaruh di belakang `return` yang salah.
+
+     ⛔ JANGAN kembalikan gerbang ini ke `!state.district`. Bila slot ke-4
+     berubah definisinya, ubah di utils/listingReadiness.js — SATU sumber.
+  ═══════════════════════════════════════════════════════════════════════════ */
+  const hasSpecificLocation = Boolean(state.district || state.anchorPoint || state.landmark);
+
+  /** Pertanyaan patokan lokasi (Q6). Dipakai DUA kali (prioritas ganti-kota di
+   *  sini, dan posisi normalnya di cascade bawah) — satu sumber teks, supaya
+   *  tidak lahir salinan ketiga yang bisa menyimpang. */
+  const _anchorQuestion = () => {
+    if (isCommercial)
+      return { q: 'Q6', hint: `Ada lokasi atau kawasan tertentu yang jadi prioritas? Misalnya dekat kawasan industri, pelabuhan, atau pusat bisnis? 📍` };
+    if (state.city && state.city.toLowerCase().includes('surabaya'))
+      return { q: 'Q6', hint: 'Ada lokasi atau tempat tertentu yang jadi patokan? Misalnya dekat Grand City, Pakuwon, KBS, wisata mangrove, sekolah anak, atau jalan tertentu? 📍' };
+    return { q: 'Q6', hint: 'Ada lokasi atau tempat tertentu yang jadi patokan? Misalnya dekat sekolah anak, mal, wisata, kawasan tertentu, atau jalan tertentu? 📍' };
+  };
+
+  // Q2c — Area/district DI DALAM kota (SEBELUM Q2b — mempersempit area pencarian)
+  if (!hasSpecificLocation && !state.q2cDeclined && state.city && !isBooking && !isCommercial) {
     const areas = getCityLandmarks(state.city);
     const areaEx = areas && areas.length
       ? `Misalnya ${areas.slice(0, 4).join(', ')}, atau area lainnya?`
       : 'Misalnya pusat kota, area selatan, atau kawasan tertentu?';
     return { q: 'Q2c', hint: `Di area atau kawasan mana di ${loc} yang Anda pertimbangkan? 📍 ${areaEx}` };
   }
+
+  /* ⭐ M162b — Q2c TERTUTUP tapi slot ke-4 MASIH KOSONG → tanyakan PATOKAN.
+   *
+   * `q2cDeclined` menyala pada dua keadaan, dan KEDUANYA berakhir sama: satu-
+   * satunya jalan tersisa untuk mengisi slot lokasi spesifik adalah Q6.
+   *   • GANTI KOTA (M124) — spec pemilik proyek item 1 harfiah: "Tanyakan ulang
+   *     lokasi landmark saja."
+   *   • Customer menolak pertanyaan area ("bebas", "terserah") — M84.
+   *
+   * SEBELUM perbaikan ini, kedua keadaan itu jatuh ke cascade biasa dan
+   * pertanyaan berikutnya menjadi Q2b ("sudah lihat berapa rumah di Malang?"),
+   * lalu Q3 budget, Q8 tanggal, Q4 penghuni, Q5 red flag — LIMA pertanyaan
+   * interview sebelum Q6 akhirnya ditanya di posisi normalnya. Persis keluhan
+   * "AI lose & forget konteks" setelah ganti kota: informasi yang justru
+   * dibuang oleh ganti-kota (patokan kota lama) tidak pernah segera digali
+   * ulang, sementara pertanyaan yang TIDAK relevan dengan perubahan itu
+   * diajukan lebih dulu.
+   */
+  if (!hasSpecificLocation && state.q2cDeclined && state.city && !isBooking && !isCommercial)
+    return _anchorQuestion();
 
   /* ═══════════════════════════════════════════════════════════════════════════
      ⭐ M140 — GERBANG "TAMPILKAN LISTING DULU" (mengalahkan sisa interview)
@@ -2367,7 +2453,10 @@ Kalau sudah ada area/kecamatan tertentu, boleh sekalian disebut ya.` };
      Tanpa syarat itu, alur akan mandek menampilkan listing selamanya.
   ═══════════════════════════════════════════════════════════════════════════ */
   {
-    const hasSpecificLocation = Boolean(state.district || state.anchorPoint || state.landmark);
+    // `hasSpecificLocation` dihitung SEKALI di atas (M162) — gerbang Q2c dan
+    // gerbang ini WAJIB memakai definisi slot ke-4 yang sama persis. Dulu hanya
+    // gerbang ini yang benar, dan `return` Q2c di atasnya membuatnya tak
+    // tercapai untuk customer yang menyebut patokan tanpa nama area.
     const minimumMet = Boolean(state.transactionType && state.buildingType && state.city && hasSpecificLocation);
     // ⚠️ `=== false`, BUKAN `!state.listingsShown`. listingsShown hanya PASTI
     // benar saat state datang dari extractQualificationState() (produksi
@@ -2393,7 +2482,16 @@ Kalau sudah ada area/kecamatan tertentu, boleh sekalian disebut ya.` };
     const pastThisPoint = Boolean(state.aiAskedQ2b || state.searchHistory || state.budget);
     if (minimumMet && state.listingsShown === false && !pastThisPoint) {
       const humanType = _humanType[type] || 'properti';
-      const where = state.district || state.anchorPoint || state.landmark;
+      // ⚠️ M162: jawaban NEGATIF/FLEKSIBEL ("bebas", "terserah", "tidak ada")
+      // sah mengisi slot lokasi (M84: penolakan = jawaban) tapi TIDAK boleh
+      // dipakai sebagai NAMA TEMPAT — tanpa guard ini direktifnya berbunyi
+      // "tampilkan listing di bebas, Surabaya" dan LLM meneruskan kalimat itu
+      // apa adanya ke customer. Bila lokasi spesifiknya cuma penolakan, jangkar
+      // pencariannya kembali ke KOTA (yang selalu valid di titik ini).
+      const _placeless = /^(bebas|terserah|tidak\s*ada|tdk\s*ada|ga(k)?\s*ada|nggak\s*ada|belum\s*tahu|belum\s*tau|blm\s*tau|mana\s*saja|apa\s*saja|semua|manapun|fleksibel|flexible)\b/i;
+      const _specific  = [state.district, state.anchorPoint, state.landmark]
+        .find((v) => v && !_placeless.test(String(v).trim()));
+      const where = _specific || state.city;
       return {
         q: 'SHOW_LISTINGS',
         hint: `SYARAT MINIMUM SUDAH TERPENUHI (tipe + transaksi + kota + lokasi). `
@@ -2476,14 +2574,10 @@ Kalau sudah ada area/kecamatan tertentu, boleh sekalian disebut ya.` };
     return { q: 'Q5', hint: 'Ada yang pasti tidak cocok? Misalnya yang hadap barat, dekat jalan ramai, gang sempit, atau rumah tua? 🚫' };
   }
 
-  // Q6 — Patokan lokasi (include wisata, kawasan, dan landmark named examples)
-  if (!state.anchorPoint) {
-    if (isCommercial)
-      return { q: 'Q6', hint: `Ada lokasi atau kawasan tertentu yang jadi prioritas? Misalnya dekat kawasan industri, pelabuhan, atau pusat bisnis? 📍` };
-    if (state.city && state.city.toLowerCase().includes('surabaya'))
-      return { q: 'Q6', hint: 'Ada lokasi atau tempat tertentu yang jadi patokan? Misalnya dekat Grand City, Pakuwon, KBS, wisata mangrove, sekolah anak, atau jalan tertentu? 📍' };
-    return { q: 'Q6', hint: 'Ada lokasi atau tempat tertentu yang jadi patokan? Misalnya dekat sekolah anak, mal, wisata, kawasan tertentu, atau jalan tertentu? 📍' };
-  }
+  // Q6 — Patokan lokasi (include wisata, kawasan, dan landmark named examples).
+  // Teks pertanyaannya dibagi dengan gerbang prioritas M162b di atas lewat
+  // `_anchorQuestion()` — JANGAN menuliskannya ulang di sini.
+  if (!state.anchorPoint) return _anchorQuestion();
 
   // Q7 — Area alternatif (AREA lain DI DALAM kota yang sama, BUKAN kota lain).
   // ⚠️ Kota sudah ditetapkan di Q2 dan TIDAK ditawar ulang di sini. Bertanya
@@ -2755,27 +2849,20 @@ function buildQualificationStateBlock(state) {
     lines.push('');
   }
 
-  // Type-change banner — shown when customer switched building type (villa→rumah, etc.)
-  // M124: no longer a full Q2-Q12 wipe — kota/landmark/tanggal masuk/jadwal
-  // survei TETAP dipakai dari sebelum perubahan (lihat qualification state ✅
-  // di bawah); hanya budget/fasilitas/detail khusus tipe yang di-reset.
-  if (state.typeChangedFromHistory) {
-    lines.push('⚠️  TIPE PROPERTI BERUBAH — Customer beralih ke jenis properti baru.');
-    lines.push('   Kota, landmark, tanggal masuk, dan jadwal survei TETAP DIPAKAI (lihat ✅ di bawah) —');
-    lines.push('   JANGAN tanya ulang itu. Hanya budget/fasilitas/detail khusus tipe yang di-reset (❓ di bawah).');
-    lines.push('   Akui perubahan singkat (1 kalimat), lanjut dari Q terkecil ❓.');
-    lines.push('');
-  }
-
-  // City-change banner — customer named a DIFFERENT city mid-flow (M124).
-  // Only the landmark/area was invalidated; everything else stays.
-  if (state.cityChangedFromHistory) {
-    lines.push('⚠️  KOTA BERUBAH — Customer pindah pencarian ke kota lain.');
-    lines.push('   Transaksi, tipe properti, budget, tanggal masuk, jadwal survei, dan fasilitas TETAP DIPAKAI —');
-    lines.push('   JANGAN tanya ulang itu dan JANGAN tawarkan pindah kota lagi.');
-    lines.push('   Akui perubahan singkat (1 kalimat), lalu tanyakan patokan lokasi/landmark di kota BARU (Q6).');
-    lines.push('');
-  }
+  // ── Banner PERUBAHAN KONTEKS (M154) ───────────────────────────────────────
+  // Dulu ditulis inline di sini: hanya dua banner (KOTA & TIPE), tanpa banner
+  // TRANSAKSI sama sekali, dan daftar "yang tetap dipakai" ditulis manual
+  // sehingga sudah menyimpang dari field yang benar-benar direset di
+  // extractQualificationState(). Sekarang teksnya dibangun dari tabel spec yang
+  // SAMA dengan yang dipakai ekstraktor filter — satu kontrak, satu tempat.
+  // Lihat utils/contextSwitchPolicy.js.
+  lines.push(...buildSwitchBanners({
+    cityChanged    : !!state.cityChangedFromHistory,
+    txChanged      : !!state.txChangedFromHistory,
+    typeChanged    : !!state.typeChangedFromHistory,
+    transactionType: state.transactionType,
+    buildingType   : state.buildingType,
+  }));
 
   // ⚠️ Disambiguation note — injected before the checklist so the AI reads it first
   lines.push('⚠️  KAMUS BAHASA INDONESIA (jangan salah tafsir):');

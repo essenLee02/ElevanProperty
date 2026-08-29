@@ -66,25 +66,48 @@ console.log('\n== Group 3: KASUS 3 (tipe properti kosong) TIDAK lagi membundel k
   ok('TIDAK ikut menanyakan budget', !/kisaran harga|budget/i.test(r.reply), r.reply);
 }
 
-console.log('\n== Group 4: KASUS 5 (hanya budget kosong) TETAP bertanya budget — tidak dihapus ==');
+/* ⚠️ DIPERBARUI M162 — SLOT KE-4 GERBANG INI BUKAN LAGI BUDGET.
+ *
+ * Directive pemilik proyek M134 (24 Agu 2026) menetapkan slot minimum ke-4 =
+ * LOKASI SPESIFIK (area/landmark), dan utils/listingReadiness.js sudah
+ * menuliskannya sejak saat itu. buildQualifyReply() tidak pernah ikut diubah,
+ * jadi dua komponen backend memberi jawaban berbeda untuk pertanyaan yang sama
+ * — dan gerbang ini yang menang karena ia `return` lebih dulu. Hasilnya di
+ * produksi: customer yang sudah menyebut tipe + transaksi + kota + area tetap
+ * ditanya BUDGET, padahal directive-nya eksplisit "budget bukan syarat".
+ *
+ * Budget TIDAK hilang dari alur — Q3 (dua harga kontras) tetap menanyakannya
+ * lewat findNextQuestion()/ConversationQualifier. Yang hilang cuma perannya
+ * sebagai palang pintu sebelum listing boleh tampil. */
+console.log('\n== Group 4: KASUS 5 (lokasi spesifik kosong) menanyakan AREA/PATOKAN, bukan budget ==');
 {
   const filters = { buildingType: 'house', transactionType: 'rent', location: 'Surabaya', budget: null };
   const r = buildQualifyReply(filters, 'Surabaya', 'Nigel', 'none', [], CATALOG_ON);
   ok('balasan ada', !!r);
-  ok('menanyakan budget (satu-satunya info yang kosong)', /kisaran harga/i.test(r.reply), r.reply);
-  // M127: transkrip nyata menunjukkan pesan ini masih verbose ("Hampir
-  // lengkap!" + paragraf "kalau belum ada angka pasti..."). Disederhanakan
-  // jadi satu kalimat + contoh saja, sama seperti KASUS 2/3/4 (M125).
+  ok('menanyakan area/kawasan atau patokan', /area|kawasan|patokan/i.test(r.reply), r.reply);
+  ok('TIDAK menanyakan budget (bukan syarat listing, M134)',
+    !/kisaran harga|budget/i.test(r.reply), r.reply);
+  // M127: satu kalimat + contoh saja, tanpa basa-basi.
   ok('TIDAK ada basa-basi "Hampir lengkap!"', !/hampir lengkap/i.test(r.reply), r.reply);
-  ok('TIDAK ada paragraf tambahan "kalau belum ada angka pasti"',
-    !/belum ada angka pasti/i.test(r.reply), r.reply);
 }
 
-console.log('\n== Group 5: KONTROL — semua 4 info lengkap → tidak ada gate reply (lanjut ke AI) ==');
+console.log('\n== Group 5: KONTROL — 4 slot minimum lengkap → tidak ada gate reply (lanjut ke AI) ==');
 {
-  const filters = { buildingType: 'house', transactionType: 'rent', location: 'Surabaya', budget: '5-10jt' };
+  // Budget SENGAJA null: ia bukan bagian dari 4 slot minimum. Yang melengkapi
+  // slot ke-4 adalah `district` (bisa juga `area` atau `landmark`).
+  const filters = {
+    buildingType: 'house', transactionType: 'rent', location: 'Surabaya',
+    district: 'Pakuwon', budget: null,
+  };
   const r = buildQualifyReply(filters, 'oke', 'Nigel', 'none', [], CATALOG_ON);
-  ok('return null (proceed to AI)', r === null, JSON.stringify(r));
+  ok('lokasi spesifik lengkap TANPA budget → null (lanjut ke AI)', r === null, JSON.stringify(r));
+
+  // Patokan/landmark sama sahnya dengan nama area (kontrak listingReadiness).
+  const r2 = buildQualifyReply(
+    { buildingType: 'house', transactionType: 'rent', location: 'Surabaya', landmark: 'dekat PTC', budget: null },
+    'oke', 'Nigel', 'none', [], CATALOG_ON,
+  );
+  ok('patokan lokasi juga mengisi slot ke-4 → null', r2 === null, JSON.stringify(r2));
 }
 
 console.log(`\n${'='.repeat(60)}`);

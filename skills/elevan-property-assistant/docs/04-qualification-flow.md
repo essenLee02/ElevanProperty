@@ -23,21 +23,36 @@ conversation already carries these four — extract whatever is present rather
 than asking from zero:
 
 ```
-① buildingType    — house / villa / apartment / …
-② transactionType — sewa (rent) | beli → sale
-③ location        — city or area
-④ budget          — numeric range OR affordability preference
+① buildingType     — house / villa / apartment / …
+② transactionType  — sewa (rent) | beli → sale
+③ city             — the city
+④ specificLocation — area/kawasan OR landmark/patokan OR commercial anchor
 ```
 
 If even one is already known from what the customer said, don't treat this as
 a cold start — go straight to whichever of Q1–Q14 is still unanswered.
 
+> **⚠️ The fourth slot is the specific LOCATION, not the budget.** It used to be budget, which
+> meant asking *"kisaran harga berapa?"* before the customer had seen a single listing. That is
+> now forbidden: **budget is never a precondition for showing listings.** Customers routinely
+> adjust price *after* seeing options ("kok kemahalan ya, saya mau yang 1–2,5 juta"), and asking
+> for a number first is the most reliable way to lose them. Budget is still asked — by Q3, using
+> the two-contrasting-prices technique, **after** listings.
+
+> **⚠️ Area and landmark are ONE slot, not two.** `Area Pakuwon`, `dekat PTC`, and
+> `dekat Bandara Juanda` all satisfy slot ④ equally. A customer who gave you a patokan has given
+> you the location — asking *"di area mana?"* next is a repeat question, not a refinement.
+
+Once all four are known — **including when the customer volunteers all four in their very first
+message** — stop interrogating and move to listings. Everything else (budget, facilities,
+move-in date, survey) is deepening, and deepening never justifies re-asking something you
+already have.
+
 **Budget is satisfied by** `terjangkau` / `murah` / `affordable` / `yang paling murah` for the
-purpose of this early cold-start check (deciding whether to run the full interview at all).
-This does not mean the number itself is optional forever — see the Q3a rule below: a bare
-affordability word with zero digits anywhere still needs one follow-up question for a real
-Rupiah figure before the final summary. "✓ Budget: Terjangkau" with no number is close to
-useless for an agent trying to match a listing.
+purpose of the Q3 checkpoint. This does not mean the number itself is optional forever — see the
+Q3a rule below: a bare affordability word with zero digits anywhere still needs one follow-up
+question for a real Rupiah figure before the final summary. "✓ Budget: Terjangkau" with no number
+is close to useless for an agent trying to match a listing.
 
 ### The checklist to keep in mind
 
@@ -93,35 +108,79 @@ new search the same way.
 > 0-1600000 maksudnya ribu/juta?" — that budget belonged to the finished search. Re-ask Q3 by
 > category.
 
-### Mid-flow changes (⚠️ M124 — GRANULAR, not a Q1 wipe)
+### Mid-flow changes (⚠️ M124 / M132 / M154 — GRANULAR, never a Q1 wipe)
 
 City / transaction / property-type changes **while still mid-flow** (no summary sent yet) used to
 hard-reset the whole search back to Q1. **That is no longer correct** — a customer naming a
 different city, or flipping sewa↔beli, or switching property type mid-conversation now keeps
 almost everything they already answered; only the field(s) that specific change actually
-invalidates get re-asked. The server computes this and shows you exactly one of two banners when it
-fires — **read the banner text literally, it tells you precisely what survived:**
+invalidates get re-asked.
 
-```
-⚠️  KOTA BERUBAH — Customer pindah pencarian ke kota lain.
-   Transaksi, tipe properti, budget, tanggal masuk, jadwal survei, dan fasilitas TETAP DIPAKAI —
-   JANGAN tanya ulang itu dan JANGAN tawarkan pindah kota lagi.
-   Akui perubahan singkat (1 kalimat), lalu tanyakan patokan lokasi/landmark di kota BARU (Q6).
-```
-```
-⚠️  TIPE PROPERTI BERUBAH — Customer beralih ke jenis properti baru.
-   Kota, landmark, tanggal masuk, dan jadwal survei TETAP DIPAKAI (lihat ✅ di bawah) —
-   JANGAN tanya ulang itu. Hanya budget/fasilitas/detail khusus tipe yang di-reset (❓ di bawah).
-   Akui perubahan singkat (1 kalimat), lanjut dari Q terkecil ❓.
-```
+The server computes this from **one shared policy table** (`utils/contextSwitchPolicy.js`) and
+shows you a banner when it fires — **read the banner literally; it tells you precisely what
+survived, and it is authoritative over anything you might infer by skimming the transcript
+yourself.**
 
-Three axes, three different preserve/reset rules:
+Four axes, four different preserve/reset rules:
 
-| Change | Re-asked | Stays exactly as answered |
+| Change | Re-asked | Stays exactly as answered — **never re-ask these** |
 |---|---|---|
-| **Ganti kota** ("tadinya Surabaya, mau Sidoarjo") | Landmark (Q6) only | Transaction, property type, budget, move-in date, survey schedule, facilities |
-| **Ganti transaksi** ("eh bukan beli, mau sewa aja") | Budget, payment method, (+ lease/booking duration if now sewa) | City, landmark, move-in date, survey schedule, facilities |
-| **Ganti properti** ("tadinya villa, sekarang mau hotel") | Budget, facilities, type-specific details (Q14) | City, landmark, move-in date, survey schedule |
+| **Ganti kota** ("tadinya Surabaya, mau Sidoarjo") | Landmark (Q6) only | Transaction, property type, budget, move-in date, survey schedule + companion, facilities, lease duration, red flags/preferences |
+| **Ganti transaksi** ("eh bukan beli, mau sewa aja") | Budget (range for the NEW tx × this property type), payment method, (+ lease/booking duration if now sewa) | City, area, landmark, property type, move-in date, survey schedule + companion, **facilities** |
+| **Ganti properti** ("tadinya villa, sekarang mau hotel") | Budget, facilities, type-specific details (Q14) | City, area, landmark, transaction type, move-in date, survey schedule + companion, **lease duration**, **red flags/preferences** |
+| **Ganti properti + transaksi in the SAME message** | Budget, payment method, facilities, type-specific details | Move-in date, survey schedule + companion, lease duration; **plus** city/area/landmark/red flags when the city did **not** also change |
+
+**⚠️ M154 — three corrections that were live bugs, do not "helpfully" undo them:**
+
+- **Ganti properti keeps the city, the landmark AND the transaction type.** The catalog-side
+  extractor used to wipe all three on a type switch, so the prompt could contain
+  `✅ Kota [Q2]: Surabaya` and `SYARAT MINIMUM LISTING: BELUM TERPENUHI — masih kurang: kota`
+  at the same time. If you ever see that contradiction, **the ✅ state block wins** — never
+  re-ask a slot that is ✅ just because a readiness line says it is missing.
+- **Ganti properti keeps `Durasi sewa` and `Red flags`.** Lease duration belongs to the
+  *transaction*, not the property type ("sewa setahun" is still setahun after apartemen→rumah).
+  Red flags/preferences belong to the *location* ("hindari rawan banjir"), not the type.
+- **Ganti transaksi keeps the facilities.** The spec says facilities are *re-weighed* against the
+  new transaction × property type — not re-asked. Keep them in the state, just stop treating
+  rent-only wishes (e.g. "full furnished") as decisive for a purchase.
+
+The three single-axis banners, verbatim:
+
+```
+⚠️  KOTA BERUBAH — customer memindahkan pencarian ke kota lain.
+   ✅ TETAP DIPAKAI (⛔ JANGAN tanya ulang): tipe transaksi, tipe properti, budget,
+      fasilitas, tanggal masuk, jadwal survei, dan pendamping survei.
+   ❓ Yang ditanyakan HANYA patokan lokasi/landmark di kota BARU (Q6).
+      Customer bebas menyebut area/kawasan baru sendiri — terima, jangan paksa.
+   ⛔ JANGAN menawarkan pindah kota lagi dan JANGAN memakai landmark kota LAMA.
+```
+```
+⚠️  TIPE TRANSAKSI BERUBAH — customer beralih dari BELI ke SEWA.
+   ✅ TETAP DIPAKAI (⛔ JANGAN tanya ulang): kota, area/kawasan, patokan lokasi/landmark,
+      tipe properti, tanggal masuk, jadwal survei, dan pendamping survei.
+   ❓ Perlu digali ulang: budget dengan rentang yang sesuai transaksi BARU atas tipe
+      properti ini, lalu metode pembayaran (cash / transfer / termin).
+   ⏳ Karena sekarang SEWA: tanyakan juga durasi sewa/booking.
+   🏊 Fasilitas yang sudah disebut TETAP DICATAT — jangan tanya ulang; cukup
+      sesuaikan relevansinya dengan skill transaksi baru atas tipe properti ini.
+```
+```
+⚠️  TIPE PROPERTI BERUBAH — customer beralih ke jenis properti lain.
+   ✅ TETAP DIPAKAI (⛔ JANGAN tanya ulang): kota, area/kawasan, patokan lokasi/landmark,
+      tipe transaksi (sewa/beli), durasi sewa, red flag & preferensi lokasi,
+      tanggal masuk, jadwal survei, dan pendamping survei.
+   ❓ Perlu digali ulang: budget (rentang tipe baru) dan fasilitas khas tipe baru.
+   Akui perubahan singkat (1 kalimat), lalu lanjut dari pertanyaan ❓ terkecil.
+```
+
+When **type and transaction flip in the same message**, you get **one** combined banner instead of
+two stacked ones — and it explicitly forbids re-asking the two things the customer just said:
+
+```
+⚠️  TIPE PROPERTI **DAN** TRANSAKSI BERUBAH BERSAMAAN — pencarian baru.
+   ⛔ JANGAN menanyakan ulang tipe properti atau sewa/beli: customer BARU SAJA
+      menyebut keduanya di pesan ini. Menanyakannya lagi = pengulangan.
+```
 
 **Your response, in every case:**
 1. Acknowledge in **ONE** sentence — *"Oke, jadi di Sidoarjo ya 😊"* / *"Oke, saya alihkan ke sewa
@@ -131,11 +190,32 @@ Three axes, three different preserve/reset rules:
    and do **not** silently re-derive different values for them from earlier in the transcript.
 3. **Never** offer to switch city again once a city change was just acknowledged (a common failure:
    re-asking "or would you like a different city?" right after the customer just picked one).
-4. **Never** show a summary on the turn the change happens.
+4. **Never** re-ask the axis that just changed. The customer's trigger message *is* the answer.
+5. **Never** show a summary on the turn the change happens.
 
 > If the trigger message already contains the new value for a field that would otherwise be
 > re-asked, skip it and jump ahead: *"eh mau sewa villa di Bali aja"* (tx+type+city all in one
 > message) → all three ✅ → go straight to whatever's next.
+
+> **The four slots you are actually chasing** are property type, transaction type, city, and one
+> specific location (area / landmark / commercial anchor). Once those four are known — including
+> when the customer volunteers all four in their very first message — **stop interrogating** and
+> move to listings. Everything else (budget, facilities, move-in date, survey) is deepening, and
+> deepening never justifies re-asking something already ✅.
+
+**⚠️ M162 — after a city change, the ONE question is the landmark.**
+
+Ganti kota is the only axis that empties slot ④, because area and landmark were both anchored to
+the *old* city. On that turn, ask the patokan lokasi question — and nothing else:
+
+- ⛔ **Do not** ask *"sudah lihat berapa rumah di Malang?"*, the budget, the move-in date, the
+  occupants, or the red flags on that turn. All of those survived the switch untouched. Drifting
+  into them is exactly the "AI forgot the context" complaint: the one thing the change *did*
+  invalidate goes unasked while five things it did **not** invalidate get asked instead.
+- ✅ If the customer answers with an **area** instead of a landmark (*"di Klojen aja"*), that is a
+  complete answer — same slot. Accept it; do not follow up asking for a patokan too.
+- ✅ If the customer declines (*"bebas"*, *"terserah"*), that is also an answer. Slot ④ is closed;
+  the search anchors on the city itself. Never ask a third time.
 
 **Why this matters:** the destructive version of this rule was itself the bug — a customer deep in
 a Surabaya house search who named "Sidoarjo" answering an unrelated question got reset all the way

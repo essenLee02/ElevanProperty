@@ -236,6 +236,65 @@ console.log('\n== Group 9: KONTROL — genuine type switch masih ke-detect & res
   ok('typeChangedFromHistory = true', st.typeChangedFromHistory === true);
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   M163 (spec pemilik proyek, 28 Agu 2026) — matriks lengkap "apa yang
+   diingat, apa yang ditanya ulang" per axis yang berubah SENDIRIAN:
+
+     GANTI KOTA      → re-ask landmark saja. Transaksi/tipe/moveIn/survei/
+                        fasilitas TETAP.
+     GANTI TRANSAKSI → re-ask budget + metode pembayaran (+ durasi bila jadi
+                        sewa). Kota/landmark/moveIn/survei TETAP. Fasilitas
+                        DITINJAU ULANG (baru, sebelumnya bocor — lihat Group 10).
+     GANTI PROPERTI  → re-ask slot spesifik-tipe (furnishing/fasilitas/dst).
+                        Kota/transaksi/landmark/moveIn/survei TETAP.
+
+   Group 3/4/5 di atas sudah menguji sebagian besar ini sejak M124/M132/M154.
+   Group 10 di bawah menutup SATU celah yang baru ditemukan: fasilitas tidak
+   pernah ditinjau ulang saat HANYA transaksi yang berubah (tipe tetap).
+═══════════════════════════════════════════════════════════════════════════ */
+console.log('\n== Group 10 (M163): GANTI TRANSAKSI SENDIRIAN → fasilitas ikut ditinjau ulang ==');
+{
+  const history = [
+    C('mau beli rumah di Surabaya'),
+    A('Kisaran harga?'),
+    C('700jt-1M'),
+    A('Ada fasilitas tertentu yang diinginkan?'),
+    C('kolam renang pribadi, carport 2 mobil'),
+    A('Ada lokasi patokan?'),
+    C('dekat Pakuwon'),
+  ];
+  const st = extractQualificationState(history, 'ganti rencana, sewa aja deh');
+
+  ok('transactionType ter-update ke rent', st.transactionType === 'rent', st.transactionType);
+  ok('buildingType TETAP house (tipe tidak ikut berubah)', st.buildingType === 'house', st.buildingType);
+  ok('city TETAP Surabaya', st.city === 'Surabaya', st.city);
+  ok('anchorPoint TETAP (landmark tidak perlu ditanya ulang)', st.anchorPoint === 'dekat Pakuwon', st.anchorPoint);
+  ok('budget DI-RESET (rentang beli tidak berlaku untuk sewa)', st.budget === null, st.budget);
+  ok('facilities DI-RESET — celah yang baru ditutup (dulu bocor ke transaksi baru)',
+    st.facilities === null, JSON.stringify(st.facilities));
+}
+
+console.log('\n== Group 11 (M163): GANTI KOTA SENDIRIAN → fasilitas TETAP (kontrol negatif utk Group 10) ==');
+{
+  const history = [
+    C('mau sewa apartemen di Surabaya'),
+    A('Kisaran harga?'),
+    C('2-3jt/bulan'),
+    A('Ada fasilitas tertentu yang diinginkan?'),
+    C('AC, gym'),
+    A('Ada lokasi patokan?'),
+    C('dekat Citraland'),
+  ];
+  const st = extractQualificationState(history, 'eh ganti, di Malang aja');
+
+  ok('city ter-update ke Malang', st.city === 'Malang', st.city);
+  ok('transactionType TETAP rent (tidak ikut berubah)', st.transactionType === 'rent', st.transactionType);
+  ok('budget TETAP (transaksi tidak berubah)', /2|3/.test(st.budget || ''), st.budget);
+  ok('facilities TETAP — ganti kota TIDAK BOLEH menyentuh fasilitas (spec: "Fasilitas sama")',
+    Array.isArray(st.facilities) && st.facilities.length > 0, JSON.stringify(st.facilities));
+  ok('anchorPoint DI-RESET (landmark lama terikat kota lama)', st.anchorPoint === null, st.anchorPoint);
+}
+
 console.log(`\n${'='.repeat(60)}`);
 console.log(`RESULT: ${pass}/${pass + fail} passed${fail ? ` (${fail} FAILED)` : ' ALL PASS'}`);
 process.exit(fail === 0 ? 0 : 1);
