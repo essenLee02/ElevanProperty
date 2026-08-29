@@ -22,6 +22,27 @@ const QS_CUST_ROLES = new Set(['user', 'customer']);
 const QS_AI_ROLES   = new Set(['assistant', 'ai', 'bot']);
 
 /**
+ * Sufiks periode untuk budget: 'week' + 2 → "/2 minggu", 'year' → "/tahun".
+ *
+ * ⚠️ M169 — SATU salinan, dipakai kedua jalur (Phase 1 dan Q3a). Sebelumnya
+ * blok terner yang sama persis ditulis DUA KALI di berkas ini; menambahkan
+ * pengali periode di satu tempat saja akan membuat keduanya diam-diam berbeda
+ * pendapat soal budget yang sama — kelas bug M27/M77 yang sudah berulang di
+ * proyek ini.
+ *
+ * `count` > 1 dicetak apa adanya ("/2 minggu"): customer yang menyebut anggaran
+ * DUA MINGGU tidak boleh muncul di brief agent sebagai anggaran SATU minggu —
+ * itu melipatgandakan budget yang dibaca agent (transkrip "kerja dinas").
+ */
+function budgetPeriodSuffix(period, count = 1) {
+  const WORD = { year: 'tahun', month: 'bulan', night: 'malam', week: 'minggu' };
+  const word = WORD[period];
+  if (!word) return '';
+  const n = Number(count) > 1 ? `${Number(count)} ` : '';
+  return `/${n}${word}`;
+}
+
+/**
  * Ringkas jawaban Q12 (tower/lantai/orientasi) jadi label pendek untuk summary.
  *
  * "Antara lantai 12-18 aja, Kak"  → "Lantai 12-18"
@@ -1085,15 +1106,18 @@ function extractQualificationState(history = [], currentMessage = '') {
     if (!state.budget || isCorrectionMsg) {
       const b = detectBudget(raw);
       if (b && !b.ambiguous) {
-        if (b.preference === 'affordable') {
-          state.budget = 'terjangkau/affordable';
+        // ⚠️ M168: dulu `b.preference === 'affordable'`. detectBudget() TIDAK
+        // PERNAH mengembalikan 'affordable' — _detectBudgetTier() hanya
+        // memulangkan kosakata Indonesia 'terjangkau' | 'menengah' |
+        // 'eksklusif' (propertyRecommendationService.js). Cabang itu mati
+        // sejak tier diperkenalkan, dan 'menengah'/'eksklusif' tidak pernah
+        // punya cabangnya sendiri sama sekali. Sekarang: kategori APA PUN
+        // disimpan apa adanya sebagai nama tier-nya (angka konkret di-resolve
+        // belakangan di buildAgentBrief, yang butuh tipe+transaksi dulu).
+        if (b.preference) {
+          state.budget = b.preference;
         } else {
-          const periodSuffix = b.period === 'year'  ? '/tahun'
-            : b.period === 'month' ? '/bulan'
-            : b.period === 'night' ? '/malam'
-            : b.period === 'week'  ? '/minggu'
-            : '';
-          state.budget = b.text + periodSuffix;
+          state.budget = b.text + budgetPeriodSuffix(b.period, b.periodCount);
         }
       }
     }
@@ -1384,13 +1408,12 @@ function extractQualificationState(history = [], currentMessage = '') {
     if (/kisaran berapa|budget.{0,10}(nya|nya kira)/i.test(ai.message || '') && !state.budgetRangeAsked) {
       state.budgetRangeAsked = true;
       const b2 = detectBudget(custResp);
-      if (b2 && !b2.ambiguous && b2.preference !== 'affordable') {
-        const periodSuffix2 = b2.period === 'year'  ? '/tahun'
-          : b2.period === 'month' ? '/bulan'
-          : b2.period === 'night' ? '/malam'
-          : b2.period === 'week'  ? '/minggu'
-          : '';
-        state.budget = b2.text + periodSuffix2;
+      // ⚠️ M168: dulu `b2.preference !== 'affordable'` — selalu true, karena
+      // 'affordable' bukan nilai yang pernah dipulangkan detectBudget(). Guard
+      // ini seharusnya membedakan jawaban ANGKA dari jawaban KATEGORI; yang
+      // dicek sekarang adalah ada-tidaknya preference, bukan satu kata mati.
+      if (b2 && !b2.ambiguous && !b2.preference) {
+        state.budget = b2.text + budgetPeriodSuffix(b2.period, b2.periodCount);
       }
       // Jika customer tetap vague ("terserah aja, yang penting terjangkau") →
       // state.budget TETAP kategori lama, tapi budgetRangeAsked=true mencegah
@@ -2442,9 +2465,33 @@ Kalau sudah ada area/kecamatan tertentu, boleh sekalian disebut ya.` };
 
   // Q2c — Area/district DI DALAM kota (SEBELUM Q2b — mempersempit area pencarian)
   if (!hasSpecificLocation && !state.q2cDeclined && state.city && !isBooking && !isCommercial) {
-    const areas = getCityLandmarks(state.city);
+    /* ⭐ M170 — CONTOH AREA HARUS DARI KATALOG AGENT, BUKAN DAFTAR STATIS.
+     *
+     * Ini bug Madiun (M164) SATU TINGKAT DI BAWAHNYA. M164 menutup kasus
+     * "kotanya tidak ada di katalog". Yang tersisa: kota BENAR-BENAR ada, tapi
+     * contoh AREA-nya tetap diambil dari utils/locationLandmarks.js — daftar
+     * statis 45 kota yang sama sekali tidak tahu stok agent.
+     *
+     * Terukur untuk agent uji (29 Agu 2026, Surabaya):
+     *   disarankan (statis) : Pakuwon, Darmo, Rungkut, Gubeng
+     *   dimiliki  (katalog) : Dukuh Pakis, Waterplace, Mulyorejo, Pakuwon City,
+     *                         Citraland, MERR
+     * Hanya Citraland yang beririsan. Jadi AI mengundang customer ke Darmo /
+     * Rungkut / Gubeng — NOL listing di ketiganya — lalu meminta maaf. Persis
+     * pola keluhan pemilik proyek: "AI dilarang menebak, langsung cek isi
+     * database... area tidak boleh hardcode."
+     *
+     * `state.agentAreas` diisi pemanggil yang punya agentUserId dan boleh
+     * async (whatsappAIService). Daftar statis TETAP dipakai sebagai cadangan
+     * ketika coverage belum termuat — bertanya dengan contoh generik masih
+     * jauh lebih baik daripada slot kosong yang mengundang karangan (M84).
+     *
+     * Maksimal 3 contoh, sesuai spec pemilik proyek ("max tampilkan 3").
+     */
+    const realAreas = Array.isArray(state.agentAreas) ? state.agentAreas.filter(Boolean) : [];
+    const areas = realAreas.length ? realAreas : getCityLandmarks(state.city);
     const areaEx = areas && areas.length
-      ? `Misalnya ${areas.slice(0, 4).join(', ')}, atau area lainnya?`
+      ? `Misalnya ${areas.slice(0, 3).join(', ')}, atau area lainnya?`
       : 'Misalnya pusat kota, area selatan, atau kawasan tertentu?';
     return { q: 'Q2c', hint: `Di area atau kawasan mana di ${loc} yang Anda pertimbangkan? 📍 ${areaEx}` };
   }

@@ -72,8 +72,24 @@ console.log('\n── Group 4: budget detection (decimal ranges, Rp-prefix, peri
   ok('malformed "1.4-3-5" stays ambiguous',       b('1.4-3-5 juta/malam') === 'AMBIGUOUS');
   ok('plain "2-3 juta"',                          b('2-3 juta') === 'Rp 2.000.000 - Rp 3.000.000');
   // single-value paths still work after rp-strip
-  ok('single "harga 5 juta"',                     b('budget harga 5 juta') === 'Rp 5.000.000');
-  ok('affordable preference',                     detectBudget('yang terjangkau saja').preference === 'affordable');
+  // ⚠️ M168: satu angka telanjang TIDAK lagi jadi nilai persis. Sejak tier
+  // budget diperkenalkan, "5 juta" dibentangkan ±15% (_budgetBand) supaya
+  // katalog tidak memulangkan nol hasil hanya karena harga meleset seribu
+  // rupiah; angka aslinya tetap disimpan utuh di `.absolute`.
+  ok('single "harga 5 juta" → band ±15%',
+    b('budget harga 5 juta') === 'Rp 4.250.000 - Rp 5.750.000', b('budget harga 5 juta'));
+  ok('single "harga 5 juta" → angka asli tersimpan di .absolute',
+    detectBudget('budget harga 5 juta').absolute === 5000000,
+    String(detectBudget('budget harga 5 juta').absolute));
+  // ⚠️ M168: preference memakai kosakata tier INDONESIA, bukan 'affordable'.
+  // _detectBudgetTier() hanya pernah memulangkan terjangkau|menengah|eksklusif;
+  // dua consumer di aiPromptBuilderService masih membandingkan ke 'affordable'
+  // (cabang mati) sampai tes ini menunjukkannya.
+  ok('preference tier = "terjangkau"',
+    detectBudget('yang terjangkau saja').preference === 'terjangkau',
+    detectBudget('yang terjangkau saja').preference);
+  ok('tier "menengah" terbaca', detectBudget('menengah saja').preference === 'menengah');
+  ok('tier "eksklusif" terbaca', detectBudget('yang mewah').preference === 'eksklusif');
 }
 
 console.log('\n── Group 5: facilities+anchor answer must NOT reset type (rumah makan / lainnya) ──');

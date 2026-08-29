@@ -603,6 +603,22 @@ const DAILY_LIFE_OFFTOPIC = [
   // in-flow) lalu MEM-FLIP transaksi sewa→beli ("Untuk beli Hotel di surabaya").
   // Dicek unconditional: verba beli/pesan/order + kata kuliner = bukan properti.
   /\b(beli|pesan|order|mau\s+makan|lagi\s+makan)\s+(?:\w+\s+){0,2}?(nasi|bakso|mie|mi\b|bubur|ayam|sate|soto|rawon|rendang|pecel|gado[\s-]?gado|martabak|roti|kue|gorengan|jajan(an)?|snack|c[ae]milan|kopi|teh|es\s+\w+|jus|boba|seblak|batagor|siomay|pentol|lontong|ketoprak|nasgor|makanan|minuman)\b/i,
+  // ── M168: "PERMISI SEBENTAR" — customer menepi, bukan menjawab ──────────────
+  // Celah nyata: sesudah AI bertanya soal KPR/DP, `aiJustAsked` membuat pesan
+  // pendek APA PUN dianggap jawaban (aturan sengaja permisif — mendiamkan
+  // customer sungguhan jauh lebih mahal). Tapi "kasi makan dulu ya" / "laper
+  // nih" bukan jawaban DP; memperlakukannya begitu berarti backend mengarang
+  // isi slot dari kalimat yang tidak pernah menjawabnya.
+  //
+  // ⚠️ SENGAJA SEMPIT — hanya frasa "saya menepi dulu", dan setiap pola
+  // menuntut kata pendampingnya:
+  //   • `makan` WAJIB diikuti `dulu` → "rumah makan" (tipe properti nyata,
+  //     diuji di Group 5) TIDAK PERNAH tertangkap.
+  //   • "nanti dulu" / "bentar dulu" TIDAK dimasukkan — itu jawaban SAH untuk
+  //     "mau dijadwalkan survei?" (artinya "belum sekarang"), dan mendiamkannya
+  //     justru kesalahan yang lebih mahal.
+  /\b(makan|mandi|sh?olat|sembahyang|istirahat|tidur|rapat|meeting)\s+dulu\b/i,
+  /\b(laper|lapar|ngantuk|capek\s+banget)\b/i,
 ];
 
 /** Pesan adalah obrolan harian non-properti (mati listrik, banjir, macet, dll)? */

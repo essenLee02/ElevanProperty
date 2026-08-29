@@ -34,7 +34,18 @@ ok('location → MOTIVATION (why now)',     has(Q(base), 'apa yang membuat'));
 const mot = { ...base, hasMotivation: true, aiAskedMotivation: true };
 ok('motivation → search history',          has(Q(mot), 'sudah sempat lihat'));
 const sh = { ...mot, hasSearchHistory: true, aiAskedSearchHist: true };
-ok('search history → budget two-option',   has(Q(sh), 'kisaran') && has(Q(sh), 'mendekati rencana'));
+// ⚠️ M169: dulu mengunci kata-kata persis versi lama ("kisaran" + "mendekati
+// rencana"). Pertanyaan budget sudah berpindah ke bentuk KATEGORI
+// (terjangkau / menengah / eksklusif) bersama fitur budget-tier — perilaku baru
+// yang disengaja, tapi tes ini tetap menuntut kalimat lama sehingga gagal atas
+// perubahan yang benar. Yang dijaga sekarang adalah MAKSUDNYA: pada langkah ini
+// budget memang ditanyakan, dan ditanyakan tanpa menodong angka.
+{
+  const q = Q(sh);
+  const asksBudget = /terjangkau|menengah|eksklusif|kisaran|budget/i.test(q);
+  const offersChoice = /\*terjangkau\*|\*menengah\*|\*eksklusif\*|mendekati rencana/i.test(q);
+  ok('search history → pertanyaan BUDGET berbentuk pilihan', asksBudget && offersChoice);
+}
 ok('budget question never asks "berapa budget" directly', !has(Q(sh), 'berapa budget'));
 const bud = { ...sh, budget: '1.8-2.2M', aiAskedBudget: true };
 ok('budget → occupants (infer rooms)',     has(Q(bud), 'ditinggali bersama siapa'));
@@ -118,7 +129,14 @@ console.log('\n── Group 5: visible house SUMMARY (✓ answered / ✗ belum d
   ok('✓ Tipe humanized: Rumah',         /✓ Tipe: \*Rumah\*/.test(out));
   // Label Q2 = "Kota" (bukan "Lokasi") — "lokasi" ambigu bagi customer.
   ok('✓ Kota: Surabaya',                /✓ Kota: \*Surabaya\*/.test(out));
-  ok('✓ Masuk: 19 Agustus 2026',        /✓ Masuk: \*19 Agustus 2026\*/.test(out));
+  // ⚠️ M169: tahun TIDAK boleh dikunci. "19 Agustus ini" yang diucapkan pada
+  // 20 Agustus dan seterusnya memang seharusnya digulung ke tahun berikutnya —
+  // perilaku parser yang BENAR, tapi versi lama tes ini menuliskan "2026" apa
+  // adanya dan mulai gagal sendiri begitu tanggal itu lewat (bom waktu).
+  // Yang dijaga: tanggal & bulannya persis seperti yang customer sebut.
+  ok('✓ Masuk: 19 Agustus (tahun mengikuti kalender berjalan)',
+    /✓ Masuk: \*0?19 Agustus \d{4}\*/.test(out) || /✓ Masuk: \*19 Agustus \d{4}\*/.test(out),
+    (out.match(/✓ Masuk: \*[^*]*\*/) || ['(tidak ada baris Masuk)'])[0]);
   ok('✓ Furnitur: Full furnished',      /✓ Furnitur: \*Full furnished\*/.test(out));
   ok('✓ Budget normalized + period',    /✓ Budget: \*Rp 9\.000\.000 - Rp 10\.000\.000\/tahun\*/.test(out));
   ok('✗ Fasilitas belum ditanyakan',    /✗ Fasilitas: \*\(Belum ditanyakan\)\*/.test(out));
@@ -192,7 +210,18 @@ console.log('\n── Group 8: summary brief field accuracy (full dinas transcri
   const f = extractPropertyFilters(last, hist);
   const p = CQ.buildProfile(hist, last, f);
   const brief = CQ.buildAgentBrief(p, f, hist, last);
-  ok('Masuk has year (3 September 2026)', brief.moveInDate.value === '3 September 2026');
+  // ⚠️ M169: dulu mengunci string persis '3 September 2026'. Dua hal salah di
+  // situ: (a) TAHUN-nya hardcode, jadi berkas ini jadi bom waktu — begitu
+  // 3 September lewat, parser (benar) menggulung ke tahun berikutnya dan tes
+  // gagal tanpa ada yang rusak; (b) formatnya ber-nol-di-depan ("03") di jalur
+  // ini, sementara jalur jadwal survei mencetak tanpa nol — ketidakseragaman
+  // yang nyata tapi terpisah dari yang diuji di sini.
+  // Yang benar-benar dijaga: TANGGAL & BULAN yang customer sebut, bukan
+  // durasi sewa "2 minggu" yang dulu menimpanya (jadi 12 September).
+  ok('Masuk = 3 September (dari kalimat customer, BUKAN durasi 2 minggu)',
+    /^0?3 September \d{4}$/.test(brief.moveInDate.value), brief.moveInDate.value);
+  ok('Masuk TIDAK diambil dari durasi sewa (bukan hari-ini + 14)',
+    !/12 September/.test(brief.moveInDate.value), brief.moveInDate.value);
   ok('Furnitur = Semi furnished (bare "semi")', brief.furnishing.value === 'Semi furnished');
   ok('Budget appends period /2 minggu', /\/2\s*minggu$/.test(brief.budget.value));
   ok('Facilities keep all items', ['AC','Lemari','Kasur','Kulkas'].every(x => brief.facilities.value.includes(x)));

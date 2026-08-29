@@ -204,6 +204,26 @@ function parseCustomerDate(text, now = new Date()) {
   // pembiayaan/KPR di mana pun pada pesan berarti bentuk BARE (tanpa
   // "lagi"/"kedepan"/"dalam") tidak boleh menyala di sini sama sekali.
   const hasFinancingSignal = /\b(kpr|kredit|cicilan|angsuran|tenor|pinjaman|dp|down\s*payment|bunga)\b/i.test(t);
+  /* ⚠️ M169 — DURASI SEWA BUKAN TANGGAL MASUK.
+   *
+   * Kelas yang sama persis dengan dua guard di atas, unit yang berbeda.
+   * Bug produksi (transkrip "kerja dinas", ditemukan 29 Agu 2026):
+   *     "Saya rencana sewa rumah di surabaya... butuh sewa selama 2 minggu"
+   * Tidak ada sinyal mata uang maupun pembiayaan di kalimat itu, jadi aturan
+   * BARE di bawah membaca "2 minggu" sebagai "2 minggu DARI SEKARANG" dan
+   * memulangkan 12 September 2026 (29 Agu + 14 hari). Nilai fabrikasi itu lalu
+   * MENIMPA Q8 (Masuk) — mengalahkan "Rencana 3 September ini" yang benar-benar
+   * diucapkan customer. Agent menerima brief dengan tanggal masuk meleset
+   * sembilan hari, dari kalimat yang sama sekali tidak membicarakan tanggal.
+   *
+   * "selama/durasi/untuk N <unit>" adalah PANJANG SEWA (Q10), bukan kapan
+   * masuk. Guard hanya mematikan bentuk BARE — "2 minggu lagi" tetap tanggal
+   * karena ditangani cabang berpenanda di atas, jadi kasus sah itu tidak
+   * tersentuh (dikunci di durationDateConflation.test.js).
+   */
+  const hasDurationSignal = /\b(selama|durasi|sepanjang)\b/i.test(t)
+    || /\b(?:untuk|buat)\s+\d{1,3}\s*(?:hari|minggu|bulan|tahun|malam)\b/i.test(t)
+    || /\b(?:sewa|nginap|menginap|stay|tinggal)\s+(?:\w+\s+){0,3}?\d{1,3}\s*(?:hari|minggu|bulan|tahun|malam)\b/i.test(t);
   {
     const m = t.match(new RegExp(
       `\\b(\\d{1,3})\\s*[-–]\\s*(\\d{1,3})\\s*(${REL_UNIT_RE})\\b(?:\\s+(?:lagi|kedepan|ke\\s+depan|mendatang))?`
@@ -240,7 +260,7 @@ function parseCustomerDate(text, now = new Date()) {
       m = t.match(new RegExp(`\\bdalam\\s+(\\d{1,3})\\s*(${REL_UNIT_RE})\\b`));
       if (m) { n = parseInt(m[1], 10); unit = m[2]; }
     }
-    if (!m && !hasCurrencySignal && !hasFinancingSignal) {
+    if (!m && !hasCurrencySignal && !hasFinancingSignal && !hasDurationSignal) {
       // Bare form: "N unit" with no qualifier at all — but only when the
       // token immediately after isn't a month name (so "3 juni" is never
       // misread as "3 <unit>"; REL_UNIT_RE only matches hari/minggu/bulan/

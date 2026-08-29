@@ -42,6 +42,7 @@ const { buildRagContext }                           = require('./ragRetrievalSer
 const { isSilentSentinel }                          = require('../utils/offTopicSentinel');
 const { tryTerminologyAnswer }                      = require('../utils/terminologyAnswerGate');
 const { getAgentCoverage,
+        getAgentAreaNames,
         buildAgentCoverageContext }                 = require('./agentCoverageService');
 const { resolveGuardrailProfile }                   = require('../utils/guardrailPolicy');
 const { evaluateListingReadiness,
@@ -476,6 +477,33 @@ async function _generateWhatsAppAIReplyCore(params) {
     qualState = extractQualificationState(history, message) || {};
     if (!filters.district && qualState.district)    filters.district = qualState.district;
     if (!filters.landmark && qualState.anchorPoint) filters.landmark = qualState.anchorPoint;
+
+    /* ⭐ M170: suplai CONTOH AREA NYATA untuk Q2c.
+     *
+     * findNextQuestion() sinkron dan tidak punya agentUserId, jadi ia tidak
+     * bisa menanyakan katalog sendiri — tanpa suntikan ini ia jatuh ke daftar
+     * statis locationLandmarks.js dan menawarkan area yang agent tidak punya
+     * (Darmo/Rungkut/Gubeng untuk agent yang sebenarnya punya Dukuh Pakis/
+     * Waterplace/Mulyorejo). Coverage sudah ber-cache 5 menit, jadi ini tidak
+     * menambah query per pesan.
+     *
+     * Fail-open: kalau coverage gagal dimuat, agentAreas tetap kosong dan
+     * findNextQuestion memakai cadangan statisnya — bertanya dengan contoh
+     * generik masih lebih baik daripada tidak bertanya sama sekali.
+     */
+    const cityForAreas = qualState.city || filters.location || '';
+    if (agentUserId && cityForAreas) {
+      try {
+        const cov = await getAgentCoverage(agentUserId);
+        const realAreas = getAgentAreaNames(
+          cov, cityForAreas,
+          qualState.buildingType || '', qualState.transactionType || '', 3
+        );
+        if (realAreas && realAreas.length) qualState.agentAreas = realAreas;
+      } catch (covErr) {
+        console.warn('[WhatsAppAI] contoh area dari katalog gagal (fail-open):', covErr.message);
+      }
+    }
   } catch (qsErr) {
     console.warn('[WhatsAppAI] enrich lokasi spesifik gagal (fail-open):', qsErr.message);
   }

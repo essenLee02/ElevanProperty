@@ -72,20 +72,51 @@ console.log('\n== kimiService.js — sudah dari M102, kontrol tetap utuh ==');
   ok('default tetap 90000', /KIMI_TIMEOUT_MS\s*\|\|\s*90000/.test(s));
 }
 
-console.log('\n== .env — provider primer aktual (kimi) diturunkan ke 30 detik ==');
+/* ⚠️ M167 — DIJAGA UNTUK PROVIDER YANG SEDANG AKTIF, BUKAN UNTUK "kimi".
+ *
+ * Versi lama berkas ini hanya memeriksa KIMI_TIMEOUT_MS, karena saat ditulis
+ * kimi memang provider primernya. Pada 29 Agu 2026 AI_PRIMARY_PROVIDER sudah
+ * berpindah ke `qwen` — dan QWEN_TIMEOUT_MS tidak pernah di-set sama sekali,
+ * jadi diam-diam memakai default 60 detik. Bug latensi yang sama persis
+ * kembali di provider berbeda, sementara tes ini tetap hijau untuk kimi.
+ *
+ * Sekarang yang dikunci adalah SIFATNYA: provider mana pun yang sedang aktif
+ * harus punya timeout EKSPLISIT dan wajar di .env.
+ */
+console.log('\n== .env — provider primer yang SEDANG AKTIF harus punya timeout eksplisit ==');
 {
   const envPath = path.join(__dirname, '..', '.env');
   if (fs.existsSync(envPath)) {
     const env = fs.readFileSync(envPath, 'utf8');
     const primaryMatch = env.match(/^AI_PRIMARY_PROVIDER\s*=\s*(\S+)/m);
-    const primary = primaryMatch ? primaryMatch[1].trim() : null;
+    const primary = primaryMatch ? primaryMatch[1].trim().toLowerCase() : null;
     console.log(`  (AI_PRIMARY_PROVIDER saat ini: ${primary})`);
-    const kimiTimeoutMatch = env.match(/^KIMI_TIMEOUT_MS\s*=\s*(\d+)/m);
-    ok('KIMI_TIMEOUT_MS diisi eksplisit (bukan diam-diam default 90000)', !!kimiTimeoutMatch,
-      'KIMI_TIMEOUT_MS tidak ditemukan di .env');
-    if (kimiTimeoutMatch) {
-      ok('KIMI_TIMEOUT_MS <= 30000 (respons cepat, fallback tidak menunggu lama)',
-        Number(kimiTimeoutMatch[1]) <= 30000, kimiTimeoutMatch[1]);
+
+    // Nama env timeout tidak selalu = nama provider (openai → GPT_TIMEOUT_MS).
+    const ENV_KEY = {
+      qwen: 'QWEN_TIMEOUT_MS', kimi: 'KIMI_TIMEOUT_MS', deepseek: 'DEEPSEEK_TIMEOUT_MS',
+      openrouter: 'OPENROUTER_TIMEOUT_MS', chatgpt: 'GPT_TIMEOUT_MS', openai: 'GPT_TIMEOUT_MS',
+      claude: 'CLAUDE_TIMEOUT_MS',
+    };
+    const key = ENV_KEY[primary];
+    ok(`provider aktif "${primary}" dikenali (punya env timeout)`, !!key, `primary=${primary}`);
+
+    if (key) {
+      const m = env.match(new RegExp(`^${key}\\s*=\\s*(\\d+)`, 'm'));
+      ok(`${key} diisi eksplisit (tidak mewarisi default panjang diam-diam)`, !!m,
+        `${key} tidak ditemukan di .env`);
+      if (m) {
+        ok(`${key} <= 30000 (customer WhatsApp tidak menunggu >30 detik)`,
+          Number(m[1]) <= 30000, m[1]);
+      }
+    }
+
+    // Semua provider yang punya kredensial juga sebaiknya eksplisit — supaya
+    // mengganti AI_PRIMARY_PROVIDER besok tidak menghidupkan ulang bug ini.
+    for (const k of ['QWEN_TIMEOUT_MS', 'KIMI_TIMEOUT_MS', 'DEEPSEEK_TIMEOUT_MS',
+      'OPENROUTER_TIMEOUT_MS', 'GPT_TIMEOUT_MS', 'CLAUDE_TIMEOUT_MS']) {
+      const m = env.match(new RegExp(`^${k}\\s*=\\s*(\\d+)`, 'm'));
+      ok(`${k} eksplisit`, !!m, `${k} belum di-set`);
     }
   } else {
     console.log('  (.env tidak ada di lingkungan ini — lewati, ini bukan lingkungan produksi)');

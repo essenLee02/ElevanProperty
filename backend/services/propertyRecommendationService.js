@@ -1327,7 +1327,35 @@ const _BUDGET_RANGE_RE = new RegExp(
   'i'
 );
 
+/**
+ * ⚠️ M169 — pembungkus tipis: menstempel `periodCount` pada hasil apa pun.
+ *
+ * detectBudget punya BANYAK titik return (range ambigu, range valid, band ±15%,
+ * ceiling, tier kualitatif). Menambahkan field baru satu per satu di tiap
+ * return adalah cara paling mudah untuk melewatkan satu — jadi pengali periode
+ * distempel sekali di batas fungsi. `periodCount` selalu ada dan minimal 1,
+ * sehingga pemanggil tidak perlu memeriksa undefined.
+ */
 function detectBudget(message = '') {
+  const result = _detectBudgetInner(message);
+  if (!result || typeof result !== 'object') return result;
+  if (result.periodCount === undefined) {
+    result.periodCount = _detectPeriodCount(message);
+  }
+  return result;
+}
+
+/** Pengali satuan periode dari teks: "/2 minggu" → 2, "/minggu" → 1. */
+function _detectPeriodCount(message = '') {
+  const text = normalizeText(message).replace(/\b(?:rp|idr)\s*(?=\d)/gi, '');
+  const m = text.match(
+    /\d[\d.,]*\s*(?:juta|jutaan|jt|ribu|rb|miliar|milyar)?\s*(?:\/|per\s+)\s*(\d{1,2})\s*(?:tahun|year|bulan|month|minggu|week|malam|night|hari|harian|day)\b/i
+  );
+  if (!m) return 1;
+  return Math.max(1, parseInt(m[1], 10) || 1);
+}
+
+function _detectBudgetInner(message = '') {
   // Strip currency markers that sit directly before a number ("rp1.4", "rp 3.5",
   // "idr 5jt"). Without this, a ranged answer like "Rp1.4 - Rp 3.5 juta" breaks the
   // range regex (the inner "rp" isn't part of a number token) and only the max value
@@ -1351,8 +1379,16 @@ function detectBudget(message = '') {
   // malam") adalah pernyataan periode HARGA yang paling tegas — dipakai lebih
   // dulu. Pemindaian longgar tetap dipertahankan sebagai fallback untuk kalimat
   // tanpa satuan menempel ("budgetnya 5 juta, per bulan ya").
+  /* ⚠️ M169: satuan periode boleh punya PENGALI ("/2 minggu", "per 3 bulan").
+   * Versi lama menuntut nama satuan PERSIS sesudah "/" atau "per", jadi
+   * "2-4 juta/2 minggu" gagal cocok di sini dan jatuh ke pemindaian longgar
+   * di bawah, yang hanya menemukan kata "minggu" → period 'week'. Angka 2-nya
+   * hilang, dan brief ke agent berbunyi "Rp 2.000.000 - Rp 4.000.000/minggu"
+   * untuk customer yang sebenarnya menyebut anggaran DUA MINGGU — praktis
+   * melipatgandakan budget yang dilihat agent (transkrip "kerja dinas").
+   */
   const attachedPeriod = text.match(
-    /\d[\d.,]*\s*(?:juta|jutaan|jt|ribu|rb|miliar|milyar)?\s*(?:\/|per\s+)\s*(tahun|year|bulan|month|minggu|week|malam|night|hari|harian|day)\b/i
+    /\d[\d.,]*\s*(?:juta|jutaan|jt|ribu|rb|miliar|milyar)?\s*(?:\/|per\s+)\s*(\d{1,2})?\s*(tahun|year|bulan|month|minggu|week|malam|night|hari|harian|day)\b/i
   );
 
   const mapPeriodWord = (word) => {
@@ -1364,8 +1400,14 @@ function detectBudget(message = '') {
     return '';
   };
 
+  // Pengali periode: "/2 minggu" → 2. Selalu >= 1; 1 berarti satuan biasa dan
+  // tidak pernah ikut dicetak ("/minggu", bukan "/1 minggu").
+  const periodCount = attachedPeriod && attachedPeriod[1]
+    ? Math.max(1, parseInt(attachedPeriod[1], 10) || 1)
+    : 1;
+
   const period = attachedPeriod
-    ? mapPeriodWord(attachedPeriod[1])
+    ? mapPeriodWord(attachedPeriod[2])
     : (/tahun|year|annual|per tahun|\/tahun/.test(text) ? 'year'
       : /bulan|month|monthly|per bulan|\/bulan/.test(text) ? 'month'
       // "seminggu"/"per minggu" diperiksa SEBELUM cabang malam/hari: kata "hari"

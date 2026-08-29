@@ -97,7 +97,10 @@ assert('house beli tanpa financing → Q_KPR', findNextQuestion({ ...beliBase })
 assert('house beli + KPR → Q_KPR-a',         findNextQuestion({ ...beliBase, financing: 'KPR' }).q, 'Q_KPR-a');
 assert('house beli + cash → Q_COND',         findNextQuestion({ ...beliBase, financing: 'cash' }).q, 'Q_COND');
 assert('house beli + kondisi → Q11 furnitur', findNextQuestion({ ...beliBase, financing: 'cash', propertyCondition: 'second' }).q, 'Q11');
-assert('house beli lengkap → null (summary)', findNextQuestion({ ...beliBase, financing: 'cash', propertyCondition: 'second', furnishing: 'kosongan' }), null);
+// M169: alur bertambah panjang sejak tes ini ditulis — Q_FAC (fasilitas) dan
+// Q9b/Q9c (jadwal survei) kini ikut ditanyakan sebelum summary. Fixture lama
+// berhenti di 'furnishing' sehingga 'lengkap' tidak lagi benar-benar lengkap.
+assert('house beli lengkap → null (summary)', findNextQuestion({ ...beliBase, financing: 'cash', propertyCondition: 'second', furnishing: 'kosongan', facilities: 'standar saja', viewingDate: '5 September 2026', viewingTime: '10.00' }), null);
 assert('hotel beli → Q14 akuisisi',          findNextQuestion({ ...beliBase, buildingType: 'hotel', financing: 'cash' }).hint.includes('operasional'), true);
 assert('kos beli → Q14 investasi kos',       findNextQuestion({ ...beliBase, buildingType: 'boarding_house', financing: 'cash' }).hint.includes('pengelola'), true);
 assert('ruko beli → Q14 tenant status',      findNextQuestion({ ...beliBase, buildingType: 'shophouse', financing: 'cash' }).hint.includes('tenant'), true);
@@ -108,7 +111,7 @@ assert('others beli → Q14 sertifikat+zonasi', findNextQuestion({ ...beliBase, 
 assert('apartemen beli → Q_COND dulu',       findNextQuestion({ ...beliBase, buildingType: 'apartment', financing: 'cash', apartmentPref: 'lantai tinggi' }).q, 'Q_COND');
 assert('mansion beli → Q14 multi-generasi',  findNextQuestion({ ...beliBase, buildingType: 'mansion', financing: 'cash', propertyCondition: 'baru/ready', furnishing: 'semi' }).hint.includes('multi-generasi'), true);
 assert('kondotel beli → Q14 ROI',            findNextQuestion({ ...beliBase, buildingType: 'kondotel', financing: 'cash' }).hint.includes('ROI'), true);
-assert('beli Q8 wording = target beli',      findNextQuestion({ buildingType: 'house', transactionType: 'sale', location: 'Surabaya', searchHistory: 'y', budget: '1M' }).hint.includes('target'), true);
+assert('beli Q8 wording = target beli',      findNextQuestion({ buildingType: 'house', transactionType: 'sale', location: 'Surabaya', district: 'Rungkut', searchHistory: 'y', budget: '1M' }).hint.includes('target'), true);
 // Investasi yang akan DISEWAKAN (kos/kontrakan) → tanya target penyewa (bukan "tinggal bersama siapa").
 assert('beli Q4 investasi+sewa → target penyewa', findNextQuestion({ ...beliBase, household: null, useCase: 'investasi', rentOutIntent: true }).hint.includes('target penyewa'), true);
 // Investasi tanpa niat sewa (didiamkan sbg aset) → JANGAN tanya penghuni; skip Q4.
@@ -118,7 +121,10 @@ assert('beli Q4 kantor → skip Q4',            findNextQuestion({ ...beliBase, 
 assert('beli Q4 ibadah → skip Q4',            findNextQuestion({ ...beliBase, household: null, useCase: 'ibadah (non-hunian)' }).q !== 'Q4', true);
 
 console.log('\n── Group 5: Q8 klarifikasi (rule 25/35) via findNextQuestion ──');
-const sewaBase = { buildingType: 'house', transactionType: 'rent', location: 'Surabaya', searchHistory: 'y', budget: '5jt' };
+// M169: 'district' WAJIB ada. Q2c (pertanyaan area) kini mendahului Q8, jadi
+// fixture yang hanya menyebut KOTA tidak pernah sampai ke Q8 dan tes Q8 gagal
+// atas urutan alur yang justru benar.
+const sewaBase = { buildingType: 'house', transactionType: 'rent', location: 'Surabaya', district: 'Rungkut', searchHistory: 'y', budget: '5jt' };
 assert('moveInDateAsk=current_month → Q8 hint Waiting the update',
   findNextQuestion({ ...sewaBase, moveInDateAsk: 'current_month' }).hint.includes('Waiting the update'), true);
 assert('moveInDateAsk=soon → Q8 hint tanya tanggal',
