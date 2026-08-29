@@ -102,9 +102,10 @@ function getMarkdownFiles(directoryPath) {
 }
 
 // ─── Conditional Reference Files ──────────────────────────────────────────────
-// Docs 11-13 are segment- or topic-scoped: the house/apartment pilot playbooks, the
-// facility vocabulary, and the location-anchor/landmark tables. All are large and
-// only useful when the conversation actually touches that topic or property segment.
+// Docs 11-14 and 16 are segment- or topic-scoped: the house/apartment pilot playbooks,
+// the facility vocabulary, the location-anchor/landmark tables, the legal/tax/KPR
+// reference, and the non-property counterpart lanes (supplier/HRD/IT/Admin). All are
+// large and only useful when the conversation actually touches that topic or segment.
 // Concatenating everything in fixed filename order (01, 02, ...)
 // means these ALWAYS lose to the core docs once the character budget is hit — they
 // never reach the LLM regardless of relevance. Instead, only include them when the
@@ -125,6 +126,20 @@ const CONDITIONAL_FILE_TRIGGERS = {
   '11-house-pilots.md': /\b(rumah|rmh|house|apartemen|apartment|apart|kontrakan|perumahan|kpr|cicilan|dp\b|rumah123|listing|masih\s*ada)\b/i,
   '12-facilities-reference.md': /\b(fasilitas|facility|facilities|gym|kolam|pool|wifi|ac\b|parkir|parking|dapur|kitchen|furnish|kasur|bed|lemari|wardrobe|balkon|balcony|jacuzzi|sauna|yoga|mushola|laundry|elevator|lift\b)\b/i,
   '13-locations-and-landmarks.md': /\b(dekat|deket|near|patokan|anchor|landmark|di\s+jalan|di\s+sekitar|kawasan|wisata|mall|mal\b|pakuwon|tunjungan|grand\s*city)\b/i,
+
+  // Legal/tax/financing reference. Same shape as 12/13: a large lookup table that only
+  // matters once the conversation actually reaches certificates, tax or a mortgage. Doc
+  // 09 §3a still carries the always-on handling rule for these terms, so a trigger miss
+  // degrades to "answer it from doc 09" rather than to silence.
+  '14-legalitas-pajak-kpr.md': /\b(shm|shgb|shsrs|hgb|ajb|ppjb|ppat|girik|imb|pbg|slf|sertifikat|certificate|legalitas|legality|notaris|notary|pajak|tax|bphtb|pph|kpr|mortgage|dp\b|uang\s*muka|cicilan|angsuran|tenor|bunga|akad|balik\s*nama|over\s*kredit)\b/i,
+
+  // Non-property counterpart lanes (supplier, applicant, visitor, insurance, IT fault).
+  // Near-disjoint from the property vocabulary above, so it almost never stacks with
+  // 11-14 in the same message — which is what keeps the all-inclusive worst case under
+  // SKILL_MAX_RESPONSE_CHARACTERS. Kept deliberately broad: an over-trigger costs only
+  // budget on that one message, while a miss sends a supplier or applicant into the
+  // off-topic guard.
+  '16-counterpart-roles-and-division-routing.md': /\b(supplier|suplai|vendor|distributor|penawaran|menawarkan|proposal|kerja\s*sama|lowongan|loker|lamaran|melamar|pelamar|karir|career|cv\b|resume|magang|internship|rekrut|recruit|hrd|asuransi|insurance|bpjs|kunjungan|audiensi|studi\s*banding|error|eror|bug|tidak\s*bisa\s*(login|dibuka)|komplain|keluhan|complaint|refund|pengembalian\s*dana)\b/i,
 };
 
 function isConditionalFile(filePath) {

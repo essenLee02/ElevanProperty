@@ -159,53 +159,50 @@ minimum slots → 2 listings → refine on the customer's reaction → summary b
 
 ## 6. Document Index
 
-Read in numeric order. `docs/12` and `docs/13` are **conditional** — loaded only when the
-conversation actually mentions facilities or landmarks.
-
-**Core behaviour — always applies**
+`docs/00` is the grounding contract and governs **every** reply — read it first. `docs/01`–`10`
+and `docs/15` are always loaded. `docs/11`–`14` and `docs/16` are **conditional**: loaded only
+when the conversation actually raises that topic.
 
 | File | Topic |
 |---|---|
+| `docs/00-data-grounding-and-verification.md` | **Grounding contract** — source ladder, 5 pre-assert checks, immutability, RAG safety, final self-audit |
 | `docs/01-core-role-and-style.md` | Role, scope, style, "Kak", WhatsApp formatting, when not to respond |
 | `docs/02-language-and-intent.md` | Language rules, `FORCED REPLY LANGUAGE`, property-intent detection, type mapping, terminology |
-| `docs/03-conversation-memory.md` | Context continuation, the 8 tracked dimensions, lazy replies, accumulation & reset, privacy |
-
-**Qualification engine**
-
-| File | Topic |
-|---|---|
+| `docs/03-conversation-memory.md` | Context continuation, 8 tracked dimensions, lazy replies, accumulation & granular change, privacy |
 | `docs/04-qualification-flow.md` | **MASTER** — Q1–Q14, state injector, session boundaries, budget tiers, summary brief rules |
 | `docs/05-answer-completeness-and-reask.md` | What counts as answered, partial answers, 2-level deflection, anti-loop |
 | `docs/06-customer-conditions-and-diagnosis.md` | Tone baseline, C1–C9 conditions, type/ambiguity diagnosis, focus invariant |
 | `docs/07-property-type-playbooks.md` | 12 types × sewa/beli — frames, slot order, Q14 slots, skip rules, summary templates |
-
-**Output & guards**
-
-| File | Topic |
-|---|---|
 | `docs/08-catalog-and-recommendations.md` | Matching priority, location fallback, budget expansion, reply templates, catalog-only sourcing |
-| `docs/15-catalog-conversation-cases.md` | **Worked dialogues** — empty city, empty area, budget outside stock, listing counts, certificate & viewing turns |
-| `docs/09-offtopic-and-escalation.md` | Off-topic guard (82 categories) + exceptions, agent self-chat admin commands (AI/catalog on-off), agent interruption auto-handover, negotiation limits, escalation |
+| `docs/09-offtopic-and-escalation.md` | Off-topic guard (82 categories) + exceptions, agent self-chat admin commands, agent-interruption handover, negotiation, escalation |
 | `docs/10-date-money-parsing.md` | 35 date rules, 51 budget cases, 13 rental periods |
-| `docs/11-house-pilots.md` | House v2 agent-representative pilot + v1 listing-referral pilot |
+| `docs/15-catalog-conversation-cases.md` | **Worked dialogues** — empty city/area, budget outside stock, listing counts, certificate & viewing turns |
 
-**Conditional reference**
+**Conditional — loaded on topic**
 
-| File | Topic |
+| File | Loads when the chat raises |
 |---|---|
-| `docs/12-facilities-reference.md` | Facility vocabulary, Q_FAC, standard-facilities fallback |
-| `docs/13-locations-and-landmarks.md` | Anchor recognition, landmark categories, per-city examples |
+| `docs/11-house-pilots.md` | House/apartment pilots — v2 agent-representative, v1 listing-referral |
+| `docs/12-facilities-reference.md` | Facilities — vocabulary, Q_FAC, standard fallback |
+| `docs/13-locations-and-landmarks.md` | Locations — anchors, landmarks, per-city examples |
+| `docs/14-legalitas-pajak-kpr.md` | Certificates, tax, KPR (doc 09 §3a always applies) |
+| `docs/16-counterpart-roles-and-division-routing.md` | Supplier / applicant / visitor / insurance / IT — **and complaints** |
 
 ---
 
 ## 7. Maintenance
 
-`claude_responds/docs/*.md` and `chat_gpt_responds/docs/*.md` must stay **byte-identical**.
-Only `SKILL.md` differs (frontmatter + H1). After editing one side:
+`claude_responds/docs/*.md` and `chat_gpt_responds/docs/*.md` must stay **byte-identical** (CRLF
+included). Only `SKILL.md` differs (frontmatter + H1). After editing one side:
 
 ```bash
 cp skills/chat_gpt_responds/docs/XX.md skills/claude_responds/docs/XX.md && diff -r skills/chat_gpt_responds/docs skills/claude_responds/docs
 ```
 
-The `diff` must be empty. `docs/12` and `docs/13` are keyed by filename in
-`skillPromptService.js` (`CONDITIONAL_FILE_TRIGGERS`) — renaming either requires updating that map.
+The `diff` must be empty. Conditional docs are keyed **by filename** in `skillPromptService.js`
+(`CONDITIONAL_FILE_TRIGGERS`) — renaming one without updating that map silently makes it
+always-on and eats the budget the core docs need.
+
+⚠️ The concatenation is capped by `SKILL_MAX_RESPONSE_CHARACTERS`; past the cap the **tail is
+silently sliced off**. Measure with `loadSkillGroupPrompt` (characters, not `wc -c` bytes) after
+any addition. `docs/00` sorts first so the grounding contract can never be what vanishes.

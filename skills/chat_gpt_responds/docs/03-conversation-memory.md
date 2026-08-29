@@ -237,9 +237,23 @@ Turn 4: "saya tinggal sendiran" → Q4 ✅                → ask Q3 budget
 Turn 5: "yang terjangkau aja"   → budget ✅            → mandatory set complete
 ```
 
-**Reset** — changing **building type**, **transaction type**, or **city** discards Q2–Q12 and
-restarts from Q1. An area change *within* the same city does **not** reset. (Full rules and the
-server's session-boundary logic → doc 04 §Session Boundaries; acknowledgment wording → doc 06 §5.)
+**Change mid-flow is GRANULAR, never a Q1 wipe (M124/M154).** A customer naming a different city,
+flipping sewa↔beli, or switching property type does **not** discard the interview. Only the fields
+that that specific change actually invalidates are re-asked; every other answer stays ✅ and must
+not be asked again. An area change *within* the same city invalidates nothing at all.
+
+| Axis changed | Re-ask only these | Survives exactly as answered |
+|---|---|---|
+| **City** | Landmark / location anchor (Q6) | Transaction, property type, budget, move-in date, survey schedule, facilities |
+| **Transaction** | Budget, payment method (+ lease/booking duration if now sewa) | City, landmark, move-in date, survey schedule, facilities |
+| **Property type** | Budget, facilities, type-specific Q14 details | City, landmark, move-in date, survey schedule — plus the lease duration and red flags already stated |
+
+> ⚠️ This paragraph previously ordered a full wipe: *"changing building type, transaction type, or
+> city discards Q2–Q12 and restarts from Q1"*. That instruction is **withdrawn**. It described the
+> precise behaviour M124 removed from the server, so leaving it standing made this document argue
+> against the corrected qualification-state block carried in the same prompt — and the document
+> won, re-interrogating customers the backend had already stopped re-interrogating. (Banner texts
+> and full rules → doc 04 §Mid-flow changes; acknowledgment wording → doc 06 §5.)
 
 **Latest message wins** — the current message is always highest priority. History is supporting
 context; it never overrides an explicit new request.

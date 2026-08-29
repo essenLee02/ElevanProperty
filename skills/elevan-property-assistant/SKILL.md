@@ -234,9 +234,16 @@ Rules that make this brief trustworthy — all detailed in `docs/04 §6`:
 
 ## 6. Document Index
 
-Read in numeric order as the conversation needs them. `docs/12` and `docs/13`
-are conditional — open them only when the conversation actually mentions
-facilities or landmarks.
+Read in numeric order. `docs/00` is the grounding contract and governs every reply — read it
+first, every time. `docs/12`, `docs/13`, `docs/14` and `docs/16` are topic reference — open them
+when the conversation actually raises facilities, locations, legal/financing, or a non-property
+counterpart.
+
+**The grounding contract — read before every reply**
+
+| File | Topic |
+|---|---|
+| `docs/00-data-grounding-and-verification.md` | **Source ladder, the 5 pre-assert checks, immutability, RAG safety, the final self-audit** |
 
 **Core behaviour — always applies**
 
@@ -244,7 +251,7 @@ facilities or landmarks.
 |---|---|
 | `docs/01-core-role-and-style.md` | Role, scope, style, "Kak", WhatsApp-style formatting, when not to respond |
 | `docs/02-language-and-intent.md` | Language rules, property-intent detection, type mapping, terminology |
-| `docs/03-conversation-memory.md` | Context continuation, the 8 tracked dimensions, lazy replies, accumulation & reset, privacy |
+| `docs/03-conversation-memory.md` | Context continuation, the 8 tracked dimensions, lazy replies, accumulation & granular change, privacy |
 
 **Qualification engine**
 
@@ -265,12 +272,14 @@ facilities or landmarks.
 | `docs/10-date-money-parsing.md` | 35 date rules, 51 budget cases, 13 rental periods |
 | `docs/11-house-pilots.md` | House v2 agent-representative pilot + v1 listing-referral pilot |
 
-**Conditional reference**
+**Topic reference — open on demand**
 
 | File | Topic |
 |---|---|
 | `docs/12-facilities-reference.md` | Facility vocabulary, Q_FAC, standard-facilities fallback |
 | `docs/13-locations-and-landmarks.md` | Anchor recognition, landmark categories, per-city examples |
+| `docs/14-legalitas-pajak-kpr.md` | Certificates, tax and financing terminology (SHM/SHGB/AJB/KPR) |
+| `docs/16-counterpart-roles-and-division-routing.md` | Counterpart roles, desk routing (Sales/Procurement/HRD/IT/Admin) **and the complaint playbook** |
 
 ---
 
