@@ -672,8 +672,51 @@ function extractQualificationState(history = [], currentMessage = '') {
   history        = normalizedHistory;
   currentMessage = normalizedCurrent;
 
-  // Build chronological message array (history is already oldest-first from DB reverse)
-  const ALL = [...(history || []), { role: 'customer', message: currentMessage }];
+  /* ── Build chronological message array ────────────────────────────────────
+   * (history is already oldest-first from DB reverse)
+   *
+   * ⭐ M166 — JANGAN MENGGANDAKAN PESAN SAAT INI.
+   *
+   * Ketiga controller WhatsApp (Kirimi/Fonnte/TimelinesAI) MENYIMPAN pesan
+   * customer ke `chat_messages` LEBIH DULU, baru memanggil
+   * generateWhatsAppAIReply() (kirimiChatController.js: simpan ~697, panggil
+   * ~711). Jadi getConversationHistory() SUDAH memulangkan pesan itu — dan
+   * baris ini dulu menambahkannya SEKALI LAGI.
+   *
+   * Akibatnya fatal dan senyap: `lastIdx = ACTIVE_ALL.length - 1` menunjuk ke
+   * salinan KEDUA, sedangkan resolver kanonik mencatat flip-nya di salinan
+   * PERTAMA. Perbandingan `runTxIdx === lastIdx` karena itu SELALU false,
+   * sehingga SELURUH sistem reset mid-flow (M124 / M132 / M154 / M163)
+   * TIDAK PERNAH SEKALI PUN menyala untuk customer WhatsApp — hanya jalur web
+   * chat (yang tidak menyimpan lebih dulu) yang pernah menjalankannya.
+   *
+   * Terbukti lewat A/B (29 Agu 2026), transkrip "sewa → beli":
+   *   bentuk web      → tx=sale, budget=null,                  txChanged=true
+   *   bentuk whatsapp → tx=sale, budget="Rp 30.855.000…/tahun", txChanged=false
+   * Itulah asal "budget Rp 36.300.000/tahun" yang menempel pada pencarian
+   * BELI di transkrip produksi 29 Agu 2026.
+   *
+   * Akar masalahnya satu keluarga dengan M162 (TTL sesi tidak pernah menyala):
+   * simpan-dulu-baru-baca. Dikompensasi di SATU titik konsumen ini, bukan
+   * dengan membalik urutan simpan di tiga controller — urutan itu dipakai juga
+   * oleh dedup pesan & penyimpanan audit.
+   *
+   * Pencocokan memakai teks TERNORMALISASI (sesudah expandAbbreviations) dan
+   * hanya menengok entri TERAKHIR: kalau customer memang mengirim teks sama
+   * dua kali berturut-turut ("Saya pilih no 2, Kak" 3x di transkrip yang sama),
+   * entri terakhir itu tetap pesan yang sedang diproses sekarang, jadi
+   * membuang satu salinan tetap benar.
+   */
+  const _lastHist = (history || [])[(history || []).length - 1];
+  const _currentAlreadyInHistory = Boolean(
+    _lastHist
+    && QS_CUST_ROLES.has(_lastHist.role)
+    && String(_lastHist.message || '').trim() === String(currentMessage || '').trim()
+    && String(currentMessage || '').trim() !== ''
+  );
+  const ALL = _currentAlreadyInHistory
+    ? [...history]
+    : [...(history || []), { role: 'customer', message: currentMessage }];
 
   // Customer JENGKEL karena pertanyaan berulang? Dipakai buildQualificationStateBlock
   // untuk menyuntikkan protokol PEMULIHAN (minta maaf + rekap + JANGAN tanya ulang).

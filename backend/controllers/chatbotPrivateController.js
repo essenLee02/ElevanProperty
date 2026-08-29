@@ -823,9 +823,23 @@ class ResponseBuilderWhatsApp {
 
   #catalogItemWhatsApp(item, index, lang = 'en') {
     const isId   = lang === 'id';
-    const imgTag = item.imageUrl
-      ? `\n   ![${item.title || 'Properti'}](${item.imageUrl})`
-      : '';
+
+    /* ⚠️ M165 — TIDAK ADA TAG GAMBAR MARKDOWN DI KARTU WHATSAPP.
+     *
+     * WhatsApp tidak merender markdown gambar. Versi lama menempelkan
+     * `![Judul](/assets/image_data/properties/house.png)` ke kartu, sehingga
+     * yang SAMPAI ke customer adalah teks path mentahnya — persis seperti di
+     * transkrip 29 Agu 2026 yang dikeluhkan pemilik proyek. Selain buruk
+     * dibaca, itu juga membocorkan struktur direktori internal, dan path
+     * relatif itu memang tidak bisa dibuka dari HP customer.
+     *
+     * Gambar yang SUNGGUHAN dikirim lewat field `media_url` Kirimi, sesudah
+     * seluruh teks terkirim (lihat kirimiChatController.js). Korelasi
+     * kartu↔gambar di sana memakai NAMA properti di teks yang sudah terkirim
+     * (getImagesForMentionedProperties), BUKAN tag ini — jadi menghapusnya
+     * tidak memutus jalur gambar mana pun.
+     */
+    const imgTag = '';
 
     // M144 — AREA & ALAMAT ditampilkan di kartu listing.
     // Laporan pemilik proyek (25 Agu 2026) atas transkrip nyata: kartu hanya
@@ -855,10 +869,11 @@ class ResponseBuilderWhatsApp {
     // menyebutnya "Harga" polos membuat customer memperlakukannya sebagai
     // harga final dan agent yang menanggung selisihnya. Sejalan dengan aturan
     // "jangan janjikan yang bukan wewenang AI" (doc 09 negotiation limits).
-    const gap = imgTag ? '' : `\n`;   // gambar sudah memberi jarak visualnya sendiri
-
+    // Baris kosong sesudah judul — format kartu M145. Dulu dilewati bila ada
+    // tag gambar; sejak M165 tag itu tidak pernah ada lagi, jadi jaraknya
+    // sekarang konsisten di semua kartu.
     return [
-      `${index + 1}. *${item.title || (isId ? 'Properti' : 'Property')}*${imgTag}${gap}`,
+      `${index + 1}. *${item.title || (isId ? 'Properti' : 'Property')}*${imgTag}\n`,
       `   📍 Lokasi: ${PropertyFormatter.formatLocation(item)}`,
       ...areaLine,
       ...addressLine,

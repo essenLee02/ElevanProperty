@@ -1,0 +1,71 @@
+/* =========================================================
+   ELEVAN PROPERTY — Home page sections (HomeView.vue)
+   ========================================================= */
+/* ── About image wrapper ─────────────────────────── */
+.about-image-wrapper {
+  position: relative;
+  border-radius: var(--radius-xl);
+  overflow: visible;
+}
+.about-main-img {
+  width: 100%;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  object-fit: cover;
+  aspect-ratio: 4/5;
+}
+.about-badge {
+  position: absolute;
+  bottom: -16px; right: -16px;
+  background: var(--gradient-gold);
+  color: var(--navy);
+  padding: 14px 20px;
+  border-radius: var(--radius-lg);
+  display: flex; align-items: center; gap: 8px;
+  font-size: 0.82rem; font-weight: 700;
+  box-shadow: var(--shadow-gold);
+  white-space: nowrap;
+}
+@media (max-width: 767px) {
+  .about-badge { bottom: -10px; right: 10px; }
+}
+
+/* ── About tabs ─────────────────────────────────── */
+.about-tabs { margin-top: var(--space-5); }
+.tab-nav {
+  display: flex; gap: 4px;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: var(--space-4);
+}
+.tab-btn {
+  padding: 9px 18px;
+  font-size: 0.875rem; font-weight: 600;
+  color: var(--text-secondary);
+  background: none; border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.tab-btn:hover { color: var(--navy); }
+.tab-btn.active { color: var(--navy); border-bottom-color: var(--gold); }
+.tab-body p { font-size: 0.9rem; line-height: 1.75; color: var(--text-secondary); margin: 0; }
+
+/* ── CTA section ─────────────────────────────────── */
+.cta-section {
+  padding: var(--space-9) 0;
+  background: var(--navy);
+  position: relative;
+  overflow: hidden;
+}
+.cta-section::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: url('/assets/images/header/hero-image.jpg') center/cover no-repeat;
+  opacity: .12;
+}
+.cta-card {
+  position: relative; z-index: 1;
+  max-width: 680px;
+}
+.cta-card .section-label { color: var(--gold); }

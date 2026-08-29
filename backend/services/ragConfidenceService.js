@@ -78,8 +78,17 @@ const { hasPropertyKeyword,
         extractPropertyTypeFromMessage,
         extractTransactionTypeFromMessage } = require('../utils/propertyKeywordFilter');
 
-/** Ambang keputusan — dari directive pemilik proyek. */
-const THRESHOLD = Number(process.env.RAG_CONFIDENCE_THRESHOLD || 0.45);
+/**
+ * Ambang keputusan — dari directive pemilik proyek.
+ *
+ * (29 Agu 2026) Pemilik proyek set `RAG_EMBEDDING_CONFIDANCE_SCORE=0.35` di
+ * .env, tapi kode ini sebelumnya membaca nama variabel yang berbeda
+ * (RAG_CONFIDENCE_THRESHOLD) — jadi 0.35 tidak pernah terbaca dan modul diam-
+ * diam jalan di fallback hardcode 0.45. Diperbaiki: baca nama variabel yang
+ * benar-benar dipakai di .env, default juga diturunkan ke 0.35 sesuai niat
+ * pemilik proyek (bukan lagi 0.45).
+ */
+const THRESHOLD = Number(process.env.RAG_EMBEDDING_CONFIDANCE_SCORE ?? 0.35);
 
 /**
  * Langit-langit normalisasi skor vektor. Dari pengukuran, skor on-topic

@@ -2,7 +2,7 @@
 /**
  * ragConfidence.test.js — M157
  * -----------------------------
- * Menguji gerbang keyakinan RAG: skor terkalibrasi 0..1 dengan ambang 0.45,
+ * Menguji gerbang keyakinan RAG: skor terkalibrasi 0..1 dengan ambang 0.35 (dapat dikonfigurasi lewat RAG_EMBEDDING_CONFIDANCE_SCORE),
  * memutuskan SKIP (diam / balasan default, 0 RAG 0 AI) vs REDIRECT (lanjut ke
  * Platform AI).
  *
@@ -127,9 +127,25 @@ async function main() {
   ok('flow: AI baru bertanya → 1', scoreFlow('Kutisari', Q('Di area mana?')) === 1);
   ok('flow: tanpa riwayat → 0', scoreFlow('Kutisari', []) === 0);
 
-  /* ── 6. Ambang dapat dikonfigurasi tapi bawaannya sesuai directive ── */
+  /* ── 6. Ambang dapat dikonfigurasi tapi bawaannya sesuai directive ──
+   * ⚠️ Diperbarui 29 Agu 2026: pemilik proyek men-set
+   * RAG_EMBEDDING_CONFIDANCE_SCORE=0.35 di backend/.env dan meminta angka itu
+   * yang berlaku (bukan lagi 0.45 hardcode). Modul sudah membaca nama variabel
+   * itu; tes ini masih mengunci 0.45 lama sehingga gagal atas perilaku yang
+   * justru BENAR — persis kelas bug "tes tidak memanggil kontrak nyata".
+   *
+   * Yang dijaga sekarang: ambang mengikuti .env bila diisi, dan jatuh ke 0.35
+   * (bukan 0.45) bila tidak.
+   */
   console.log('\n6) Ambang');
-  ok('bawaan 0.45 sesuai directive pemilik proyek', THRESHOLD === 0.45, String(THRESHOLD));
+  const envThreshold = process.env.RAG_EMBEDDING_CONFIDANCE_SCORE;
+  const expected = envThreshold !== undefined && envThreshold !== ''
+    ? Number(envThreshold)
+    : 0.35;
+  ok(`ambang mengikuti RAG_EMBEDDING_CONFIDANCE_SCORE (${expected})`,
+    THRESHOLD === expected, `THRESHOLD=${THRESHOLD}, env=${envThreshold}`);
+  ok('bawaan tanpa env = 0.35 (bukan 0.45 hardcode lama)',
+    Number(require('../services/ragConfidenceService').THRESHOLD) === expected);
 
   /* ══════════════════════════════════════════════════════════════════════════
      M159 — SERTIFIKAT & JARAK WAJIB LOLOS (bukan sekadar "sebaiknya")

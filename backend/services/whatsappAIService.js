@@ -52,6 +52,7 @@ const { tryCityAvailabilityAnswer,
         tryAreaAvailabilityAnswer,
         customerAsksAvailability }                  = require('../utils/areaAvailabilityGate');
 const { resolveCityAndArea, findAreaInText }        = require('./areaAvailabilityService');
+const { tryListingSelectionAnswer }                 = require('../utils/listingSelectionGate');
 
 // Jendela history untuk ekstraksi filter & state kualifikasi. Cukup besar agar
 // pesan pembuka (tipe/transaksi/lokasi) tidak keluar scope di alur panjang, tapi
@@ -618,6 +619,39 @@ async function _generateWhatsAppAIReplyCore(params) {
   // mengatur gaya percakapan yang jadi wewenang platform AI.
   try {
     const isIdMsg = isIndonesian(message, history);
+
+    /* ── ★ M165: GERBANG PEMILIHAN LISTING — SEBELUM gerbang kota/area ★ ────
+     * Transkrip produksi 29 Agu 2026: backend mengirim 2 kartu MERR berjudul
+     * IDENTIK (beda harga saja). Customer memilih no. 2 LIMA KALI — lewat
+     * nomor ("Saya mau yang no 2"), lewat harga ("Yg hrg 471.1 juta"), lalu
+     * mengulang "Saya pilih no 2, Kak" tiga kali. Tiap kali backend mengirim
+     * ULANG kedua kartu yang sama persis.
+     *
+     * Ditaruh PALING DEPAN di blok ini, dan itu memang inti perbaikannya:
+     * gerbang area di bawah masih punya jalur yang merender ulang katalog
+     * untuk area yang sama. Selama pemilihan belum dikenali lebih dulu,
+     * jawaban apa pun yang lebih dalam tidak pernah tercapai — kelas bug yang
+     * sama dengan M129 (gerbang istilah) dan M164 (gerbang kota).
+     *
+     * ⛔ Aktif di KEDUA profil guardrail. Kartu mana yang customer tunjuk
+     * adalah FAKTA yang hanya bisa dibaca dari teks yang sudah terkirim —
+     * bukan gaya percakapan. Membiarkan LLM menebaknya justru sumber bug ini.
+     */
+    const pick = tryListingSelectionAnswer({ message, history, isId: isIdMsg });
+    if (pick && backendMayCompose) {
+      console.log(`[WhatsAppAI] 🎯 Gerbang pemilihan listing: ${pick.verdict}`
+        + `${pick.card ? ` → no.${pick.card.index} "${pick.card.title}" (${pick.card.priceText})` : ''}`);
+      return {
+        reply      : pick.reply,
+        replyParts : [pick.reply],
+        provider   : 'listing_selection_gate',
+        contextSource,
+      };
+    }
+    if (pick && !backendMayCompose) {
+      gateFacts.push(`PILIHAN CUSTOMER ATAS KATALOG YANG SUDAH DIKIRIM (fakta, jangan ditebak ulang):\n${pick.reply}`);
+    }
+
     // require lokal, BUKAN di puncak file: aiPromptBuilderService berada di sisi
     // lain pipeline dan me-require balik modul-modul di sekitarnya. Menariknya
     // ke atas berisiko siklus require yang muncul sebagai export undefined saat
@@ -767,7 +801,13 @@ async function _generateWhatsAppAIReplyCore(params) {
         console.log(`[WhatsAppAI] 📊 Gerbang ketersediaan: ${hit.verdict} untuk "${realArea}" (${txDb}) — dijawab dengan data katalog, alur interview dilewati.`);
         return {
           reply      : hit.reply,
-          replyParts : [hit.reply],
+          // ⚠️ M165: WAJIB dipecah. Gerbang ini merender KARTU LISTING, dan
+          // versi lama mengirim head + semua kartu + kalimat penutup sebagai
+          // SATU pesan WhatsApp raksasa — persis bentuk yang membuat pertanyaan
+          // penutup tidak terbaca (lihat catatan di utils/replySplitter.js).
+          // Untuk balasan non-katalog (apologi "belum ada di data saya"),
+          // splitCatalogReply() mengembalikan [teks] apa adanya.
+          replyParts : splitCatalogReply(hit.reply),
           provider   : 'area_availability_gate',
           contextSource,
         };

@@ -1,0 +1,124 @@
+/* =========================================================
+   ELEVAN PROPERTY — SHARED ADMIN UI COMPONENTS
+   Reusable atoms for the dashboard (list & master) pages:
+   page header · filter bar · action buttons · empty/loading
+   states · spinners · alert · confirm modal.
+
+   Loaded globally via index.html.  NOT scoped — class names
+   are shared by design.
+
+   ⚠ The "admin-scoped primitives" block below is deliberately
+   nested under .master-list-section / .master-form-section.
+   Reason: public/style.css (and Bootstrap, loaded later) also
+   define .alert / .spinner-* / .modal-* / .loading-state with
+   the luxury navy-gold look used by the public pages. Scoping
+   keeps the admin purple theme here (specificity 0,2,0) WITHOUT
+   leaking onto the public pages. Admin-only atoms that do not
+   collide stay bare so any view can reuse them.
+   ========================================================= */
+
+/* ─────────────────────────────────────────────────────────
+   ADMIN ATOMS (bare — no collision with style.css / Bootstrap)
+   ───────────────────────────────────────────────────────── */
+
+/* Page header */
+.page-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 16px; }
+.page-header-left h2 { font-size: 24px; font-weight: 700; color: #2d3748; margin: 0 0 4px; }
+.page-header-left p  { font-size: 14px; color: #718096; margin: 0; }
+
+/* Gradient action buttons */
+.btn-add,
+.btn-add-empty {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: opacity 0.2s;
+  white-space: nowrap;
+}
+.btn-add-empty { margin-top: 8px; }
+.btn-add:hover,
+.btn-add-empty:hover { opacity: 0.9; color: white; }
+
+/* Filter bar */
+.filter-bar { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+.search-wrapper { flex: 1; min-width: 200px; }
+.select-wrapper { min-width: 180px; }
+
+.search-input,
+.filter-select {
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 14px;
+  border: 1px solid #cbd5e0;
+  border-radius: 8px;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+  background: white;
+}
+.search-input:focus,
+.filter-select:focus { border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15); }
+
+/* Empty state */
+.empty-icon  { font-size: 48px; }
+
+/* Confirm-modal buttons (admin-only names — no collision) */
+.btn-modal-cancel { padding: 10px 24px; border: 1px solid #e2e8f0; background: white; color: #4a5568; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s; min-width: 100px; }
+.btn-modal-cancel:hover:not(:disabled) { background: #f7fafc; }
+.btn-modal-cancel:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-modal-confirm { padding: 10px 24px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s; min-width: 100px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: white; }
+.btn-modal-confirm:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn-confirm-danger  { background: #e53e3e; }
+.btn-confirm-danger:hover:not(:disabled) { background: #c53030; }
+.btn-confirm-success { background: #38a169; }
+.btn-confirm-success:hover:not(:disabled) { background: #2f855a; }
+
+/* Spinner keyframe (identical to style.css's — safe to share) */
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes elevanModalIn { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: scale(1); } }
+
+/* ─────────────────────────────────────────────────────────
+   ADMIN-SCOPED PRIMITIVES
+   Nested under the admin page wrappers so they override the
+   public design-system versions (style.css / Bootstrap) only
+   inside the dashboard. Do NOT un-nest these.
+   ───────────────────────────────────────────────────────── */
+
+/* Alert */
+:is(.master-list-section, .master-form-section) .alert {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 14px;
+}
+:is(.master-list-section, .master-form-section) .alert-danger  { background: #fed7d7; color: #742a2a; border: 1px solid #feb2b2; }
+:is(.master-list-section, .master-form-section) .alert-success { background: #c6f6d5; color: #22543d; border: 1px solid #9ae6b4; }
+:is(.master-list-section, .master-form-section) .alert-warning { background: #fefcbf; color: #744210; border: 1px solid #faf089; }
+:is(.master-list-section, .master-form-section) .alert-close   { background: none; border: none; font-size: 18px; cursor: pointer; color: inherit; opacity: 0.7; line-height: 1; padding: 0 4px; }
+:is(.master-list-section, .master-form-section) .alert-close:hover { opacity: 1; }
+
+/* Loading / empty states */
+:is(.master-list-section, .master-form-section) .loading-state,
+:is(.master-list-section, .master-form-section) .empty-state { display: flex; flex-direction: column; align-items: center; padding: 60px 20px; color: #718096; gap: 12px; }
+:is(.master-list-section, .master-form-section) .empty-state p { margin: 0; font-size: 15px; }
+
+/* Spinners */
+:is(.master-list-section, .master-form-section) .spinner-lg { width: 40px; height: 40px; border: 3px solid #e2e8f0; border-top-color: #667eea; border-radius: 50%; animation: spin 0.7s linear infinite; }
+:is(.master-list-section, .master-form-section) .spinner-sm { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.4); border-top-color: currentColor; border-radius: 50%; animation: spin 0.7s linear infinite; }
+
+/* Confirm modal */
+:is(.master-list-section, .master-form-section) .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 9999; padding: 16px; }
+:is(.master-list-section, .master-form-section) .modal-box { background: white; border-radius: 16px; padding: 36px 32px; max-width: 420px; width: 100%; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.2); animation: elevanModalIn 0.2s ease; }
+:is(.master-list-section, .master-form-section) .modal-icon  { font-size: 48px; margin-bottom: 12px; }
+:is(.master-list-section, .master-form-section) .modal-title { font-size: 20px; font-weight: 700; color: #2d3748; margin: 0 0 10px; }
+:is(.master-list-section, .master-form-section) .modal-desc  { font-size: 14px; color: #718096; margin: 0 0 24px; line-height: 1.6; }
+:is(.master-list-section, .master-form-section) .modal-actions { display: flex; gap: 10px; justify-content: center; }
+
+/* ── Responsive ──────────────────────────────────────────── */
+@media (max-width: 768px) {
+  :is(.master-list-section, .master-form-section) .modal-box { padding: 28px 20px; }
+}
