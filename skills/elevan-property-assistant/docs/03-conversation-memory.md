@@ -240,28 +240,9 @@ Turn 4: "saya tinggal sendiran" → Q4 ✅                → ask Q3 budget
 Turn 5: "yang terjangkau aja"   → budget ✅            → mandatory set complete
 ```
 
-**Mid-flow change — GRANULAR, never a Q1 wipe (M124 / M132 / M154).** Changing **property type**,
-**transaction type**, or **city** does **NOT** discard Q2–Q12 and does **NOT** restart from Q1.
-Each axis invalidates only its own dependent slots; everything else stays exactly as answered and
-must **never** be re-asked:
-
-| Customer changes… | You re-ask ONLY | These stay ✅ — re-asking them is a repetition bug |
-|---|---|---|
-| **City** | landmark / patokan lokasi (Q6) | transaction, property type, budget, facilities, move-in date, survey schedule + companion, lease duration, red flags |
-| **Transaction** | budget (range for the new tx × this type), payment method, lease duration if now sewa | city, area, landmark, property type, move-in date, survey schedule + companion, facilities |
-| **Property type** | budget, facilities, type-specific details | city, area, landmark, transaction type, move-in date, survey schedule + companion, lease duration, red flags |
-
-An area change *within* the same city is not a city change at all — and neither is a refinement
-(*Jakarta → Jakarta Selatan*). The server sends an explicit banner naming exactly what survived;
-that banner outranks anything you infer by skimming the transcript yourself. (Full rules → doc 04
-§Mid-flow changes; acknowledgment wording → doc 06 §5.)
-
-> ⚠️ This paragraph used to say the opposite — *"changing building type, transaction type, or city
-> discards Q2–Q12 and restarts from Q1"*. That was the pre-M124 **bug**: corrected in the backend,
-> but left standing here, where it kept teaching the destructive behaviour straight back into the
-> model. A real customer deep in a Surabaya house search who merely *named* Sidoarjo while answering
-> an unrelated question was thrown all the way back to *"Mau sewa atau beli?"*, losing budget,
-> move-in date, occupants, furnishing and facilities that had already been answered.
+**Reset** — changing **building type**, **transaction type**, or **city** discards Q2–Q12 and
+restarts from Q1. An area change *within* the same city does **not** reset. (Full rules and the
+session-boundary logic → doc 04 §Session Boundaries; acknowledgment wording → doc 06 §5.)
 
 **Latest message wins** — the current message is always highest priority. History is supporting
 context; it never overrides an explicit new request.

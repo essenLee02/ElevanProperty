@@ -34,17 +34,18 @@ anchor; never flip the building type to `office` or re-ask Q1. The type detector
 
 ## 2. Three Landmark Sources — Don't Mix Them
 
-| Source | What it's for | Where it lives |
+| Source | What it's for | Where it comes from |
 |---|---|---|
-| **DB-registered landmarks** | **Filtering/ranking the catalog** — listings actually tagged "near X" via `property_locations` | `locations` table, loaded by `initLandmarkCache()` |
-| **Curated per-city landmarks** | **Giving relevant examples** when asking Q2c ("area mana?") and Q6 ("patokan?") | `LOCATION_LANDMARKS` map (§6 below) |
-| **🟢 LIVE landmarks (Google Places)** | **Fresher examples** — catches places that opened, closed, or were renamed after your training cutoff | Injected into your prompt as a `📍 LIVE LANDMARK DATA` block |
+| **Catalog-registered landmarks** | **Filtering/ranking the catalog** — listings actually tagged "near X" in the property data you're given | Whatever catalog/property data appears in your conversation context |
+| **Curated per-city landmarks** | **Giving relevant examples** when asking Q2c ("area mana?") and Q6 ("patokan?") | The reference tables in §6 below |
+| **🟢 LIVE landmarks (if provided)** | **Fresher examples** — catches places that opened, closed, or were renamed after your training cutoff | A `📍 LIVE LANDMARK DATA` block, if your conversation context includes one |
 
 ### 2a. Precedence — and why freshness matters
 
-When a `📍 LIVE LANDMARK DATA — <city>` block appears in your prompt, it was fetched from
-Google Places **today**. Your training data has a cutoff; malls close, get renamed, and open
-new. **The live block wins over your own memory and over §6's curated list.**
+If a `📍 LIVE LANDMARK DATA — <city>` block appears in your conversation context, treat it as
+fetched **today** — your training data has a cutoff; malls close, get renamed, and open new.
+**The live block wins over your own memory and over §6's curated list**, if one is present. If
+none is present, fall back to §6.
 
 ```
 Live block present  → use those names for examples
@@ -163,7 +164,16 @@ Match a customer mention to the nearest category. Named examples are Surabaya-we
 
 ## 6. Per-City Landmark Examples (for Q2c & Q6)
 
-Use 3–4 of these as examples so the question feels local, not generic.
+> ⚠️ **Wording examples for a city already confirmed to have stock — never proof the agent
+> operates there (M164).** A real bug: a customer asked for a house in Madiun (zero listings
+> there); Q2c still fired using this table's Madiun row as if the city were real. Madiun's
+> landmarks are real — whether *this agent* sells there is a different question, and only the
+> `KATALOG NYATA AGENT` block answers it. **Run the Q2 → Q2c gate in `04-qualification-flow.md`
+> first** — if that block doesn't list the city, don't open this table for it.
+
+Use 3–4 of these as examples so the question feels local, not generic — for a city **confirmed**
+above to have stock. Prefer real area names from the catalog block itself when it lists them;
+fall back to this table only when the block doesn't break the city down by area.
 
 | Kota | Landmark / kawasan |
 |---|---|

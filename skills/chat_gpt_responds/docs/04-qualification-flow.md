@@ -9,57 +9,42 @@ real needs from natural reactions.
 
 ---
 
-## 1. Server-Side Machinery (what you receive)
+## 1. Tracking Qualification State Yourself
 
-### Pre-Qualification Gate
+There is no external system computing this for you — **you** must build and
+maintain this picture by re-reading the conversation before every reply (see
+SKILL.md rule 10). Treat it as a mental checklist, not something to print for
+the customer.
 
-Before any AI token is spent, the backend checks four minimum fields from accumulated history:
+### The four minimum fields
 
-```
-① buildingType     — house / villa / apartment / …
-② transactionType  — sewa (rent) | beli → sale
-③ city             — the city
-④ specificLocation — area/kawasan OR landmark/patokan OR commercial anchor
-```
-
-| `RESPOND_CATALOG_RUN` | Gate behaviour |
-|---|---|
-| `OFF` (summary) | Intercepts only when type, transaction **and** location are ALL missing (true cold start). If even one is known → the AI runs the flow naturally. |
-| `ON` (summary + catalog) | Same gate, **same interview**. The only difference is what happens *after* the interview completes. |
-
-> **⚠️ M162 — the fourth slot is the specific LOCATION, not the budget.** Slot ④ used to be
-> budget, and the gate would ask *"kisaran harga berapa?"* before a customer had seen a single
-> listing. That is now forbidden: **budget is never a precondition for showing listings.**
-> Customers routinely adjust price *after* seeing options ("kok kemahalan ya, saya mau yang
-> 1–2,5 juta"), and asking for a number first is the single most reliable way to lose them.
-> Budget is still asked — by Q3, using the two-contrasting-prices technique, **after** listings.
-
-> **⚠️ Area and landmark are ONE slot, not two.** `Area Pakuwon`, `dekat PTC`, and
-> `dekat Bandara Juanda` all satisfy slot ④ equally. A customer who gave you a patokan has
-> given you the location — asking *"di area mana?"* next is a repeat question, not a
-> refinement. (This was a live bug: the Q2c gate looked only at the area field, so a
-> landmark-only answer got the area question anyway and the show-listings gate below it was
-> never reached.)
-
-**Budget** is satisfied by `terjangkau` / `murah` / `affordable` / `yang paling murah` for the
-purpose of the Q3 checkpoint. This does **not** mean the number itself is optional forever —
-see §Q3 below and the Q3a follow-up: a bare affordability word with **zero digits anywhere**
-still needs exactly one follow-up question to get a real Rupiah figure before the final summary,
-because "✓ Budget: Terjangkau" with no number is close to useless for an agent trying to match a
-listing.
-
-### Qualification State Injector
-
-The backend scans the active session (window = `AI_HISTORY_WINDOW`, default **60** messages) and
-injects a checklist into **every** prompt:
+Before starting the Q1–Q14 interview in earnest, check whether the
+conversation already carries these four — extract whatever is present rather
+than asking from zero:
 
 ```
-╔══════════════════════════════════════════╗
-║  📋 QUALIFICATION STATE                  ║
-║  ✅ = SUDAH DIJAWAB → JANGAN TANYA LAGI  ║
-║  ❓ = BELUM DIJAWAB → TANYAKAN BERIKUTNYA║
-╚══════════════════════════════════════════╝
+① buildingType    — house / villa / apartment / …
+② transactionType — sewa (rent) | beli → sale
+③ location        — city or area
+④ budget          — numeric range OR affordability preference
+```
 
+If even one is already known from what the customer said, don't treat this as
+a cold start — go straight to whichever of Q1–Q14 is still unanswered.
+
+**Budget is satisfied by** `terjangkau` / `murah` / `affordable` / `yang paling murah` for the
+purpose of this early cold-start check (deciding whether to run the full interview at all).
+This does not mean the number itself is optional forever — see the Q3a rule below: a bare
+affordability word with zero digits anywhere still needs one follow-up question for a real
+Rupiah figure before the final summary. "✓ Budget: Terjangkau" with no number is close to
+useless for an agent trying to match a listing.
+
+### The checklist to keep in mind
+
+Before every reply, mentally reconstruct something like this from the full
+conversation (this is for your own reasoning — never print it to the customer):
+
+```
 ✅ Tipe transaksi    [Q1]: rent
 ✅ Tipe properti         : villa (fallback: apartment)
 ✅ Lokasi            [Q2]: Surabaya
@@ -75,29 +60,20 @@ injects a checklist into **every** prompt:
 ❓ Tower/Lantai     [Q12]: BELUM DIJAWAB
 ```
 
-**The state block is the ONLY source of truth about what has been answered.** Even if a question
-was answered 20 messages ago, the block reflects it. Ask only ❓ fields, lowest number first.
+**This is the only source of truth about what has been answered — and you build
+it fresh from the whole conversation every time.** Even if a question was
+answered 20 messages ago, it still counts as answered. Ask only ❓ fields,
+lowest number first.
 
-### ⚡ NEXT ACTION directive
+### Deciding the next question
 
-At the bottom of every state block the server injects the authoritative next question:
+Once you've built the checklist above, the next question is simply the
+**lowest-numbered ❓ field** — follow the priority order below. Don't ask
+anything already ✅, and don't let raw conversational noise (small talk,
+a customer repeating themselves, an aside) convince you a field is unanswered
+when your checklist already has it marked ✅.
 
-```
-╔══════════════════════════════════════════════════════════╗
-║  ⚡ PERTANYAAN BERIKUTNYA: Q7                             ║
-╠══════════════════════════════════════════════════════════╣
-║  Tanyakan: "Selain area *Pakuwon*, apakah area sekitar    ║
-║  masih oke? 🗺️"                                           ║
-╠══════════════════════════════════════════════════════════╣
-║  ⛔ JANGAN tanya pertanyaan lain selain yang di atas.     ║
-║  ⛔ JANGAN ulangi field yang sudah ✅ di atas.            ║
-║  ⛔ ABAIKAN raw history — STATE BLOCK = satu-satunya      ║
-║     sumber kebenaran tentang apa yang sudah dijawab.      ║
-╚══════════════════════════════════════════════════════════╝
-```
-
-It is computed server-side and **overrides any conclusion you might draw from raw history**.
-When everything is answered it becomes `✅ SEMUA Q WAJIB SUDAH DIJAWAB — Tampilkan summary brief sekarang.`
+When everything mandatory is ✅, stop asking and show the summary brief instead.
 
 **Priority order:** Q1 → Q2 → Q2c → Q2b → Q3 → Q8 → Q4 → Q5 → Q6 → Q7 → Q9 → Q10 → Q11 →
 Q_FAC → Q12 → Q14 → summary.
@@ -106,10 +82,10 @@ Q_FAC → Q12 → Q14 → summary.
 
 ## 2. Session Boundaries (why old answers don't leak)
 
-`activeSessionStart` is the **summary boundary only** — the first customer message after the last
-summary brief. Anything before belongs to a completed search and is dropped from
-`history.slice(activeStart)`. A greeting + fresh intent (`hi`, `halo`, `pagi`, `permisi`, … +
-restating a property intent) also starts a new search the same way.
+The **active session** starts at the **summary boundary** — the first customer message after the
+last summary brief. Anything before it belongs to a completed search and must not leak in. A
+greeting + fresh intent (`hi`, `halo`, `pagi`, `permisi`, … + restating a property intent) starts a
+new search the same way.
 
 > **⛔ Stale budget must never cross the summary boundary.** A numeric budget from a completed
 > search (e.g. an old `0-1600000` awaiting unit clarification) is dropped when a new search starts
@@ -117,79 +93,35 @@ restating a property intent) also starts a new search the same way.
 > 0-1600000 maksudnya ribu/juta?" — that budget belonged to the finished search. Re-ask Q3 by
 > category.
 
-### Mid-flow changes (⚠️ M124 / M132 / M154 — GRANULAR, never a Q1 wipe)
+### Mid-flow changes (⚠️ M124 — GRANULAR, not a Q1 wipe)
 
 City / transaction / property-type changes **while still mid-flow** (no summary sent yet) used to
 hard-reset the whole search back to Q1. **That is no longer correct** — a customer naming a
 different city, or flipping sewa↔beli, or switching property type mid-conversation now keeps
 almost everything they already answered; only the field(s) that specific change actually
-invalidates get re-asked.
+invalidates get re-asked. The server computes this and shows you exactly one of two banners when it
+fires — **read the banner text literally, it tells you precisely what survived:**
 
-The server computes this from **one shared policy table** (`utils/contextSwitchPolicy.js`) and
-shows you a banner when it fires — **read the banner literally; it tells you precisely what
-survived, and it is authoritative over anything you might infer by skimming the transcript
-yourself.**
+```
+⚠️  KOTA BERUBAH — Customer pindah pencarian ke kota lain.
+   Transaksi, tipe properti, budget, tanggal masuk, jadwal survei, dan fasilitas TETAP DIPAKAI —
+   JANGAN tanya ulang itu dan JANGAN tawarkan pindah kota lagi.
+   Akui perubahan singkat (1 kalimat), lalu tanyakan patokan lokasi/landmark di kota BARU (Q6).
+```
+```
+⚠️  TIPE PROPERTI BERUBAH — Customer beralih ke jenis properti baru.
+   Kota, landmark, tanggal masuk, dan jadwal survei TETAP DIPAKAI (lihat ✅ di bawah) —
+   JANGAN tanya ulang itu. Hanya budget/fasilitas/detail khusus tipe yang di-reset (❓ di bawah).
+   Akui perubahan singkat (1 kalimat), lanjut dari Q terkecil ❓.
+```
 
-Four axes, four different preserve/reset rules:
+Three axes, three different preserve/reset rules:
 
-| Change | Re-asked | Stays exactly as answered — **never re-ask these** |
+| Change | Re-asked | Stays exactly as answered |
 |---|---|---|
-| **Ganti kota** ("tadinya Surabaya, mau Sidoarjo") | Landmark (Q6) only | Transaction, property type, budget, move-in date, survey schedule + companion, facilities, lease duration, red flags/preferences |
-| **Ganti transaksi** ("eh bukan beli, mau sewa aja") | Budget (range for the NEW tx × this property type), payment method, (+ lease/booking duration if now sewa) | City, area, landmark, property type, move-in date, survey schedule + companion, **facilities** |
-| **Ganti properti** ("tadinya villa, sekarang mau hotel") | Budget, facilities, type-specific details (Q14) | City, area, landmark, transaction type, move-in date, survey schedule + companion, **lease duration**, **red flags/preferences** |
-| **Ganti properti + transaksi in the SAME message** | Budget, payment method, facilities, type-specific details | Move-in date, survey schedule + companion, lease duration; **plus** city/area/landmark/red flags when the city did **not** also change |
-
-**⚠️ M154 — three corrections that were live bugs, do not "helpfully" undo them:**
-
-- **Ganti properti keeps the city, the landmark AND the transaction type.** The catalog-side
-  extractor used to wipe all three on a type switch, so the prompt could contain
-  `✅ Kota [Q2]: Surabaya` and `SYARAT MINIMUM LISTING: BELUM TERPENUHI — masih kurang: kota`
-  at the same time. If you ever see that contradiction, **the ✅ state block wins** — never
-  re-ask a slot that is ✅ just because a readiness line says it is missing.
-- **Ganti properti keeps `Durasi sewa` and `Red flags`.** Lease duration belongs to the
-  *transaction*, not the property type ("sewa setahun" is still setahun after apartemen→rumah).
-  Red flags/preferences belong to the *location* ("hindari rawan banjir"), not the type.
-- **Ganti transaksi keeps the facilities.** The spec says facilities are *re-weighed* against the
-  new transaction × property type — not re-asked. Keep them in the state, just stop treating
-  rent-only wishes (e.g. "full furnished") as decisive for a purchase.
-
-The three single-axis banners, verbatim:
-
-```
-⚠️  KOTA BERUBAH — customer memindahkan pencarian ke kota lain.
-   ✅ TETAP DIPAKAI (⛔ JANGAN tanya ulang): tipe transaksi, tipe properti, budget,
-      fasilitas, tanggal masuk, jadwal survei, dan pendamping survei.
-   ❓ Yang ditanyakan HANYA patokan lokasi/landmark di kota BARU (Q6).
-      Customer bebas menyebut area/kawasan baru sendiri — terima, jangan paksa.
-   ⛔ JANGAN menawarkan pindah kota lagi dan JANGAN memakai landmark kota LAMA.
-```
-```
-⚠️  TIPE TRANSAKSI BERUBAH — customer beralih dari BELI ke SEWA.
-   ✅ TETAP DIPAKAI (⛔ JANGAN tanya ulang): kota, area/kawasan, patokan lokasi/landmark,
-      tipe properti, tanggal masuk, jadwal survei, dan pendamping survei.
-   ❓ Perlu digali ulang: budget dengan rentang yang sesuai transaksi BARU atas tipe
-      properti ini, lalu metode pembayaran (cash / transfer / termin).
-   ⏳ Karena sekarang SEWA: tanyakan juga durasi sewa/booking.
-   🏊 Fasilitas yang sudah disebut TETAP DICATAT — jangan tanya ulang; cukup
-      sesuaikan relevansinya dengan skill transaksi baru atas tipe properti ini.
-```
-```
-⚠️  TIPE PROPERTI BERUBAH — customer beralih ke jenis properti lain.
-   ✅ TETAP DIPAKAI (⛔ JANGAN tanya ulang): kota, area/kawasan, patokan lokasi/landmark,
-      tipe transaksi (sewa/beli), durasi sewa, red flag & preferensi lokasi,
-      tanggal masuk, jadwal survei, dan pendamping survei.
-   ❓ Perlu digali ulang: budget (rentang tipe baru) dan fasilitas khas tipe baru.
-   Akui perubahan singkat (1 kalimat), lalu lanjut dari pertanyaan ❓ terkecil.
-```
-
-When **type and transaction flip in the same message**, you get **one** combined banner instead of
-two stacked ones — and it explicitly forbids re-asking the two things the customer just said:
-
-```
-⚠️  TIPE PROPERTI **DAN** TRANSAKSI BERUBAH BERSAMAAN — pencarian baru.
-   ⛔ JANGAN menanyakan ulang tipe properti atau sewa/beli: customer BARU SAJA
-      menyebut keduanya di pesan ini. Menanyakannya lagi = pengulangan.
-```
+| **Ganti kota** ("tadinya Surabaya, mau Sidoarjo") | Landmark (Q6) only | Transaction, property type, budget, move-in date, survey schedule, facilities |
+| **Ganti transaksi** ("eh bukan beli, mau sewa aja") | Budget, payment method, (+ lease/booking duration if now sewa) | City, landmark, move-in date, survey schedule, facilities |
+| **Ganti properti** ("tadinya villa, sekarang mau hotel") | Budget, facilities, type-specific details (Q14) | City, landmark, move-in date, survey schedule |
 
 **Your response, in every case:**
 1. Acknowledge in **ONE** sentence — *"Oke, jadi di Sidoarjo ya 😊"* / *"Oke, saya alihkan ke sewa
@@ -199,34 +131,11 @@ two stacked ones — and it explicitly forbids re-asking the two things the cust
    and do **not** silently re-derive different values for them from earlier in the transcript.
 3. **Never** offer to switch city again once a city change was just acknowledged (a common failure:
    re-asking "or would you like a different city?" right after the customer just picked one).
-4. **Never** re-ask the axis that just changed. The customer's trigger message *is* the answer.
-5. **Never** show a summary on the turn the change happens.
+4. **Never** show a summary on the turn the change happens.
 
 > If the trigger message already contains the new value for a field that would otherwise be
 > re-asked, skip it and jump ahead: *"eh mau sewa villa di Bali aja"* (tx+type+city all in one
 > message) → all three ✅ → go straight to whatever's next.
-
-> **The four slots you are actually chasing** are property type, transaction type, city, and one
-> specific location (area / landmark / commercial anchor). Once those four are known — including
-> when the customer volunteers all four in their very first message — **stop interrogating** and
-> move to listings. Everything else (budget, facilities, move-in date, survey) is deepening, and
-> deepening never justifies re-asking something already ✅.
-
-**⚠️ M162 — after a city change, the ONE question is the landmark.**
-
-Ganti kota is the only axis that empties slot ④, because area and landmark were both anchored to
-the *old* city. The `⚡ NEXT ACTION` directive will hand you **Q6 (patokan lokasi)** on that turn.
-Ask that, and nothing else:
-
-- ⛔ **Do not** ask *"sudah lihat berapa rumah di Malang?"* (Q2b), the budget, the move-in date,
-  the occupants, or the red flags on that turn. All of those are still ✅ from before the switch —
-  the city change did not invalidate any of them. Drifting into them is exactly the "AI forgot the
-  context" complaint: the one thing the change *did* invalidate goes unasked while five things it
-  did **not** invalidate get asked instead.
-- ✅ If the customer answers with an **area** instead of a landmark (*"di Klojen aja"*), that is a
-  complete answer — same slot. Accept it and move on; do not follow up asking for a patokan too.
-- ✅ If the customer declines (*"bebas"*, *"terserah"*), that is also an answer. Slot ④ is closed;
-  the search anchors on the city itself. Never ask a third time.
 
 **Why this matters:** the destructive version of this rule was itself the bug — a customer deep in
 a Surabaya house search who named "Sidoarjo" answering an unrelated question got reset all the way
@@ -236,15 +145,17 @@ skimming the raw transcript yourself.
 
 ### Session TTL
 
-`CHATBOT_COOKIE_TTL_MINUTES` bounds the session. On expiry the backend creates a fresh session →
-empty history → Q1 from scratch, regardless of prior state. **You'll see an all-❓ state block —
-treat it as a brand-new customer.**
+If a very long time has passed since the last message (hours or more, depending
+on the platform), it's reasonable to treat the session as expired — start over
+from Q1 as if this were a brand-new customer, regardless of what was discussed
+before.
 
 ### Q1 non-property gate
 
-If a customer's **very first** message has no property content, the backend deflects in one
-sentence and never calls the AI. So if you *are* called on a first message, it already carries a
-property signal — proceed with Q1 and extract what's there.
+If a customer's **very first** message has no property content at all, respond
+briefly and redirect (see `docs/09`) rather than opening the Q1 interview. If
+the first message *does* carry a property signal (even a vague one), proceed
+with Q1 and extract what's there.
 
 ---
 
@@ -306,7 +217,6 @@ made the AI ask for the location it had already been given. Two slots, two expli
 
 > **The rule behind all six:** if you offered something and the customer said no, the question
 > is answered. Asking again — even reworded — is the single fastest way to lose them.
-
 ### Q− — Kota, Area & Fasilitas: database sebagai ACUAN, bukan pembatas
 
 Sistem menyimpan master data **City**, **Location** (landmark/patokan), dan
@@ -431,10 +341,53 @@ ID: Oke, mau *[sewa/beli] [Tipe]*. 📍 Di kota atau area mana yang Anda pertimb
 EN: Got it, *[rent/buy] a [Type]*. 📍 Which city or area are you considering?
 ```
 
+### Q2 → Q2c gate — does the agent even sell in this city?
+
+> ⚠️ **Check this BEFORE asking Q2c — skipping it caused a real bug (M164, 29 Agu 2026).** A
+> customer asked for a house in Madiun; the agent had **zero** listings there. Q2c still fired,
+> asking *"area mana di Madiun? Misalnya Pahlawan Street Center, Kartoharjo…"* The customer asked
+> *"Anda punya listing dimana?"* four times and kept getting the same Madiun question — the city
+> itself was never real, so no area inside it could be either.
+
+**The rule:** once transaction type + property type + a city are known, **check your conversation
+context for a `KATALOG NYATA AGENT` (or equivalent real-catalog) block before asking Q2c.**
+
+```
+Block lists this city         → proceed to Q2c normally (§ below), using THAT city's
+                                 real areas from the block — never doc 13 §6 alone.
+Block does NOT list this city → do NOT ask Q2c. Apologise, name up to 3 cities the
+                                 block DOES show stock in, and ask if the customer is
+                                 interested in one of those instead.
+No catalog block available    → proceed to Q2c as normal (nothing to check against —
+                                 doc 13's curated table is the fallback it exists for).
+```
+
+```
+ID (kota tidak ada di katalog):
+Mohon maaf, Kak 🙏 Saya belum punya listing *[Tipe]* di *[Kota yang diminta]*. Saya
+punya listing di kota lain; seperti [kota A], [kota B], [kota C]. Apakah berminat? 😊
+```
+
+- **Never guess** from memory or from doc 13's curated table — that table is wording examples
+  for a *confirmed* city, never proof the agent sells there.
+- **Maximum 3 alternative cities**, even if the agent has more — pick the ones with the most
+  relevant stock (same transaction + type) if visible, otherwise the first/most prominent ones.
+- If the customer accepts ("Mau.", "Boleh", "Oke") without naming which city, ask **"Mau di kota
+  mana, Kak?"** — a plain follow-up, not a repeat of the same offer.
+- If the customer declines ("Tidak mau", "gak usah"), close warmly and stop — don't keep
+  re-offering or drift into another qualification question.
+- If the customer names one of the offered cities (or any other city), treat it exactly like a
+  fresh Q2 answer and re-run this same check for the new city before Q2c.
+
+This is the **same discipline** as §1 of doc 08 ("never invent a listing") — a city that isn't in
+the agent's real catalog is exactly as fictional as a listing that isn't. Both come from the same
+root cause: answering from what *sounds* plausible instead of what the data actually shows.
+
 ### Q2c — District / area inside the city
 
 **Fires when** a city is known and no district was named yet — for **every** city, not just the
 big ones. **Does not fire for** commercial types or hotel/kondotel booking. **Fires BEFORE Q2b.**
+**Fires only after the gate above confirms the agent has stock in this city.**
 
 > ⚠️ **This used to be limited to a short list of large cities, and that caused a real
 > production bug (M84).** A customer asked for a house in **Malang**; Malang was not on the
@@ -485,16 +438,15 @@ AI: "Oke, sudah lihat 2 dan mau yang ada gym + kolam renang ya 👌" → Q3
 
 > **⚠️ After Q2b, the next question is Q3 (Budget)** — never a summary. Q3/Q8/Q4 are still open.
 
-**Server note:** Q2b answers contain no property keywords, so they pass the WhatsApp gate via
-`isPropertyContextContinuation` (fast-path patterns: `belum pernah lihat`, `belum lihat`,
-`sudah lihat [N]`, `belum ada yang cocok`, `belum pernah survey`). If one is dropped
-(log: `⏭️ Tidak disimpan ke DB`), the pattern is missing from the filter.
+**Note:** Q2b answers often contain no obvious property keywords (`belum pernah lihat`,
+`sudah lihat 2`, `belum ada yang cocok`) — still treat them as an answer to Q2b, not
+as an off-topic aside.
 
 ### Q3 — Budget *(NEVER ask directly)*
 
 **Ask by CATEGORY (3 tiers), never by absolute price.** Don't quote blunt figures like
-"Rp 40.750.000.000 dan Rp 67.700.000.000". Offer the tiers; the server maps the choice to a
-concrete range.
+"Rp 40.750.000.000 dan Rp 67.700.000.000". Offer the tiers; map the customer's choice
+to a concrete range using the table below.
 
 ```
 ID: Untuk *[Tipe]* *[sewa/beli]* di *[area]*, Kak lebih prefer yang
@@ -509,7 +461,7 @@ EN: For *[Type]* *[to rent/to buy]* in *[area]*, would you prefer
 | **Menengah** | menengah, sedang, standar, kompetitif, mid-range |
 | **Eksklusif** | eksklusif, mewah, premium, mahal, kelas atas, luxury |
 
-**Reasonable bands per type × transaction** (server `getBudgetTiers`; `jt`=juta, `M`=miliar):
+**Reasonable bands per type × transaction** (`jt`=juta, `M`=miliar):
 
 | Property | Transaksi | Terjangkau | Menengah | Eksklusif |
 |---|---|---|---|---|
@@ -585,8 +537,24 @@ ways to reply. All three complete Q3. None of them may be re-asked.
 
 **⛔ Never record a bare category word ("Terjangkau"/"Menengah"/"Eksklusif") with no Rupiah
 figure attached when you have real numbers available.** You just quoted two real prices in
-your own message — always carry the actual number(s) forward into the recorded value, never
-collapse them back down to just the tier name.
+your own message — always carry the actual number(s) forward, never collapse them back down
+to just the tier name.
+
+#### Q3a — one follow-up when the customer preempts Q3 with a bare category
+
+Real production bug (Jakarta beli-rumah, 5 Agu 2026): the customer volunteered *"Cari yang
+harga terjangkau"* immediately after stating intent — before you ever got to offer the
+two-price anchor. Budget ended up recorded as `"terjangkau"` with zero digits anywhere, Q3
+was treated as satisfied, and the final summary shipped `✓ Budget: Terjangkau` with no number
+at all — useless for an agent trying to match a listing.
+
+Since this skill has no backend tracking this for you, **you** must catch this case yourself:
+whenever budget would be recorded as a bare affordability word with **no digits anywhere in
+what the customer has said about it**, ask exactly ONE follow-up before finalizing — e.g.
+*"Baik, Kak! Kira-kira di kisaran berapa ya budgetnya? Misalnya '900jt-2 miliar', '700-900
+juta', atau '300rb-2jt'"* — the concrete examples anchor the customer to a *range* answer
+instead of another vague word. Accept whatever comes back (a real number, or another vague
+word) and move on; never ask this twice.
 
 ```
 AI  : Di Surabaya ada apartment kisaran Rp 2.200.000 dan Rp 3.100.000/bulan.
@@ -604,21 +572,6 @@ Cust: Sesuai, Kak
 
 > **The customer may change their mind later.** A new figure in a later message replaces the
 > earlier one; acknowledge briefly (*"✏️ sudah saya perbarui"*) and do not re-open Q3.
-
-#### Q3a — one follow-up when the customer preempts Q3 with a bare category
-
-Real production bug (Jakarta beli-rumah, 5 Agu 2026): the customer volunteered *"Cari yang
-harga terjangkau"* immediately after stating intent — **before** you ever got to offer the
-two-price anchor. The server captured `budget = "terjangkau"` with **zero digits anywhere**,
-Q3 was marked satisfied, and it was never revisited. The final summary shipped
-`✓ Budget: Terjangkau` with no number at all — useless for an agent trying to match a listing.
-
-The server now asks **exactly one** follow-up in this situation — you'll see it in the state
-block as `Q3a`, with a hint like *"Kira-kira di kisaran berapa ya budgetnya? Misalnya
-'900jt-2 miliar', '700-900 juta', atau '300rb-2jt'"*. Ask it verbatim (or close to it — keep
-the concrete examples, they anchor the customer to a *range* answer instead of another vague
-word). Whatever the customer says next — a real number, or another vague word — **accept it
-and move on**; this question is asked once, never twice.
 
 This applies to every transaction word — **sewa, booking, kontrak, ngekos are all rent**
 (see §Transaction basis above) — and to **beli** for every property type.
@@ -676,8 +629,8 @@ ID: Nanti akan tinggal bersama siapa saja?
 > ```
 >
 > **A longer answer is a BETTER answer, not a suspicious one.** When a customer
-> bundles several facts into one message, record every slot it fills (doc 03 §3c)
-> — never treat length or extra detail as a reason to reject it.
+> bundles several facts into one message, record every slot it fills — never treat
+> length or extra detail as a reason to reject it.
 
 > **⚠️ USE-CASE GATE — only ask when the property will be LIVED IN.** Skip Q4 for non-hunian:
 > **investasi** (didiamkan/dijual lagi), **usaha/kantor**, **ibadah**. For investasi-sewa
@@ -687,21 +640,22 @@ ID: Nanti akan tinggal bersama siapa saja?
 > **⛔ "Untuk investasi" is an ANSWER to Q4 — never a reason to end the conversation.**
 > Real production failure (Malang, 7 Agu 2026): asked *"Nanti akan ditempati bersama siapa
 > saja?"*, the customer replied *"Oh ini untuk investasi"*. That fully answers Q4 (nobody
-> will live there). The correct move is to record it and ask the **next unanswered
-> question**. Instead the assistant replied *"Maaf, belum ada properti di katalog saya
-> yang cocok…"* and the conversation died with qualification only half done.
+> will live there). Record it and ask the **next unanswered question**. Instead the
+> assistant replied *"Maaf, belum ada properti di katalog saya yang cocok…"* and the
+> conversation died with qualification only half done.
 >
 > ```
 > Cust: Oh ini untuk investasi
-> ✅  → Q4 answered (N/A — investasi) → ask the next ❓ question (Q5/Q6/Q7/Q_KPR/…)
+> ✅  → Q4 answered (N/A — investasi) → ask the next unanswered question
 > ❌  → "Maaf, belum ada properti di katalog…"   ← ends a live interview
 > ❌  → repeating "ditempati bersama siapa?"      ← already answered
 > ```
 >
-> **A "nothing in the catalog" message is ONLY ever the closing of a completed brief.**
-> It is never a valid standalone reply while any mandatory field is still ❓ — an empty
-> catalog says nothing about whether the interview is finished. If the state block shows
-> `🚫 SUMMARY DIBLOKIR`, you owe the customer a question, not an apology.
+> **A "nothing available" message is ONLY ever the closing of a completed brief.** It is
+> never a valid standalone reply while any mandatory slot is still unanswered — having no
+> matching listing says nothing about whether the interview is finished. Since you track
+> qualification state yourself here (SKILL.md §2 rule 10), check it before closing: if any
+> mandatory slot is open, you owe the customer a question, not an apology.
 
 ### Q5 — Red Flags *(skip if captured in Q2b)*
 
@@ -874,7 +828,7 @@ Red-flag parts → `Hindari`; anchor parts → `Patokan` (Q6). Both fields get p
 > | Clause | Type | Goes to |
 > |---|---|---|
 > | "tidak retak-retak" | already negative | `Hindari`: Jalan rusak/retak |
-> | "akses jalan yang lebar, karena truk besar" | positive wish (needs the M71 split) | `Hindari`: Gang sempit **+** `Prefer`: Akses jalan lebar (untuk truk besar) |
+> | "akses jalan yang lebar, karena truk besar" | positive wish (needs the split above) | `Hindari`: Gang sempit **+** `Prefer`: Akses jalan lebar (untuk truk besar) |
 > | "tidak banjir" | already negative | `Hindari`: Banjir |
 > | "dekat dengan jalan tol" | anchor, not a red flag | `Patokan` (Q6), not Hindari/Prefer at all |
 >
@@ -976,7 +930,7 @@ ID: Rencananya masuk atau pindah bulan apa? 📅
 If a listing fired before Q8, append inside that reply:
 *"Omong-omong, rencananya masuk atau pindah bulan apa? 📅"*
 
-**Year inference (server-side)** — reference is the live clock; examples with today = 10 Jun 2026:
+**Year inference** — reference is the live clock (today's date); examples with today = 10 Jun 2026:
 
 | Says | Stored |
 |---|---|
@@ -1009,8 +963,7 @@ Never ask "siapa yang memutuskan" directly.
 | Answer | Stored |
 |---|---|
 | "saya yang ambil keputusan", "langsung bisa viewing", "tidak perlu koordinasi" | `Mandiri` |
-| **"tdk perlu", "tidak usah", "gak mau"** (bare refusal) | **`Mandiri`** |
-| "sendiri", "sendirian", "solo", **"survei sendiri"** | **`Mandiri`** |
+| "sendiri", "sendirian", "solo" | `Sendirian` |
 | "sama suami" / "sama istri" | `Bersama suami` / `Bersama istri` |
 | "sama pasangan" | `Bersama pasangan` |
 | "sama keluarga" | `Bersama keluarga` |
@@ -1020,8 +973,7 @@ Never ask "siapa yang memutuskan" directly.
 
 When Q4 household = "1 orang (sendiri)", Q9 auto-sets to `Mandiri` and is not asked.
 
-> **⛔ Never invent labels** like `Solo (mandiri)`, `Sendirian`, or `Solo — customer yang
-> memutuskan sendiri`. Deciding without anyone else is **always** exactly `Mandiri`.
+> **⛔ Never invent labels** like `Solo (mandiri)` or `Solo — customer yang memutuskan sendiri`.
 > **⛔ A date answer is not a Q9 answer.** If the customer replies "mei tahun depan" / "bulan
 > depan", that fills **Q8**, and Q9 stays ❓. This prevents
 > `✓ Keputusan bersama: *mei tahun depan*`.
@@ -1097,35 +1049,6 @@ stored as duration — Q10 stays ❓ and is re-asked with the hint above.
 ID: Untuk pembayaran, lebih cocok bayar di muka penuh atau ada yang bisa cicil?
 ```
 
-### Q_FAC — Facilities *(MANDATORY — ask before every summary)*
-
-```
-ID: Ada fasilitas yang wajib ada untuk [tipe]-nya? Misalnya AC, kolam renang,
-    gym, parkir, atau kitchen set. Kalau tidak ada preferensi khusus,
-    boleh jawab "standar saja" 🛠️
-```
-
-**This question was being skipped entirely** — summaries went out with no facilities line at
-all. It is not optional: ask it before the brief, every time.
-
-**Tiga bentuk jawaban — dan yang ketiga paling sering salah ditangani:**
-
-| Jawaban customer | Yang dicatat |
-|---|---|
-| Daftar spesifik — `"AC, gym, kolam renang"` | Item itu saja, apa adanya. |
-| Bebas — `"standar saja"`, `"terserah"`, `"apapun"`, `"apa saja"`, `"bebas"`, `"semua boleh"`, `"ikut aja"`, `"ga ada preferensi"` | **Seluruh daftar fasilitas standar** tipe properti tersebut (doc 12). |
-| **Bebas + item wajib** — `"Fasilitas terserah saja, pokok ada AC dan gym"` | **Daftar standar LENGKAP + item yang disebut.** Bukan salah satunya — KEDUANYA. |
-
-> ⛔ **"Terserah" tidak berarti "tidak ada fasilitas".** Itu berarti fasilitas standar
-> tipe properti tersebut BERLAKU. Menuliskan hanya item yang kebetulan disebut customer
-> justru memberi agent daftar paling sempit dari customer yang paling fleksibel —
-> kebalikan dari maksudnya.
-
-> Semua bentuk di atas adalah JAWABAN SAH. Jangan pernah menanyakan Q_FAC ulang
-> setelah salah satunya diberikan.
-
----
-
 ### Q9b / Q9c — Viewing schedule *(date FIRST, then hour)*
 
 ```
@@ -1145,6 +1068,7 @@ you have **both**. These were never being asked at all; the brief shipped with n
 
 > **⛔ The customer may always decline a viewing.** Declining is a complete answer, not a gap
 > to chase. Record `Minta listing` and move on to the summary.
+
 
 ---
 
@@ -1171,11 +1095,7 @@ Plain "furnished" (no semi/full) = **Full furnished** by convention (turnkey).
 > "semi furnished". Demanding it produced this real loop:
 >
 > ```
-> AI  : Untuk furnitur, prefer furnished, semi-furnished, atau kosongan? 🛋️
-> Cust: Yang semi, Kak      → AI asked the identical question again
-> Cust: semi, Kak           → AI asked it again
-> Cust: semi furnished      → only now accepted (3rd time)
-> ```
+
 
 > **⚠️ "Kosongan" is a furnishing answer, NOT a type change.** The word contains "kos" as a
 > substring — the detector uses `\bkos\b`. Never flip the building type to boarding house, and
@@ -1323,53 +1243,47 @@ Baik, saya sudah catat permintaan Anda, sebagai berikut 📝 🔥
 ✓ Furnitur: *[Q11 — Full/Semi/Kosongan]*
 ✓ Fasilitas: *[amenities spesifik]*
    ✓ Fasilitas: *[SALIN UTUH daftar fasilitas yang tersedia — JANGAN dipangkas]*   ← jika jawab "standar/terserah/apapun": nilainya sudah berupa daftar NYATA yang lengkap (Kamar Tidur, Dapur, Lift, …). Salin SELURUHNYA. JANGAN tulis kata "Standar" telanjang, dan JANGAN hanya menyalin item yang customer sebut.
-   (baris "Fasilitas" TIDAK ADA sama sekali)              ← HANYA jika Q_FAC belum ditanya (state ❓) — jangan tulis "✗" atau "(Belum ditanyakan)" apa pun
+   (baris "Fasilitas" TIDAK ADA sama sekali)              ← HANYA jika Q_FAC belum ditanya — jangan tulis "✗" atau "(Belum ditanyakan)" apa pun
 ✓ Patokan: *[Q6 — frasa PENUH]*
 ✓ Area alternatif: *[Q7]*
 ✓ Hindari: / ✓ Prefer:  *[pasangan dari Q5]*
-✓ Tower/Lantai: *[Q12]*                                   (apartemen — JANGAN dilewatkan)
-✓ Viewing: *[Q9b+Q9c — "Jam 10 pagi, 20 Agustus 2026", atau "Minta listing" bila ditolak]*
+✓ Tower/Lantai: *[Q12]*                                   (apartemen)
+✓ Viewing: *[jadwal ABSOLUT — mis. "18 Agustus 2026, jam 1 siang" — JANGAN PERNAH kata relatif seperti "besok"/"lusa"]*
 
 Terima kasih sudah menghubungi saya. 🙏
 
 Salam hangat,
-⟨copy the agent name from the 🪪 block — plain text, no brackets⟩
-⟨copy the app name from the 🪪 block — plain text, no brackets⟩
+⟨the agent name you were given — plain text, no brackets⟩
+⟨the app/company name you were given — plain text, no brackets⟩
 ```
 
 > ⛔ **The two signature lines are the ONLY lines in this template that are not
 > placeholders.** Every `*[...]*` above is a slot you fill from the qualification state.
-> The signature is different: the real names are handed to you already resolved, so you
-> copy them verbatim. Do **not** carry the bracket habit down into the signature.
+> The signature is different: the real names are given to you in the conversation context,
+> so you copy them verbatim. Do **not** carry the bracket habit down into the signature.
 
-> **The signature is ALWAYS dynamic — and it is ALREADY RESOLVED for you.** It comes from
-> exactly ONE place: the `🪪 IDENTITAS ANDA (AGENT)` block, which gives
-> `Nama agent (users.name)` and `Nama aplikasi (APP_NAME)`. Copy those two values as
-> plain text. **Never hardcode** "LEO FELIX" or "Elevan Property" — both are only
-> examples, never the real answer.
->
-> **⛔ The `Customer profile` block is NOT your identity.** Its `Name:` line is the
-> person you are talking to. A real production summary went out signed with the
-> customer's own name while the agent was someone else entirely — the customer appeared
-> to receive a letter from themselves. Two names in the prompt, only one is yours: the
-> one in the agent block.
+> **The signature is ALWAYS dynamic** — use the agent name and app/company name given
+> in your conversation context (see SKILL.md §1). **Never hardcode** "LEO FELIX" or
+> "Elevan Property" — both are only source-material examples. The signature appears
+> **ONLY** in the summary brief — never on a Q1–Q14 question.
 >
 > **⛔ A real production summary was sent to a customer containing the literal text
 > `[Nama Agen]` and `[Nama Aplikasi]`** — Indonesian bracket placeholders, invented on the
-> spot by translating this document's own `*[...]*` notation. The agent name and app name
-> were both sitting in the prompt, already resolved, a few hundred tokens away. If the
-> signature you are about to write contains `[`, `]`, `<`, `>`, `$`, `{`, or `}`, it is
-> wrong — no matter how reasonable the label inside it looks.
+> spot by translating this document's own `*[...]*` notation into the reply. An earlier
+> incident produced `${agentName}` / `${appName}` the same way. Both are the same mistake:
+> writing the *name of the slot* instead of the *value in it*. If the signature you are
+> about to write contains `[`, `]`, `<`, `>`, `$`, `{`, or `}`, it is wrong — no matter
+> how reasonable the label inside it looks. Write the actual name, as ordinary text.
 >
-> **⛔ A real production summary was sent to a customer containing the literal text
-> `${agentName}` and `${appName}`** — the raw placeholder notation itself, typed out
-> character-for-character, instead of an actual name. This notation exists ONLY to
-> explain the rule in this document; it is never valid output. If you are about to type
-> a `$` followed by `{`, stop — you are about to repeat this exact bug. Write the real
-> name you were given, as ordinary text, with no `$`, `{`, or `}` characters anywhere in
-> the signature line.
+> If you genuinely were not given an agent name, sign with the neutral fallback
+> ("Tim Properti") — never with a placeholder, and never with the customer's own name.
 >
-> The signature appears **ONLY** in the summary brief — never on a Q1–Q14 question.
+> **⛔ Sign as the AGENT, never as the CUSTOMER.** The name you were told to answer as
+> is the agent; a name that came from the customer's own messages, profile, or display
+> name is the customer. A real production summary went out signed with the customer's
+> own name while the agent was someone else — the customer appeared to receive a letter
+> from themselves. If you truly cannot tell which is which, use the neutral fallback
+> ("Tim Properti"); signing with the wrong name is worse than signing generically.
 
 > **After the brief — catalogue or not?** Decided by `users.catalog_summary` for this agent:
 > `ON` + listings available → continue straight into the recommendations in the same turn;
@@ -1395,8 +1309,8 @@ Salam hangat,
 - **Include ONLY ✅ fields.** Skip a ❓ line entirely — never render it empty.
 - **Use the EXACT value** after `": "` in the state row. Never "Disebutkan", "Ada", "Iya",
   "Diketahui", or any vague filler.
-- **⛔ Never pull a value from raw history when the field is ❓** in the state block. The state is
-  computed from the *active* session only.
+- **⛔ Never pull a value from raw history when your own checklist has the field as ❓.** Only the
+  *active* session (since the last summary, or since a type/location switch) counts.
 - **⛔ Never carry values from a replaced search.** After villa→hotel, the villa's
   location/date/furnishing must not appear in the hotel summary.
 - **⛔ Never invent.** If you never asked about location, duration, or anchor this session, those
@@ -1408,7 +1322,8 @@ Salam hangat,
   `✗ Keputusan bersama: (Belum ditanyakan)`.
 - **⛔ Budget is never a floor number** (see Q12) and never appears if Q3 is ❓.
 - **✓ Budget MUST appear if stated anywhere in the active session** — including in the very first
-  message ("rumah 600-800 juta cash") and never repeated. The server re-scans the whole session.
+  message ("rumah 600-800 juta cash") and never repeated. Re-scan the whole conversation, not
+  just the last few messages, before deciding a slot is unanswered.
 - **⛔ Never summarize while Q3 or Q8 is ❓** — no exceptions.
 - One question per message; max 12 AI messages before the brief.
 
@@ -1556,18 +1471,17 @@ Customer: "Area [nama yang mereka ketik]" → ✓ Area: [salin persis kata merek
 
 > ⛔⛔ **This document's own place-name examples are NOT customer data — this is a
 > real production failure, not a hypothetical.** A customer bought a warehouse in
-> **Jakarta** and never typed any area word at all (`district` stayed `null` for the
+> **Jakarta** and never typed any area word at all (`district` stayed empty for the
 > whole chat). The final summary shipped `✓ Area: Sidotopo` anyway — "Sidotopo" is
 > the Surabaya example word used a few lines above in this very document to
 > illustrate what an unfamiliar area name looks like. The model copied its own
 > instruction text into a customer's Jakarta brief. Two providers on two different
-> transcripts have now invented an area this way (see also "Ciputra" in §Q7 below) —
+> transcripts have now invented an area this way (see also "Ciputra" further below) —
 > this is a document-priming pattern, not a one-off.
-> **If `district` is `❓` in the state block, the Area line does not exist. Full
-> stop.** Never write "Sidotopo", "Ngagel", "Pakuwon", "Merr", "Gubeng", "Wiyung",
-> "Ciputra", or any other place name that appears ANYWHERE ELSE in this prompt
-> (including your own earlier questions) unless the CURRENT customer message
-> contains that exact word.
+> **If the area/district is unknown, the Area line does not exist. Full stop.**
+> Never write "Sidotopo", "Ngagel", "Pakuwon", "Merr", "Gubeng", "Wiyung", "Ciputra",
+> or any other place name that appears ANYWHERE ELSE in this prompt (including your
+> own earlier questions) unless the CURRENT customer message contains that exact word.
 
 **9. Strip conversational filler from every value.** Words like `juga`, `aja`,
 `saja`, `sama`, `kak`, `nya` are speech, not data.
@@ -1604,7 +1518,9 @@ treat it as if Q2c were ❓ and omit the line rather than copying the mess.
 **12. `Area` is never just a restatement of `Kota`.** Q2 (Kota) and Q2c (Area) are
 different questions; the area is a neighbourhood/kecamatan **inside** the city, never
 the city name itself and never an answer to some other question (room type,
-facilities, etc).
+facilities, etc). This matters even more here than for other agents — since this
+skill has no backend qualification-state block to fall back on, you are the only
+thing keeping Kota and Area from being conflated.
 
 ```
 ❌ ✓ Kota: *Malang*   ✓ Area: *Kota Malang*   ← Area just repeats Kota, not a real area
@@ -1615,7 +1531,8 @@ facilities, etc).
 A real production summary invented `✓ Keputusan bersama: *Iya, Kak\nSaya survei
 bersama istri*`, dialogue that reads like the customer said it but does not match
 anything they actually typed. Only write what the customer said in response to Q9,
-normalized to a short phrase — never compose a sentence and put it in their mouth.
+normalized to a short phrase — never compose a sentence and put it in their mouth,
+even if it "sounds like" something they might have said.
 
 ```
 ❌ ✓ Keputusan bersama: *Iya, Kak
@@ -1623,11 +1540,15 @@ normalized to a short phrase — never compose a sentence and put it in their mo
 ✅ ✓ Keputusan bersama: *Bersama istri*
 ```
 
-**14. `Viewing` uses the ABSOLUTE date from the state, never a relative word you
-insert yourself.** A real production summary showed `✓ Viewing: *Besok siang jam
-2*` — "besok" never appeared anywhere in that chat; the AI substituted a relative
-word for a date it should have copied verbatim from the qualification state (which
-already stores dates as "DD Bulan YYYY", never "besok"/"lusa"/"minggu depan").
+**14. `Viewing` uses the ABSOLUTE date the customer/AI actually settled on, never a
+relative word you insert yourself.** A real production summary showed `✓ Viewing:
+*Besok siang jam 2*` — "besok" never appeared anywhere in that chat; the AI
+substituted a relative word for a concrete date it should have carried forward
+verbatim ("DD Bulan YYYY"). If you stated a date earlier in the conversation while
+asking for the hour (e.g. "untuk tanggal 5 Agustus 2026, jam berapa yang pas?"),
+that IS the answer to "when" — copy it forward into the summary; do not replace it
+with "besok"/"lusa"/any relative word, and do not drop it just because the customer's
+reply only contained the hour.
 
 ```
 ❌ ✓ Viewing: *Besok siang jam 2*
