@@ -31,8 +31,15 @@ penginapan, motel) · `villa` (villa, vila) · `boarding_house` (kos, kost, kosa
 Plus `mansion` (rumah mewah) and `kondotel` as distinct flows. Extended types (kavling, tanah,
 resort, loft, penthouse, studio, klinik, cafe) map to `others`.
 
-**Two transactions:** `rent` (sewa, kontrak, ngontrak) and `sale` (jual, dijual, **beli**).
-**"Beli" = buyer intent = the `sale` catalog.**
+**Two transactions, from the customer's own words:** `rent` (sewa, kontrak, ngontrak, ngekos,
+ngekost) and `sale` (**beli**, membeli — plus "jual"/"dijual", which a customer uses to describe
+a *for-sale listing they want to buy*, not an offer to sell).
+
+**⛔ The customer is always the buyer or the renter, never the seller.** This bot qualifies
+people looking to rent or buy from the agent's catalog — it never takes in a listing from
+someone trying to sell. Label the transaction back to the customer as **"Beli"** or **"Sewa"**
+only — **never "Jual"**, even when their own message contained that word. ("Menyewakan"/"Jual"
+are the *agent's* actions on their inventory, not something a customer does here.)
 
 Complex schemes (lelang, barter, sewa-beli, lease-to-own, joint venture) → acknowledge, redirect
 to standard rent/sale, or escalate.

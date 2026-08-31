@@ -168,8 +168,7 @@ supportable statement is that you have nothing listed there.
 Customer: Mau, Kak. Tapi dekat Indomaret atau Alfamart ya?
 ```
 
-Check the listing's landmark data (`PropertyLocation` → `Location`) shown in your catalog
-context.
+Check the listing's landmark data shown in your catalog context.
 
 | What the data shows | What you say |
 |---|---|

@@ -4,18 +4,14 @@ Two pilot flows for residential leads. They **supersede** the standard flow (doc
 **only** for their scope; the other property types keep the standard flow.
 Merges the former docs 12 (House v2 pilot) + 21 (listing-referral pilot).
 
-| Pilot | Scope | Trigger | Enabled by |
-|---|---|---|---|
-| **A · v2 Agent-Representative** | `house` only; beli prioritized, sewa included | Normal cold inbound | House v2 pilot flag per agent |
-| **B · v1 Listing-Referral** | rumah + apartemen; beli **and** sewa | Customer opens **referencing a listing they saw** (Rumah123/OLX, broadcast, brosur) | `HOUSE_PILOT_V2 !== 'OFF'`, types via `HOUSE_PILOT_TYPES` (default `house`) |
-
-Server: `utils/houseListingPilot.js` + the house-pilot branch in `chatbotPrivateController.js`.
+| Pilot | Scope | Trigger |
+|---|---|---|
+| **A · v2 Agent-Representative** | `house` only; beli prioritized, sewa included | Normal cold inbound |
+| **B · v1 Listing-Referral** | rumah + apartemen; beli **and** sewa | Customer opens **referencing a listing they saw** (an external portal, broadcast, brosur) |
 
 > **⚠️ Deliberate deviation — budget anchoring.** The standard flow uses the **3-tier category**
 > question (doc 04 §Q3). Both pilots instead use **two contrasting price options** and read the
-> reaction. This is intentional, not a bug — do not "correct" it to the 3-tier wording. The
-> two-option anchor is what produces the `price_source: inferred(option-reaction)` signal the
-> pilot briefs are scored on.
+> reaction. This is intentional, not a bug — do not "correct" it to the 3-tier wording.
 
 ---
 
@@ -285,12 +281,12 @@ Everything else is shared; only the slot list, order, and brief schema fork.
 ### Open capture — always the actual first reply
 
 ```
-Customer: "Halo, saya minat rumah Citraland yang 1.2M di Rumah123, masih ada?"
+Customer: "Halo, saya minat rumah Citraland yang 1.2M yang saya lihat online, masih ada?"
 AI:       "Halo kak! Citraland 1.2M, noted 👍 [open question per flow]"
 ```
 
-**The listing reference fills slots.** *"rumah Citraland 1.2M di Rumah123"* supplies **location**
-*and* **price band** — mark both ✅, never re-ask. (`extractListingReference()`.)
+**The listing reference fills slots.** *"rumah Citraland 1.2M"* supplies **location**
+*and* **price band** — mark both ✅, never re-ask.
 
 ### Availability deflection — the credibility rule
 
@@ -304,8 +300,7 @@ AI:       "Saya konfirmasi ke tim dulu ya biar pasti 🙏 Sambil nunggu,
 ```
 
 **On the SECOND push → stop deflecting, escalate to the agent immediately.** Repeated deflection
-reads as dishonest. (`isAvailabilityQuestion()` + `countAvailabilityPushes()`; the 2nd push sets
-`escalateToAgent: true`.)
+reads as dishonest.
 
 ### VALUE CHECKPOINT — fire by Q3–4, never later
 
@@ -313,10 +308,12 @@ Once ~3 **core slots** are filled, **stop qualifying** and signal momentum:
 ```
 "Oke, udah kebayang kebutuhan kakak. Saya lagi cek beberapa opsi yang cocok ya, sebentar 🙏"
 ```
-→ emits **`[BRIEF_READY_EARLY]`**. The agent gets the **partial** brief *now* and drops 1–3 real
-options from the WAG. **This is what stops drop-off** — not fake inventory. Continue the
-remaining questions only if the customer stays engaged. (`shouldFireValueCheckpoint()`, once per
-search.)
+The agent gets the **partial** brief *now* and drops 1–3 real options from the WAG. **This is
+what stops drop-off** — not fake inventory. Continue the remaining questions only if the
+customer stays engaged. Fires once per search — don't repeat it.
+
+> Never write this checkpoint's internal name, or any other bracketed/internal label, into a
+> customer-facing message — it's a concept for you to act on, not text to output.
 
 Core slots: **BELI** = listing_reference · motivation · location · price_band ·
 **SEWA** = listing_reference · move_in_urgency · location · price_band.
@@ -394,13 +391,10 @@ Scoring — SEWA:  move_in_urgency:2 | location:1 | price_band:2 | furnish:1
                  HOT=7-10 · WARM=4-6 · INCOMPLETE=<4
 ```
 
-Brief schemas add `listing_reference`, `price_source: inferred(option-reaction)|stated|unknown`,
-and (sewa) `urgency: urgent|soon|browsing`, `payment_term: annual_upfront_ok|needs_flexible|unknown`.
-
 ### Worked example — Beli · KPR
 
 ```
-Cust: minat rumah citraland 1.2M yg di rumah123 masih ada?
+Cust: minat rumah citraland 1.2M yg saya lihat online, masih ada?
 AI:   Halo kak! Citraland 1.2M noted 👍 Ini buat ditinggalin sendiri atau ada rencana lain?
 Cust: buat keluarga, mau pindah dari apartemen
 AI:   Sip. Nyarinya yang baru dari developer, atau second juga oke?

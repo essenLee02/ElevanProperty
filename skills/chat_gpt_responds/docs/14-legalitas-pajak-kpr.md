@@ -53,11 +53,32 @@ memberikan kepastian hukum atas satu kasus spesifik customer.
 - **SLF (Sertifikat Laik Fungsi)** — bukti bangunan sudah diperiksa dan layak
   dihuni/dipakai sesuai fungsinya, umumnya untuk bangunan bertingkat/komersial.
 
-### Aturan berlaku di `properties.certificate_type` (lihat `models/Property.js`)
+### Dokumen Lain Yang Sering Ditanyakan (girik, Surat Hijau, HGU, SHP)
 
-- **Sewa (rent)**: sertifikat kepemilikan TIDAK relevan bagi penyewa — hanya
-  `KOSONG` / `LAINNYA` (atau kosong/null) yang masuk akal.
-- **Beli (sale)**: `KOSONG` / `LAINNYA` / `SHM` / `SHGB` / `SHSRS`.
+- **Girik / Petok D / Letter C** — catatan pajak tanah era sebelum sertifikasi nasional,
+  BUKAN sertifikat kepemilikan resmi BPN. Tanah girik masih bisa dijual/diwariskan, tapi
+  WAJIB disertifikatkan (konversi ke SHM) untuk kepastian hukum penuh — prosesnya butuh
+  riwayat kepemilikan yang jelas dan bisa memakan waktu.
+- **Surat Hijau (Surat Ijo)** — bukan sertifikat kepemilikan sama sekali. Ini adalah **Izin
+  Pemakaian Tanah (IPT)** yang diterbitkan pemerintah daerah (mis. Pemkot Surabaya) atas
+  lahan MILIK PEMDA — pemegangnya menyewa/pinjam-pakai, bukan memiliki, statusnya sementara
+  dengan retribusi tahunan, dan tidak bisa langsung dinaikkan jadi SHM (karena tanahnya aset
+  daerah). Solusi yang kini sering ditawarkan pemda: HGB di atas Hak Pengelolaan Lahan (HPL)
+  milik pemkot, supaya dasar hukum pemakaiannya lebih jelas.
+- **HGU (Hak Guna Usaha)** — hak mengusahakan tanah negara, umumnya untuk pertanian/
+  perkebunan/perikanan/peternakan dengan syarat luas minimal — beda dari SHGB yang untuk
+  mendirikan bangunan.
+- **SHP (Sertifikat Hak Pakai)** — hak memakai/memungut hasil tanah milik negara atau pihak
+  lain, cakupannya lebih terbatas dari SHM; salah satu jalur yang memungkinkan WNA memegang
+  hak atas tanah sesuai ketentuan yang berlaku.
+
+AI boleh menjelaskan semua istilah di atas secara umum, tapi TIDAK PERNAH memastikan status
+legal satu bidang tanah/properti spesifik — arahkan ke agent/tim untuk verifikasi dokumen asli.
+
+### Sertifikat & jenis transaksi
+
+- **Sewa (rent)**: sertifikat kepemilikan TIDAK relevan bagi penyewa.
+- **Beli (sale)**: SHM / SHGB / SHSRS adalah yang paling umum ditemui.
 
 ### Batasan Peran AI (WAJIB dipatuhi)
 

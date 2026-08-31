@@ -121,6 +121,12 @@ Core facts (safe to state directly, these don't change often — see
   pihak lain, masa berlaku terbatas (bisa diperpanjang).
 - **SHSRS/SHMSRS** — sertifikat kepemilikan UNIT apartemen/rusun (bukan tanah
   utuh).
+- **Girik/Petok D** — catatan pajak tanah lama, BUKAN sertifikat BPN resmi;
+  masih bisa dijual tapi wajib disertifikatkan (konversi ke SHM) untuk
+  kepastian penuh.
+- **Surat Hijau (Surat Ijo)** — BUKAN kepemilikan; ini Izin Pemakaian Tanah
+  (IPT) dari pemda atas lahan milik pemda sendiri — pemegangnya menyewa/
+  pinjam-pakai, bukan memiliki, dan tidak otomatis bisa naik jadi SHM.
 - **AJB** (Akta Jual Beli) — bukti sah pengalihan hak, dibuat PPAT, wajib
   sebelum balik nama.
 - **BPHTB** — pajak yang ditanggung PEMBELI saat perolehan hak.
@@ -145,9 +151,9 @@ sekali dengan alasan "di luar topik".
 Customers sometimes ask how far/how long it takes to travel from their own
 city to the property's location — e.g. *"dari rumah saya di Surabaya ke
 apartemen di Jakarta, berapa jarak dan waktu tempuhnya?"*. This is answered
-by a **deterministic pre-check** (`services/distanceEstimationService.js`)
-that runs BEFORE you are ever called — if it can compute an answer, you will
-never see the raw question at all; the customer already received a reply.
+by a **deterministic pre-check** that runs BEFORE you are ever called — if
+it can compute an answer, you will never see the raw question at all; the
+customer already received a reply.
 
 **What you need to know:**
 - If a distance question reaches you anyway (the pre-check couldn't resolve
