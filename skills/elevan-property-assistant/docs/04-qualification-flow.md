@@ -742,41 +742,21 @@ Already-avoidance-framed statements (banjir, hadap barat, gang sempit, bising, r
 kereta) go straight into `Hindari` **as-is**, with no Prefer counterpart.
 
 > **⛔ An all-positive Q5 answer still produces BOTH lines — never zero lines.**
-> Real production failure (booking villa Malang, 18 Agu 2026). Q5 was answered
-> *"Saya mau tempat yang dingin, udaranya bersih, tempat sejuk, akses jalan
-> strategis dengan tempat makanan"* — every clause a WISH, no avoidance word at
-> all. The brief shipped with **no `Hindari` line and no `Prefer` line**: the
-> customer's only description of the atmosphere they wanted vanished entirely.
->
-> The state block hands you this as **two separate rows** — use both:
+> The state block gives two rows. `Red flags [Q5]: Tidak ada` means nothing to *avoid* was
+> named — **not** that nothing was said. Derive `Hindari` from the opposites table above, and
+> copy the wishes into `Prefer`. (Real failure, villa Malang 18 Agu 2026: an all-wish answer
+> shipped with neither line, losing the customer's only description of what they wanted.)
 >
 > ```
-> ✅ Red flags         [Q5]: Tidak ada
-> ✅ Prefer/suasana     [Q5]: Saya mau tempat yang dingin, udaranya bersih, …
-> ```
->
-> `Red flags: Tidak ada` means the customer named nothing to avoid — it does
-> **not** mean they said nothing. Derive `Hindari` from the opposites table
-> above, and copy the wishes into `Prefer`:
->
-> ```
-> ✅ ✓ Hindari:
->    1. Tempat panas
->    2. Udara kotor / berpolusi
->    ✓ Prefer:
->    1. Tempat sejuk
->    2. Udara bersih
->    3. Lokasi strategis dekat tempat makan
->
+> Q5: "tempat yang dingin, udaranya bersih, akses jalan strategis dengan tempat makanan"
+> ✅ ✓ Hindari: 1. Tempat panas   2. Udara kotor / berpolusi
+>    ✓ Prefer:  1. Tempat sejuk   2. Udara bersih   3. Lokasi strategis dekat tempat makan
 > ❌ (baris Hindari & Prefer tidak ada sama sekali)   ← preferensi customer hilang
 > ```
 >
-> ⚠️ If `Prefer/suasana [Q5]` is ✅ in the state block, a summary with **no**
-> `Prefer` line is wrong — that row exists precisely because this data was
-> being lost.
-> **⚠️ "mau ramai" is a POSITIVE wish, not a red flag.** → `Hindari: Tempat yang sepi`
-> + `Prefer: Tempat yang ramai`. Only treat "ramai" as avoidance when explicitly negated
-> ("jangan ramai", "jalan terlalu ramai", "bising").
+> If `Prefer/suasana [Q5]` is ✅, a summary with **no** `Prefer` line is wrong.
+> **"mau ramai" is a POSITIVE wish** → `Hindari: Tempat yang sepi` + `Prefer: Tempat yang ramai`.
+> Only avoidance when explicitly negated ("jangan ramai", "bising").
 
 #### "Jauh dari X" is an AVOIDANCE — it never belongs in `Prefer`
 
@@ -801,18 +781,11 @@ Customer: "Saya mau tempat yang jauh dari pemakaman, masjid, gereja, diskotik/cl
 ❌ ✓ Hindari: 1. Bau busuk  2. Tidak ramai  ← invented; the customer said neither
 ```
 
-**Rules for this list:**
-1. **Split on commas / `dan` / `atau`** — each place is its own line. Four places named
-   means four lines, not one run-on entry.
-2. **Keep `/` intact.** `diskotik/club` is one place written two ways, not two places.
-3. **Never invent an item.** Every entry must trace to a word the customer typed. Do not
-   infer "bau busuk" from *pemakaman*, or "tempat pembuangan sampah" from nothing at all.
-4. **Never drop an item.** If they named four places, all four appear.
-5. **Do not duplicate.** If the same objection is already on the list in other words
-   ("Tidak mau dekat rel kereta" vs "Jauh dari rel kereta"), keep one.
-6. **Accept any place, known or not.** Cemetery, place of worship, nightclub, landfill,
-   railway, tollroad, factory, hospital, school — record what they said, do not judge it
-   and do not ask them to justify it.
+**Rules:** split on commas / `dan` / `atau` — four places named means four lines, not one
+run-on entry; keep `/` intact (`diskotik/club` is one place written two ways); **never invent**
+an item (don't infer "bau busuk" from *pemakaman*); **never drop** one; don't list the same
+objection twice in different words; accept any place named, known or not (cemetery, place of
+worship, landfill, railway, factory, school) — record it, don't judge it or ask them to justify it.
 
 > **⚠️ All negation variants count** — `enggak / gak / gk / ga / nggak / ngga / tdk / ndak` = `tidak`.
 > "Gk banjir" = Tidak mau banjir. These short WA forms are the MOST common. A multi-message batch
@@ -825,39 +798,21 @@ Customer: "Saya mau tempat yang jauh dari pemakaman, masjid, gereja, diskotik/cl
 **Mixed Q5+Q6 answers:** *"tidak macet, tidak banjir, terus deket cafe dan restoran"* → split.
 Red-flag parts → `Hindari`; anchor parts → `Patokan` (Q6). Both fields get populated.
 
-> **⛔ A long compound sentence carries MULTIPLE separate items — copying only one
-> of them is a real production failure, not a hypothetical.** A warehouse buyer
-> wrote in ONE message: *"saya cari akses jalan yang lebar, karena saya punya truk
-> besar. Pastikan akses jalannya bagus, tidak retak-retak. Tidak banjir dan dekat
-> dengan jalan tol."* The raw state already held the full sentence — nothing was
-> lost server-side — but the summary that shipped only printed `✓ Hindari: Tidak
-> mau banjir`, silently dropping two of the three avoidance-relevant clauses AND
-> never adding a `Prefer` line at all. Correct decomposition of that exact
-> sentence:
+> **⛔ A long compound sentence carries MULTIPLE separate items.** Real failure: a warehouse
+> buyer wrote *"akses jalan yang lebar, karena saya punya truk besar. Pastikan akses jalannya
+> bagus, tidak retak-retak. Tidak banjir dan dekat dengan jalan tol."* — the shipped summary
+> printed only `✓ Hindari: Tidak mau banjir`, dropping two clauses and the whole Prefer line.
 >
-> | Clause | Type | Goes to |
-> |---|---|---|
-> | "tidak retak-retak" | already negative | `Hindari`: Jalan rusak/retak |
-> | "akses jalan yang lebar, karena truk besar" | positive wish (needs the split above) | `Hindari`: Gang sempit **+** `Prefer`: Akses jalan lebar (untuk truk besar) |
-> | "tidak banjir" | already negative | `Hindari`: Banjir |
-> | "dekat dengan jalan tol" | anchor, not a red flag | `Patokan` (Q6), not Hindari/Prefer at all |
+> | Clause | Goes to |
+> |---|---|
+> | "tidak retak-retak" | `Hindari`: Jalan rusak/retak |
+> | "akses jalan lebar, karena truk besar" | `Hindari`: Gang sempit **+** `Prefer`: Akses jalan lebar (untuk truk besar) |
+> | "tidak banjir" | `Hindari`: Banjir |
+> | "dekat dengan jalan tol" | `Patokan` (Q6) — an anchor, not a red flag |
 >
-> ```
-> ✅ ✓ Hindari:
->    1. Jalan rusak/retak
->    2. Gang sempit
->    3. Banjir
->    ✓ Prefer:
->    1. Akses jalan lebar (untuk truk besar)
->    ✓ Patokan: Dekat jalan tol
->
-> ❌ ✓ Hindari: 1. Tidak mau banjir        ← two clauses silently dropped, no Prefer line
-> ```
->
-> **Count the sentences/clauses in the raw answer before writing the summary** —
-> semicolons, periods, and "dan" inside one Q5/Q2b answer each usually mark a
-> separate item. If the raw answer had three avoidance-relevant clauses, the
-> summary needs three lines across Hindari+Prefer, not one.
+> **Count the clauses before writing the summary.** Semicolons, periods and "dan" inside one
+> Q5/Q2b answer each usually mark a separate item — three avoidance-relevant clauses need three
+> lines across Hindari+Prefer, not one.
 
 **Q12 sun orientation also feeds this pair** — avoiding both sunrise and sunset adds:
 `Hindari` = "Lokasi kamar yang hadap sinar matahari terbenam dan terbit",
@@ -1387,26 +1342,10 @@ landmark — route it to Prefer.
 ```
 
 **5. Hindari and Prefer are two separate lists — never fold one into the other.**
-A positively-framed wish belongs in Prefer; state the avoidance plainly in Hindari.
-Full mapping table and the "jauh dari X" rule live in §Q5 above.
-
-```
-❌ ✓ Hindari: 1. Tempat yang sejuk : Hindari tempat yang panas
-             2. Akses jalan lancar : Hindari tempat macet
-✅ ✓ Hindari: 1. Tempat panas
-             2. Jalan macet
-   ✓ Prefer:  1. Tempat yang sejuk
-             2. Akses jalan lancar
-```
-
-Distance is avoidance, not preference — and never invent or drop an item:
-
-```
-❌ ✓ Prefer: 1. Jauh/hindari masjid     ← "jauh dari X" is a Hindari item
-❌ ✓ Hindari: 1. Bau busuk               ← never said; do not infer it from "pemakaman"
-✅ ✓ Hindari: 1. Jauh dari pemakaman  2. Jauh dari masjid
-             3. Jauh dari gereja     4. Jauh dari diskotik/club
-```
+A positively-framed wish belongs in Prefer; state the avoidance plainly in Hindari. Distance
+("jauh dari X") is avoidance, never preference. Never invent an item, never drop one.
+Mapping table, worked examples and the "jauh dari X" rule all live in §Q5 above — follow them
+there rather than re-deriving the split here.
 
 **6. Viewing holds a decision, and a viewing has BOTH a date and a time.**
 The customer is always free to decline a viewing — declining is an ANSWER, so record
