@@ -3212,9 +3212,27 @@ function getProjectSkillInstruction(provider = 'shared', context = null) {
   return `${BASE_PROPERTY_ASSISTANT_PROMPT}\n\nPROJECT SKILL DOCUMENTATION FOR PROVIDER: ${provider}\n${loadProjectSkillPrompt({ provider, context })}`;
 }
 
-/** Recent message text used to decide which conditional skill docs to load (see getProjectSkillInstruction). */
+/**
+ * Recent message text used to decide which conditional skill docs to load
+ * (see getProjectSkillInstruction + CONDITIONAL_FILE_TRIGGERS in skillPromptService.js).
+ *
+ * ⚠️ WINDOW SIZE IS THE WHOLE POINT — it was 6 and the optimization was INERT.
+ * Measured on a real transcript (Sidoarjo/Puri Surya, 8 turns): with a 6-message window
+ * ALL SIX conditional docs (104KB) loaded on EVERY turn, because six turns of any property
+ * chat inevitably contain "rumah", "harga", "dekat", "fasilitas" — every trigger fires, and
+ * "conditional" silently means "always on". Narrowing the window to the CURRENT EXCHANGE
+ * (customer's message + the AI's immediately preceding question + one turn of lookback)
+ * cut the skill payload 33% on the same transcript with no rule lost.
+ *
+ * Why 2 and not 0/1: the AI's own last question is the decisive signal — a customer answering
+ * "AC dan kolam renang" only makes sense as a facilities answer because the previous turn asked
+ * about fasilitas, so that turn must stay in the window for doc 12 to load.
+ * ⚠️ Never use 0 here: `Array.slice(-0)` is `slice(0)` and silently returns the ENTIRE history,
+ * which is exactly the always-on behaviour this window exists to prevent.
+ */
+const SKILL_CONTEXT_WINDOW = 2;
 function _skillContext(history = [], userMessage = '') {
-  const recent = (history || []).slice(-6).map((h) => h.message || '').join(' ');
+  const recent = (history || []).slice(-SKILL_CONTEXT_WINDOW).map((h) => h.message || '').join(' ');
   return `${recent} ${userMessage || ''}`;
 }
 

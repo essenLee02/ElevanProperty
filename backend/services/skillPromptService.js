@@ -123,6 +123,18 @@ function getMarkdownFiles(directoryPath) {
 // When NOT provided (e.g. skill-status checks that don't have a live conversation),
 // every conditional file is included — preserves prior behavior for those callers.
 const CONDITIONAL_FILE_TRIGGERS = {
+  // Doc 07 — the 12 per-type playbooks. Only ONE property type is ever active in a
+  // conversation, but all twelve were loading on every turn (23KB). Q1–Q14 itself lives in
+  // doc 04 (always-on); doc 07 only adds the type-SPECIFIC slots, so a trigger miss degrades
+  // to "run the standard flow" — never to silence. Fires on any property-type noun or a
+  // type-specific slot word.
+  '07-property-type-playbooks.md': /\b(rumah|rmh|house|apartemen|apartment|apart|studio|hotel|motel|penginapan|villa|vila|kos|kost|kosan|indekos|ngekos|ngekost|ruko|rukan|shophouse|toko|kios|store|kantor|office|gudang|warehouse|mansion|kondotel|condotel|kavling|tanah|lahan|tower|lantai|grade|fit[\s-]?out|kamar|bedroom)\b/i,
+
+  // Doc 15 — worked catalog dialogues (32KB). These are EXAMPLES; the binding rules live in
+  // doc 08 (always-on), so a trigger miss degrades to "follow doc 08 without an example".
+  // Fires once the conversation actually reaches listings, stock or availability.
+  '15-catalog-conversation-cases.md': /\b(listing|katalog|catalog|rekomendasi|recommend|tersedia|available|stok|stock|pilihan|opsi|option|unit|properti\s+lain|area\s+lain|kota\s+lain|masih\s*ada|ada\s+(?:nggak|ngga|ga|gak|tidak|gk)|adakah|apakah\s+ada|minta\s+(?:\d{1,2}\s+)?(?:data|listing)|harga|budget|mahal|murah|sertifikat)\b/i,
+
   '11-house-pilots.md': /\b(rumah|rmh|house|apartemen|apartment|apart|kontrakan|perumahan|kpr|cicilan|dp\b|rumah123|listing|masih\s*ada)\b/i,
   '12-facilities-reference.md': /\b(fasilitas|facility|facilities|gym|kolam|pool|wifi|ac\b|parkir|parking|dapur|kitchen|furnish|kasur|bed|lemari|wardrobe|balkon|balcony|jacuzzi|sauna|yoga|mushola|laundry|elevator|lift\b)\b/i,
   '13-locations-and-landmarks.md': /\b(dekat|deket|near|patokan|anchor|landmark|di\s+jalan|di\s+sekitar|kawasan|wisata|mall|mal\b|pakuwon|tunjungan|grand\s*city)\b/i,
