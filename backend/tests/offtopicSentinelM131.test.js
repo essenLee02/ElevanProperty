@@ -96,7 +96,7 @@ const SKILLS_ROOT = path.join(__dirname, '..', '..', 'skills');
 const FOLDERS = ['claude_responds', 'chat_gpt_responds', 'elevan-property-assistant'];
 
 FOLDERS.forEach((f) => {
-  const doc = fs.readFileSync(path.join(SKILLS_ROOT, f, 'docs', '09-offtopic-and-escalation.md'), 'utf8');
+  const doc = fs.readFileSync(path.join(SKILLS_ROOT, f, 'docs', '08-offtopic-and-escalation.md'), 'utf8');
   ok(`${f}: memuat §3c`, doc.includes('3c. Full Category Reference & Silence Protocol'));
   ok(`${f}: memuat rujukan M131`, doc.includes('M131'));
   ok(`${f}: memuat token sentinel persis`, doc.includes('[[OFFTOPIC_SILENT]]'));
@@ -109,7 +109,7 @@ FOLDERS.forEach((f) => {
 
 // chat_gpt_responds sekarang HARUS ikut punya §3a/§3b juga (disinkronkan ulang sesi ini,
 // beda dari keputusan M129/M130 yang sengaja melewatkannya).
-const chatGptDoc = fs.readFileSync(path.join(SKILLS_ROOT, 'chat_gpt_responds', 'docs', '09-offtopic-and-escalation.md'), 'utf8');
+const chatGptDoc = fs.readFileSync(path.join(SKILLS_ROOT, 'chat_gpt_responds', 'docs', '08-offtopic-and-escalation.md'), 'utf8');
 ok('chat_gpt_responds: disinkron ulang, sekarang ikut memuat §3a (M129)', chatGptDoc.includes('3a. Property legal/financing terminology'));
 ok('chat_gpt_responds: disinkron ulang, sekarang ikut memuat §3b (M130)', chatGptDoc.includes('3b. Distance/travel-time questions'));
 

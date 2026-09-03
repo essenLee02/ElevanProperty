@@ -8,7 +8,7 @@
  *    Customer tidak pernah menyebut nama area apa pun (hanya "Jakarta yang
  *    bagian barat saja" sebagai jawaban Q7 area-alternatif, BUKAN Q2c).
  *    Summary yang terkirim tetap menampilkan "✓ Area: Sidotopo" — kata itu
- *    HANYA ada di skill doc sendiri (04-qualification-flow.md) sebagai
+ *    HANYA ada di skill doc sendiri (03-qualification-flow.md) sebagai
  *    ilustrasi "Customer: 'Area Sidotopo' → ✓ Area: Sidotopo". Model menyalin
  *    contoh dari instruksinya sendiri, bukan dari pesan customer manapun.
  *    Kelas yang sama dengan M84 ("Ciputra"), sumber priming BERBEDA (kali ini
@@ -114,15 +114,15 @@ const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 const folders = ['claude_responds', 'chat_gpt_responds', 'elevan-property-assistant'];
 
 folders.forEach((folder) => {
-  const docPath = path.join(PROJECT_ROOT, 'skills', folder, 'docs', '04-qualification-flow.md');
+  const docPath = path.join(PROJECT_ROOT, 'skills', folder, 'docs', '03-qualification-flow.md');
   const text = fs.existsSync(docPath) ? fs.readFileSync(docPath, 'utf8') : '';
   ok(`${folder}/docs/04: memuat peringatan anti-priming "Sidotopo"`,
     text.includes('Sidotopo') && /(is|are) NOT customer data|BUKAN jawaban customer/i.test(text));
 });
 
-const claudeDoc = fs.readFileSync(path.join(PROJECT_ROOT, 'skills', 'claude_responds', 'docs', '04-qualification-flow.md'), 'utf8');
-const chatgptDoc = fs.readFileSync(path.join(PROJECT_ROOT, 'skills', 'chat_gpt_responds', 'docs', '04-qualification-flow.md'), 'utf8');
-ok('claude_responds & chat_gpt_responds doc 04 BYTE-IDENTICAL (aturan wajib proyek)',
+const claudeDoc = fs.readFileSync(path.join(PROJECT_ROOT, 'skills', 'claude_responds', 'docs', '03-qualification-flow.md'), 'utf8');
+const chatgptDoc = fs.readFileSync(path.join(PROJECT_ROOT, 'skills', 'chat_gpt_responds', 'docs', '03-qualification-flow.md'), 'utf8');
+ok('claude_responds & chat_gpt_responds doc 03 BYTE-IDENTICAL (aturan wajib proyek)',
   claudeDoc === chatgptDoc);
 
 // ── KONTROL NEGATIF: contoh SKILL.md standalone tidak lagi memakai "Sidotopo" ──
@@ -146,14 +146,14 @@ ok('KONTROL: anchor "dekat jalan tol" masuk ke Q6, BUKAN ke Q5/Hindari',
 console.log('\n[M92b] Dokumentasi memuat contoh dekomposisi 3-klausa (ketiga folder)');
 
 folders.forEach((folder) => {
-  const docPath = path.join(PROJECT_ROOT, 'skills', folder, 'docs', '04-qualification-flow.md');
+  const docPath = path.join(PROJECT_ROOT, 'skills', folder, 'docs', '03-qualification-flow.md');
   const text = fs.existsSync(docPath) ? fs.readFileSync(docPath, 'utf8') : '';
   ok(`${folder}/docs/04: memuat contoh dekomposisi kalimat majemuk (akses jalan lebar/truk)`,
     text.includes('truk besar') && text.includes('Jalan rusak/retak') && text.includes('Gang sempit'));
 });
 
-const claudeDoc2 = fs.readFileSync(path.join(PROJECT_ROOT, 'skills', 'claude_responds', 'docs', '04-qualification-flow.md'), 'utf8');
-const chatgptDoc2 = fs.readFileSync(path.join(PROJECT_ROOT, 'skills', 'chat_gpt_responds', 'docs', '04-qualification-flow.md'), 'utf8');
+const claudeDoc2 = fs.readFileSync(path.join(PROJECT_ROOT, 'skills', 'claude_responds', 'docs', '03-qualification-flow.md'), 'utf8');
+const chatgptDoc2 = fs.readFileSync(path.join(PROJECT_ROOT, 'skills', 'chat_gpt_responds', 'docs', '03-qualification-flow.md'), 'utf8');
 ok('claude_responds & chat_gpt_responds tetap BYTE-IDENTICAL setelah kedua fix',
   claudeDoc2 === chatgptDoc2);
 

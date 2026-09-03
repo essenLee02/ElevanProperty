@@ -76,7 +76,7 @@ function markProtectedLines(lines) {
 
 /**
  * Membangun breadcrumb heading untuk sebuah posisi baris.
- * Contoh hasil: "04-qualification-flow.md > 3. The Question Sequence > Q3 — Budget"
+ * Contoh hasil: "03-qualification-flow.md > 3. The Question Sequence > Q3 — Budget"
  */
 function buildBreadcrumb(sourceLabel, headingStack) {
   return [sourceLabel, ...headingStack.map((h) => h.text)].filter(Boolean).join(' > ');
