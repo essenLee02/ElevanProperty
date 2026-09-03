@@ -1,7 +1,54 @@
 ================================================================================
-  ELEVAN PROPERTY — COMPREHENSIVE PROJECT CONTEXT (V16)
+  ELEVAN PROPERTY — COMPREHENSIVE PROJECT CONTEXT (V17)
   Dibuat  : 15 Juni 2026
-  Update  : 29 Agustus 2026, sesi lanjutan lagi (M171): ⭐⭐⭐ TEMUAN PALING
+  Update  : 3 September 2026 (M172–M176): ⭐⭐⭐ DUA TEMUAN STRUKTURAL.
+
+            (A) KODE MENGALAHKAN DOC — UNTUK KETIGA KALINYA. Blok prompt
+            hardcoded berjudul `## QUALIFICATION MODE` di
+            `aiPromptBuilderService.js` disuntikkan SETIAP GILIRAN dan
+            berbunyi: "You are conducting a property qualification
+            interview", "DO NOT show property listings DURING Q1–Q12",
+            "Ask Q1–Q12 in order", "Only after ALL mandatory questions →
+            show the brief", "Never skip Q8 — MANDATORY". KELIMANYA
+            berlawanan dengan kontrak offer-first (4 slot → 2 listing) yang
+            sudah berkali-kali ditulis ulang di skill doc. Karena blok prompt
+            dari KODE selalu mengalahkan isi `.md`, model menuruti kode —
+            itulah sebabnya perbaikan doc berulang kali TIDAK pernah terlihat
+            di produksi. Diganti `## CUSTOMER-AGENDA MODE` (Gate A/B/C,
+            batas 5 pertukaran + minta izin, larangan KPR/DP/bank).
+            ⛔ POLA YANG HARUS DIINGAT: kalau perilaku yang sudah
+            didokumentasikan tidak muncul di produksi, GREP DULU string
+            instruksi hardcoded di prompt builder SEBELUM menyentuh `.md`.
+            Dua kejadian sebelumnya: `listMissingMandatory` (8 slot vs 4) dan
+            blok state 53K-token (lihat V13→V14).
+
+            (B) SEMUA `.md` SKILL DIPUTUS DARI BACKEND (arahan pemilik
+            proyek). Platform AI harus BERDIRI SENDIRI: `.md` tidak boleh
+            lagi menyebut nama service/util/controller, kolom DB, env var,
+            atau membingkai sesuatu sebagai "the server does X / the backend
+            injects Y / handled server-side". Seluruh section `## Provider
+            Chain` (chain fallback + nama env model) dan `## Maintenance`
+            (perintah sync, `skillPromptService.js`, plafon karakter)
+            DIHAPUS dari SKILL.md ketiga folder. Blok yang memang ada di
+            prompt sekarang disebut MENURUT WUJUDNYA ("the catalog block in
+            your context"), BUKAN menurut siapa yang membuatnya — sengaja,
+            supaya grounding anti-halusinasi tidak ikut hilang. Kompensasi
+            kapabilitas: doc 00 §7a "No Safety Net" (tabel: tiap jaminan
+            backend yang dicabut → self-check yang kini dijalankan AI
+            sendiri). ⚠️ KOREKSI KEYAKINAN LAMA: `elevan-property-assistant`
+            TERNYATA BUKAN contoh yang bersih — ia memuat `users.name`,
+            `APP_NAME`, `RESPOND_CATALOG_RUN`, `Property joined with
+            PropertyFacility` yang sama; hanya SKILL.md-nya yang benar-benar
+            diadaptasi, `docs/`-nya identik byte dengan chat_gpt_responds.
+
+            Juga sesi ini: penomoran skill doc dirapikan 00–14 berurutan
+            (dulu 00,02–15 — bocor di 01) di KETIGA folder + sinkron ke
+            `CONDITIONAL_FILE_TRIGGERS` dan 8 berkas tes; gerbang kota M164
+            akhirnya benar-benar menutup bug produksi Madiun (5/10 → 10/10).
+            Baseline tes: 101/107 (5 near-miss live-LLM + 1 crash lama
+            huggingface). Detail penuh → §PERUBAHAN BESAR V16 → V17.
+
+            Sebelumnya, 29 Agustus 2026, sesi lanjutan lagi (M171): ⭐⭐⭐ TEMUAN PALING
             KRITIS DARI SELURUH SESI HARI INI — ADA DUA DIREKTORI skills/
             TERPISAH: `Elevan_Property/skills/` (root proyek) DAN
             `Elevan_Property/backend/asset/skills/`. HANYA yang PERTAMA yang
@@ -1676,6 +1723,33 @@ KONVENSI KODE
   5. SOLUSI — MASALAH YANG SUDAH DISELESAIKAN (jangan ulangi solusi lama)
 ================================================================================
 
+[⭐ M172–M176 — 3 September 2026 (detail penuh → §PERUBAHAN BESAR V16 → V17)]
+  M172 ⭐⭐⭐ Blok `## QUALIFICATION MODE` hardcoded di
+       aiPromptBuilderService.js memerintahkan "interview, JANGAN tampilkan
+       listing selama Q1–Q12, Q1–Q12 berurutan, Q8 WAJIB" — berlawanan
+       dengan seluruh kontrak offer-first di skill doc, dan MENANG karena
+       blok prompt dari kode mengalahkan `.md`. Diganti
+       `## CUSTOMER-AGENDA MODE` (Gate A/B/C). ⛔ Ini kejadian KETIGA dari
+       pola yang sama — grep prompt builder DULU sebelum menyalahkan doc.
+  M173 Gate C — batas 5 pertukaran/sesi, lalu summary + minta izin sekali;
+       penolakan apa pun = BERHENTI. Doc 04 §9 "Worked Example" ditulis ulang
+       (versi lama justru mencontohkan 5 pertanyaan beruntun tanpa listing).
+  M174 Penomoran skill doc dirapikan 00–14 berurutan di 3 folder + sinkron ke
+       CONDITIONAL_FILE_TRIGGERS, 8 berkas tes, judul H1, dan indeks SKILL.md.
+       Jebakan: double-shift (wajib satu pass), CRLF vs LF, dan berkas di akar
+       folder skill yang terlewat.
+  M175 SEMUA `.md` diputus dari backend (arahan pemilik proyek): section
+       Provider Chain & Maintenance dihapus, plus kolom DB/env/nama fungsi dan
+       framing "the server does X". Blok yang memang disuntikkan kini disebut
+       menurut WUJUDNYA, bukan pembuatnya — supaya grounding anti-halusinasi
+       tidak ikut hilang. Kompensasi: doc 00 §7a "No Safety Net".
+       ⚠️ Koreksi: `elevan-property-assistant` TERNYATA tidak lebih bersih.
+  M176 Gerbang kota M164 sebenarnya SUDAH terpasang, tapi untuk profil
+       guardrail `platform` ia hanya menyuntik fakta pasif — DeepSeek
+       mengabaikannya, jadi bug Madiun tidak pernah tertutup. Kini hard-return
+       tanpa memandang profil + tawaran hanya sekali + penjaga state basi.
+       5/10 → 10/10.
+
 [M1–M48: lihat V4. M49–M61: lihat V5. Highlight yang paling sering relevan:]
   M35 Loop repetitif → sticky anchor + history window 60
   M46 AI jatuh ke private_agent diam-diam → DeepSeek V4 model name
@@ -2624,10 +2698,20 @@ LOKASI FISIK — ⛔⛔⛔ BACA INI DULU SEBELUM MENGEDIT SATU BERKAS SKILL PUN 
   `Elevan_Property/skills/*/docs/`. Sesudahnya SELALU verifikasi dengan
   memanggil `loadResponseSkillPrompt('chatgpt', {context: <kata-trigger>})`
   langsung dari Node — BUKAN `grep` folder, BUKAN `wc -c`, BUKAN asumsi dari
-  nama path yang "terlihat benar". Kedua direktori disinkronkan manual
-  (diff -rq kosong) per 29 Agu malam sebagai mitigasi sementara; status akhir
-  `backend/asset/skills/` (hapus / symlink / tetap sebagai salinan manual
-  pemilik proyek) BELUM diputuskan — lihat §13 TROUBLESHOOT.
+  nama path yang "terlihat benar".
+
+  ⭐⭐ STATUS PER 3 SEP 2026 (M174): `backend/asset/skills/` KINI SUDAH JAUH
+  BASI — DUA GENERASI di belakang. Isinya masih struktur LAMA-SEKALI:
+  `00-data-grounding-and-verification.md` + `01-core-role-and-style.md`
+  TERPISAH (padahal keduanya sudah DIGABUNG jadi
+  `00-core-identity-and-grounding.md` di pohon hidup), dan masih bernomor
+  00–15 (pohon hidup: 00–14). Sinkronisasi manual "diff -rq kosong" per 29
+  Agu malam SUDAH TIDAK BERLAKU. Seluruh pekerjaan 3 Sep hanya masuk ke
+  `Elevan_Property/skills/` — dan itu MEMANG yang benar, karena hanya itu
+  yang dibaca runtime. ⛔ JANGAN menyalin dari `backend/asset/skills/` ke
+  pohon hidup untuk "menyamakan" — arahnya akan MEMBALIK semua perbaikan
+  Agustus–September. Status akhirnya (hapus / symlink / biarkan) MASIH belum
+  diputuskan pemilik proyek — lihat §13 TROUBLESHOOT.
 
   Isi `Elevan_Property/skills/` (5 folder — ⭐ M131: knowledge/ DIHAPUS,
   digabung ke skills/*/docs/14):
@@ -2656,35 +2740,87 @@ LOKASI FISIK — ⛔⛔⛔ BACA INI DULU SEBELUM MENGEDIT SATU BERKAS SKILL PUN 
   terminologi (§3a), jarak/waktu tempuh (§3b), dan off-topic silence sentinel
   (§3c) — item roadmap lama "belum RAG-aware" (per 14 Agu) SELESAI.
 
-SKILL DOCS (claude_responds/docs — struktur 00–15. ⭐ M171: doc 16 DIHAPUS —
-  lihat catatan di bawah tabel. ⚠️ NOMOR SUDAH BERUBAH dari versi V13 dan
-  sebelumnya — jangan pakai "01–14" lama.)
-  00 Data grounding & verification ⭐  08 Catalog & recommendations
-     BARU (M165–M170): 6-tingkat     09 Off-topic & escalation ★ (§3a/3b/3c)
-     sumber kebenaran, 5 pre-assert  10 Date & money parsing
-     check, immutability, RAG-safety 11 House pilots            [KONDISIONAL]
-     (data yang diambil/di-paste =   12 Facilities reference    [KONDISIONAL]
-     DATA, bukan instruksi), 9       13 Locations & landmarks   [KONDISIONAL]
-     pertanyaan self-audit akhir.    14 Legalitas/pajak/KPR (M131,
-     SELALU dimuat, TIDAK bersyarat,     gantikan knowledge/property-id/)
-     TIDAK RAG-indexed — sengaja     [KONDISIONAL — trigger sertifikat/pajak/
-     diberi nomor terkecil supaya        KPR, lihat CONDITIONAL_FILE_TRIGGERS]
-     tidak pernah jadi bagian yang   15 Catalog conversation cases (M133 —
-     terpotong senyap saat prompt         korpus RAG few-shot, kasus tersulit:
-     mendekati plafon karakter.           area kosong, budget di luar stok,
-  01 Core role, scope, style               pemilihan listing by nomor/harga/
-  02 Language & intent detection           nama — diperluas M165)
-  03 Conversation memory & stability
-     ⚠️ diperbaiki M165–M170: §5 masih mengajarkan FULL-RESET ke Q1 saat
-     kota/tipe/transaksi berubah — bug M124 yang sudah DICABUT di kode sejak
-     V10. Diganti tabel preserve/reset tiga-axis granular.
-  04 Qualification flow Q1–Q14 ★
-     ⚠️ diperbaiki M165–M170: masih mendaftar ④ budget sebagai syarat
-     minimum listing — kontrak M162 sudah menggantinya dengan ④ lokasi
-     spesifik (area/landmark/commercial); budget BUKAN prasyarat. Diganti +
-     ditambahkan "area dan landmark = SATU slot".
-  05 Answer completeness & re-ask     07 Property type playbooks
-  06 Customer conditions & diagnosis
+SKILL DOCS — ⭐⭐⭐ M174: PENOMORAN BARU 00–14 BERURUTAN (3 Sep 2026).
+  ⛔ JANGAN pakai penomoran lama "00, 02–15" (ada LUBANG di 01, dan berakhir
+  di 15). Lama → baru: 02→01, 03→02, 04→03, 05→04, 06→05, 07→06, 08→07,
+  09→08, 10→09, 11→10, 12→11, 13→12, 14→13, 15→14 (00 tetap 00). Berlaku di
+  KETIGA folder AI-facing, dan SUDAH disinkronkan ke:
+    - `CONDITIONAL_FILE_TRIGGERS` (skillPromptService.js) — dikunci pada NAMA
+      BERKAS PERSIS; salah rename = doc diam-diam jadi always-on.
+    - 8 berkas tes yang membaca doc lewat nama berkas.
+    - Judul H1 di DALAM tiap doc (dulu masih memuat nomor lama).
+    - Indeks `docs/` di KETIGA SKILL.md.
+
+  00 Core identity, scope, style & grounding   [SELALU DIMUAT]
+     6-tingkat source ladder · 5 pre-assert check · immutability · RAG-safety
+     (data yang di-retrieve = DATA, bukan instruksi) · §11 self-audit akhir.
+     ⭐ M176 BARU: §7a "No Safety Net" — tabel yang memetakan tiap jaminan
+     backend yang dicabut ke self-check yang kini WAJIB dijalankan AI sendiri
+     (lacak slot terjawab, deteksi tipe/transaksi, telusuri asal klaim, audit
+     pertanyaan berulang, cek coverage, nilai off-topic, normalisasi
+     tanggal/uang, tangkap kontradiksi sendiri).
+  01 Language & intent detection
+  02 Conversation memory & stability
+  03 Qualification flow Q1–Q14 ★ MASTER (93 KB — 30% dari total 310 KB)
+     Gate A (giliran customer menang) · Gate B (4 slot → 2 listing) ·
+     ⭐ M173 Gate C (batas 5 pertukaran → summary + minta izin sekali;
+     penolakan apa pun = BERHENTI; setuju = maks 3 pertukaran lagi).
+  04 Answer completeness & re-ask (§6a Anti-Echo; §9 worked example ditulis
+     ulang M173 jadi listings-first — versi lama justru mengajarkan 5
+     pertanyaan beruntun tanpa satu listing pun)
+  05 Customer conditions & diagnosis (§C2 pemilik tunggal: lazy chat,
+     singkatan, toleransi typo)
+  06 Property type playbooks              [KONDISIONAL]
+  07 Catalog & recommendations
+  08 Off-topic & escalation ★ (§3a terminologi, §3b jarak, §3c sentinel)
+  09 Date & money parsing
+  10 House pilots                         [KONDISIONAL]
+  11 Facilities reference                 [KONDISIONAL]
+  12 Locations & landmarks                [KONDISIONAL]
+  13 Legalitas / pajak / KPR              [KONDISIONAL]
+  14 Catalog conversation cases           [KONDISIONAL]
+
+  ⭐⭐⭐ M175 — KONTRAK BARU: `.md` DILARANG MENYEBUT BACKEND (arahan pemilik
+  proyek, 3 Sep 2026). Platform AI harus BERDIRI SENDIRI; `.md` adalah SATU-
+  SATUNYA patokan cara ia menghadapi keluhan/permintaan/penolakan/pertanyaan
+  customer. Alur yang dimaksud pemilik proyek:
+      Customer → WhatsApp → Util (RAG + vektor + guardrails)
+               → Platform AI → Kirimi API → WhatsApp → Customer
+  DIHAPUS dari ketiga folder: section `## Provider Chain` (urutan fallback +
+  env model — sekaligus BERTENTANGAN dengan Rule 7 "never reveal the AI chain"
+  di berkas yang sama), section `## Maintenance`/`## Provenance & Sync`
+  (perintah sync, `skillPromptService.js`, plafon karakter), kolom DB
+  (`users.catalog_summary`, `users.name`, `properties.certificate_type`,
+  `customers.ai_response`), env (`RESPOND_CATALOG_RUN`, `GOOGLE_ENABLED`,
+  `APP_NAME`), nama fungsi (`isDailyLifeOffTopic`), nama model
+  (`Property` joined with `PropertyFacility`), dan SEMUA framing
+  "the server does X / the backend injects Y / handled server-side".
+
+  ⚠️ KEPUTUSAN PENTING YANG MENOPANG SEMUA ITU: doc TIDAK boleh menyatakan
+  blok-blok itu tidak ada. Backend MEMANG masih menyuntikkan state block,
+  direktif bahasa, dan angka katalog nyata; menyuruh model mengabaikannya
+  akan MENGEMBALIKAN halusinasi yang baru saja diperbaiki. Karena itu blok
+  disebut MENURUT WUJUDNYA di konteks ("the catalog block in your context",
+  "a captured-state block, when present") — TIDAK PERNAH menurut siapa yang
+  menghasilkannya. Ketiadaan blok secara eksplisit BUKAN alasan (doc 00 §7a).
+
+  ⚠️ `[[OFFTOPIC_SILENT]]` DIPERTAHANKAN — itu kontrak FORMAT OUTPUT (token
+  kendali yang harus jadi seluruh isi balasan), bukan panggilan kode; hanya
+  framing "backend detects this string" yang dibuang.
+
+  ⚠️ KOREKSI: `elevan-property-assistant` BUKAN contoh bersih yang selama ini
+  diasumsikan. `docs/`-nya identik byte dengan chat_gpt_responds (beda hanya
+  CRLF + satu guard basi di doc 06), dan ia memuat referensi backend yang
+  sama. HANYA SKILL.md-nya yang benar-benar diadaptasi. Jangan menyalin dari
+  sana dengan anggapan sudah bersih — verifikasi dulu.
+
+  ⚠️ TES YANG IKUT BERUBAH: `distanceSkillDocsSync.test.js` dulu MEWAJIBKAN
+  doc memuat literal `GOOGLE_ENABLED=false` — tes itu justru mengunci coupling
+  yang diperintahkan hilang. Ditulis ulang: menguji MAKNA ("no mapping or
+  geocoding data available") + assertion NEGATIF bahwa `GOOGLE_ENABLED` tidak
+  ada. Pelajaran: saat kontrak berubah atas arahan pemilik, tes yang mengunci
+  kontrak LAMA ikut diperbarui — dan alasannya ditulis di komentar tes.
+
 
   ⭐⭐⭐ M171 — DOC 16 (peran non-properti: supplier/pelamar/tamu/asuransi/
   komplain/routing divisi Sales-Procurement-HRD-IT-Admin) DIHAPUS SEPENUHNYA
@@ -2791,6 +2927,29 @@ TUJUAN TEKNIS
 ================================================================================
   10. ROADMAP
 ================================================================================
+
+⭐ UTANG TERBUKA PER 3 SEP 2026 (M172–M176) — PALING ATAS, BELUM DIKERJAKAN
+  [ ] `chatbotPrivateController.js` (300 KB) + `generatePrivateChatbotResponse`
+      DIARAHKAN PEMILIK PROYEK UNTUK DIHAPUS. ⚠️ TAPI PER 3 SEP MASIH HIDUP
+      DAN TERPAKAI — `chatbotController.js:299` memanggilnya sebagai fallback
+      TERJAMIN. Menghapusnya tanpa pengganti = memutus rantai fallback saat
+      semua provider eksternal gagal. PERLU KEPUTUSAN: apa penggantinya
+      (pesan statis? antrian retry? handover ke agent?) SEBELUM dihapus.
+  [ ] Toleransi typo di `findAreaCandidatesInText` — `levenshtein()` sudah ada
+      dan sudah dipakai di `checkAreaAvailability` (koreksi area berstok nol),
+      tapi BELUM di jalur pencocokan teks. Tes: privateAgentAreaGate 9/10.
+  [ ] Duplikasi payload ±87K token — skill docs terkirim DUA KALI per
+      panggilan API. Nilai penghematan ±50%. Berdiri sejak beberapa sesi.
+  [ ] Status akhir `backend/asset/skills/` — kini 2 GENERASI basi (masih
+      struktur 00-data-grounding + 01-core-role terpisah, penomoran 00–15).
+      Putuskan: hapus / symlink / biarkan sebagai cadangan manual.
+      ⛔ JANGAN menyalin DARI sana ke pohon hidup.
+  [ ] `huggingfaceService.test.js` crash — provider huggingface tidak pernah
+      di-wire ke `aiProviderService`. Celah fitur lama, bukan regresi.
+  [ ] (OPSIONAL, berisiko) Pemangkasan doc 03 (93 KB = 30% total prompt).
+      Pemilik proyek MEMILIH TIDAK mengambil risikonya sekarang — tiap blok
+      narasi diikat assertion 5 berkas tes. Bila dikerjakan: satu blok per
+      langkah + jalankan tes pemiliknya SEGERA.
 
 JANGKA PENDEK (1–2 minggu)
   [ ] ⭐⭐ PERBAIKI 4 TEMUAN TERBUKA DARI TRANSKRIP KANTOR MADIUN (§5 M102):
@@ -3033,14 +3192,20 @@ Elevan_Property/
 │                                       checklist DB/Node app/frontend/routing,
 │                                       peringatan keamanan .env
 │
-├── skills/
-│   ├── claude_responds/     (SKILL.md + docs 01–14) ✅ RAG/terminologi/jarak/
-│   │                         sentinel-aware (M129–M131)
-│   │   └── docs/14-legalitas-pajak-kpr.md ⭐ BARU (M131) — gantikan
-│   │       knowledge/property-id/ (folder itu DIHAPUS)
-│   ├── chat_gpt_responds/   (byte-identical docs, termasuk M131 resync)
-│   ├── elevan-property-assistant/ (standalone, sama update-nya)
-│   ├── website_env_concept/ (docs 00–19)
+├── skills/                  ⭐ SATU-SATUNYA POHON SKILL YANG DIBACA RUNTIME
+│   ├── claude_responds/     (SKILL.md + docs 00–14 ⭐ M174: penomoran BARU,
+│   │                         berurutan; dulu 00,02–15 dengan lubang di 01)
+│   │   └── docs/13-legalitas-pajak-kpr.md (M131 — gantikan
+│   │       knowledge/property-id/, folder itu DIHAPUS; dulu bernomor 14)
+│   ├── chat_gpt_responds/   ⭐ SUMBER KEBENARAN docs/ — dua folder lain
+│   │                         disalin dari sini (byte-identical, sudah
+│   │                         diverifikasi `diff -r` kosong per 3 Sep)
+│   ├── elevan-property-assistant/ (standalone; HANYA SKILL.md yang benar-
+│   │                         benar beda — docs/ identik. ⚠️ M175: folder ini
+│   │                         BUKAN contoh bebas-backend seperti yang lama
+│   │                         diasumsikan — lihat §8 SKILLS)
+│   ├── website_env_concept/ (docs 00–19 — penomoran SENDIRI, TIDAK ikut
+│   │                         M174; ini doc arsitektur untuk developer)
 │   └── website_design_guidelines/
 │
 ├── Real-Estate/             (26 file playbook + CHAT + MASTER QFLOW)
@@ -3082,9 +3247,10 @@ backend/tests` untuk angka aktual). Daftar berkas BARU sesi ini saja:
   backend/scripts/seed-natasha-batch2-rent-sale.js    ← M135: batch 2 (521
                                               properti lagi, Jual+Sewa,
                                               --dry supported)
-  skills/*/docs/15-catalog-conversation-cases.md      ← M134: dialog kerja
+  skills/*/docs/14-catalog-conversation-cases.md      ← M134: dialog kerja
                                               (byte-identical 3 folder),
                                               ter-index RAG skill_docs
+                                              (⭐ M174: dulu bernomor 15)
   backend/tests/terminologyQualGateWiring.test.js
   backend/tests/openrouterProviderWiring.test.js
   backend/tests/agentCoverageAndGuardrailProfile.test.js
@@ -3173,6 +3339,82 @@ D. WORKFLOW DEVELOPER (menambah/ubah fitur chat)
 ================================================================================
 
 GEJALA → PENYEBAB → SOLUSI
+
+[⭐ M172-M176 — BARU 3 SEP 2026, CEK BLOK INI DULU]
+
+  Perilaku SUDAH BENAR di skill doc, tapi produksi TETAP berperilaku lama
+  (mis. "AI masih interview padahal doc sudah offer-first")
+    → PENYEBAB TERSERING DI PROYEK INI (sudah 3 kali): ada string instruksi
+      HARDCODED di prompt builder yang berlawanan, dan blok prompt dari KODE
+      SELALU mengalahkan isi `.md`.
+    → SOLUSI: SEBELUM menyentuh `.md`, grep dulu:
+        grep -nE "You are conducting|DO NOT show|in order|MANDATORY" \
+             backend/services/aiPromptBuilderService.js
+      Preseden: `## QUALIFICATION MODE` (M172), `listMissingMandatory` 8-slot,
+      blok state 53K-token. Perbaiki KODE dulu, baru doc.
+    → ⛔ Mengedit `.md` saja saat ada blok tandingan = TIDAK BISA
+      DIVERIFIKASI; kelihatan "sudah diperbaiki" padahal tidak berubah.
+
+  Gerbang (gate) sudah dibuat & tes UNIT-nya lulus, tapi tes ujung-ke-ujung
+  GAGAL dan bug produksinya tetap hidup
+    → PENYEBAB: gerbang bercabang pada profil guardrail. Profil `platform`
+      hanya `gateFacts.push(...)` (konteks PASIF) — model bebas
+      mengabaikannya. Persis yang terjadi pada gerbang kota M164 (Madiun).
+    → TANDA PENGENAL: baris log gerbang TIDAK muncul di output, padahal
+      fungsi datanya (`checkCityAvailability`) lulus 4/4.
+    → SOLUSI: untuk JALAN BUNTU FAKTUAL (kota berstok nol, area ambigu),
+      hard-return tanpa memandang profil. Itu bukan "backend menyusun
+      interview" — tidak ada kalimat sah tentang area di kota berstok NOL.
+    → CATATAN: header `gateFactsContext` hanya melarang MENGARANG ANGKA; ia
+      tidak pernah menyuruh model BERHENTI BERTANYA.
+
+  Gerbang deterministik mengulang kalimat yang sama tiap giliran
+    → PENYEBAB: gerbang tidak punya state "sudah pernah ditawarkan".
+    → SOLUSI: baca pesan AI TERAKHIR dari history; bila masih memuat penanda
+      tawaran, giliran ini milik JAWABAN customer (tolak → tutup sopan;
+      terima → lanjutkan satu langkah), BUKAN pengulangan tawaran.
+    → JEBAKAN LANJUTAN (state basi): pada giliran sesudah tawaran, `qs.city`
+      MASIH berisi kota yang baru divonis kosong — `realCity` TIDAK boleh
+      dipercaya. Bandingkan dengan nilai yang di-parse dari kalimat tawaran.
+
+  Regex mem-parse nilai yang SALAH dari kalimat balasan sendiri
+    → CONTOH NYATA: `listing *rumah* di *Madiun*` punya DUA bidang
+      ber-bintang; pola longgar `listing[^*]*\*([^*]+)\*` menangkap TIPE
+      PROPERTI ("rumah"), bukan KOTA.
+    → SOLUSI: selalu beri JANGKAR kata di antara bidang (mis. ` di `).
+
+  Rename/renumber massal berkas: sebagian berkas tidak ikut berubah, atau
+  nomor tergeser DUA kali
+    → (a) DOUBLE-SHIFT: rename nama berkas dulu lalu regex nomor sebagai
+      pass KEDUA membuat hasil pass pertama ikut tergeser (03→02→01), karena
+      rentang nomor lama & baru saling tumpang tindih. WAJIB SATU PASS: satu
+      regex gabungan + callback (`String.replace` tidak memindai ulang
+      keluarannya sendiri).
+    → (b) CRLF: repo ini CAMPUR CRLF/LF. Regex ber-anchor `$` GAGAL DIAM-DIAM
+      pada baris CRLF — beri `
+?` sebelum `$`. (12 berkas sempat terlewat.)
+    → (c) Jangan hanya menyusuri `docs/` — berkas di AKAR folder skill
+      (`SKILL.md`, berisi indeks doc) ikut memuat nomor.
+    → (d) Judul H1 DI DALAM tiap doc memuat nomornya sendiri; regex
+      cross-reference tidak menyentuhnya. Perlu pass terpisah.
+    → ⛔ REPO INI TIDAK BER-GIT: SELALU buat cadangan bertanggal ke
+      `_backups/` sebelum operasi mekanis massal.
+
+  Tes gagal setelah kontrak sengaja diubah atas arahan pemilik proyek
+    → CONTOH: `distanceSkillDocsSync.test.js` MEWAJIBKAN doc memuat literal
+      `GOOGLE_ENABLED=false` — padahal env itu justru diperintahkan hilang
+      dari `.md` (M175). Tesnya mengunci kontrak LAMA.
+    → SOLUSI: perbarui tes ke MAKNA-nya (+ assertion NEGATIF bahwa string
+      terlarang tidak ada), dan TULIS ALASANNYA di komentar tes.
+    → ⚠️ Bedakan dari regresi sungguhan: pastikan dulu kontraknya memang
+      diubah pemilik proyek, bukan Anda yang merusak perilaku.
+
+  Suite tes naik-turun tanpa perubahan kode
+    → PENYEBAB: sebagian tes gerbang MEMANGGIL LLM LIVE (DeepSeek) — hasilnya
+      NON-DETERMINISTIK. `budgetPersistenceAndAddressRecall` gagal 4/6 di satu
+      run dan lulus di run berikutnya tanpa perubahan relevan.
+    → SOLUSI: jangan simpulkan dari SATU run. Baseline stabil per 3 Sep 2026
+      = 101/107 (5 near-miss live-LLM + 1 crash lama huggingface).
 
 [CHAT / AI]
 
@@ -4484,12 +4726,209 @@ PRINSIP DEBUG
   lebih dari satu salinan berkas ini di proyek, dan sudahkah dibuktikan
   yang mana yang benar-benar dibaca runtime?
 
-  ⭐ PENOMORAN M — nomor berikutnya untuk sesi mendatang: **M172**.
+  ⭐ PENOMORAN M — (V16) nomor berikutnya saat itu: M172 — SUDAH DIPAKAI
+  sesi 3 Sep 2026 (M172–M176); lihat §PERUBAHAN BESAR V16 → V17.
 
 
 ================================================================================
-  END OF FILE — ELEVAN_PROPERTY_CONTEXT_V8.txt (V16 per header — nama berkas
-  fisik SENGAJA tidak di-rename ke _V16.txt, ikuti pola V8-judul/=badan-lebih-
+  >> PERUBAHAN BESAR V16 → V17 (3 September 2026) <<
+================================================================================
+
+  Dipicu tiga permintaan pemilik proyek yang tampak terpisah — (1) rapikan
+  penomoran skill 0–14, (2) hemat token, (3) `.md` dilarang memanggil kode
+  backend — tetapi yang membuka temuan terbesar justru penelusuran KENAPA
+  perbaikan doc offer-first berkali-kali TIDAK terlihat di produksi.
+
+  --------------------------------------------------------------------------
+  1. M172 ⭐⭐⭐ PALING KRITIS — BLOK PROMPT HARDCODED MENGALAHKAN SEMUA DOC
+  --------------------------------------------------------------------------
+  `aiPromptBuilderService.js` menyuntikkan blok `## QUALIFICATION MODE`
+  SETIAP GILIRAN (selalu, tanpa syarat). Isinya:
+
+      "You are conducting a property qualification interview"
+      1. DO NOT show property listings or catalog DURING Q1-Q12 questions.
+      2. Ask Q1-Q12 qualification questions, in order, ONE per message.
+      3. Only after ALL mandatory questions are answered -> show the brief.
+      4. Never skip Q8 (move-in date) — it is MANDATORY.
+
+  KELIMA baris itu berlawanan langsung dengan kontrak offer-first (4 slot →
+  2 listing, Gate A/B/C) yang sudah berkali-kali ditulis ulang di skill doc.
+  Karena blok prompt dari KODE mengalahkan isi `.md`, model menuruti kode.
+  Inilah sebab struktural kenapa keluhan "AI masih interview, masih fokus
+  agenda pribadi" tidak pernah benar-benar hilang walau doc terus diperbaiki.
+
+  Diganti `## CUSTOMER-AGENDA MODE`: Gate A (pesan customer memiliki giliran
+  ini — pertanyaan/keluhan/penolakan dijawab SEKARANG, tidak pernah dibalas
+  dengan pertanyaan), Gate B (4 slot: transaksi-tipe-kota-area → LANGSUNG 2
+  listing), maks 3 giliran-pertanyaan sesudah listing, Gate C (pertukaran
+  ke-5 → kirim summary + minta izin SEKALI dengan halus; penolakan apa pun
+  "cukup"/"tidak"/"terima kasih infonya" = BERHENTI, summary berlaku; setuju
+  = maks 3 pertukaran lagi → summary diperbarui), TIDAK ADA slot di luar 4
+  itu yang memblokir summary, satu pertanyaan per pesan, dan larangan keras
+  membuka topik KPR/DP/bank lebih dulu.
+
+  Dua baris sekerabat di berkas yang sama ikut diperbaiki:
+    - `Maximum 12 AI messages before showing brief` → diganti Gate C (12
+      diturunkan jadi failsafe luar, bukan target).
+    - Cabang `catalog_summary = ON` masih berbunyi "JANGAN tampilkan catalog
+      selama Q1-Q12 ... (semua Q wajib OK)" → diganti "begitu 4 slot terisi,
+      WAJIB tampilkan 2 listing". (Cabang `OFF` TIDAK disentuh — itu setelan
+      agent yang sah.)
+
+  POLA YANG WAJIB DIINGAT (sudah 3 kali terjadi): perilaku yang sudah BENAR
+  di doc tapi TIDAK muncul di produksi = curigai string instruksi hardcoded
+  di prompt builder LEBIH DULU, sebelum menyentuh `.md`. Preseden:
+  `listMissingMandatory` (memblokir 8 slot padahal doc bilang 4) dan blok
+  state 53K-token.
+
+  --------------------------------------------------------------------------
+  2. M173 — GATE C: BATAS 5 PERTUKARAN + IZIN (doc 03 §1, doc 04 §9)
+  --------------------------------------------------------------------------
+  Ditambahkan ke doc 03 §1 sebagai Gate C, dan doc 04 §9 "Worked Example"
+  DITULIS ULANG. Versi lamanya justru mengajarkan persis perilaku yang
+  dilarang: 5 pertanyaan beruntun (jenis kos → budget → tier → tanggal masuk
+  → fasilitas) TANPA satu listing pun, ditutup kalimat "Every mandatory slot
+  ends OK" seolah wawancara lengkap adalah tujuannya. Contoh baru: HANYA SATU
+  pertanyaan (slot yang benar-benar kosong), lalu listing; budget, tanggal
+  masuk dan fasilitas terisi SENDIRI dari reaksi customer; ditutup checkpoint
+  Gate C dan berhenti bersih saat customer bilang "cukup, makasih infonya".
+
+  --------------------------------------------------------------------------
+  3. M174 — PENOMORAN SKILL DOC 00-14 BERURUTAN
+  --------------------------------------------------------------------------
+  Dulu `00, 02-15` (bolong di 01, berakhir 15). Sekarang `00-14` rapat di
+  KETIGA folder. Rincian pemetaan + daftar berkas → §8 SKILLS.
+
+  Ikut disinkronkan: `CONDITIONAL_FILE_TRIGGERS`, `build-rag-index.js`,
+  `Property.js`, `offTopicSentinel.js`, `ragChunker.js`,
+  `standardFacilities.js`, 8 berkas tes, judul H1 di dalam tiap doc, dan
+  indeks `docs/` di KETIGA SKILL.md.
+
+  TIGA JEBAKAN TEKNIS YANG BENAR-BENAR MENGGIGIT SESI INI — CATAT:
+    (a) DOUBLE-SHIFT. Mengganti nama berkas dulu, LALU menjalankan regex
+        `docs/NN` sebagai pass kedua, membuat hasil pass pertama IKUT
+        tergeser lagi (03→02 lalu 02→01). Karena rentang nomor lama dan baru
+        SALING TUMPANG TINDIH, penggantian WAJIB SATU PASS: satu regex
+        gabungan dengan callback (`String.replace` tidak pernah memindai
+        ulang keluarannya sendiri). Sempat terjadi pada SKILL.md, dipulihkan
+        dari `_backups/renumber_20260903_162240/`.
+    (b) CRLF. Sebagian doc ber-CRLF, sebagian LF (campur di repo ini). Regex
+        ber-anchor `$` GAGAL DIAM-DIAM pada baris CRLF — 12 berkas tidak ikut
+        terperbaiki di percobaan pertama sampai polanya diberi `\r?`.
+    (c) Skrip renumber pertama hanya menyusuri `docs/`, sehingga KETIGA
+        `SKILL.md` (indeks doc-nya) tertinggal menunjuk berkas yang sudah
+        tidak ada. Selalu cek berkas di AKAR folder skill, bukan hanya
+        `docs/`.
+
+  --------------------------------------------------------------------------
+  4. M175 — `.md` DIPUTUS TOTAL DARI BACKEND (arahan pemilik proyek)
+  --------------------------------------------------------------------------
+  Lihat §8 SKILLS untuk kontrak lengkap + daftar yang dihapus. Inti keputusan
+  desainnya (penting, jangan dibalik tanpa sadar): doc TIDAK menyatakan blok
+  suntikan itu tidak ada — backend memang masih menyuntikkannya, dan menyuruh
+  model mengabaikannya akan mengembalikan halusinasi. Blok disebut menurut
+  WUJUDNYA di konteks, bukan menurut PEMBUATNYA.
+
+  PEMBAGIAN YANG BERLAKU SEKARANG:
+    - `.md` skill  = MURNI perilaku percakapan. Nol nama berkas/fungsi/kolom/
+                     env. Pembacanya harus bisa mengikuti tanpa akses repo.
+    - berkas INI   = tempat yang BENAR untuk detail backend (arsitektur,
+                     service, env, kolom DB) — karena ini konteks untuk
+                     Claude Code, bukan prompt untuk platform AI.
+
+  --------------------------------------------------------------------------
+  5. M176 — GERBANG KOTA AKHIRNYA MENUTUP BUG PRODUKSI MADIUN (5/10 → 10/10)
+  --------------------------------------------------------------------------
+  Gerbang M164 TERNYATA SUDAH terpasang di `whatsappAIService.js` — bugnya:
+  ia bercabang pada `backendMayCompose`. Profil `backend` → balasan pasti;
+  profil `platform` → HANYA `gateFacts.push(...)` alias konteks pasif.
+  Natasha (`NA40D8N007`) berprofil `platform`, jadi fakta "Madiun 0 listing"
+  cuma disodorkan sebagai bahan bacaan — DeepSeek mengabaikannya dan tetap
+  bertanya "di area mana di Madiun?", persis bug produksi 29 Agu yang
+  seharusnya sudah ditutup. Lapisan datanya TIDAK PERNAH salah:
+  `checkCityAvailability` lulus 4/4 selama ini; yang gagal murni langkah
+  "model diminta mempertimbangkan".
+
+  Header `gateFactsContext` berbunyi "Angka & definisi ... jangan menyebut
+  angka lain" — itu melarang MENGARANG ANGKA, tapi tidak pernah menyuruh
+  BERHENTI BERTANYA. Tidak ada kalimat sah tentang area di kota berstok NOL.
+
+  Perbaikan (M164b/M164c), 5/10 → 10/10:
+    (a) hard-return tanpa memandang profil guardrail — ini jalan buntu
+        FAKTUAL, sekelas gerbang disambiguasi area, bukan "backend menyusun
+        interview".
+    (b) tawaran hanya SEKALI: bila pesan AI sebelumnya masih memuat "belum
+        punya listing", giliran ini milik JAWABAN customer — penolakan →
+        tutup sopan; penerimaan → tanya kota mana.
+    (c) jebakan STATE BASI: pada giliran sesudah tawaran, `qs.city` MASIH
+        berisi kota yang baru divonis kosong, jadi `realCity` tidak boleh
+        dipercaya — bandingkan dengan kota yang di-parse dari tawaran.
+    (d) regex parse kota WAJIB berjangkar " di ": kalimat
+        "listing *rumah* di *Madiun*" punya DUA bidang ber-bintang, pola
+        longgar menangkap TIPE PROPERTI, bukan kotanya.
+
+  POLA: gerbang yang tes unit-nya LULUS tapi tes ujung-ke-ujungnya GAGAL →
+  periksa apakah profil guardrail menurunkannya jadi sekadar saran. Tandanya:
+  baris log gerbang TIDAK muncul padahal fungsi datanya lulus.
+
+  --------------------------------------------------------------------------
+  6. PENGHEMATAN TOKEN — DISELIDIKI, HASILNYA JUJUR: TIDAK BANYAK LAGI
+  --------------------------------------------------------------------------
+  Diminta hemat 20%. Dijalankan deteksi duplikasi (exact + fuzzy shingling)
+  ke-15 doc (total ±310 KB): praktis NOL blok duplikat, lintas-doc maupun di
+  dalam satu doc. Konsolidasi v7 (21→13→15 doc) sudah memerah bagian yang
+  mudah. Sisa lemak terbesar ada di doc 03 (93 KB = 30% total) berupa blok
+  narasi "Real production failure (tanggal)..." — TETAPI tiap blok itu diikat
+  substring yang di-assert 5 berkas tes, masing-masing mewakili bug produksi
+  nyata. Pemilik proyek memilih TIDAK mengambil risiko itu.
+  Kalau nanti tetap dikerjakan: satu blok per langkah, jalankan berkas tes
+  pemiliknya SEGERA setiap kali — jangan pernah batch.
+  Gaya balasan ringkas/anti-echo TIDAK diduplikasi ke doc lain: pemiliknya
+  sudah jelas — doc 00 §11 (self-audit butir 8-14) dan doc 04 §6a.
+
+  --------------------------------------------------------------------------
+  7. STATUS TES & UTANG YANG MASIH BERDIRI
+  --------------------------------------------------------------------------
+  Baseline stabil sebelum & sesudah SELURUH pekerjaan sesi ini: 101/107.
+    - 5 near-miss yang MEMANG memanggil LLM live (bookingShortStayVersi2
+      25/26, contextSwitchM162 84/87, facilitiesViewingAndShortAnswers 29/30,
+      midFlowChangeGranular 55/56, privateAgentAreaGate 9/10 — naik dari
+      5/10). Tes-tes ini NON-DETERMINISTIK: `budgetPersistenceAndAddress
+      Recall` gagal 4/6 di satu run dan lulus di run berikutnya TANPA
+      perubahan relevan. Jangan tarik kesimpulan dari satu run.
+    - `huggingfaceService.test.js` CRASH (`TypeError: Cannot read properties
+      of undefined (reading 'provider')`) — LAMA, tidak tersentuh sesi ini:
+      provider huggingface tidak pernah di-wire ke `aiProviderService`.
+      Celah fitur, bukan regresi.
+
+  UTANG TERBUKA:
+    - Toleransi typo di `findAreaCandidatesInText` — `levenshtein()` SUDAH
+      terpasang di `checkAreaAvailability` (koreksi area berstok nol) tapi
+      BELUM di jalur pencocokan teks.
+    - Duplikasi payload ±87K token (skill docs terkirim dua kali per
+      panggilan API) — masih berdiri, nilainya ±50%.
+    - `chatbotPrivateController.js` (300 KB) + `generatePrivateChatbotResponse`
+      diarahkan pemilik proyek untuk DIHAPUS. PER 3 SEP MASIH HIDUP DAN
+      TERPAKAI: `chatbotController.js:299` memanggilnya sebagai fallback
+      terjamin. Menghapusnya = memutus rantai fallback. Belum dieksekusi;
+      perlu keputusan eksplisit soal pengganti fallback lebih dulu.
+    - Status akhir `backend/asset/skills/` (kini 2 generasi basi).
+
+  --------------------------------------------------------------------------
+  8. CADANGAN
+  --------------------------------------------------------------------------
+  Proyek ini TIDAK ber-git. Cadangan sebelum renumber:
+  `_backups/renumber_20260903_162240/` (ketiga folder skill + berkas kode &
+  tes yang disentuh). Cadangan itu MENYELAMATKAN sesi ini saat SKILL.md
+  ter-double-shift. Selalu buat cadangan bertanggal sebelum operasi mekanis
+  massal di repo tanpa git ini.
+
+  PENOMORAN M — nomor berikutnya untuk sesi mendatang: M177.
+
+
+================================================================================
+  END OF FILE — ELEVAN_PROPERTY_CONTEXT_V8.txt (V17 per header — nama berkas
+  fisik SENGAJA tidak di-rename ke _V17.txt, ikuti pola V8-judul/=badan-lebih-
   baru yang sudah didokumentasikan di §Riwayat; lihat catatan penomoran di
   kepala berkas ini bila membingungkan)
 ================================================================================

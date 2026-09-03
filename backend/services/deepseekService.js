@@ -31,11 +31,14 @@ function getDeepSeekConfig() {
 
   return {
     apiKey,
-    // ⚠️ Default HARUS model yang masih didukung. Sejak DeepSeek V4 (Juli 2026),
-    // nama lama `deepseek-chat` / `deepseek-reasoner` DITOLAK dengan HTTP 400:
-    //   "The supported API model names are deepseek-v4-pro or deepseek-v4-flash".
-    // Akibatnya seluruh panggilan gagal & sistem diam-diam jatuh ke Private Agent.
-    model       : rawModel || 'deepseek-v4-flash',
+    // ⛔ TIDAK ADA MODEL PENGGANTI. Versi lama menulis `rawModel ||
+    // 'deepseek-v4-flash'`, sehingga DEEPSEEK_MODEL yang kosong/salah ketik
+    // diam-diam diganti model LAIN — backend memakai model yang tidak pernah
+    // dipilih operator, dan itu baru ketahuan dari tagihan di dashboard
+    // provider. Arahan pemilik proyek (3 Sep 2026): backend WAJIB memakai
+    // PERSIS model di .env, tidak pernah menyubstitusi.
+    // Kalau kosong → gagal LANTANG di callDeepSeek(), jangan menebak.
+    model       : rawModel,
     maxTokens,
     temperature,
     topP,
@@ -75,8 +78,15 @@ function normalizeDeepSeekError(error) {
       '╚════════════════════════════════════════════════════════════════════╝\n' +
       `   Pesan API : ${apiMessage}\n` +
       `   Model kini: ${sanitizeEnvValue(process.env.DEEPSEEK_MODEL || '(kosong)')}\n` +
-      '   PERBAIKI  : set DEEPSEEK_MODEL=deepseek-v4-flash (atau deepseek-v4-pro)\n' +
-      '               di backend/.env lalu RESTART backend.\n'
+      '   PERBAIKI  : set DEEPSEEK_MODEL ke salah satu nama yang DIDUKUNG AKUN\n' +
+      '               ANDA, lalu RESTART backend. Nama yang didukung berubah\n' +
+      '               sewaktu-waktu — JANGAN menyalin dari catatan lama.\n' +
+      '               Cek daftar aslinya:\n' +
+      '                 curl -s https://api.deepseek.com/models \\\n' +
+      '                      -H "Authorization: Bearer $DEEPSEEK_API_KEY"\n' +
+      '               (per 3 Sep 2026 akun ini: deepseek-v4-flash,\n' +
+      '                deepseek-v4-pro, deepseek-v4-flash-vision-exp)\n' +
+      '   ⛔ Backend TIDAK akan menggantikan model ini dengan model lain.\n'
     );
     const err = new Error(`DeepSeek model tidak didukung: ${apiMessage}`);
     err.provider = 'deepseek'; err.status = status; err.fallbackEligible = true;
@@ -95,6 +105,13 @@ async function callDeepSeekChatAPI(userPrompt, options = {}) {
   if (!config.apiKey) {
     const err = new Error('DEEPSEEK_API_KEY is missing in backend/.env');
     err.provider = 'deepseek'; err.fallbackEligible = false;
+    throw err;
+  }
+
+  // ⛔ Model kosong = KESALAHAN KONFIGURASI, bukan alasan menebak model lain.
+  if (!config.model) {
+    const err = new Error('DEEPSEEK_MODEL is missing in backend/.env — set it explicitly; the backend never substitutes another model.');
+    err.provider = 'deepseek'; err.fallbackEligible = false; err.configError = true;
     throw err;
   }
 
@@ -131,6 +148,22 @@ async function callDeepSeekChatAPI(userPrompt, options = {}) {
       // — default unchanged (90000) so unset behavior doesn't shift silently.
       timeout: Number(process.env.DEEPSEEK_TIMEOUT_MS || 90000),
     });
+
+    // ⭐ M177: BUKTIKAN model mana yang BENAR-BENAR melayani panggilan ini.
+    // Latar: dashboard DeepSeek mencatat `deepseek-v4-flash` padahal .env
+    // berisi `deepseek-chat`. Tanpa baris ini, satu-satunya tempat perbedaan
+    // itu terlihat adalah tagihan provider — terlambat dan mahal. `model` di
+    // BODY RESPONS adalah nama yang di-resolve server (alias sudah dibuka),
+    // jadi selisihnya di sini = jawaban pasti, bukan tebakan.
+    const servedModel = response.data?.model;
+    if (servedModel && servedModel !== payload.model) {
+      console.warn(
+        `[DEEPSEEK ⚠️ MODEL MISMATCH] dikirim "${payload.model}" → dilayani "${servedModel}". ` +
+        'Nama di .env kemungkinan ALIAS yang di-resolve provider ke model lain; ' +
+        'tagihan & dashboard akan memakai nama yang DILAYANI. ' +
+        'Set DEEPSEEK_MODEL ke nama yang dilayani bila ingin keduanya sama persis.'
+      );
+    }
 
     const choice = response.data?.choices?.[0] || {};
     const text   = choice.message?.content?.trim() || '';
