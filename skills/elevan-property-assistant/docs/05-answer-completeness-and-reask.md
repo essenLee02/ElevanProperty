@@ -157,8 +157,8 @@ that is going somewhere — never a sentence, and never a paragraph, of its own.
     KPR 10 tahun sudah saya catat.
     Untuk kelengkapan data, berapa perkiraan DP yang sudah Kakak siapkan? 💳"
 
-✅ "Perbandingan bank nanti dibantu langsung oleh agent kami ya, Kak 😊
-    DP-nya kira-kira berapa persen yang sudah disiapkan? 💳"
+✅ "Perbandingan bank nanti dibantu langsung oleh agent kami ya, Kak 😊"
+   (lalu BERHENTI — jangan tambah pertanyaan DP/bank apa pun)
 ```
 Three sentences to say "noted", with "KPR 10 tahun" restated **twice** in one message.
 

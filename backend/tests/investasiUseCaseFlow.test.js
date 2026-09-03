@@ -62,7 +62,12 @@ console.log('\n── Alur LANJUT, tidak berhenti & tidak mengulang Q4 ──');
 
   const block = buildQualificationStateBlock(st);
   ok('state block menandai Q4 sebagai N/A investasi', /N\/A — investasi/.test(block));
-  ok('state block memblokir summary (kualifikasi belum lengkap)', /SUMMARY DIBLOKIR/.test(block));
+
+  // ⚠️ KONTRAK BERUBAH 2 Sep 2026 — dulu di sini di-assert "SUMMARY DIBLOKIR".
+  // HISTORY ini sudah punya KEEMPAT slot inti (beli · rumah · Malang · Lokowaru),
+  // jadi di bawah aturan 4-slot summary memang BOLEH keluar. Menahannya justru
+  // perilaku lama yang memaksa interview lanjut (budget/fasilitas/survei/KPR).
+  ok('4 slot inti lengkap → summary TIDAK diblokir lagi', !/SUMMARY DIBLOKIR/.test(block));
 }
 
 console.log('\n── Kalimat "belum ada properti di katalog" TIDAK tersedia saat summary diblokir ──');
@@ -70,7 +75,10 @@ console.log('\n── Kalimat "belum ada properti di katalog" TIDAK tersedia saa
   const p = buildWhatsappReplyPrompt(SESSION, HISTORY, 'Oh ini untuk investasi', '', 'shared', {});
   ok('kalimat penutup katalog-kosong TIDAK ada di prompt (tidak bisa disalin)',
      !/belum ada properti di katalog saya yang cocok/.test(p));
-  ok('ada peringatan eksplisit "SUMMARY SEDANG DIBLOKIR"', /SUMMARY SEDANG DIBLOKIR/.test(p));
+  // ⚠️ KONTRAK BERUBAH 2 Sep 2026 (lihat catatan di blok sebelumnya): HISTORY ini
+  // sudah memenuhi 4 slot inti, jadi peringatan blokir memang TIDAK boleh muncul.
+  ok('4 slot inti lengkap → tidak ada peringatan "SUMMARY SEDANG DIBLOKIR"',
+     !/SUMMARY SEDANG DIBLOKIR/.test(p));
   ok('direktif final tetap menyuruh bertanya, bukan menutup', /TANYAKAN SEKARANG →/.test(p));
 }
 

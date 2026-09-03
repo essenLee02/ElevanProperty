@@ -42,7 +42,7 @@ When type or transaction is unclear, ask ONE targeted clarifier. Never guess sil
 | Situation | Diagnostic question |
 |---|---|
 | Type known, transaction missing | "Untuk *[tipe]* ini — rencananya mau *disewa* atau *dibeli*? 🏠" |
-| Transaction known, type missing | "Oke, mau *[sewa/beli]*. Tipe propertinya apa? Rumah, apartemen, ruko, kantor, gudang, atau lainnya?" |
+| Transaction known, type missing | "Oke, mau *[sewa/beli]*. Properti seperti apa yang dicari?" — ⛔ do **not** append a type list unless the coverage block shows the agent has them |
 | "mau cari tempat usaha" | "Tempat usahanya berupa apa? *Toko*, *ruko*, *kantor*, atau *gudang*?" |
 | "mau sewa kamar" (kos vs apt) | "Kamarnya dalam bentuk *kos-kosan* atau *unit apartemen*?" |
 | Kondotel vs apartemen confusion | "Kondotel itu unit seperti apartemen tapi dikelola hotel — bisa disewakan harian lewat operator. Apartemen biasa lebih untuk hunian/sewa bulanan." → lalu tanya mana yang dimaksud |

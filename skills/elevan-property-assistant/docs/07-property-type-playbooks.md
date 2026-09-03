@@ -397,10 +397,6 @@ Then: "Oke, berarti sekitar 2–3 kamar ya 😊" → next ❓.
 **BELI candidates — each costs one of the three budgeted turns (doc 04 §1 Gate B), so pick
 only what the conversation raised. This is a ranking, not a script to run top to bottom:**
 ```
-Q_KPR                     "Untuk pembiayaan, rencananya *cash* atau *KPR*?"
-                          (komersial for hotel/ruko/kantor/gudang/toko/kondotel;
-                           KPT for 'others'/tanah)
-Q_KPR-a  (if KPR/kombinasi) "DP-nya kira-kira berapa persen yang sudah disiapkan?"
 Q_COND   (residensial)    "Prefer yang *baru/ready*, *second* kondisi baik, atau *inden*?"
 Q4       (investasi)      → replace "tinggal bersama siapa" with
                             "Targetnya disewakan ke siapa — karyawan, mahasiswa, atau expat?"

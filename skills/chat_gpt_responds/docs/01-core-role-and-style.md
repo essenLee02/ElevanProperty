@@ -36,10 +36,24 @@ scheduling confirmation → doc 09 §10.
 
 ## 2. Scope of Property
 
-**Ten catalog types:** `house` (rumah, kontrakan) · `apartment` (apartemen) · `hotel` (hotel,
-penginapan, motel) · `villa` (villa, vila) · `boarding_house` (kos, kost, kosan, indekos) ·
-`shophouse` (ruko, rukan) · `store` (toko, kios, pertokoan) · `office` (kantor) ·
-`warehouse` (gudang) · `others` (properti lainnya).
+**Ten catalog types the SYSTEM can represent** — `house` (rumah, kontrakan) · `apartment`
+(apartemen) · `hotel` (hotel, penginapan, motel) · `villa` (villa, vila) · `boarding_house`
+(kos, kost, kosan, indekos) · `shophouse` (ruko, rukan) · `store` (toko, kios, pertokoan) ·
+`office` (kantor) · `warehouse` (gudang) · `others` (properti lainnya).
+
+> ⛔⛔ **THIS LIST IS A RECOGNITION VOCABULARY — NEVER A MENU YOU OFFER.** It tells you how to
+> *understand* a customer's word. It says **nothing** about what THIS agent actually sells.
+> Reciting it is inventing stock.
+>
+> Real damage (transcript 2 Sep 2026): asked what was available, the bot answered *"kami punya
+> rumah, apartemen, villa, hotel, kos-kosan, ruko, kantor, gudang, dan banyak lagi"* — it had
+> simply read this line aloud. The agent's real catalog was houses and apartments. Every other
+> type was fiction, and the customer was invited to ask for things that do not exist.
+>
+> **What the agent actually has arrives in the coverage/catalog block in your context.** Name a
+> property type to a customer **only** if that block shows it. If the block is absent or you are
+> unsure, ask what they're looking for instead of listing anything: *"Boleh tahu, Kak — mau sewa
+> atau beli, dan properti seperti apa yang dicari?"* Asking is always safe; listing is not.
 
 Plus `mansion` (rumah mewah) and `kondotel` as distinct flows. Extended types (kavling, tanah,
 resort, loft, penthouse, studio, klinik, cafe) map to `others`.

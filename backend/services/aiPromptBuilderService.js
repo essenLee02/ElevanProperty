@@ -2846,20 +2846,26 @@ Kalau sudah ada area/kecamatan tertentu, boleh sekalian disebut ya.` };
  * @returns {string[]} label field wajib yang belum terisi (kosong = summary boleh)
  */
 function listMissingMandatory(state = {}) {
-  const isSale = (state.transactionType || '').toLowerCase().includes('sale')
-    || (state.transactionType || '').toLowerCase().includes('beli');
-
+  // ⭐ EMPAT SLOT INTI SAJA (arahan pemilik proyek, 2 Sep 2026 — transkrip nyata).
+  // DULU delapan field memblokir summary (budget, fasilitas, red flags, jadwal
+  // survei, tanggal masuk, pembiayaan). Akibatnya summary tidak pernah boleh
+  // keluar sampai SEMUANYA terisi, sehingga AI terpaksa terus meng-interview —
+  // persis keluhan yang merusak reputasi di transkrip 2 Sep: customer minta
+  // listing 3x, menolak survei, bilang "saya tanya saja dulu", dan AI tetap
+  // menembak "cash atau KPR?" lalu "DP berapa persen?" karena slot itu WAJIB.
+  //
+  // Sekarang: hanya transaksi + tipe + kota + AREA yang menahan summary. Sisanya
+  // BEST-EFFORT — boleh ditanya kalau percakapan mengalir ke sana, tapi TIDAK
+  // PERNAH jadi alasan menahan summary atau memaksa pertanyaan berikutnya.
+  //
+  // ⚠️ AREA kini WAJIB (dulu opsional): tanpa area, katalog tidak bisa disaring
+  // ke listing yang benar-benar relevan — itu sumber bug "customer minta
+  // Citraland/Pakuwon tapi dikirimi MERR/Wiyung".
   const missing = [];
-  if (!state.transactionType)     missing.push('Q1 Tipe transaksi');
-  if (!state.buildingType)        missing.push('Tipe properti');
-  if (!state.city)                missing.push('Q2 Lokasi KOTA');
-  if (!state.budget)              missing.push('Q3 Budget');
-  if (!(Array.isArray(state.facilities) ? state.facilities.length : state.facilities))
-                                  missing.push('Q_FAC Fasilitas');
-  if (!state.redFlags)            missing.push('Q5 Avoiding & Preference');
-  if (!state.viewingDate)         missing.push('Q9b Jadwal survei (tanggal, atau "Minta listing")');
-  if (!state.moveInDate)          missing.push('Q8 Tanggal masuk/check-in');
-  if (isSale && !state.financing) missing.push('Q_KPR Pembiayaan (WAJIB untuk beli)');
+  if (!state.transactionType)                    missing.push('Q1 Tipe transaksi');
+  if (!state.buildingType)                       missing.push('Tipe properti');
+  if (!state.city)                               missing.push('Q2 Lokasi KOTA');
+  if (!state.district && !state.anchorPoint)     missing.push('Q2c Area/kawasan');
   return missing;
 }
 
@@ -3042,7 +3048,7 @@ function buildQualificationStateBlock(state) {
     || (state.transactionType || '').toLowerCase().includes('beli');
   if (isSale) {
     lines.push(
-      row('Pembiayaan ⚠️WAJIB [Q_KPR]', state.financing),
+      row('Pembiayaan [Q_KPR — hanya bila customer sendiri yang membuka topik]', state.financing),
       row('Detail KPR    [Q_KPR-a]', /kpr|kombinasi/i.test(state.financing || '') ? state.kprDetails : 'N/A (cash)'),
       row('Kondisi        [Q_COND]', state.propertyCondition),
       row('Use-case (huni/invest) ', state.useCase),

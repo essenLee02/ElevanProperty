@@ -69,8 +69,10 @@ console.log('\n── Gate katalog: hanya dibangun setelah field wajib lengkap �
   ok('kota termasuk yang kurang', miss1.some(m => /Lokasi KOTA/i.test(m)));
 
   // Alur lengkap → katalog boleh tampil.
+  // ⚠️ 2 Sep 2026: area/kawasan kini termasuk 4 slot INTI (doc 04 §3.1), jadi
+  // fixture "alur lengkap" harus menyebut area — bukan kota saja.
   const done = [
-    u('mau sewa rumah di Surabaya'),
+    u('mau sewa rumah di Surabaya, daerah Ngagel'),
     a('Di Surabaya ada rumah kisaran Rp 2.000.000 dan Rp 3.000.000. Mana lebih sesuai?'), u('2-3 juta'),
     a('Ada target kapan masuk?'), u('20 Agustus'),
     a('Ada yang pasti tidak cocok?'), u('tidak banjir'),

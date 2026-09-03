@@ -590,11 +590,49 @@ async function findAreaInText({ userId, city, text }) {
       group: ['area'],
       raw: true,
     });
-    const hits = rows
-      .map((r) => String(r.area || '').trim())
-      .filter((a) => a && t.includes(a.toLowerCase()))
+    const areas = rows.map((r) => String(r.area || '').trim()).filter(Boolean);
+
+    // Lapis 1 — nama area LENGKAP muncul di pesan ("...di Pakuwon City").
+    // Terpanjang menang supaya "Pakuwon City" tidak kalah oleh "Pakuwon".
+    const exact = areas
+      .filter((a) => t.includes(a.toLowerCase()))
       .sort((a, b) => b.length - a.length);
-    return hits[0] || null;
+    if (exact.length) return exact[0];
+
+    /* ── Lapis 2 — SEBUTAN PENDEK (M162, transkrip 2 Sep 2026) ───────────────
+     * Customer hampir tidak pernah mengetik nama area lengkap. Katalog Natasha
+     * (NA40D8N007) menyimpan "Pakuwon City" / "Pakuwon Indah", tapi customer
+     * menulis "Di Pakuwon ini, Kak" — lapis 1 mencari "pakuwon city" DI DALAM
+     * pesan, tidak ketemu, dan mengembalikan null. Akibatnya gerbang
+     * ketersediaan TIDAK PERNAH menyala, LLM berimprovisasi, lalu mengirim
+     * listing MERR/Wiyung padahal Pakuwon punya 22 rumah dijual. Diverifikasi
+     * langsung: findAreaInText("Di Pakuwon ini, Kak") === null sebelum patch.
+     *
+     * Jadi arah pencocokan dibalik: cari TOKEN nama area yang muncul sebagai
+     * KATA UTUH di pesan. "pakuwon" → cocok "Pakuwon City" & "Pakuwon Indah".
+     *
+     * ⚠️ Token generik sengaja diabaikan — tanpa daftar ini "Kota"/"Permata"/
+     * "Taman" akan mencocokkan area acak dan melahirkan area palsu (kelas bug
+     * M92a "Sidotopo"). Token < 4 huruf juga dibuang.
+     */
+    const GENERIC = new Set(['kota', 'permata', 'taman', 'graha', 'grand', 'green', 'baru',
+      'indah', 'jaya', 'city', 'town', 'park', 'residence', 'regency', 'estate', 'villa',
+      'darat', 'barat', 'timur', 'utara', 'selatan', 'tengah', 'raya', 'lama']);
+    const scored = [];
+    for (const a of areas) {
+      for (const tok of a.toLowerCase().split(/[^a-z0-9]+/)) {
+        if (tok.length < 4 || GENERIC.has(tok)) continue;
+        if (new RegExp(`\\b${tok}\\b`, 'i').test(t)) { scored.push({ a, tok }); break; }
+      }
+    }
+    if (!scored.length) return null;
+
+    // Bila satu sebutan cocok ke BEBERAPA area ("Pakuwon" → City & Indah),
+    // kembalikan nama TERPENDEK: itu yang paling dekat dengan maksud customer,
+    // dan pencocokan katalog memakai LIKE '%area%' sehingga tetap menjaring
+    // seluruh varian yang lebih panjang.
+    scored.sort((x, y) => x.a.length - y.a.length);
+    return scored[0].a;
   } catch (err) {
     console.error('[FIND AREA IN TEXT ERROR]', err.message);
     return null;

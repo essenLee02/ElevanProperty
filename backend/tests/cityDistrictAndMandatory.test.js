@@ -40,33 +40,58 @@ console.log('\n── (A) city vs district — dua slot, dua nama ──');
   ok('alias location = city',         st.location === st.city);
 }
 
-console.log('\n── (B) WAJIB memblokir summary, OPSIONAL tidak ──');
+/* ══════════════════════════════════════════════════════════════════════════
+ * (B) EMPAT SLOT INTI memblokir summary — sisanya TIDAK (2 Sep 2026).
+ *
+ * ⚠️ KONTRAK INI SENGAJA DIUBAH. Sebelumnya DELAPAN field memblokir summary
+ * (budget, fasilitas, red flags, jadwal survei, tanggal masuk, pembiayaan).
+ * Itu membuat state block mencetak "🚫 SUMMARY DIBLOKIR" hampir sepanjang
+ * percakapan, sehingga AI terpaksa terus meng-interview sampai semuanya
+ * terisi — persis kegagalan di transkrip 2 Sep: customer minta listing 3x,
+ * menolak survei, bilang "saya tanya saja dulu", dan tetap ditembak
+ * "cash atau KPR?" lalu "DP berapa persen?".
+ *
+ * skill doc 04 §3.1 SUDAH lama menulis "BLOCKING (4) — and only these four"
+ * dan menandai daftar-8 sebagai "the interview engine". Kode-lah yang
+ * tertinggal; blok state (kode) menang atas doc, jadi doc benar tapi tidak
+ * pernah berlaku. Tes ini sekarang mengunci versi 4-slot supaya kode & doc
+ * tidak bisa menyimpang lagi.
+ * ══════════════════════════════════════════════════════════════════════════ */
+console.log('\n── (B) 4 slot inti memblokir summary, sisanya tidak ──');
 {
   const lengkap = {
     transactionType: 'rent', buildingType: 'apartment', city: 'Surabaya',
-    budget: 'terjangkau', facilities: ['standar'], redFlags: 'tidak banjir',
-    viewingDate: 'Minta listing', moveInDate: '24 Agustus 2026',
-    // semua OPSIONAL sengaja dikosongkan:
-    district: null, furnishing: null, anchorPoint: null, decisionMaker: null,
+    district: 'Ngagel',
+    // semua NON-BLOCKING sengaja dikosongkan:
+    budget: null, facilities: null, redFlags: null, viewingDate: null,
+    moveInDate: null, financing: null, furnishing: null,
+    anchorPoint: null, decisionMaker: null,
   };
   const blocked = (s) => /SUMMARY DIBLOKIR/.test(buildQualificationStateBlock(s, {}));
 
-  ok('8 wajib ✅ + semua opsional kosong → TIDAK diblokir', !blocked(lengkap));
+  ok('4 slot inti ✅ + SEMUA sisanya kosong → TIDAK diblokir', !blocked(lengkap));
 
   for (const [field, label] of [
     ['transactionType', 'transaksi'], ['buildingType', 'tipe properti'],
-    ['city', 'kota'], ['budget', 'budget'], ['facilities', 'fasilitas'],
-    ['redFlags', 'avoiding & preference'], ['viewingDate', 'jadwal survei'],
-    ['moveInDate', 'tanggal masuk'],
+    ['city', 'kota'],
   ]) {
-    ok(`wajib "${label}" kosong → diblokir`, blocked({ ...lengkap, [field]: null }));
+    ok(`inti "${label}" kosong → diblokir`, blocked({ ...lengkap, [field]: null }));
   }
 
+  // Slot ke-4 = lokasi spesifik: district ATAU anchorPoint, mana pun yang ada.
+  ok('area kosong TAPI patokan ada → TIDAK diblokir',
+     !blocked({ ...lengkap, district: null, anchorPoint: 'dekat Pakuwon' }));
+  ok('area DAN patokan sama-sama kosong → diblokir',
+     blocked({ ...lengkap, district: null, anchorPoint: null }));
+
+  // Yang DULU wajib — sekarang tidak boleh menahan summary sama sekali.
   for (const [field, label] of [
-    ['district', 'area/district'], ['furnishing', 'furnitur'],
-    ['anchorPoint', 'patokan lokasi'], ['decisionMaker', 'keputusan bersama'],
+    ['budget', 'budget'], ['facilities', 'fasilitas'], ['redFlags', 'avoiding & preference'],
+    ['viewingDate', 'jadwal survei'], ['moveInDate', 'tanggal masuk'],
+    ['financing', 'pembiayaan/KPR'], ['furnishing', 'furnitur'],
+    ['decisionMaker', 'keputusan bersama'],
   ]) {
-    ok(`opsional "${label}" kosong → TIDAK diblokir`, !blocked({ ...lengkap, [field]: null }));
+    ok(`non-blocking "${label}" kosong → TIDAK diblokir`, !blocked({ ...lengkap, [field]: null }));
   }
 }
 

@@ -397,20 +397,20 @@ Then: "Oke, berarti sekitar 2–3 kamar ya 😊" → next ❓.
 **BELI candidates — each costs one of the three budgeted turns (doc 04 §1 Gate B), so pick
 only what the conversation raised. This is a ranking, not a script to run top to bottom:**
 ```
-Q_KPR                     "Untuk pembiayaan, rencananya *cash* atau *KPR*?"
-                          (komersial for hotel/ruko/kantor/gudang/toko/kondotel;
-                           KPT for 'others'/tanah)
-Q_KPR-a  (if KPR/kombinasi) "DP-nya kira-kira berapa persen yang sudah disiapkan?"
 Q_COND   (residensial)    "Prefer yang *baru/ready*, *second* kondisi baik, atau *inden*?"
 Q4       (investasi)      → replace "tinggal bersama siapa" with
                             "Targetnya disewakan ke siapa — karyawan, mahasiswa, atau expat?"
 → summary (Template B or D) as soon as the budget is spent
 ```
 
-> ⛔ **Q_KPR-a used to read "Bank mana yang dituju, dan DP berapa persen?" — two questions,
-> and the first one is banned.** Never ask which bank; if the customer names one, record it
-> and say nothing further (doc 04 §Q_KPR-a). This was the second copy of that question in the
-> skill; a rule fixed in one doc while its duplicate survives in another is not fixed.
+> ⛔⛔ **FINANCING IS NOT ON THIS LIST — AND NEVER WILL BE.** "cash atau KPR?", "DP berapa
+> persen?", and anything about a bank are the **agent's** job. Never spend a turn on them,
+> never ask them to complete a brief, and never treat a missing financing value as a gap.
+> If the **customer** raises financing, record it in one clause and move on (doc 04 §Q_KPR).
+>
+> Real damage (transcript 2 Sep 2026): right after the customer said *"Saya tdk mau survei"*
+> and *"Saya tanya saja dulu"*, the bot asked *"cash atau KPR?"* — its own agenda, straight
+> past a refusal. This list is where that question used to live.
 
 **Detection aliases:** BELI = `beli | purchase | KPR | cicil | investasi | akuisisi` ·
 financing `cash` → strong buyer, `KPR`/`kredit`/`cicil` → fires Q_KPR-a, `kombinasi`/`50% cash`
