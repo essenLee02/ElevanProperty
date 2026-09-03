@@ -52,7 +52,8 @@ const { getAgentIdentity,
 const { tryCityAvailabilityAnswer,
         tryAreaAvailabilityAnswer,
         customerAsksAvailability }                  = require('../utils/areaAvailabilityGate');
-const { resolveCityAndArea, findAreaInText }        = require('./areaAvailabilityService');
+const { resolveCityAndArea, findAreaInText,
+        findAreaCandidatesInText }                  = require('./areaAvailabilityService');
 const { tryListingSelectionAnswer }                 = require('../utils/listingSelectionGate');
 
 // Jendela history untuk ekstraksi filter & state kualifikasi. Cukup besar agar
@@ -721,8 +722,25 @@ async function _generateWhatsAppAIReplyCore(params) {
     // findAreaInText mencocokkan ke daftar area NYATA milik agent, jadi ini
     // bukan tebakan — dan tanpa itu pesan pembuka yang sudah memuat keempat
     // slot tetap dibalas "di area mana di Surabaya?" (keluhan pemilik proyek).
-    const realArea = resolvedArea
-      || await findAreaInText({ userId: agentUserId, city: realCity, text: message });
+    // ⚠️ M162 — SEBUTAN PENDEK YANG AMBIGU HARUS DITANYAKAN, BUKAN DITEBAK.
+    // "Di Pakuwon ini, Kak" cocok ke DUA kawasan berbeda milik agent yang sama
+    // ("Pakuwon City" & "Pakuwon Indah"). Katalog Natasha (NA40D8N007) punya 14
+    // sebutan ambigu semacam itu ("puri" → 3 area, "darmo" → 3, "alana" → 2).
+    // Memilih sendiri = mengirim listing kawasan yang TIDAK diminta.
+    const areaMatch = resolvedArea
+      ? { area: resolvedArea, candidates: [resolvedArea] }
+      : await findAreaCandidatesInText({ userId: agentUserId, city: realCity, text: message });
+    const realArea = areaMatch.area;
+
+    if (!realArea && areaMatch.candidates.length > 1) {
+      const opts = areaMatch.candidates.slice(0, 4);
+      const list = opts.map((a) => `*${a}*`).join(' atau ');
+      console.log(`[WhatsAppAI] 📍 Area ambigu (${opts.join(', ')}) — bertanya, tidak menebak.`);
+      const reply = isIdMsg
+        ? `Di ${realCity || 'kota itu'} saya ada ${opts.length} kawasan dengan nama mirip: ${list}. Yang mana yang Kakak maksud? 📍`
+        : `I have ${opts.length} areas with similar names there: ${list}. Which one did you mean? 📍`;
+      return { reply, replyParts: [reply], provider: 'area_disambiguation_gate', contextSource };
+    }
     const txRaw   = qs.transactionType || filters.transactionType || '';
     const typeRaw = qs.buildingType   || filters.buildingType    || '';
     let   txDb    = /rent|sewa/i.test(txRaw) ? 'Rent' : (/sale|beli|jual/i.test(txRaw) ? 'Sale' : '');
@@ -768,6 +786,63 @@ async function _generateWhatsAppAIReplyCore(params) {
      * (resolveCityAndArea hanya mengisi city bila cocok baris tabel `cities`),
      * jadi aman dicek langsung ke katalog agent tanpa menunggu area disebut.
      */
+    /* ── M164c — TAWARAN KOTA HANYA SEKALI, LALU TANGGAPI JAWABANNYA ───────
+     * Setelah gerbang kota dikunci (M164b), muncul gejala kedua: gerbang
+     * menyala di SETIAP giliran, jadi customer yang menjawab "Mau." atau
+     * "Tidak mau, Kak." menerima kalimat tawaran yang sama persis lagi —
+     * bentuk pengulangan yang sudah lama dilarang doc 05 §6.
+     *
+     * Tawaran kota adalah pertanyaan; sekali diajukan, giliran berikutnya
+     * milik JAWABAN customer, bukan pengulangan pertanyaan (doc 04 §1 Gate A).
+     * Penolakan adalah jawaban yang sah dan LENGKAP — bukan undangan menawar
+     * ulang ("⛔ REFUSAL IS AN ANSWER").
+     */
+    const lastAiMsg = [...history].reverse()
+      .find((h) => /^(ai|assistant)$/i.test(String(h.role || '')));
+    const cityOfferPending = /belum punya listing|don't have any .*listings in/i
+      .test(String(lastAiMsg?.message || lastAiMsg?.content || ''));
+
+    if (cityOfferPending) {
+      const declines = /\b(tidak|ndak|nggak|enggak|gak|gk|no)\b|cukup|makasih|terima\s*kasih|trm\s*ksh|lain\s*kali|nanti\s*saja/i
+        .test(message);
+      if (declines) {
+        console.log('[WhatsAppAI] 🏙️ Tawaran kota DITOLAK — tutup sopan, tanpa menawar ulang.');
+        const reply = isIdMsg
+          ? 'Baik, Kak 🙏 Terima kasih sudah menghubungi saya. Kalau nanti butuh properti di area lain, silakan chat saya lagi ya 😊'
+          : 'Understood 🙏 Thank you for reaching out. Feel free to message me again anytime.';
+        return { reply, replyParts: [reply], provider: 'city_offer_declined', contextSource };
+      }
+      /* Bukan penolakan → customer menerima tawaran. Lanjut SATU langkah:
+       * tanya kota mana, jangan ulangi kalimat "belum punya listing".
+       *
+       * ⚠️ `realCity` TIDAK bisa dipakai apa adanya di sini. Pada giliran ini
+       * qs.city MASIH berisi kota yang baru saja dinyatakan kosong (customer
+       * menjawab "Mau." — sebuah persetujuan, bukan kota baru), jadi
+       * realCity==='Madiun' dan gerbang di bawah akan menawarkan ulang kalimat
+       * yang sama persis. Kota yang sudah divonis kosong adalah state BASI:
+       * satu-satunya alasan kita bertanya adalah karena kota itu buntu.
+       */
+      // ⚠️ Kalimat tawaran memuat DUA bidang ber-bintang: "listing *rumah* di
+      // *Madiun*". Pola longgar /listing[^*]*\*([^*]+)\*/ menangkap yang
+      // PERTAMA (tipe properti, "rumah") — bukan kotanya — sehingga
+      // perbandingan di bawah tidak pernah cocok dan tawaran terulang.
+      // Jangkar " di " WAJIB ada supaya yang terambil bidang KEDUA.
+      const offeredCity = (String(lastAiMsg?.message || lastAiMsg?.content || '')
+        .match(/listing\s*\*[^*]+\*\s*d[ii]\s*\*([^*]+)\*/i)
+        || String(lastAiMsg?.message || lastAiMsg?.content || '')
+          .match(/listings?\s+in\s+\*?([A-Za-z\s]+?)\*?[.,]/i)
+        || [])[1] || '';
+      const stillStaleCity = !realCity
+        || (offeredCity && realCity.toLowerCase() === offeredCity.trim().toLowerCase());
+      if (stillStaleCity) {
+        console.log('[WhatsAppAI] 🏙️ Tawaran kota DITERIMA — lanjut tanya kota, tidak mengulang tawaran.');
+        const reply = isIdMsg
+          ? 'Siap, Kak 😊 Kota mana yang Kakak mau saya carikan?'
+          : 'Great 😊 Which city would you like me to look in?';
+        return { reply, replyParts: [reply], provider: 'city_offer_followup', contextSource };
+      }
+    }
+
     if (realCity && (txDb || typeDb)) {
       const cityHit = await tryCityAvailabilityAnswer({
         userId: agentUserId, city: realCity,
@@ -775,17 +850,34 @@ async function _generateWhatsAppAIReplyCore(params) {
         typeLabel: typeRaw ? humanBuildingType(String(typeRaw).toLowerCase()) : 'properti',
         isId: isIdMsg,
       });
-      if (cityHit && backendMayCompose) {
-        console.log(`[WhatsAppAI] 🏙️ Gerbang kota: "${realCity}" tidak ada di katalog agent — dijawab dengan kota alternatif nyata.`);
+      /* ⚠️ M164b — GERBANG KOTA BERLAKU JUGA UNTUK PROFIL 'platform'.
+       *
+       * Versi lama membelah dua: profil 'backend' mendapat balasan pasti,
+       * profil 'platform' hanya mendapat gateFacts (konteks pasif). Itulah
+       * sebabnya bug produksi 29 Agu 2026 TIDAK pernah tertutup — Natasha
+       * (NA40D8N007) berprofil 'platform', jadi fakta "Madiun tidak ada di
+       * katalog" hanya disodorkan sebagai bahan bacaan, lalu deepseek tetap
+       * bertanya "di area mana di Madiun?" persis seperti sebelumnya.
+       * Diverifikasi ulang: cityHit.reply BENAR (checkCityAvailability lulus
+       * 4/4), yang gagal murni langkah "model diminta mempertimbangkan".
+       *
+       * Header gateFacts berbunyi "Angka & definisi ... jangan menyebut angka
+       * lain" — itu melarang model MENGARANG ANGKA, tapi tidak pernah
+       * menyuruhnya BERHENTI BERTANYA. Tidak ada kalimat sah yang bisa
+       * disusun tentang area di kota berstok NOL: setiap pertanyaan lanjutan
+       * di sana adalah pertanyaan tentang barang yang tidak ada.
+       *
+       * Ini bukan "backend menyusun interview" (yang memang milik platform) —
+       * ini jalan buntu faktual, sekelas dengan gerbang disambiguasi area.
+       */
+      if (cityHit) {
+        console.log(`[WhatsAppAI] 🏙️ Gerbang kota: "${realCity}" tidak ada di katalog agent — dijawab dengan kota alternatif nyata${backendMayCompose ? '' : ' (profil platform: tetap dikunci, jalan buntu faktual)'}.`);
         return {
           reply      : cityHit.reply,
           replyParts : [cityHit.reply],
           provider   : 'city_availability_gate',
           contextSource,
         };
-      }
-      if (cityHit && !backendMayCompose) {
-        gateFacts.push(`KETERSEDIAAN KOTA (fakta katalog agent):\n${cityHit.reply}`);
       }
     }
 

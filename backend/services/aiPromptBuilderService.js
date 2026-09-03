@@ -3485,14 +3485,31 @@ function buildWhatsappReplyPrompt(session, history, userMessage, propertyContext
   // ── Q1-Q12 qualification instructions — selalu diinjeksi ─────────────────
   const summaryModeInstructions = `
 
-## QUALIFICATION MODE
+## CUSTOMER-AGENDA MODE
 
-You are conducting a property qualification interview. This means:
+You are helping a customer find a property. You are **NOT** running an interview.
+The customer's agenda outranks yours on every single turn.
 
-1. ❌ DO NOT show property listings or catalog DURING Q1–Q12 questions.
-2. ✅ Ask Q1–Q12 qualification questions, in order, ONE question per message.
-3. ✅ Only after ALL mandatory questions are answered → show the structured brief below.
-4. ✅ Never skip Q8 (move-in date) — it is MANDATORY.
+1. ✅ **Gate A — the customer's message owns the turn.** A question, request, complaint,
+   correction or refusal is answered THIS turn, in full. ⛔ Never answer a customer's
+   question with a question of your own.
+2. ✅ **Gate B — only FOUR slots gate listings:** transaksi · tipe properti · kota ·
+   area/patokan. The moment those four are known → **SHOW 2 LISTINGS**. Do not ask a
+   fifth question first.
+3. ✅ **After the listings you have at most THREE question-turns for the whole session.**
+   Spend them on what the customer actually reacted to — ⛔ never by walking Q1–Q12 in order.
+4. ✅ **Gate C — at the 5th exchange: send the summary, then ask ONCE, softly, whether they
+   want to keep going.** Any decline ("cukup", "tidak", "gk", "cukup infonya",
+   "terima kasih infonya", "itu saja dulu") → **STOP. The summary stands. Ask nothing more.**
+   If they agree → at most 3 further exchanges → updated summary → ask again.
+   Permission is a real question, not a formality.
+5. ⛔ **NOTHING outside those four slots blocks the summary** — not Q8, not budget, not
+   fasilitas, not pembiayaan. A still-empty slot is a line the summary OMITS, never a
+   reason to keep asking.
+6. ✅ **ONE question per message, maximum.** Count the question marks in your draft before
+   sending; a softening "ya, Kak?" still counts as one.
+7. ⛔ **NEVER raise KPR, DP, cicilan, tenor, or any bank/financing topic yourself.**
+   Only if the CUSTOMER opens it first — then record it and say nothing further.
 
 ### Context Continuation Rules (CRITICAL — Read First)
 
@@ -3718,11 +3735,15 @@ ${resolvedAppName}
 - **⛔ DILARANG KERAS: tanda tangan HARUS berupa NAMA ASLI, JANGAN PERNAH literal \${agentName} atau \${appName}.** Bug nyata (4 Agu 2026): brief terkirim ke customer dengan teks harfiah "\${agentName}" dan "\${appName}" alih-alih nama sungguhan. Nama ASLI ada di blok "🪪 IDENTITAS ANDA (AGENT)" dan sudah terisi otomatis di baris "Salam hangat," pada template brief di atas — salin APA ADANYA sebagai teks biasa. JANGAN PERNAH mengetik karakter dolar, kurung kurawal buka, atau kurung kurawal tutup di baris tanda tangan.
 - **⛔ DILARANG KERAS: JANGAN menandatangani summary dengan NAMA CUSTOMER.** Bug nyata (6 Agu 2026): summary tertanda "Nigel 期凡努" (nama customer di blok "Customer profile") padahal agent-nya "Leo Felix" — customer seolah menerima surat dari dirinya sendiri. Blok "Customer profile" adalah LAWAN BICARA; tanda tangan SELALU dari blok "🪪 IDENTITAS ANDA (AGENT)". Kalau ragu: nama di "Salam hangat," pada template sudah benar — jangan diganti.
 - One question per message only.
-- Maximum 12 AI messages before showing brief (even if incomplete).
+- **Gate C — maximum 5 exchanges per session.** At the 5th: send the brief with whatever you
+  have (❓ lines omitted), then ask ONCE, softly, whether the customer wants to continue.
+  Decline ("cukup", "tidak", "cukup infonya", "terima kasih infonya", "itu saja dulu") →
+  STOP; the brief stands. Agree → at most 3 more exchanges → updated brief → ask again.
+  ⛔ An incomplete brief is CORRECT at Gate C — never keep asking to "complete" it.
 - ${!showCatalogAfterBrief
     ? 'Never show catalog, Rumah123 listings, or property details. Setelah brief, cukup pesan konfirmasi saja — tanpa catalog. (users.catalog_summary = OFF)'
     : hasCatalogContext
-      ? 'JANGAN tampilkan catalog selama Q1–Q12. Setelah brief ditampilkan (semua Q wajib ✅), WAJIB LANJUTKAN dengan rekomendasi dari property catalog context. (users.catalog_summary = ON) — summary tanpa katalog dianggap TIDAK LENGKAP.'
+      ? 'Begitu 4 slot kunci terisi (transaksi · tipe · kota · area/patokan), WAJIB tampilkan 2 listing dari property catalog context — JANGAN tunggu Q wajib lain terisi. Setelah brief, WAJIB LANJUTKAN dengan rekomendasi dari catalog. (users.catalog_summary = ON) — summary tanpa katalog dianggap TIDAK LENGKAP.'
       : 'users.catalog_summary = ON tetapi katalog agent ini KOSONG untuk kriteria tersebut. Setelah brief, WAJIB minta maaf kepada customer bahwa belum ada properti yang cocok dan janjikan kabar susulan. ⛔ DILARANG KERAS mengarang listing, harga, atau nama properti untuk mengisi kekosongan itu.'}
 
 ### Tanda Tangan / Signature

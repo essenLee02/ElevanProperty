@@ -576,8 +576,23 @@ async function fetchAreaListings({
  * kalah oleh "Pakuwon".
  */
 async function findAreaInText({ userId, city, text }) {
+  const { area } = await findAreaCandidatesInText({ userId, city, text });
+  return area;                       // ambigu → null (pemanggil WAJIB bertanya)
+}
+
+/**
+ * SATU implementasi pencocokan area, dua cara memakainya (M162).
+ * `findAreaInText()` di atas hanya membungkus fungsi ini; jangan menduplikasi
+ * logikanya lagi di tempat lain.
+ *
+ * @returns {Promise<{ area: string|null, candidates: string[] }>}
+ *   area       = satu-satunya kecocokan (aman dipakai langsung), atau null
+ *   candidates = >1 bila sebutan pendek ambigu; [] bila tidak cocok sama sekali
+ */
+async function findAreaCandidatesInText({ userId, city, text }) {
   const t = String(text || '').toLowerCase();
-  if (!userId || !t.trim()) return null;
+  const empty = { area: null, candidates: [] };
+  if (!userId || !t.trim()) return empty;
   try {
     const cityId = await resolveCityId(city);
     const rows = await Property.findAll({
@@ -597,7 +612,7 @@ async function findAreaInText({ userId, city, text }) {
     const exact = areas
       .filter((a) => t.includes(a.toLowerCase()))
       .sort((a, b) => b.length - a.length);
-    if (exact.length) return exact[0];
+    if (exact.length) return { area: exact[0], candidates: [exact[0]] };
 
     /* ── Lapis 2 — SEBUTAN PENDEK (M162, transkrip 2 Sep 2026) ───────────────
      * Customer hampir tidak pernah mengetik nama area lengkap. Katalog Natasha
@@ -625,17 +640,23 @@ async function findAreaInText({ userId, city, text }) {
         if (new RegExp(`\\b${tok}\\b`, 'i').test(t)) { scored.push({ a, tok }); break; }
       }
     }
-    if (!scored.length) return null;
+    if (!scored.length) return empty;
 
-    // Bila satu sebutan cocok ke BEBERAPA area ("Pakuwon" → City & Indah),
-    // kembalikan nama TERPENDEK: itu yang paling dekat dengan maksud customer,
-    // dan pencocokan katalog memakai LIKE '%area%' sehingga tetap menjaring
-    // seluruh varian yang lebih panjang.
-    scored.sort((x, y) => x.a.length - y.a.length);
-    return scored[0].a;
+    /* ⛔ JANGAN MENEBAK SAAT SEBUTAN PENDEK COCOK KE BEBERAPA AREA.
+     * Versi pertama patch ini mengembalikan nama TERPENDEK ("Pakuwon" →
+     * "Pakuwon City"). Itu tetap MENEBAK: katalog Natasha punya "Pakuwon City"
+     * DAN "Pakuwon Indah" — dua kawasan berbeda di kota yang sama. Diukur pada
+     * katalog nyata NA40D8N007: 14 sebutan pendek ambigu, mis. "puri" → 3 area
+     * (Puri Safira/Puri Indah Sidoarjo/Puri Surya Jaya), "darmo" → 3, "alana" →
+     * 2 (Alana Cemandi/Alana Cerme). Menebak = mengirim listing kawasan yang
+     * TIDAK diminta — persis keluhan yang sudah merusak percakapan nyata.
+     * Ambigu → kembalikan null di sini; pemanggil WAJIB bertanya
+     * (lihat findAreaCandidatesInText). */
+    const candidates = [...new Set(scored.map((s) => s.a))].sort((a, b) => a.localeCompare(b));
+    return { area: candidates.length === 1 ? candidates[0] : null, candidates };
   } catch (err) {
     console.error('[FIND AREA IN TEXT ERROR]', err.message);
-    return null;
+    return empty;
   }
 }
 
@@ -645,6 +666,7 @@ module.exports = {
   checkAreaAvailability,
   fetchAreaListings,
   findAreaInText,
+  findAreaCandidatesInText,
   resolveCityAndArea,
   listAlternativeAreas,
   listAreasWithinBudget,

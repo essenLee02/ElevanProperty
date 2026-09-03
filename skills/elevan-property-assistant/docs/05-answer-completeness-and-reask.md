@@ -206,25 +206,49 @@ Budget spent, or the customer signals they are done → summary brief, ❓ lines
 
 ---
 
-## 9. Worked Example — Completeness Recovery
+## 9. Worked Example — listings first, then the consent checkpoint
 
 ```
-Customer : mau sewa kos surabaya            → tx=rent, type=kos, city=Surabaya ✅
-AI       : Kos-nya untuk *putra*, *putri*, atau *campur*?
-Customer : putri                             → kosType ✅   (budget, tanggal ❓)
-AI       : Oke kos putri 👍 Budget/bulan lebih prefer *terjangkau*, *menengah*, atau *eksklusif*?
-Customer : gak tau sih                       → deflection L1
-AI       : Santai 😊 Kos putri Surabaya umumnya ~800rb–1,5jt (terjangkau) atau ~2–3,5jt
-           (nyaman ber-AC). Yang mana?
-Customer : yang ac aja                       → budget=menengah ✅
-AI       : Sip, yang ber-AC. Rencana masuk kapan?              ← last mandatory (Q8)
-Customer : secepatnya                        → moveIn ✅
-AI       : Ada fasilitas wajib lain? (kamar mandi dalam, WiFi, dapur bersama, dll)   ← Q_FAC
-Customer : km dalam + wifi                   → facilities ✅ → all mandatory ✅
-AI       : [Summary brief]
+Customer : mau sewa kos surabaya       → tx=rent · type=kos · city=Surabaya ✅ · area ❓
+AI       : Kos-nya di area mana kak? Biar saya carikan yang paling deket   ← ex.1, the ONE gap
+
+Customer : deket ubaya aja             → area ✅ — all four slots known
+AI       : Ada 2 kos putri deket Ubaya kak
+           [listing 1] · [listing 2]                        ← listings, NOT another question
+           Ada yang menarik?
+
+Customer : yang pertama kayaknya. tapi ada wifi gak?
+AI       : Ada kak, wifi + km dalam                          ← Gate A: answer, free turn
+
+Customer : oke. masuknya bisa bulan depan?
+AI       : Bisa kak                                          ← still free, still their agenda
+
+Customer : ada yang lebih murah gak?
+AI       : Ini yang paling terjangkau di area itu, 900rb/bln
+           [listing 3]                                       ← complaint → new listing, no interview
+
+           Ini catatan saya sejauh ini ya kak 📝
+           ✓ Rencana: Sewa · ✓ Tipe: Kos · ✓ Kota: Surabaya
+           ✓ Area: dekat Ubaya · ✓ Budget: ±900rb/bln · ✓ Masuk: bulan depan
+           ✓ Fasilitas: WiFi, kamar mandi dalam
+
+           Ada lagi yang mau ditanyakan, atau sudah cukup segini dulu?   ← Gate C checkpoint
+
+Customer : cukup, makasih infonya
+AI       : Siap kak, sama-sama 🙏 Saya teruskan ke agent kami ya          ← STOP. No new question.
 ```
 
-Every mandatory slot ends ✅; nothing was asked twice; each deflection became a choice, not a drop.
+**What makes this correct:** exactly **one** question was asked (the single missing slot). Every
+other turn served the customer's own agenda — their question, their date, their price complaint.
+Budget, move-in and facilities all got filled **without being asked**, because listings and
+answers pull that information out naturally. The checkpoint offered an exit, and the moment they
+said *"cukup"* the conversation ended.
+
+> ⛔ **This example previously showed the opposite** — five AI questions in a row (kos type →
+> budget → tier → move-in → facilities), no listing at any point, ending with *"Every mandatory
+> slot ends ✅"* as though a completed interview were the goal. That is the exact agenda-first
+> behaviour §1 Gate A and doc 04 §3.1 exist to stop. **The goal is a customer who got what they
+> came for, not a form with every field filled.**
 
 ---
 
