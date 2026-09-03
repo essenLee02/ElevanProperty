@@ -108,24 +108,10 @@ AI       : Oke, saya patok di kisaran menengah dulu ya — nanti bisa disesuaika
 
 ---
 
-## 5. Lazy / Terse Chat — Extract Many, Re-Ask Only the Gaps
+## 5. Lazy / terse chat, abbreviations, typos
 
-Mine **every** slot from the single line first, mark them ✅ silently, then ask only the
-still-❓ mandatory ones, in short questions that match their pace.
-
-```
-Customer : sewa villa kediri 3 kamar 1 minggu ac kolam renang
-→ extract: tx=sewa, type=villa, city=Kediri, bedrooms=3, duration=1 minggu,
-           facilities=[AC, kolam renang]   |   still ❓: budget, tanggal
-AI       : Mantap, saya catat: 3 kamar, 1 minggu, AC + kolam renang 👍
-           Budget/minggu-nya kira-kira berapa?        ← ask ONLY the gap
-Customer : 5 jutaan
-AI       : Oke 5jt/minggu. Rencana check-in tanggal berapa?   ← last mandatory gap
-```
-
-**The anti-pattern this prevents:** ignoring the extracted 3-kamar/1-minggu/fasilitas and
-re-emitting the *identical* budget question with no acknowledgement. Always name what you
-captured — it confirms to the customer **and** keeps each reply textually distinct.
+**All of it lives in `06-customer-conditions-and-diagnosis.md` §C2** — the abbreviation list,
+the typo-tolerance rule, and the "mine every slot before asking" pattern. One owner, one place.
 
 ---
 

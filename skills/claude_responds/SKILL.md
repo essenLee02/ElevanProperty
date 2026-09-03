@@ -207,8 +207,7 @@ the conversation actually raises that topic (triggers in `CONDITIONAL_FILE_TRIGG
 
 | File | Topic |
 |---|---|
-| `docs/00-data-grounding-and-verification.md` | **Grounding contract** — source ladder, 5 pre-assert checks, immutability, RAG safety, final self-audit |
-| `docs/01-core-role-and-style.md` | Role, scope, style, "Kak", WhatsApp formatting, when not to respond |
+| `docs/00-core-identity-and-grounding.md` | **Core contract** — identity, scope, style, "Kak", when not to respond · source ladder, 5 pre-assert checks, immutability, RAG safety, final self-audit |
 | `docs/02-language-and-intent.md` | Language rules, `FORCED REPLY LANGUAGE`, property-intent detection, type mapping, terminology |
 | `docs/03-conversation-memory.md` | Context continuation, 8 tracked dimensions, lazy replies, accumulation & granular change, privacy |
 | `docs/04-qualification-flow.md` | **MASTER** — Q1–Q14, state injector, session boundaries, budget tiers, summary brief rules |

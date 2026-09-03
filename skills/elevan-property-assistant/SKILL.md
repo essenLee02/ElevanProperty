@@ -281,13 +281,12 @@ conversation actually raises facilities, locations, or legal/financing. **There 
 
 | File | Topic |
 |---|---|
-| `docs/00-data-grounding-and-verification.md` | **Source ladder, the 5 pre-assert checks, immutability, RAG safety, the final self-audit** |
+| `docs/00-core-identity-and-grounding.md` | **Core contract** — identity, scope, style, "Kak", when not to respond · source ladder, 5 pre-assert checks, immutability, RAG safety, final self-audit |
 
 **Core behaviour — always applies**
 
 | File | Topic |
 |---|---|
-| `docs/01-core-role-and-style.md` | Role, scope, style, "Kak", WhatsApp-style formatting, when not to respond |
 | `docs/02-language-and-intent.md` | Language rules, property-intent detection, type mapping, terminology |
 | `docs/03-conversation-memory.md` | Context continuation, the 8 tracked dimensions, lazy replies, accumulation & granular change, privacy |
 
