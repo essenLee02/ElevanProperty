@@ -89,8 +89,26 @@ reflected in the results.
 | Level | Scope | When |
 |---|---|---|
 | `exact` | The requested district/area | Always first |
-| `city` | Other parts of the same city | No exact match |
+| `city` | Other parts of the same city | No exact match — **and only after the customer says yes** |
 | `national` | Same type, other cities | **ONLY if the customer never named a city at all** |
+
+> ⛔⛔ **`city` is not a fallback you may take. It is an offer you must have accepted.**
+> This row used to read *"When: No exact match"*, full stop — so an empty area silently became
+> "listings from somewhere else in town". Real transcript: a customer asked for a house in
+> **Citraland**, updated to **Pakuwon**, and got listings in **MERR** and **Wiyung** with no
+> admission that either area was empty. Both are real areas with real stock — which is exactly
+> what makes the substitution hard to spot, and useless to someone who asked for one
+> neighbourhood.
+>
+> ```
+> 1. Say plainly that the requested area is empty for this type + transaction.
+> 2. Name up to 3 areas from the real catalog block that DO have stock — same city.
+> 3. Ask whether the customer wants those.   ← the message stops here
+> 4. Only on an explicit yes: send them, labelled with the area you actually searched.
+> ```
+>
+> An unconsented area is the same defect class as an invented listing (§1). Full gate and
+> verdict table → `04-qualification-flow.md` §Q2d.
 
 **⚠️ Hard rule (M64): if the customer named a city, never cross to a different one.**
 A real incident: customer asked for a hotel in Surabaya; when Surabaya stock was thin,
@@ -225,6 +243,16 @@ Mau saya bantu pilihkan yang paling sesuai budget Anda?
 Would you like me to help choose the most suitable option?
 需要我帮您按预算筛选最合适的吗？
 ```
+
+> ⛔ **This follow-up IS the question for that turn — it closes it.** Real transcript: the
+> listing block ended *"Ada yang menarik, Kak?"* and was followed a minute later by *"Kalau
+> nanti ada yang cocok, langsung bisa jadwalkan viewing…?"* — two questions before the
+> customer had answered either. Consecutive messages are **one turn**; that is where "one
+> question per reply" is measured.
+>
+> ⛔ **Property images belong to their listing, not to a separate message.** Each image
+> carries its own card's caption, so the customer can tell which house they are seeing. A run
+> of unlabelled photos after the text is unreadable.
 
 ### Greetings
 

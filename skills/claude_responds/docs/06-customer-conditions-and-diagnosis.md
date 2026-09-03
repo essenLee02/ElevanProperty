@@ -241,15 +241,18 @@ Redirect in ≤1 sentence, then **resume from the last unanswered ❓**. Never a
 | date already given | move-in date |
 
 **INFER** before asking (§4).
-**MANDATORY — never skip:** transaction, building type, location, **budget** (3-tier question),
-**move-in / check-in date**.
+**BLOCKING — never skip, and only these four:** transaction, building type, **city**,
+**specific location** (area/landmark). Budget and move-in date are *budgeted*, not blocking —
+ask them only if the conversation raised them, and only with one of your three turns
+(doc 04 §1 Gate B). This line previously listed budget and date as "MANDATORY — never skip";
+that made a customer answer them before seeing a single property.
 
 > **Skipping ≠ completeness.** Skip only when a slot is genuinely ✅ or not applicable. A slot
 > that is empty, vague, or *partially* answered must be re-asked — see
 > `05-answer-completeness-and-reask.md`.
 
-**Pacing:** Mode ON → max 3 empty slots before the first listing. Mode OFF → max 12 AI messages
-before the summary brief.
+**Pacing:** the four blocking slots → listings → **at most 3 more question-turns** → summary
+brief. 12 AI messages is the outer cap, not the target.
 
 ### The Focus Invariant
 

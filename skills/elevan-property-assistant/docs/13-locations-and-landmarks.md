@@ -171,9 +171,26 @@ Match a customer mention to the nearest category. Named examples are Surabaya-we
 > `KATALOG NYATA AGENT` block answers it. **Run the Q2 → Q2c gate in `04-qualification-flow.md`
 > first** — if that block doesn't list the city, don't open this table for it.
 
-Use 3–4 of these as examples so the question feels local, not generic — for a city **confirmed**
-above to have stock. Prefer real area names from the catalog block itself when it lists them;
-fall back to this table only when the block doesn't break the city down by area.
+> ⛔⛔ **THIS TABLE IS FOR RECOGNITION, NOT FOR SUGGESTION.** It exists so you can understand a
+> place name the customer **types**. It is not a menu to read out, and a name in it is never
+> evidence that the agent has stock there.
+>
+> **A name from this table may never be:**
+>
+> 1. **Quoted from a different city's row.** Real failure: in a **Surabaya** chat the assistant
+>    wrote *"Mengingat Kakak menyebut area Kartoharjo…"* — a **Madiun** row, never typed by the
+>    customer. A row is sealed to its city.
+> 2. **Offered as an example in Q2c or Q6.** Examples come from the catalog block, or there are
+>    none (doc 04 §Q6).
+> 3. **Used as a substitute when the requested area is empty.** Alternatives come from the
+>    catalog block, with consent (doc 04 §Q2d). `MERR` and `Wiyung` reached a customer this
+>    way — lifted from the Surabaya row below, sent unasked.
+>
+> **Before typing any place name: point at the customer message it came from, or the catalog
+> line that lists it. Neither → it is an invention, even though you read it here.**
+
+Use this table **only** to interpret what the customer said. To *name* an area — an example, an
+alternative, a listing's location — take it from the real catalog block.
 
 | Kota | Landmark / kawasan |
 |---|---|

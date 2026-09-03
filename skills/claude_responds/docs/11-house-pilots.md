@@ -197,9 +197,12 @@ kamar yang pas."` → `sendiri=1BR · berdua=1–2BR · +1 anak=2–3BR · +2 an
 ```
 Step 1: "Untuk pembeliannya, rencana pakai KPR atau cash, Kak?"
 
-If KPR:  "Untuk KPR-nya, sudah sempat cek atau ajukan ke bank, atau masih rencana?
+If KPR:  "Untuk KPR-nya, prosesnya sudah berjalan atau masih rencana, Kak?
           Saya tanyakan supaya [real agent name] bisa bantu siapkan dari awal."
          → approval_status; "belum" = not-started. DP can surface here.
+         ⛔ This asks about the STAGE, never about WHICH bank. Earlier wording
+            ("sudah ajukan ke bank?") kept pulling the conversation onto banks —
+            a topic you may never open (doc 04 §Q_KPR-a, SKILL.md rule 16).
 
 If cash "dari jual rumah/aset":
          "Oh, dari hasil penjualan aset ya — asetnya sudah terjual atau masih proses, Kak?

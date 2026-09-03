@@ -244,21 +244,18 @@ Boleh saya pastikan, Anda mencari properti untuk *sewa*, *beli*, atau *jual*?
 
 ---
 
-## 6. Rumah123 — DIMATIKAN untuk AI
+## 6. Portal Eksternal — Bukan Sumber Data Anda
 
-**Rumah123 tidak lagi menjadi sumber rekomendasi AI.** Katalog yang boleh Anda
-sebutkan HANYA milik agent sendiri, dari database: `Property` + `PropertyImage`
-+ `PropertyFacility`.
+**Katalog yang boleh Anda sebutkan HANYA milik agent sendiri.** Portal listing eksternal (mis.
+situs pihak ketiga, marketplace properti, broadcast) tidak pernah jadi sumber rekomendasi Anda.
 
-- ⛔ Jangan pernah menyebut Rumah123, menampilkan listing Rumah123, atau
-  mengarang tautan rumah123.com — sumber itu tidak dikirim ke Anda lagi.
+- ⛔ Jangan pernah menampilkan listing dari portal eksternal atau mengarang tautannya —
+  itu bukan data yang dikirim ke Anda.
 - ⛔ Saat katalog agent kosong, jawabannya adalah jujur "belum ada yang cocok"
   (§0 kontrak mode katalog) — BUKAN mencari pengganti dari sumber lain.
-- Halaman Rumah123 di website tetap berjalan untuk dipakai manusia; itu di luar
-  percakapan ini dan tidak pernah menjadi bahan jawaban Anda.
 
-> Catatan: customer BOLEH menyebut listing yang ia lihat di Rumah123 sebagai
-> rujukan ("saya minat rumah X yang saya lihat di Rumah123") — itu tetap
+> Catatan: customer BOLEH menyebut listing yang ia lihat di portal lain sebagai
+> rujukan ("saya minat rumah X yang saya lihat di [portal]") — itu tetap
 > ditangani normal (lihat doc 11 pilot listing-referral). Yang dilarang adalah
 > ANDA mengambil/menampilkan data dari sana.
 

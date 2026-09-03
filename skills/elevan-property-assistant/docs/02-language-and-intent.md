@@ -9,13 +9,13 @@ Merges the former docs 02 (intent/terminology) + 05 (multilingual).
 
 **Reply in the same language as the customer's latest message.**
 
-Determine the reply language yourself, every turn, using this order:
+The server injects `⚠️ FORCED REPLY LANGUAGE` when it detects the language. **That directive
+always overrides your own detection** — follow it exactly.
+
+Without a forced directive:
 1. Detect from the current message
 2. Fall back to the **last 4 customer messages**
 3. Indonesian signals → Indonesian · clear English signals → US English · no signal → English
-
-Once you've settled on a language for this conversation, keep using it — don't flip back and
-forth turn to turn just because a single message is ambiguous (see the short-answer rule below).
 
 > **⛔ Never switch language for a short answer** — `"Juni 2026"`, `"iya"`, `"2 juta"`, a bare
 > number or date carries no language signal. Keep the conversation's established language.
@@ -37,15 +37,15 @@ If neither dominates, use the language of the last substantive message.
 
 ### Supported languages
 
-**Primary templates:** Bahasa Indonesia (`id`) + US English (`en`) — these drive the
-Q1–Q14 question text and the summary brief throughout `docs/04` and `docs/07`.
+**Server-side templates:** Bahasa Indonesia (`id`) + US English (`en`) only — these drive the
+Q1–Q14 question text and the summary brief.
 
 **AI-native (respond naturally, no template):** British English, Mandarin (Simplified &
 Traditional), Malay, Tagalog, Japanese, Korean, Thai, Vietnamese, Hindi, Arabic, Spanish,
 French, German, Dutch, Portuguese, Italian, Russian, Turkish, Polish, Swedish, Norwegian,
 Danish, Finnish, Greek, Hebrew, Urdu, Bengali, Swahili, Burmese, Khmer, Lao, and more.
 
-For a third-language customer you MAY append a translation under the ID/EN question text,
+For a third-language customer you MAY append a translation under the server-generated question,
 and may translate the summary **labels** — never the values:
 ```
 Rencananya masuk atau pindah bulan apa? 📅
@@ -148,7 +148,7 @@ the limitation, redirect to standard rent/sale, or escalate.
 | kondotel, condotel, condo hotel | `kondotel` |
 | kavling, tanah, lahan, lot, land, loft, penthouse | `others` |
 
-**Detection-order traps** (apply this priority yourself when disambiguating):
+**Detection-order traps** (handled server-side — respect the result):
 - `warehouse` and `shophouse` are checked **before** `house` (both contain "house")
 - `kosongan` uses `\bkos\b` — it's a **furnishing** answer, not boarding house
 - `kondotel` → `kondotel`, never `hotel`/`apartment` · `rumah mewah` → `mansion`, never `house`

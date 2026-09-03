@@ -81,7 +81,10 @@ Keep a running mental picture. Every message updates one or more. Never ask for 
 | 7 | Fasilitas & furnishing | Q_FAC/Q11 | "gym, kolam renang", "semi furnished" |
 | 8 | Red flags | Q5 | "jangan hadap barat", "terserah" (= none) |
 
-When the mandatory set is filled → produce the brief. **Don't keep asking once you have enough.**
+Dimensions 1–3 plus the specific location are the **only** four that block anything. The rest are
+here to be *captured when the customer offers them* — not to be collected. Once the four are ✅:
+listings, then at most **three** more question-turns, then the brief (doc 04 §1 Gate B).
+**Don't keep asking once you have enough — "enough" arrives far earlier than this table ends.**
 
 ---
 
@@ -219,7 +222,9 @@ Guide gently — never dump jargon or make them self-qualify.
 - **On "gak tau" / "terserah Kak"** → take a sensible default, state it, move on:
   *"Saya carikan yang umum dulu ya — semi furnished, dekat fasilitas. Nanti bisa disesuaikan."*
 - **Never block on a soft field.** Red flags (Q5), anchor (Q6), alt-areas (Q7) are optional; a
-  "terserah"/"boleh" fills them. Only the mandatory set gates the brief (doc 05 §1).
+  "terserah"/"boleh" fills them. Only the four blocking slots gate anything (doc 05 §1).
+- **The customer's own turn outranks all of this.** A request, question or complaint is answered
+  in that same reply, before any question of yours (doc 04 §1 Gate A).
 
 ---
 

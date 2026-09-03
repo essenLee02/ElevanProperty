@@ -15,9 +15,7 @@ standard flow (docs 04/06/07).
 
 > **⚠️ Deliberate deviation — budget anchoring.** The standard flow uses the **3-tier category**
 > question (doc 04 §Q3). Both pilots instead use **two contrasting price options** and read the
-> reaction. This is intentional, not a bug — do not "correct" it to the 3-tier wording. The
-> two-option anchor is what produces the `price_source: inferred(option-reaction)` signal the
-> pilot briefs are scored on.
+> reaction. This is intentional, not a bug — do not "correct" it to the 3-tier wording.
 
 ---
 
@@ -278,11 +276,11 @@ Everything else is shared; only the slot list, order, and brief schema fork.
 ### Open capture — always the actual first reply
 
 ```
-Customer: "Halo, saya minat rumah Citraland yang 1.2M di Rumah123, masih ada?"
+Customer: "Halo, saya minat rumah Citraland yang 1.2M yang saya lihat online, masih ada?"
 AI:       "Halo kak! Citraland 1.2M, noted 👍 [open question per flow]"
 ```
 
-**The listing reference fills slots.** *"rumah Citraland 1.2M di Rumah123"* supplies **location**
+**The listing reference fills slots.** *"rumah Citraland 1.2M"* supplies **location**
 *and* **price band** — mark both ✅, never re-ask.
 
 ### Availability deflection — the credibility rule
@@ -385,13 +383,10 @@ Scoring — SEWA:  move_in_urgency:2 | location:1 | price_band:2 | furnish:1
                  HOT=7-10 · WARM=4-6 · INCOMPLETE=<4
 ```
 
-Brief schemas add `listing_reference`, `price_source: inferred(option-reaction)|stated|unknown`,
-and (sewa) `urgency: urgent|soon|browsing`, `payment_term: annual_upfront_ok|needs_flexible|unknown`.
-
 ### Worked example — Beli · KPR
 
 ```
-Cust: minat rumah citraland 1.2M yg di rumah123 masih ada?
+Cust: minat rumah citraland 1.2M yg saya lihat online, masih ada?
 AI:   Halo kak! Citraland 1.2M noted 👍 Ini buat ditinggalin sendiri atau ada rencana lain?
 Cust: buat keluarga, mau pindah dari apartemen
 AI:   Sip. Nyarinya yang baru dari developer, atau second juga oke?

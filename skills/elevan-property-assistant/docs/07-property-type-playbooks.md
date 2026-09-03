@@ -10,7 +10,7 @@ Merges the former docs 10 (playbooks) + 11 (Q14 slots & patterns).
 `Occ`=occupants · `Alt`=alternative area · `Dec`=decision maker · `Dur`=duration ·
 `Pay`=payment terms (≥1 yr) · `Furn`=furnishing · `Fin`=financing.
 
-> **Q14 fires after Q12, in BOTH operating modes (SKILL.md §4). One slot per message.
+> **Q14 fires after Q12, in BOTH `RESPOND_CATALOG_RUN` modes. One slot per message.
 > Fire only slots not already answered.**
 
 ---
@@ -27,7 +27,7 @@ Merges the former docs 10 (playbooks) + 11 (Q14 slots & patterns).
 | Summary after a type change | Restart from Q1 first |
 | Rejecting an "unrealistic" budget | Offer alternatives: "Ada yang lebih terjangkau di area tetangga" |
 
-**Q8 date is MANDATORY in all 24 flows** — never skipped, always normalized per `docs/10`.
+**Q8 date is MANDATORY in all 24 flows** — never skipped, always normalized server-side.
 **Summary + confirmation is required** before executing a search.
 
 ---
@@ -394,17 +394,23 @@ Then: "Oke, berarti sekitar 2–3 kamar ya 😊" → next ❓.
 | Red-flag focus | Kenyamanan & kecocokan | Legalitas, struktur, sertifikat |
 | Investment | — | Target market, ROI, tenant status |
 
-**BELI sequence after Q8 target date:**
+**BELI candidates — each costs one of the three budgeted turns (doc 04 §1 Gate B), so pick
+only what the conversation raised. This is a ranking, not a script to run top to bottom:**
 ```
-Q_KPR    (MANDATORY)      "Untuk pembiayaan, rencananya *cash* atau *KPR*?"
+Q_KPR                     "Untuk pembiayaan, rencananya *cash* atau *KPR*?"
                           (komersial for hotel/ruko/kantor/gudang/toko/kondotel;
                            KPT for 'others'/tanah)
-Q_KPR-a  (if KPR/kombinasi) "Bank mana yang dituju, dan DP berapa persen?"
+Q_KPR-a  (if KPR/kombinasi) "DP-nya kira-kira berapa persen yang sudah disiapkan?"
 Q_COND   (residensial)    "Prefer yang *baru/ready*, *second* kondisi baik, atau *inden*?"
 Q4       (investasi)      → replace "tinggal bersama siapa" with
                             "Targetnya disewakan ke siapa — karyawan, mahasiswa, atau expat?"
-→ Q14 per-type → summary (Template B or D)
+→ summary (Template B or D) as soon as the budget is spent
 ```
+
+> ⛔ **Q_KPR-a used to read "Bank mana yang dituju, dan DP berapa persen?" — two questions,
+> and the first one is banned.** Never ask which bank; if the customer names one, record it
+> and say nothing further (doc 04 §Q_KPR-a). This was the second copy of that question in the
+> skill; a rule fixed in one doc while its duplicate survives in another is not fixed.
 
 **Detection aliases:** BELI = `beli | purchase | KPR | cicil | investasi | akuisisi` ·
 financing `cash` → strong buyer, `KPR`/`kredit`/`cicil` → fires Q_KPR-a, `kombinasi`/`50% cash`
@@ -432,7 +438,8 @@ financing `cash` → strong buyer, `KPR`/`kredit`/`cicil` → fires Q_KPR-a, `ko
 ## Summary Templates
 
 Only include lines whose slots are ✅. Copy values verbatim. Full field rules → doc 04
-§Summary Brief. End with the dynamic signature (agent name / app name — SKILL.md §1).
+§Summary Brief. End with the dynamic signature — the REAL agent name and app name from
+your system context, never the literal placeholder notation itself (see doc 04 §6 warning).
 
 **A — Sewa Hunian** (rumah, apartemen, villa bulanan, kos, mansion)
 ```

@@ -35,13 +35,11 @@ never off-topic just because it doesn't contain an obvious property keyword. You
 > as an empty or new topic.
 
 > **⛔ A PURPOSE is an answer too — "untuk investasi" answers "ditempati bersama siapa?".**
-> Real production failure (Malang, 7 Agu 2026): asked who would live in the house, the customer
-> answered *"Oh ini untuk investasi"* — i.e. **nobody**, it is an investment. That is a complete
-> Q4 answer. Record it (`Penghuni: N/A — investasi`) and move to the next unanswered question.
-> Never re-ask who will live there, and never treat it as a dead end.
+> It means **nobody** lives there. Record it (`Penghuni: N/A — investasi`) and move on; never
+> re-ask, never treat it as a dead end. (Real failure, Malang 7 Agu 2026 — the customer had to
+> repeat it twice more hours later because the flow stalled.)
 >
-> The customer repeated *"Rumahnya untuk investasi"* twice more hours later because the flow had
-> stalled. **If a customer repeats the same fact, assume you failed to register it** — acknowledge
+> **If a customer repeats the same fact, assume you failed to register it** — acknowledge
 > it explicitly ("Baik, untuk investasi ya Kak 👍") before asking anything else. A message that
 > states a property's PURPOSE ("rumahnya untuk investasi", "ruko buat usaha", "tidak ditinggali")
 > is always on-topic, even if it arrives long after the previous message and contains no
