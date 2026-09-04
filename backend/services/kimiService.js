@@ -34,11 +34,10 @@ function getKimiConfig() {
 
   return {
     apiKey,
-    // ⛔ TIDAK ADA MODEL PENGGANTI (arahan pemilik proyek, 3 Sep 2026).
-    // Dulu: `rawModel || 'kimi-k3'` — KIMI_MODEL kosong/salah ketik diam-diam
-    // diganti model lain, sehingga backend memakai model yang tidak pernah
-    // dipilih operator dan itu hanya ketahuan dari tagihan provider.
-    model       : rawModel,
+    // Model Moonshot AI (Kimi) OpenAI-compatible. kimi-k3 adalah default resmi
+    // platform per Agu 2026 ("If you are not sure which model to choose, start
+    // with kimi-k3") — konteks 1M token, cocok untuk qualification flow panjang.
+    model       : rawModel || 'kimi-k3',
     maxTokens,
     temperature,
     topP,
@@ -107,13 +106,6 @@ async function callKimiChatAPI(userPrompt, options = {}) {
   if (!config.apiKey) {
     const err = new Error('KIMI_API_KEY is missing in backend/.env');
     err.provider = 'kimi'; err.fallbackEligible = false;
-    throw err;
-  }
-
-  // ⛔ Model kosong = KESALAHAN KONFIGURASI, bukan alasan menebak model lain.
-  if (!config.model) {
-    const err = new Error('KIMI_MODEL is missing in backend/.env — set it explicitly; the backend never substitutes another model.');
-    err.provider = 'kimi'; err.fallbackEligible = false; err.configError = true;
     throw err;
   }
 

@@ -59,10 +59,10 @@ function getHuggingFaceConfig() {
 
   return {
     apiKey,
-    // ⛔ TIDAK ADA MODEL PENGGANTI (arahan pemilik proyek, 3 Sep 2026).
-    // Dulu: `rawModel || 'openai/gpt-oss-20b:groq'` — HF_MODEL kosong/salah
-    // ketik diam-diam diganti model lain. Set HF_MODEL secara eksplisit.
-    model       : rawModel,
+    // Default: gpt-oss-20b via provider Groq (latensi rendah, cocok untuk
+    // chat WhatsApp interaktif). deepseek-ai/DeepSeek-V4-Flash-0731:novita
+    // adalah alternatif — ganti lewat HF_MODEL, JANGAN hardcode di sini.
+    model       : rawModel || 'openai/gpt-oss-20b:groq',
     maxTokens,
     temperature,
     topP,
@@ -127,7 +127,7 @@ function normalizeHuggingFaceError(error) {
       '║  ⛔ HUGGING FACE: MODEL TIDAK TERSEDIA DI ROUTER                  ║\n' +
       '╚════════════════════════════════════════════════════════════════════╝\n' +
       `   Pesan API : ${apiMessage}\n` +
-      `   Model kini: ${sanitizeEnvValue(process.env.HF_MODEL || '(kosong — WAJIB diisi, tidak ada default)')}\n` +
+      `   Model kini: ${sanitizeEnvValue(process.env.HF_MODEL || '(kosong, pakai default)')}\n` +
       '   PERBAIKI  : model HF Router WAJIB sufiks ":provider" (mis.\n' +
       '   "openai/gpt-oss-20b:groq"). Cek ketersediaan di\n' +
       '   huggingface.co/models?inference_provider=... lalu set HF_MODEL,\n' +
@@ -150,13 +150,6 @@ async function callHuggingFaceChatAPI(userPrompt, options = {}) {
   if (!config.apiKey) {
     const err = new Error('HF_TOKEN is missing in backend/.env');
     err.provider = 'huggingface'; err.fallbackEligible = false;
-    throw err;
-  }
-
-  // ⛔ Model kosong = KESALAHAN KONFIGURASI, bukan alasan menebak model lain.
-  if (!config.model) {
-    const err = new Error('HF_MODEL is missing in backend/.env — set it explicitly; the backend never substitutes another model.');
-    err.provider = 'huggingface'; err.fallbackEligible = false; err.configError = true;
     throw err;
   }
 

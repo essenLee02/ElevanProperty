@@ -50,6 +50,17 @@ const C = (m) => ({ role: 'customer',  message: m });
 const A = (m) => ({ role: 'assistant', message: m });
 
 /** Transkrip lengkap: keempat slot minimum terisi + tanggal + survei. */
+// ⚠️ TANGGAL RELATIF, BUKAN LITERAL. Fixture ini dulu menulis '1 September 2026';
+// begitu tanggal sistem melewatinya, customerDateParser menolaknya (reject_past),
+// moveInDate jadi null, dan 3 asersi "tanggal tetap" gagal SELAMANYA tanpa ada bug
+// nyata di kode. Dihitung relatif supaya tidak pernah basi lagi.
+const _futureDate = (() => {
+  const d = new Date(); d.setDate(d.getDate() + 60);
+  const BULAN = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus',
+                 'September','Oktober','November','Desember'];
+  return `${d.getDate()} ${BULAN[d.getMonth()]} ${d.getFullYear()}`;
+})();
+
 const FULL = [
   C('Mau sewa rumah di Surabaya'),
   A('Di area atau kawasan mana di Surabaya yang Anda pertimbangkan?'),
@@ -59,7 +70,7 @@ const FULL = [
   A('Budgetnya berapa kak?'),
   C('sekitar 5 juta per bulan'),
   A('Kapan rencana masuk?'),
-  C('1 September 2026'),
+  C(_futureDate),
   A('Kalau ada yang cocok, bisa jadwalkan viewing?'),
   C('Bisa, saya sendiri yang memutuskan'),
 ];

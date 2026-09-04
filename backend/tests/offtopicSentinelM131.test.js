@@ -100,9 +100,17 @@ FOLDERS.forEach((f) => {
   ok(`${f}: memuat §3c`, doc.includes('3c. Full Category Reference & Silence Protocol'));
   ok(`${f}: memuat rujukan M131`, doc.includes('M131'));
   ok(`${f}: memuat token sentinel persis`, doc.includes('[[OFFTOPIC_SILENT]]'));
-  ok(`${f}: memuat semua 83 nomor kategori (cek #1, #43, #65, #83)`,
-    /\b1\. Movie, Film\b/.test(doc) && /\b43\. Candi, Candi\b/.test(doc) &&
-    /\b65\. Gods, Dewa, Tuhan, Allah\b/.test(doc) && /\b83\. Furnitur/.test(doc));
+  // ⚠️ ASERSI DIPERBARUI (3 Sep 2026) — DULU mewajibkan enumerasi 83 kategori verbatim
+  // (#1 Movie, #43 Candi, #65 Gods, #83 Furnitur). Pemilik proyek meminta seluruh skill
+  // .md dipadatkan ke ~7.000 char total; daftar 83 baris itu sendiri ±2.400 char, jadi
+  // target itu MUSTAHIL selama enumerasinya dipertahankan. Ditanyakan eksplisit dan
+  // pemilik proyek memilih membuang enumerasinya, mempertahankan ATURANNYA — yang memang
+  // menentukan perilaku guard: §1 menang lebih dulu, model adalah otoritas akhir, dan
+  // token [[OFFTOPIC_SILENT]] (ketiganya masih diasersi di sekitar baris ini).
+  // Yang dijaga sekarang: kategori tetap ADA dalam bentuk berkelompok, bukan hilang.
+  ok(`${f}: memuat kategori off-topic (bentuk berkelompok, bukan enumerasi 83 baris)`,
+    /Entertainment/i.test(doc) && /politics/i.test(doc) && /religion/i.test(doc)
+    && /furniture/i.test(doc) && /topic signals, not keyword bans/i.test(doc));
   ok(`${f}: menegaskan §1 (jawaban atas pertanyaan sendiri tetap menang) tetap berlaku`,
     doc.includes('§1 always applies first') || doc.includes("§1's rule always wins"));
 });
