@@ -169,7 +169,7 @@ sudah jalan) — billing PROJECT Google Cloud-nya yang belum di-enable.
 Sistem turun anggun ke peta kurasi `utils/locationLandmarks.js` (45 kota)
 sampai billing dinyalakan di `console.cloud.google.com`.
 
-Skill doc terkait (`claude_responds/docs/12-locations-and-landmarks.md`,
+Skill doc terkait (`claude_responds/docs/13-locations-and-landmarks.md`,
 mirror di `chat_gpt_responds/`) diperbarui dengan §2a (tangga prioritas:
 live > kurasi > generik; blok kosong itu NORMAL, jangan pernah dilaporkan ke
 customer sebagai kegagalan) dan §2b (larangan keras mengarang nama

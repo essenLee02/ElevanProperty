@@ -47,17 +47,10 @@ const SKILL_DOCS_DIR = path.join(PROJECT_ROOT, 'skills', 'claude_responds', 'doc
  * hilang bahkan sekali pun (lihat M62/M83/M84).
  */
 const RAG_ELIGIBLE_SKILL_DOCS = [
-  '06-property-type-playbooks.md',
-  '07-catalog-and-recommendations.md',
-  '09-date-money-parsing.md',
-  '10-house-pilots.md',
-  '11-facilities-reference.md',
-  '12-locations-and-landmarks.md',
-  '13-legalitas-pajak-kpr.md',  // M131: gantikan knowledge/property-id/ (dihapus, digabung ke sini)
   // M133: dialog contoh (few-shot) untuk kasus katalog tersulit — kota kosong,
   // area kosong, budget di luar stok, jumlah listing yang diminta customer.
   // REFERENSI, bukan aturan inti — aman lewat retrieval (lihat §5 M92 poin 2).
-  '14-catalog-conversation-cases.md'
+  '03-catalog-conversation-cases.md'
 ];
 
 function parseArgs(argv) {

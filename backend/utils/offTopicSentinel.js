@@ -8,7 +8,7 @@
  * kata kunci murah SEBAGAI langkah pertama (propertyKeywordFilter.js, hemat
  * token), tapi begitu pesan lolos penyaring itu dan diteruskan ke platform
  * API, keputusan akhir "diam atau balas" ada di tangan model — via skill doc
- * (`docs/08-offtopic-and-escalation.md` §3c) yang menginstruksikan model
+ * (`docs/04-offtopic-and-escalation.md` §3c) yang menginstruksikan model
  * membalas dengan token ini, PERSIS, tanpa teks lain, saat memutuskan diam.
  *
  * Deteksi exact-match (bukan substring) dengan sengaja: token ini hanya sah

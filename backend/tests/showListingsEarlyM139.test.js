@@ -10,7 +10,7 @@
  * ⛔ AKAR MASALAH yang ditemukan (bukan sekadar contoh dialog kurang):
  * `SKILL.md` §4 — OPERATING CONTRACT yang MENGALAHKAN docs/ — masih berbunyi
  * "❌ Never show listings mid-interview" dan mensyaratkan SEMUA slot wajib ✅
- * sebelum listing apa pun. Itu BERTENTANGAN LANGSUNG dengan doc 14 §0b (M134,
+ * sebelum listing apa pun. Itu BERTENTANGAN LANGSUNG dengan doc 03 §0b (M134,
  * 4 slot saja), dan karena SKILL.md adalah kontrak, SKILL.md yang menang.
  * Itulah sebabnya AI tetap meng-interview walau M134 sudah dikerjakan —
  * kelas kegagalan yang SAMA dengan "prompt outranks skill docs".
@@ -39,7 +39,7 @@ const ok = (label, cond, extra = '') => {
 const SKILL_DIRS = ['chat_gpt_responds', 'claude_responds', 'elevan-property-assistant'];
 const skillRoot = path.join(__dirname, '..', '..', 'skills');
 const readSkill = (d) => fs.readFileSync(path.join(skillRoot, d, 'SKILL.md'), 'utf8');
-const readDoc15 = (d) => fs.readFileSync(path.join(skillRoot, d, 'docs', '14-catalog-conversation-cases.md'), 'utf8');
+const readDoc15 = (d) => fs.readFileSync(path.join(skillRoot, d, 'docs', '03-catalog-conversation-cases.md'), 'utf8');
 
 async function main() {
   console.log('\n== Group 1: kontrak SKILL.md §4 sudah "show early", di KETIGA folder ==');
@@ -68,20 +68,33 @@ async function main() {
       !/Q1–Q14 qualification {2}→ {2}summary brief/.test(s));
   }
 
-  console.log('\n== Group 3: doc 14 selaras & byte-identical antar folder ==');
+  console.log('\n== Group 3: doc 03 selaras & byte-identical antar folder ==');
   {
     const base = readDoc15(SKILL_DIRS[0]);
     for (const d of SKILL_DIRS.slice(1)) {
-      ok(`doc 14 ${d} byte-identical dengan chat_gpt_responds`, readDoc15(d) === base);
+      ok(`doc 03 ${d} byte-identical dengan chat_gpt_responds`, readDoc15(d) === base);
     }
-    ok('doc 14 menegaskan "show as soon as you can"', /show as soon as you can/i.test(base));
-    ok('doc 14 punya tabel kapan slot lain baru relevan', /Then it is natural to ask/i.test(base));
-    ok('doc 14 melarang interview lanjutan sebagai anti-pattern',
+    ok('doc 03 menegaskan "show as soon as you can"', /show as soon as you can/i.test(base));
+    ok('doc 03 punya tabel kapan slot lain baru relevan', /Then it is natural to ask/i.test(base));
+    ok('doc 03 melarang interview lanjutan sebagai anti-pattern',
       /Keep interviewing after the 4 slots are known/i.test(base));
-    ok('doc 14 punya dialog kerja penuh Case 1 (Andy)', /8c\. Full worked dialogue/.test(base));
-    ok('doc 14 punya dialog kerja penuh Case 2/3 (Gresik)', /8d\. Full worked dialogue/.test(base));
-    ok('doc 14 punya variasi pembukaan lain', /8e\. Shorter variations/.test(base));
-    ok('doc 14 mengatur jumlah listing default 2', /default \*\*2\*\*/.test(base));
+    /* ⚠️ M180 (4 Sep 2026) — TIGA ASSERTION DIALOG PANJANG DIGANTI.
+     * Dulu tes ini MEWAJIBKAN doc 03 memuat tiga dialog kerja penuh
+     * (§8c Andy, §8d Gresik, §8e variasi) — beberapa KB contoh percakapan.
+     * Pemilik proyek memerintahkan `.md` dipangkas ke 6.000-6.500 char dan
+     * secara eksplisit menyebut contoh bertele-tele/repetitif sebagai
+     * pemborosan token yang harus dibuang. Jadi tes yang MEWAJIBKAN contoh
+     * itu mengunci kontrak LAMA.
+     * Yang dijaga sekarang adalah ATURAN-nya, bukan panjang contohnya —
+     * urutan alternatif dan larangan menukar area diam-diam adalah inti
+     * M139 yang sebenarnya. */
+    ok('doc 03 mengatur urutan alternatif saat stok kosong',
+      /same area other transaction/i.test(base) && /nearby area same type/i.test(base));
+    ok('doc 03 melarang menukar area diam-diam',
+      /Never substitute an area silently/i.test(base));
+    ok('doc 03 menangani kota yang tidak ada di katalog',
+      /City absent/i.test(base) && /never ask about areas in a city with\s+no stock/i.test(base));
+    ok('doc 03 mengatur jumlah listing default 2', /default \*\*2\*\*/.test(base));
   }
 
   console.log('\n== Group 4: PESAN NYATA skenario pemilik proyek → READY (bukan interview) ==');

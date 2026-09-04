@@ -96,20 +96,28 @@ const SKILLS_ROOT = path.join(__dirname, '..', '..', 'skills');
 const FOLDERS = ['claude_responds', 'chat_gpt_responds', 'elevan-property-assistant'];
 
 FOLDERS.forEach((f) => {
-  const doc = fs.readFileSync(path.join(SKILLS_ROOT, f, 'docs', '08-offtopic-and-escalation.md'), 'utf8');
+  const doc = fs.readFileSync(path.join(SKILLS_ROOT, f, 'docs', '04-offtopic-and-escalation.md'), 'utf8');
   ok(`${f}: memuat §3c`, doc.includes('3c. Full Category Reference & Silence Protocol'));
   ok(`${f}: memuat rujukan M131`, doc.includes('M131'));
   ok(`${f}: memuat token sentinel persis`, doc.includes('[[OFFTOPIC_SILENT]]'));
-  ok(`${f}: memuat semua 83 nomor kategori (cek #1, #43, #65, #83)`,
-    /\b1\. Movie, Film\b/.test(doc) && /\b43\. Candi, Candi\b/.test(doc) &&
-    /\b65\. Gods, Dewa, Tuhan, Allah\b/.test(doc) && /\b83\. Furnitur/.test(doc));
+  /* M181 (4 Sep 2026) - ASSERTION 83 NOMOR KATEGORI DIGANTI.
+   * Dulu tes ini mewajibkan enumerasi 83 kategori bernomor (~2.6 KB padat,
+   * 13.8 KB bentuk aslinya). Pemilik proyek menetapkan plafon 6.500-7.100
+   * char untuk SELURUH skill .md, dan daftar itu sendiri memakan sepertiganya.
+   * Diganti daftar KELOMPOK topik: sinyal sama, biaya jauh lebih kecil.
+   * Yang dijaga tetap sama - lihat dua assertion di bawah + token diam. */
+  ok(`${f}: memuat daftar kelompok topik off-topic`,
+    /hiburan/i.test(doc) && /olahraga/i.test(doc) && /politik/i.test(doc)
+    && /agama/i.test(doc) && /trading/i.test(doc));
+  ok(`${f}: menegaskan ini sinyal topik, bukan larangan kata kunci`,
+    /topic signals, not keyword bans/i.test(doc));
   ok(`${f}: menegaskan §1 (jawaban atas pertanyaan sendiri tetap menang) tetap berlaku`,
     doc.includes('§1 always applies first') || doc.includes("§1's rule always wins"));
 });
 
 // chat_gpt_responds sekarang HARUS ikut punya §3a/§3b juga (disinkronkan ulang sesi ini,
 // beda dari keputusan M129/M130 yang sengaja melewatkannya).
-const chatGptDoc = fs.readFileSync(path.join(SKILLS_ROOT, 'chat_gpt_responds', 'docs', '08-offtopic-and-escalation.md'), 'utf8');
+const chatGptDoc = fs.readFileSync(path.join(SKILLS_ROOT, 'chat_gpt_responds', 'docs', '04-offtopic-and-escalation.md'), 'utf8');
 ok('chat_gpt_responds: disinkron ulang, sekarang ikut memuat §3a (M129)', chatGptDoc.includes('3a. Property legal/financing terminology'));
 ok('chat_gpt_responds: disinkron ulang, sekarang ikut memuat §3b (M130)', chatGptDoc.includes('3b. Distance/travel-time questions'));
 
