@@ -2,11 +2,71 @@ const fs = require('fs');
 const path = require('path');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
+const BACKEND_ROOT = path.resolve(__dirname, '..');
 const SKILLS_ROOT = path.join(PROJECT_ROOT, 'skills');
 
 const DEFAULT_MAX_WEBSITE_SKILL_CHARACTERS = Number(process.env.SKILL_MAX_WEBSITE_CHARACTERS || 12000);
 const DEFAULT_MAX_RESPONSE_SKILL_CHARACTERS = Number(process.env.SKILL_MAX_RESPONSE_CHARACTERS || 22000);
 const DEFAULT_MAX_PROJECT_SKILL_CHARACTERS = Number(process.env.SKILL_MAX_PROJECT_CHARACTERS || 36000);
+
+function pathExists(directoryPath) {
+  try {
+    return fs.existsSync(directoryPath) && fs.statSync(directoryPath).isDirectory();
+  } catch (_) {
+    return false;
+  }
+}
+
+/* ⭐ M182 (arahan pemilik proyek, 4 Sep 2026) — AI_SKILL_CALL: SATU folder
+ * skill untuk SEMUA provider AI (OpenRouter, Claude, ChatGPT, DeepSeek, Qwen,
+ * Kimi, dst).
+ *
+ * Sebelumnya Claude membaca `claude_responds/` dan provider lain membaca
+ * `chat_gpt_responds/` — dua folder BERBEDA yang isinya sudah byte-identical
+ * sejak beberapa sesi lalu (dijaga identik lewat sinkronisasi manual setiap
+ * edit). AI_SKILL_CALL menghapus duplikasi itu: begitu diisi, KEDUA grup
+ * provider membaca persis folder yang sama — tidak ada lagi dua salinan yang
+ * bisa diam-diam berbeda.
+ *
+ * Nilai env (`backend/.env`): path RELATIF terhadap root `backend/` (mis.
+ * `AI_SKILL_CALL=asset\skills\chat_gpt_responds` ->
+ * `backend/asset/skills/chat_gpt_responds`), atau path ABSOLUT. Kosong/tidak
+ * diset -> perilaku LAMA sama sekali tidak berubah (chat_gpt_responds &
+ * claude_responds tetap terpisah, dibaca dari `skills/` di root proyek).
+ *
+ * ⛔ TIDAK PERNAH gagal senyap (pola M177/M178 di file ini): AI_SKILL_CALL
+ * yang diisi tapi foldernya tidak ada akan MENCATAT PERINGATAN KERAS ke
+ * console lalu tetap jalan dengan folder lama sebagai fallback — supaya
+ * salah ketik path tidak membuat AI kehilangan skill tanpa jejak di log.
+ */
+function resolveAiSkillCallDir() {
+  const raw = String(process.env.AI_SKILL_CALL || '').trim();
+  if (!raw) return null;
+
+  const normalized = raw.replace(/[\\/]+/g, path.sep);
+  const resolved = path.isAbsolute(normalized) ? normalized : path.join(BACKEND_ROOT, normalized);
+
+  if (!pathExists(resolved)) {
+    console.error(
+      '\n╔════════════════════════════════════════════════════════════════════╗\n' +
+      '║  ⛔ AI_SKILL_CALL DIISI TAPI FOLDER TIDAK DITEMUKAN                ║\n' +
+      '╚════════════════════════════════════════════════════════════════════╝\n' +
+      `   AI_SKILL_CALL : ${raw}\n` +
+      `   Resolved ke   : ${resolved}\n` +
+      '   AKIBAT        : dilewati untuk sesi ini — backend memakai lokasi\n' +
+      '                   lama (skills/chat_gpt_responds + skills/claude_responds\n' +
+      '                   di root proyek) sebagai fallback.\n' +
+      '   PERBAIKI      : pastikan foldernya ada persis di path itu, lalu\n' +
+      '                   restart backend.\n'
+    );
+    return null;
+  }
+
+  console.log(`[SKILL] AI_SKILL_CALL aktif — semua provider membaca: ${resolved}`);
+  return resolved;
+}
+
+const AI_SKILL_CALL_DIR = resolveAiSkillCallDir();
 
 const SKILL_GROUPS = {
   website_env_concept: {
@@ -19,7 +79,7 @@ const SKILL_GROUPS = {
   chatgpt: {
     name: 'chat_gpt_responds',
     title: 'ChatGPT Response Skill',
-    paths: [
+    paths: AI_SKILL_CALL_DIR ? [AI_SKILL_CALL_DIR] : [
       // Correct folder name requested by user.
       path.join(SKILLS_ROOT, 'chat_gpt_responds'),
 
@@ -30,7 +90,9 @@ const SKILL_GROUPS = {
   claude: {
     name: 'claude_responds',
     title: 'Claude Response Skill',
-    paths: [
+    // AI_SKILL_CALL set -> Claude membaca folder yang SAMA dengan provider
+    // lain (lihat catatan M182 di atas), bukan claude_responds/ terpisah.
+    paths: AI_SKILL_CALL_DIR ? [AI_SKILL_CALL_DIR] : [
       path.join(SKILLS_ROOT, 'claude_responds')
     ]
   }
@@ -44,14 +106,6 @@ function normalizeProvider(provider = 'shared') {
   if (['private', 'private_agent', 'local'].includes(value)) return 'private_agent';
 
   return 'shared';
-}
-
-function pathExists(directoryPath) {
-  try {
-    return fs.existsSync(directoryPath) && fs.statSync(directoryPath).isDirectory();
-  } catch (_) {
-    return false;
-  }
 }
 
 function getExistingSkillDirectories(groupKey) {
