@@ -3186,25 +3186,11 @@ function detectLanguage(message = '', history = []) {
 }
 
 const BASE_PROPERTY_ASSISTANT_PROMPT = `
-You are a professional property assistant for a property rental and sales platform in Indonesia.
-
-You must follow the project skill documentation provided below. The skill documentation is the main behavior standard for this website chatbot and WhatsApp chatbot.
-
-Core behavior:
-- Help customers buy, sell, or rent properties such as houses, villas, hotels, apartments, boarding houses, shophouses, offices, and warehouses.
-- LANGUAGE RULE: Always obey the ⚠️ FORCED REPLY LANGUAGE instruction that is injected above the conversation history — it overrides all other language detection. Never switch language just because the latest message is a short answer like a number, date, month name, or single word.
-- Stay focused on property topics only.
-- Prioritize the customer's latest message over older conversation history.
-- Remember returning customers by the combination of name, phone number, and location when conversation history is provided.
-- Use only backend property catalog data provided in the current request.
-- Do not invent property names, prices, facilities, addresses, locations, discounts, or availability.
-- Translate response labels and explanation text, but do not translate or change factual catalog data such as property names, IDs, addresses, city names, province names, prices, sizes, facilities, or image URLs.
-- If exact matching properties exist, list exact matching properties first.
-- If no exact match exists, clearly apologize or explain that no exact match is available, then provide only the closest alternatives from the backend catalog.
-- If the customer asks for rental houses in Surabaya, do not recommend hotels in Malang.
-- If the customer asks for hotels in Malang, recommend hotels in Malang if available.
-- If the customer asks for a budget range, respect the range when exact matching data exists; if alternatives are outside the range, say so clearly.
-- After listing property options, ask only one short follow-up question.
+You are a professional property assistant in Indonesia, speaking for one named human agent.
+Follow the skill documentation below exactly. Help customers rent or buy rumah, villa, hotel,
+apartemen, kos, ruko, kantor, gudang. Use ONLY the catalog data in this request - never invent a
+name, price, facility, address, availability or certificate. Translate labels, never factual
+catalog values. Stay on property topics; at most one short question per reply.
 `.trim();
 
 /**
@@ -3752,8 +3738,17 @@ ${resolvedAppName}
 ✅ Tanda tangan HANYA boleh ada satu kali — di dalam summary brief final (sudah termasuk dalam template di atas), dan TIDAK di tempat lain.
 `;
 
-  return `${getProjectSkillInstruction(provider, _skillContext(history, userMessage))}
-${forcedLangInstruction}
+  // ⭐ M178 — SKILL DOCS TIDAK LAGI DIULANG DI SINI.
+  // Setiap provider service SUDAH mengirim skill docs sebagai SYSTEM message
+  // (`systemPrompt = options.system || getProjectSkillInstruction(provider)`),
+  // lalu baris ini menyisipkannya SEKALI LAGI ke USER message. Hasilnya seluruh
+  // skill dikirim DUA KALI tiap panggilan API. Diukur sebelum perbaikan:
+  // system 25.409 char + user 56.389 char = 81.798 char (~22.7K token) per
+  // panggilan, dan sekitar sepertiganya murni salinan kedua.
+  // Ini utang lama yang tercatat sebagai "duplikasi payload ±87K token" saat
+  // skill docs masih 310 KB (waktu itu ~179K token per panggilan).
+  // ⛔ JANGAN kembalikan `getProjectSkillInstruction(...)` ke string ini.
+  return `${forcedLangInstruction}
 🪪 IDENTITAS ANDA (AGENT) — SUDAH DI-RESOLVE, PAKAI APA ADANYA:
 Nama agent (users.name) : ${resolvedAgentName}
 Nama aplikasi (APP_NAME): ${resolvedAppName}

@@ -260,7 +260,7 @@ console.log('\n── Group 6: jangkar listing tidak boleh berupa penolakan ─�
    Group 7 — SKILL DOCS TIDAK BOLEH MENGAJARKAN ATURAN LAMA
    ══════════════════════════════════════════════════════════════════════════
    Pelajaran skill-docs-M124-sync: dokumen yang masih mengajarkan perilaku lama
-   membuat LLM membantah kode yang sudah diperbaiki. Kalau doc 03 masih menulis
+   membuat LLM membantah kode yang sudah diperbaiki. Kalau doc 02 masih menulis
    "④ budget" sebagai slot minimum, model akan menanyakan harga lebih dulu
    walau backend sudah berhenti memaksanya. */
 console.log('\n── Group 7: skill docs sinkron dengan kode ──');
@@ -271,7 +271,7 @@ console.log('\n── Group 7: skill docs sinkron dengan kode ──');
   const FOLDERS = ['claude_responds', 'chat_gpt_responds', 'elevan-property-assistant'];
 
   for (const folder of FOLDERS) {
-    const doc = fs.readFileSync(path.join(root, folder, 'docs', '03-qualification-flow.md'), 'utf8');
+    const doc = fs.readFileSync(path.join(root, folder, 'docs', '02-qualification-flow.md'), 'utf8');
     ok(`${folder}: slot ke-4 dinyatakan LOKASI SPESIFIK`,
       /④\s*specificLocation/.test(doc));
     ok(`${folder}: slot ke-4 TIDAK lagi budget`,
@@ -284,9 +284,9 @@ console.log('\n── Group 7: skill docs sinkron dengan kode ──');
       /after a city change, the ONE question is the landmark/i.test(doc));
   }
 
-  const a = fs.readFileSync(path.join(root, 'claude_responds',   'docs', '03-qualification-flow.md'));
-  const b = fs.readFileSync(path.join(root, 'chat_gpt_responds', 'docs', '03-qualification-flow.md'));
-  ok('claude_responds & chat_gpt_responds doc 03 tetap BYTE-IDENTICAL', a.equals(b));
+  const a = fs.readFileSync(path.join(root, 'claude_responds',   'docs', '02-qualification-flow.md'));
+  const b = fs.readFileSync(path.join(root, 'chat_gpt_responds', 'docs', '02-qualification-flow.md'));
+  ok('claude_responds & chat_gpt_responds doc 02 tetap BYTE-IDENTICAL', a.equals(b));
 }
 
 console.log(`\n${'='.repeat(60)}`);

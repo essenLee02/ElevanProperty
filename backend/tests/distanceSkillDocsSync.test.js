@@ -20,7 +20,7 @@ const ROOT = path.join(__dirname, '..', '..');
 const FOLDERS = ['claude_responds', 'elevan-property-assistant'];
 
 FOLDERS.forEach((f) => {
-  const doc = fs.readFileSync(path.join(ROOT, 'skills', f, 'docs', '08-offtopic-and-escalation.md'), 'utf8');
+  const doc = fs.readFileSync(path.join(ROOT, 'skills', f, 'docs', '04-offtopic-and-escalation.md'), 'utf8');
   ok(`${f}: memuat §3b jarak/waktu tempuh`, doc.includes('3b. Distance/travel-time questions'));
   ok(`${f}: memuat rujukan M130`, doc.includes('M130'));
   ok(`${f}: melarang menebak nama pelabuhan`, /never state a specific ferry port/i.test(doc));

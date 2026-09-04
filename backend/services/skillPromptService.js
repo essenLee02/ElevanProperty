@@ -122,29 +122,14 @@ function getMarkdownFiles(directoryPath) {
 // `context` is optional (recent user message + a few history turns, lowercased).
 // When NOT provided (e.g. skill-status checks that don't have a live conversation),
 // every conditional file is included — preserves prior behavior for those callers.
-const CONDITIONAL_FILE_TRIGGERS = {
-  // Doc 06 — the 12 per-type playbooks. Only ONE property type is ever active in a
-  // conversation, but all twelve were loading on every turn (23KB). Q1–Q14 itself lives in
-  // doc 03 (always-on); doc 06 only adds the type-SPECIFIC slots, so a trigger miss degrades
-  // to "run the standard flow" — never to silence. Fires on any property-type noun or a
-  // type-specific slot word.
-  '06-property-type-playbooks.md': /\b(rumah|rmh|house|apartemen|apartment|apart|studio|hotel|motel|penginapan|villa|vila|kos|kost|kosan|indekos|ngekos|ngekost|ruko|rukan|shophouse|toko|kios|store|kantor|office|gudang|warehouse|mansion|kondotel|condotel|kavling|tanah|lahan|tower|lantai|grade|fit[\s-]?out|kamar|bedroom)\b/i,
-
-  // Doc 14 — worked catalog dialogues (32KB). These are EXAMPLES; the binding rules live in
-  // doc 07 (always-on), so a trigger miss degrades to "follow doc 07 without an example".
-  // Fires once the conversation actually reaches listings, stock or availability.
-  '14-catalog-conversation-cases.md': /\b(listing|katalog|catalog|rekomendasi|recommend|tersedia|available|stok|stock|pilihan|opsi|option|unit|properti\s+lain|area\s+lain|kota\s+lain|masih\s*ada|ada\s+(?:nggak|ngga|ga|gak|tidak|gk)|adakah|apakah\s+ada|minta\s+(?:\d{1,2}\s+)?(?:data|listing)|harga|budget|mahal|murah|sertifikat)\b/i,
-
-  '10-house-pilots.md': /\b(rumah|rmh|house|apartemen|apartment|apart|kontrakan|perumahan|kpr|cicilan|dp\b|rumah123|listing|masih\s*ada)\b/i,
-  '11-facilities-reference.md': /\b(fasilitas|facility|facilities|gym|kolam|pool|wifi|ac\b|parkir|parking|dapur|kitchen|furnish|kasur|bed|lemari|wardrobe|balkon|balcony|jacuzzi|sauna|yoga|mushola|laundry|elevator|lift\b)\b/i,
-  '12-locations-and-landmarks.md': /\b(dekat|deket|near|patokan|anchor|landmark|di\s+jalan|di\s+sekitar|kawasan|wisata|mall|mal\b|pakuwon|tunjungan|grand\s*city)\b/i,
-
-  // Legal/tax/financing reference. Same shape as 11/12: a large lookup table that only
-  // matters once the conversation actually reaches certificates, tax or a mortgage. Doc
-  // 08 §3a still carries the always-on handling rule for these terms, so a trigger miss
-  // degrades to "answer it from doc 08" rather than to silence.
-  '13-legalitas-pajak-kpr.md': /\b(shm|shgb|shsrs|hgb|ajb|ppjb|ppat|girik|imb|pbg|slf|sertifikat|certificate|legalitas|legality|notaris|notary|pajak|tax|bphtb|pph|kpr|mortgage|dp\b|uang\s*muka|cicilan|angsuran|tenor|bunga|akad|balik\s*nama|over\s*kredit)\b/i,
-};
+/* ⭐ M180 (4 Sep 2026) — TIDAK ADA LAGI DOC KONDISIONAL.
+ * 15 doc digabung jadi 5 (00 identitas/grounding · 02 memori/bahasa/kondisi ·
+ * 03 alur+slot+summary · 08 off-topic/legal/survei/eskalasi · 14 katalog).
+ * Semuanya INTI dan selalu dimuat, jadi peta trigger ini kosong — dulu ia
+ * menunjuk berkas 06/10/11/12/13/14 yang kini SUDAH TIDAK ADA, dan entri yang
+ * menunjuk berkas hilang tidak pernah cocok (gagal senyap).
+ * ⛔ Kalau menambah doc kondisional lagi: kunci pada NAMA BERKAS PERSIS. */
+const CONDITIONAL_FILE_TRIGGERS = {};
 // ⚠️ M171 (29 Agu 2026): doc 16-counterpart-roles-and-division-routing.md
 // DIHAPUS atas arahan pemilik proyek — fokus skill HANYA properti (kualifikasi
 // sewa/beli, rekomendasi katalog, jadwal & jarak survei), bukan routing
@@ -173,7 +158,8 @@ function readSkillFile(filePath) {
 
     return [
       '',
-      `--- FILE: ${path.relative(PROJECT_ROOT, filePath)} ---`,
+      // M180: basename saja — path lengkap tidak menambah makna bagi model.
+      `--- ${path.basename(filePath)} ---`,
       text
     ].join('\n');
   } catch (error) {
@@ -256,16 +242,33 @@ function loadResponseSkillPrompt(provider = 'shared', options = {}) {
 
 function loadProjectSkillPrompt(options = {}) {
   const provider = normalizeProvider(options.provider || 'shared');
-  const websitePrompt = loadWebsiteEnvSkillPrompt({
-    maxCharacters: Number(options.maxWebsiteCharacters || DEFAULT_MAX_WEBSITE_SKILL_CHARACTERS)
-  });
+
+  /* ⭐ M179 (4 Sep 2026) — `website_env_concept` TIDAK LAGI DIKIRIM KE AI.
+   *
+   * Diukur: grup itu menyumbang 12.104 char dari 28.184 char payload skill —
+   * 43%, dan NOL manfaat untuk mengobrol dengan customer properti. Isinya
+   * dokumentasi ARSITEKTUR untuk developer: daftar env var, kebijakan API key,
+   * kolom DB, batas TPM provider, urutan fallback AI, path folder.
+   *
+   * Dua alasan menghapusnya, dan keduanya berdiri sendiri:
+   *   1. BOROS — 43% payload untuk teks yang tidak pernah dipakai menjawab
+   *      pertanyaan properti mana pun.
+   *   2. MELANGGAR M175 — arahan pemilik proyek: `.md` yang dibaca platform AI
+   *      DILARANG memuat referensi backend. Seluruh dokumen ini adalah
+   *      referensi backend; menghapus nama service dari docs properti tapi
+   *      tetap menyuntikkan daftar env var lewat pintu lain = tidak konsisten.
+   *
+   * `loadWebsiteEnvSkillPrompt()` SENGAJA dipertahankan sebagai fungsi —
+   * dipakai getSkillGroupStatus()/health check, dan dokumennya tetap berguna
+   * untuk MANUSIA. Yang berubah hanya: ia tidak lagi ikut ke prompt AI.
+   * ⛔ JANGAN kembalikan `websitePrompt` ke array di bawah.
+   */
   const responsePrompt = loadResponseSkillPrompt(provider, {
     maxCharacters: Number(options.maxResponseCharacters || DEFAULT_MAX_RESPONSE_SKILL_CHARACTERS),
     context: options.context
   });
 
   const loaded = [
-    websitePrompt,
     responsePrompt
   ].filter(Boolean).join('\n\n');
 

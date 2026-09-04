@@ -144,7 +144,7 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const FOLDERS = ['claude_responds', 'chat_gpt_responds', 'elevan-property-assistant'];
 
 FOLDERS.forEach((f) => {
-  const doc = fs.readFileSync(path.join(ROOT, 'skills', f, 'docs', '03-qualification-flow.md'), 'utf8');
+  const doc = fs.readFileSync(path.join(ROOT, 'skills', f, 'docs', '02-qualification-flow.md'), 'utf8');
   ok(`${f}: aturan "all-positive Q5 tetap menghasilkan DUA baris"`,
     doc.includes('all-positive Q5 answer still produces BOTH lines'));
   ok(`${f}: aturan periode budget ≠ durasi menginap`,
@@ -153,9 +153,9 @@ FOLDERS.forEach((f) => {
     doc.includes('Udara kotor / berpolusi'));
 });
 
-const a = fs.readFileSync(path.join(ROOT, 'skills', 'claude_responds', 'docs', '03-qualification-flow.md'), 'utf8');
-const b = fs.readFileSync(path.join(ROOT, 'skills', 'chat_gpt_responds', 'docs', '03-qualification-flow.md'), 'utf8');
-ok('claude_responds & chat_gpt_responds doc 03 BYTE-IDENTICAL', a === b);
+const a = fs.readFileSync(path.join(ROOT, 'skills', 'claude_responds', 'docs', '02-qualification-flow.md'), 'utf8');
+const b = fs.readFileSync(path.join(ROOT, 'skills', 'chat_gpt_responds', 'docs', '02-qualification-flow.md'), 'utf8');
+ok('claude_responds & chat_gpt_responds doc 02 BYTE-IDENTICAL', a === b);
 
 console.log(`\nRESULT: ${pass}/${total}`);
 process.exit(pass === total ? 0 : 1);
