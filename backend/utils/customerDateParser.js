@@ -394,7 +394,24 @@ function parseCustomerDate(text, now = new Date()) {
       const mon = MONTH_LOOKUP[m[1]];
       const y = m[2] ? parseInt(m[2], 10) : null;
 
-      if (y && y > curY) return ok(y, mon, 1);
+      /* ⭐ M184 (6 Sep 2026) — HORMATI "awal / pertengahan / akhir <bulan>".
+       * Dulu ketiganya diabaikan dan SEMUA bulan-tanpa-tanggal jatuh ke tanggal 1.
+       * Customer yang bilang "akhir Desember" muncul di brief agent sebagai
+       * "01 Desember" — meleset ~30 hari untuk tanggal masuk/serah terima, dan
+       * agent menjadwalkan survei di paruh yang salah. Dipetakan konservatif:
+       * awal→5, pertengahan→15, akhir→hari terakhir bulan itu. Tanpa penanda,
+       * perilaku lama (tanggal 1) dipertahankan apa adanya. */
+      const partOfMonth = /\bakhir\b/.test(t) ? 'end'
+        : /\b(pertengahan|tengah)\b/.test(t) ? 'mid'
+          : /\bawal\b/.test(t) ? 'start' : null;
+      const dayFor = (year, month1to12) => {
+        if (partOfMonth === 'end') return daysInMonth(month1to12 - 1, year);
+        if (partOfMonth === 'mid') return 15;
+        if (partOfMonth === 'start') return 5;
+        return 1;
+      };
+
+      if (y && y > curY) return ok(y, mon, dayFor(y, mon));
       // Explicit past year → REJECT, do not silently reinterpret as "next
       // occurrence". "Februari 2023" is almost certainly a typo or a
       // customer testing the bot, not "Februari 2027" — ask, don't guess.
@@ -413,8 +430,8 @@ function parseCustomerDate(text, now = new Date()) {
           fallbackSummary: WAITING_THE_UPDATE,
         };
       }
-      if (mon > curM) return ok(curY, mon, 1);          // bulan depan tahun ini → tgl 1
-      return ok(curY + 1, mon, 1);                       // sudah lewat → tahun depan tgl 1
+      if (mon > curM) return ok(curY, mon, dayFor(curY, mon));   // bulan depan tahun ini
+      return ok(curY + 1, mon, dayFor(curY + 1, mon));           // sudah lewat → tahun depan
     }
   }
 

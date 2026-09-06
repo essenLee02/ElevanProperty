@@ -152,7 +152,7 @@ async function getImagesForMentionedProperties(replyText, agentUserId) {
   try {
     candidates = await Property.findAll({
       where: { user_id: agentUserId },
-      attributes: ['property_id', 'title'],
+      attributes: ['property_id', 'title', 'address'],
       limit: 500, // agent tunggal jarang punya lebih — batas jaga-jaga, bukan pemotong nyata
       raw: true,
     });
@@ -161,18 +161,61 @@ async function getImagesForMentionedProperties(replyText, agentUserId) {
     return [];
   }
 
+  /* ⛔ M183 (6 Sep 2026) — JUDUL TIDAK UNIK, JANGAN DIPAKAI SENDIRIAN.
+   * Bug produksi (transkrip 3 Sep): balasan menampilkan SATU listing
+   * "Wiyung House Sale Surabaya — Jl. Wiyung No. 72", tetapi customer menerima
+   * TIGA foto. Sebabnya katalog agent ini punya 14 properti berjudul PERSIS
+   * "Wiyung House Sale Surabaya" (alamat berbeda: No. 58, 44, 64, 72, …).
+   * Pencocokan lama `text.includes(title)` cocok ke KEEMPAT BELAS baris itu,
+   * lalu `.slice(0, 3)` mengirim 3 foto pertama menurut urutan database —
+   * yaitu foto RUMAH LAIN (No. 58/44/64), bukan rumah yang ditampilkan (No. 72).
+   * Jadi ini bukan sekadar spam: fotonya memang milik properti yang SALAH.
+   *
+   * Perbaikan: identitas kartu = judul + ALAMAT (alamat ikut dicetak di setiap
+   * kartu katalog, lihat template di whatsappAIService/chatbotPrivateController).
+   * Alamat itulah yang membedakan 14 baris berjudul sama. Kalau alamat sebuah
+   * properti TIDAK muncul di teks, properti itu TIDAK dianggap tampil —
+   * gagal-aman ke NOL foto, konsisten dengan aturan lama di kepala berkas ini:
+   * lebih baik tidak mengirim foto daripada mengirim foto rumah yang salah.
+   */
+  const lowerText = text.toLowerCase();
   const mentioned = candidates.filter((p) => {
     const title = String(p.title || '').trim();
-    return title.length >= 3 && text.toLowerCase().includes(title.toLowerCase());
+    if (title.length < 3 || !lowerText.includes(title.toLowerCase())) return false;
+
+    const address = String(p.address || '').trim();
+    const sameTitleCount = candidates.filter(
+      (c) => String(c.title || '').trim().toLowerCase() === title.toLowerCase()
+    ).length;
+
+    // Judul unik di katalog agent ini → judul saja sudah cukup (perilaku lama).
+    if (sameTitleCount <= 1) return true;
+
+    // Judul KEMBAR → wajib dipastikan lewat alamat yang tercetak di kartu.
+    return address.length >= 5 && lowerText.includes(address.toLowerCase());
   });
 
+  /* Satu properti = satu foto, dan hanya SEKALI. Dedup by property_id menutup
+   * sisa kemungkinan baris ganda; jumlah foto tidak boleh melebihi jumlah kartu
+   * yang benar-benar tampil (dihitung dari penanda harga per kartu). */
+  const seen = new Set();
+  const unique = mentioned.filter((p) => {
+    if (seen.has(p.property_id)) return false;
+    seen.add(p.property_id);
+    return true;
+  });
+
+  const cardCount = (text.match(/Estimasi Harga|Estimated Price/gi) || []).length;
+  const limit = Math.min(MAX_IMAGES_PER_REPLY, cardCount > 0 ? cardCount : MAX_IMAGES_PER_REPLY);
+
   const results = [];
-  for (const property of mentioned.slice(0, MAX_IMAGES_PER_REPLY)) {
+  for (const property of unique.slice(0, limit)) {
     const image = await getRandomImageForProperty(property.property_id);
     if (image) {
       results.push({
         propertyId: property.property_id,
         title: property.title,
+        address: property.address || '',
         absoluteUrl: image.absoluteUrl,
       });
     }

@@ -283,10 +283,16 @@ async function sendViaKirimi(targetPhone, message, deviceId, mediaUrl = null) {
     secret,
     device_id : String(deviceId).trim(),
     phone,
-    // Pesan gambar TIDAK mendapat tag "sent via" — caption gambar properti
-    // yang diakhiri kalimat "(dikirim via ...)" terasa aneh; tag itu hanya
-    // relevan untuk balasan teks penuh.
-    message   : mediaUrl ? String(message || '').trim() : appendSentViaTag(String(message).trim())
+    /* ⭐ M183: caption gambar SEKARANG juga mendapat tag "sent via".
+     * Dulu tag sengaja dilewati karena caption gambar hanya berisi judul
+     * ("📷 Wiyung House…") dan tag terasa aneh di situ. Sejak M183 caption
+     * gambar adalah KARTU LISTING PENUH — pesan balasan sungguhan — dan tag itu
+     * dipakai isOwnEcho() untuk mengenali pesan AI sendiri saat dipantulkan
+     * balik oleh WhatsApp. Tanpa tag, kartu bergambar bisa terbaca sebagai pesan
+     * CUSTOMER pada giliran berikutnya. Caption kosong tetap tanpa tag. */
+    message   : String(message || '').trim()
+      ? appendSentViaTag(String(message).trim())
+      : ''
   };
   if (mediaUrl) payload.media_url = String(mediaUrl).trim();
 
@@ -784,33 +790,58 @@ async function handleDebouncedBatch({ combinedMessage, sender, name, normSender,
   let sendError = null;
   const replyParts = aiResult.replyParts && aiResult.replyParts.length ? aiResult.replyParts : [aiResult.reply];
 
+  /* ⭐ M183 (6 Sep 2026) — SATU KARTU LISTING = SATU PESAN = FOTO + TEKSNYA.
+   *
+   * Perilaku LAMA: semua teks dikirim dulu, lalu foto menyusul sebagai pesan
+   * TERPISAH bercaption judul saja ("📷 Wiyung House Sale Surabaya"). Di WhatsApp
+   * hasilnya persis keluhan pemilik proyek pada transkrip 3 Sep: blok teks
+   * listing di satu tempat, lalu tumpukan foto tanpa konteks di tempat lain —
+   * dan jumlah fotonya pun tidak sama dengan jumlah listing.
+   *
+   * Perilaku BARU: foto ditempelkan ke kartunya sendiri sebagai media + caption,
+   * sehingga customer melihat gambar dan detail unitnya menyatu:
+   *     1. Wiyung House Sale Surabaya
+   *     [FOTO]
+   *        📍 Lokasi … 💰 Estimasi Harga … 🏷️ Fasilitas …
+   * Bagian NON-kartu (kalimat pembuka, pertanyaan penutup) tetap dikirim sebagai
+   * pesan teks tersendiri — pertanyaan tidak pernah menempel pada kartu.
+   *
+   * Pencarian gambar dilakukan PER KARTU (bukan atas gabungan seluruh teks),
+   * jadi satu kartu paling banyak menghasilkan satu foto — mustahil lagi 3 foto
+   * untuk 1 listing. Seluruh blok ini fail-open: kegagalan mencari/mengirim foto
+   * tidak boleh mengubah status terkirimnya teks.
+   */
+  const imagesEnabled = String(process.env.PROPERTY_IMAGE_SEND_ENABLED || 'OFF').toUpperCase() === 'ON';
+  const CARD_RE = /Estimasi Harga|Estimated Price/i;
+  const mediaByPartIndex = new Map();
+
+  if (imagesEnabled) {
+    try {
+      const { getImagesForMentionedProperties } = require('../services/propertyImageService');
+      for (let i = 0; i < replyParts.length; i++) {
+        const part = String(replyParts[i] || '');
+        if (!CARD_RE.test(part)) continue;              // hanya kartu listing yang dapat foto
+        const found = await getImagesForMentionedProperties(part, agent.user_id);
+        if (found.length) mediaByPartIndex.set(i, found[0]);   // TEPAT satu foto per kartu
+      }
+    } catch (imgErr) {
+      safeLog('KIRIMI_PROPERTY_IMAGE_LOOKUP_FAILED', { sessionId: session.id, error: imgErr.message }, 'error');
+    }
+  }
+
   try {
-    for (const part of replyParts) {
-      await sendViaKirimi(sender, part, agent.kirimi_device_id);
+    for (let i = 0; i < replyParts.length; i++) {
+      const media = mediaByPartIndex.get(i);
+      await sendViaKirimi(sender, replyParts[i], agent.kirimi_device_id, media ? media.absoluteUrl : null);
     }
     sent = true;
 
-    // ── Gambar properti (opsional, OFF secara default) ──────────────────
-    // Dikirim SETELAH seluruh teks terkirim sukses — customer melihat brief/
-    // katalog lengkap dulu, baru foto menyusul. Korelasi kartu↔gambar lewat
-    // NAMA properti yang benar-benar ada di teks yang SUDAH terkirim (lihat
-    // catatan fail-closed di propertyImageService.js) — tidak pernah menebak
-    // dari urutan. Non-fatal sepenuhnya: kegagalan di sini TIDAK PERNAH
-    // membuat status "✅ Terkirim" balasan teks berubah jadi gagal.
-    if (String(process.env.PROPERTY_IMAGE_SEND_ENABLED || 'OFF').toUpperCase() === 'ON') {
-      try {
-        const { getImagesForMentionedProperties } = require('../services/propertyImageService');
-        const fullReplyText = replyParts.join('\n\n');
-        const images = await getImagesForMentionedProperties(fullReplyText, agent.user_id);
-        for (const img of images) {
-          await sendViaKirimi(sender, `📷 ${img.title}`, agent.kirimi_device_id, img.absoluteUrl);
-        }
-        if (images.length) {
-          safeLog('KIRIMI_PROPERTY_IMAGES_SENT', { sessionId: session.id, count: images.length });
-        }
-      } catch (imgErr) {
-        safeLog('KIRIMI_PROPERTY_IMAGE_SEND_FAILED', { sessionId: session.id, error: imgErr.message }, 'error');
-      }
+    if (mediaByPartIndex.size) {
+      safeLog('KIRIMI_PROPERTY_IMAGES_SENT', {
+        sessionId: session.id,
+        count: mediaByPartIndex.size,
+        cards: replyParts.filter((p) => CARD_RE.test(String(p || ''))).length,
+      });
     }
 
     safeLog('KIRIMI_REPLY_SENT', {

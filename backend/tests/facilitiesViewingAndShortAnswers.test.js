@@ -32,6 +32,15 @@ const Q11 = 'Untuk furnitur, lebih prefer yang sudah furnished, semi-furnished, 
 const Q9B = 'Kalau mau lihat unitnya langsung, enaknya tanggal berapa? 📅';
 const Q9C = 'Kira-kira jam berapa yang paling pas? ⏰';
 
+// ⚠️ BULAN RELATIF, BUKAN LITERAL. Fixture ini dulu menulis bulan tetap; begitu tanggal
+// sistem melewatinya, customerDateParser (benar) menggulung ke tahun berikutnya dan asersi
+// gagal SELAMANYA tanpa ada bug nyata. `_futureMonth` selalu ~3 bulan ke depan.
+const _BULAN_ID = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus',
+                   'September','Oktober','November','Desember'];
+const _fm = (() => { const d = new Date(); d.setMonth(d.getMonth() + 3); return d; })();
+const _futureMonth = _BULAN_ID[_fm.getMonth()];
+const _futureYear = _fm.getFullYear();
+
 console.log('\n── Q9: penolakan telanjang = Mandiri (bukan slot kosong) ──');
 for (const ans of ['Tdk perlu. Saya survei sndri', 'Tdk perlu', 'Tdk mau', 'Saya survei sndri',
                    'Saya survei sndrian', 'Saya survei sendirian', 'gak usah']) {
@@ -48,8 +57,8 @@ ok('"full" → fully furnished',          answer(Q11, 'full', 'furnishing') === 
 ok('"kosongan" → unfurnished',          answer(Q11, 'kosongan', 'furnishing') === 'unfurnished/kosongan');
 
 console.log('\n── Q9b: tanggal survei, dan hak menolak ──');
-ok('"tanggal 20 Agustus" → tanggal rapi (bukan ISO)',
-   answer(Q9B, 'tanggal 20 Agustus', 'viewingDate') === '20 Agustus 2026');
+ok('"tanggal 20 <bulan depan>" → tanggal rapi (bukan ISO)',
+   answer(Q9B, `tanggal 20 ${_futureMonth}`, 'viewingDate') === `20 ${_futureMonth} ${_futureYear}`);
 for (const ans of ['lihat listing saja', 'belum mau survei', 'skip']) {
   ok(`"${ans}" → Minta listing`, answer(Q9B, ans, 'viewingDate') === 'Minta listing');
 }

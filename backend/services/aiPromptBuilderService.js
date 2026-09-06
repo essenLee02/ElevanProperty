@@ -1245,12 +1245,30 @@ function extractQualificationState(history = [], currentMessage = '') {
     const hasMoveInCue  = /\b(check[\s-]?in|checkin|masuk|mulai\s+(sewa|tinggal|huni|nginap|menginap)|tempati|menempati|pindah|nginap|menginap|booking\s+dari)\b/i.test(text);
     const isViewingOnly = /\b(viewing|survei|survey|lihat\s+unit|lihat\s+propert|kunjungan|jadwal\w*)\b/i.test(text) && !hasMoveInCue;
 
-    if ((!state.moveInDate && !isViewingOnly) || (isCorrectionMsg && !isViewingOnly)) {
+    /* ⭐ M184 (6 Sep 2026) — JAWABAN TANGGAL PASTI HARUS MENIMPA JAWABAN BULAN.
+     * Bug nyata: customer menjawab "Akhir Desember", AI lalu bertanya "boleh
+     * diinfokan tanggal pastinya?", customer menjawab "25 Desember" — dan
+     * jawaban PASTI itu DIBUANG karena Q8 first-match-wins, sehingga summary
+     * memuat 01 Desember. Persis pola yang paling dikeluhkan: AI bertanya, lalu
+     * mengabaikan jawabannya.
+     * Bug ini lama tersembunyi karena fixture tesnya memakai bulan yang sudah
+     * LEWAT — nilai vague-nya ditolak (reject_past) sehingga slot masih kosong
+     * dan jawaban pasti kebetulan masuk. Begitu bulannya jatuh di masa depan,
+     * kegagalan aslinya muncul.
+     * Aturan: nilai yang berasal dari jawaban TANPA tanggal (bulan saja) ditandai
+     * vague dan BOLEH ditimpa sekali oleh pesan yang menyebut tanggal eksplisit. */
+    const hasExplicitDay = /(?:^|\D)(3[01]|[12]\d|0?[1-9])\s*(?:jan|feb|mar|apr|mei|jun|jul|agu|sep|okt|nov|des|\/|-)/i.test(raw);
+    const canOverwriteVague = state.moveInDateVague === true && hasExplicitDay;
+
+    if ((!state.moveInDate && !isViewingOnly) || (isCorrectionMsg && !isViewingOnly)
+        || (canOverwriteVague && !isViewingOnly)) {
       const parsed = parseCustomerDate(raw, now);
       if (parsed) {
         if (parsed.status === 'ok') {
           state.moveInDate    = parsed.formatted;
           state.moveInDateAsk = null;
+          // vague = jawaban ini tidak menyebut tanggal, hanya bulan/periode.
+          state.moveInDateVague = !hasExplicitDay;
         } else if (parsed.status === 'ask_current_month') {
           state.moveInDateAsk = 'current_month';
         } else if (parsed.status === 'ask_soon') {

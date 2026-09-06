@@ -181,6 +181,13 @@ async function callChatGPTResponseAPI(input, options = {}) {
       // pattern already applied to Kimi (KIMI_TIMEOUT_MS) — see that comment
       // for the full reasoning. Default unchanged (90000) so behavior doesn't
       // shift silently for anyone who hasn't set CHAT_GPT_TIMEOUT_MS.
+      //
+      // ⛔ M183 (6 Sep 2026) — BUG DIPERBAIKI: baris ini dulu membaca
+      // `CHAT_CHAT_GPT_TIMEOUT_MS` (dobel "CHAT_"), nama yang TIDAK PERNAH ADA
+      // di .env. Akibatnya `CHAT_GPT_TIMEOUT_MS=30000` yang jelas-jelas tertulis
+      // di .env tidak pernah terbaca dan provider ini diam-diam memakai default
+      // 90000ms — persis kelas kegagalan M126 (config terlihat diatur, padahal
+      // nol pengaruh). Nama env yang benar: CHAT_GPT_TIMEOUT_MS.
       timeout: Number(process.env.CHAT_GPT_TIMEOUT_MS || 90000)
     });
 

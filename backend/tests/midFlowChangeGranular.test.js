@@ -46,14 +46,18 @@ const A = (m) => ({ role: 'ai', message: m });
  * Aturannya sama dengan produksi: tanggal tanpa tahun yang sudah lewat tahun
  * ini berarti tahun depan.
  */
+// ⚠️ BULAN RELATIF, BUKAN LITERAL. Fixture ini dulu menulis bulan tetap; begitu tanggal
+// sistem melewatinya, customerDateParser (benar) menggulung ke tahun berikutnya dan asersi
+// gagal SELAMANYA tanpa ada bug nyata. `_futureMonth` selalu ~3 bulan ke depan.
+const _BULAN_ID = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus',
+                   'September','Oktober','November','Desember'];
+const _fm = (() => { const d = new Date(); d.setMonth(d.getMonth() + 3); return d; })();
+const _futureMonth = _BULAN_ID[_fm.getMonth()];
+const _futureYear = _fm.getFullYear();
+
 function expectedAugust25() {
-  const now = new Date();
-  const thisYear = now.getFullYear();
-  const target = new Date(thisYear, 7, 25);       // 7 = Agustus (0-indexed)
-  const year = target < new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    ? thisYear + 1
-    : thisYear;
-  return `25 Agustus ${year}`;
+  // Nama dipertahankan agar diff kecil; nilainya kini mengikuti _futureMonth.
+  return `25 ${_futureMonth} ${_futureYear}`;
 }
 
 console.log('\n== Group 1: transkrip nyata — GANTI KOTA via jawaban Q7 ==');
@@ -69,9 +73,9 @@ console.log('\n== Group 1: transkrip nyata — GANTI KOTA via jawaban Q7 ==');
     A('Sudah lihat berapa Rumah di Surabaya?'),
     C('Ada 5, ga cocok terlalu kecil'),
     A('Rencananya masuk atau pindah bulan apa?'),
-    C('Akhir agustus'),
+    C(`Akhir ${_futureMonth}`),
     A('Boleh diinfokan tanggal pastinya?'),
-    C('25 agustus'),
+    C(`25 ${_futureMonth}`),
     C('Berdua saja'),
     C('Btw daerah Pakuwon juga oke'),
     A('Untuk furnitur, lebih prefer yang sudah furnished, semi-furnished, atau kosongan saja?'),
@@ -107,7 +111,7 @@ console.log('\n== Group 2: kota baru TIDAK reverts di giliran berikutnya ==');
     A('Kisaran harga?'),
     C('50jt/tahun'),
     A('Rencana masuk kapan?'),
-    C('25 agustus'),
+    C(`25 ${_futureMonth}`),
     A('Ada lokasi patokan?'),
     C('dekat Grand City'),
     A('Selain area sekitar, masih oke?'),
@@ -128,7 +132,7 @@ console.log('\n== Group 3: GANTI TRANSAKSI (sewa → beli) ==');
     A('Kisaran harga?'),
     C('50jt/tahun'),
     A('Rencana masuk kapan?'),
-    C('25 agustus'),
+    C(`25 ${_futureMonth}`),
     A('Bersama siapa?'),
     C('berdua'),
     A('Ada lokasi patokan?'),

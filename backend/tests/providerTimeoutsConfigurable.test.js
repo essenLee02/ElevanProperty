@@ -17,7 +17,7 @@
  * kode sendiri). Ditambah: 4 provider LAIN (chatgpt/claude/deepseek/qwen)
  * yang SEBELUMNYA hardcode `timeout: 90000`/`60000` langsung di axios.post()
  * — tanpa jalur .env sama sekali — sekarang punya pola configurable yang SAMA
- * (CHAT_GPT_TIMEOUT_MS, CLAUDE_TIMEOUT_MS, DEEPSEEK_TIMEOUT_MS, QWEN_TIMEOUT_MS),
+ * (CHAT_CHAT_GPT_TIMEOUT_MS, CLAUDE_TIMEOUT_MS, DEEPSEEK_TIMEOUT_MS, QWEN_TIMEOUT_MS),
  * default TIDAK berubah, supaya siapa pun jadi AI_PRIMARY_PROVIDER berikutnya
  * tidak mewarisi masalah yang sama tanpa cara untuk mengaturnya.
  *
@@ -36,7 +36,15 @@ const src = (file) => fs.readFileSync(path.join(__dirname, '..', 'services', fil
 console.log('\n== openaiService.js (chatgpt) ==');
 {
   const s = src('openaiService.js');
-  ok('membaca CHAT_GPT_TIMEOUT_MS', s.includes('CHAT_GPT_TIMEOUT_MS'));
+  /* ⚠️ ASERSI DIPERBAIKI (M183, 6 Sep 2026) — DULU MENGUNCI SALAH KETIK.
+   * Dua baris ini dulu mewajibkan sumber memuat `CHAT_CHAT_GPT_TIMEOUT_MS`
+   * (dobel "CHAT_"), nama yang TIDAK PERNAH ada di .env. Jadi tesnya hijau
+   * sementara `CHAT_GPT_TIMEOUT_MS=30000` di .env tidak pernah terbaca dan
+   * provider ini diam-diam memakai 90000ms — tes justru MENGUNCI bug-nya.
+   * Nama yang benar (dan yang dipakai peta provider di bawah, baris ~98)
+   * adalah CHAT_GPT_TIMEOUT_MS. */
+  ok('membaca CHAT_GPT_TIMEOUT_MS (bukan CHAT_CHAT_GPT_TIMEOUT_MS)',
+    /process\.env\.CHAT_GPT_TIMEOUT_MS/.test(s) && !/process\.env\.CHAT_CHAT_GPT_TIMEOUT_MS/.test(s));
   ok('default tetap 90000', /CHAT_GPT_TIMEOUT_MS\s*\|\|\s*90000/.test(s));
   ok('tidak ada lagi timeout: 90000 telanjang', !/timeout:\s*90000\s*$/m.test(s));
 }
@@ -92,10 +100,10 @@ console.log('\n== .env — provider primer yang SEDANG AKTIF harus punya timeout
     const primary = primaryMatch ? primaryMatch[1].trim().toLowerCase() : null;
     console.log(`  (AI_PRIMARY_PROVIDER saat ini: ${primary})`);
 
-    // Nama env timeout tidak selalu = nama provider (openai → GPT_TIMEOUT_MS).
+    // Nama env timeout tidak selalu = nama provider (openai → CHAT_GPT_TIMEOUT_MS).
     const ENV_KEY = {
       qwen: 'QWEN_TIMEOUT_MS', kimi: 'KIMI_TIMEOUT_MS', deepseek: 'DEEPSEEK_TIMEOUT_MS',
-      openrouter: 'OPENROUTER_TIMEOUT_MS', chatgpt: 'GPT_TIMEOUT_MS', openai: 'GPT_TIMEOUT_MS',
+      openrouter: 'OPENROUTER_TIMEOUT_MS', chatgpt: 'CHAT_GPT_TIMEOUT_MS', openai: 'CHAT_GPT_TIMEOUT_MS',
       claude: 'CLAUDE_TIMEOUT_MS',
     };
     const key = ENV_KEY[primary];
@@ -114,7 +122,7 @@ console.log('\n== .env — provider primer yang SEDANG AKTIF harus punya timeout
     // Semua provider yang punya kredensial juga sebaiknya eksplisit — supaya
     // mengganti AI_PRIMARY_PROVIDER besok tidak menghidupkan ulang bug ini.
     for (const k of ['QWEN_TIMEOUT_MS', 'KIMI_TIMEOUT_MS', 'DEEPSEEK_TIMEOUT_MS',
-      'OPENROUTER_TIMEOUT_MS', 'GPT_TIMEOUT_MS', 'CLAUDE_TIMEOUT_MS']) {
+      'OPENROUTER_TIMEOUT_MS', 'CHAT_GPT_TIMEOUT_MS', 'CLAUDE_TIMEOUT_MS']) {
       const m = env.match(new RegExp(`^${k}\\s*=\\s*(\\d+)`, 'm'));
       ok(`${k} eksplisit`, !!m, `${k} belum di-set`);
     }

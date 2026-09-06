@@ -48,6 +48,15 @@ const Q5 = 'Ada yang pasti tidak cocok? Misalnya yang hadap barat, dekat jalan r
 const Q3 = 'Di Surabaya, ada apartemen kisaran Rp 800.000 - Rp 1.400.000 per malam dan Rp 2.000.000 - Rp 3.500.000 per malam. Kira-kira yang mana lebih sesuai? 💰';
 
 // ───────────────────────────────────────────────────────────────────────────
+// ⚠️ BULAN RELATIF, BUKAN LITERAL. Fixture ini dulu menulis bulan tetap; begitu tanggal
+// sistem melewatinya, customerDateParser (benar) menggulung ke tahun berikutnya dan asersi
+// gagal SELAMANYA tanpa ada bug nyata. `_futureMonth` selalu ~3 bulan ke depan.
+const _BULAN_ID = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus',
+                   'September','Oktober','November','Desember'];
+const _fm = (() => { const d = new Date(); d.setMonth(d.getMonth() + 3); return d; })();
+const _futureMonth = _BULAN_ID[_fm.getMonth()];
+const _futureYear = _fm.getFullYear();
+
 console.log('── (a) durasi sukarela "book selama 5 hari" ──');
 {
   const H = [U('Saya ingin booking apartemen di Surabaya'), A(Q3),
@@ -112,7 +121,7 @@ console.log('\n── (c) nada Q10 mengikuti konteks menginap vs sewa ──');
   const rent = [U('Saya mau sewa rumah di Surabaya'), A('Di area mana?'), U('Gubeng'),
                 A('Sudah lihat berapa?'), U('Belum'),
                 A('kisaran 30 juta dan 60 juta per tahun?'), U('30 juta'),
-                A('masuk bulan apa?'), U('September 2026'),
+                A('masuk bulan apa?'), U(`${_futureMonth} ${_futureYear}`),
                 A('tinggal bersama siapa?'), U('keluarga'), ...tail];
 
   const sB = extractQualificationState(book, 'Saya survei sendiri');

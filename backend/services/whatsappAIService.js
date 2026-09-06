@@ -732,7 +732,27 @@ async function _generateWhatsAppAIReplyCore(params) {
       : await findAreaCandidatesInText({ userId: agentUserId, city: realCity, text: message });
     const realArea = areaMatch.area;
 
-    if (!realArea && areaMatch.candidates.length > 1) {
+    /* ⛔ M184 (6 Sep 2026) — NAMA KOTA BUKAN "AREA AMBIGU".
+     * Bug nyata: customer menjawab pertanyaan KOTA dengan "Di Sidoarjo", lalu
+     * gerbang M162 mencocokkannya ke dua area katalog yang KEBETULAN memuat kata
+     * "Sidoarjo" ("Puri Indah Sidoarjo", "Sidoarjo Kota") dan balik bertanya
+     * "2 kawasan dengan nama mirip, yang mana?" — padahal customer baru saja
+     * menjawab kotanya, bukan menyebut area. Customer melihat pertanyaan aneh
+     * yang tidak dia picu.
+     * Aturan: kalau SEMUA kandidat hanya cocok karena memuat nama kota itu
+     * sendiri, itu gema nama kota — bukan sebutan area yang ambigu. Lanjutkan
+     * tanpa area; alur normal akan menanyakan/menyarankan area NYATA setelah ini.
+     * Ambiguitas asli (mis. "Pakuwon" → Pakuwon City / Pakuwon Indah) tidak
+     * memuat nama kota, jadi tetap tertangkap seperti sebelumnya. */
+    const cityEchoOnly = Boolean(realCity) && areaMatch.candidates.length > 1
+      && areaMatch.candidates.every((a) =>
+        String(a).toLowerCase().includes(String(realCity).toLowerCase()));
+
+    if (cityEchoOnly) {
+      console.log(`[WhatsAppAI] 📍 "${realCity}" hanya gema nama kota (${areaMatch.candidates.join(', ')}) — bukan area ambigu, lanjut.`);
+    }
+
+    if (!realArea && !cityEchoOnly && areaMatch.candidates.length > 1) {
       const opts = areaMatch.candidates.slice(0, 4);
       const list = opts.map((a) => `*${a}*`).join(' atau ');
       console.log(`[WhatsAppAI] 📍 Area ambigu (${opts.join(', ')}) — bertanya, tidak menebak.`);

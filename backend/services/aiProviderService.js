@@ -348,6 +348,22 @@ function checkAIProviderConfig() {
   const kimi        = checkKimiConfig();
   const openrouter  = checkOpenRouterConfig();
 
+  /* ⭐ M184 (6 Sep 2026) — huggingface IKUT DILAPORKAN.
+   * `getPrimaryAIProvider()` sudah menerima 'huggingface'/'hf' sebagai nilai
+   * AI_PRIMARY_PROVIDER yang sah, tapi audit konfigurasi ini TIDAK pernah
+   * melaporkannya — jadi provider yang bisa dipilih tidak muncul sama sekali
+   * saat seseorang mengecek kesiapan konfigurasi, dan tesnya crash
+   * (`cfg.huggingface.provider` pada undefined). Dilaporkan seperti provider
+   * lain; require dibuat defensif supaya berkas service yang hilang/rusak
+   * tidak menjatuhkan seluruh audit. */
+  let huggingface = { provider: 'huggingface', ready: false, error: 'huggingfaceService tidak dapat dimuat' };
+  try {
+    ({ checkHuggingFaceConfig: huggingface } = require('./huggingfaceService'));
+    huggingface = huggingface();
+  } catch (error) {
+    huggingface = { provider: 'huggingface', ready: false, error: error.message };
+  }
+
   return {
     primaryProvider      : getPrimaryAIProvider(),
     providerOrder        : getAIProviderOrder(),
@@ -358,12 +374,14 @@ function checkAIProviderConfig() {
     deepseekReady        : canUseDeepSeek(),
     kimiReady            : canUseKimi(),
     openrouterReady      : canUseOpenRouter(),
+    huggingfaceReady     : Boolean(huggingface && huggingface.ready),
     chatGPT,
     claude,
     qwen,
     openrouter,
     deepseek,
     kimi,
+    huggingface,
   };
 }
 
