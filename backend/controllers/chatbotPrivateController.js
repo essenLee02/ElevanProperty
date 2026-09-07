@@ -68,7 +68,8 @@ const { HTTP } = require('../config/httpStatus');
 // di katalog agent, dan TIDAK LAGI menyarankan area dari daftar statis
 // (locationLandmarks.js) yang bisa sama sekali tidak sesuai katalog nyata.
 const { tryCityAvailabilityAnswer, tryAreaAvailabilityAnswer, customerAsksAvailability } = require('../utils/areaAvailabilityGate');
-const { tryListingSelectionAnswer } = require('../utils/listingSelectionGate');
+const { tryListingSelectionAnswer, tryPendingViewingConfirmation, tryPendingViewingSchedule, lastAiMessage } = require('../utils/listingSelectionGate');
+const { customerSignalsClosing } = require('../utils/customerQuestionGuard');
 const { resolveCityAndArea } = require('../services/areaAvailabilityService');
 const { getAgentCoverage, getAgentAreaNames } = require('../services/agentCoverageService');
 
@@ -4762,6 +4763,50 @@ class ChatbotPrivateService {
           + `${pick.card ? ` → no.${pick.card.index} "${pick.card.title}" (${pick.card.priceText})` : ''}`);
         return this.#wrap(pick.reply, { skillInfo, filters, provider: 'listing_selection_gate' });
       }
+
+      /* M189 — jawaban giliran berikutnya atas tawaran survei sendiri ("Mau,
+       * Kak" / "Saya mau survei, Kak. Kapan bisa survei?"). Lihat catatan
+       * panjang di utils/listingSelectionGate.js. Ditaruh di posisi yang
+       * sama dengan tryListingSelectionAnswer supaya gerbang lokasi di
+       * bawah TIDAK sempat menjalankan ulang pencarian. */
+      const viewingConfirm = tryPendingViewingConfirmation({ message: userMessage, history, isId: lang === 'id' });
+      if (viewingConfirm) {
+        console.log(`[PrivateAgent] 🎯 Gerbang konfirmasi survei pending: ${viewingConfirm.verdict}`);
+        return this.#wrap(viewingConfirm.reply, { skillInfo, filters, provider: 'pending_viewing_gate' });
+      }
+
+      /* M189b — jawaban tanggal+jam atas pertanyaan yang gerbang di atas
+       * baru saja ajukan. Lihat catatan panjang di listingSelectionGate.js. */
+      const viewingSchedule = tryPendingViewingSchedule({ message: userMessage, history, isId: lang === 'id' });
+      if (viewingSchedule) {
+        console.log(`[PrivateAgent] 🎯 Gerbang jadwal survei pending: ${viewingSchedule.verdict}`);
+        return this.#wrap(viewingSchedule.reply, { skillInfo, filters, provider: 'pending_viewing_schedule_gate' });
+      }
+
+      /* ── M190 (7 Sep 2026) — SINYAL PENUTUP SETELAH KATALOG DITAMPILKAN ★──
+       * Transkrip produksi nyata: gerbang area menutup dengan "Ada yang
+       * menarik, Kak? ... boleh sebutkan budget atau kebutuhan lainnya."
+       * Customer menjawab "Tidak ada, Kak. Trma kasih" / "Cukup, Kak. Saya
+       * tanya-tanya dlu" — dibalas dengan MENGIRIM ULANG kedua kartu yang
+       * sama, tiga kali berturut-turut. Skill doc 04 §3d sudah menuliskan
+       * "Closing signal -> send the SUMMARY once, then STOP", tapi itu
+       * instruksi jalur LLM — Private Agent tidak punya kode untuk ini
+       * sama sekali (kelas gap M188/M189: aturan di dokumen, bukan di
+       * kode deterministik yang justru paling sering berjalan).
+       * `agentBrief()` SUDAH menyaring field UNKNOWN/null sendiri (baris
+       * ~1100), jadi ringkasan parsial (Q belum lengkap) tetap rapi —
+       * bukan generator ringkasan kedua yang bisa melenceng dari yang asli.
+       */
+      const lastAi = lastAiMessage(history);
+      if (/ada yang menarik, kak\?|anything catch your eye\?/i.test(lastAi)
+          && customerSignalsClosing(userMessage)) {
+        console.log('[PrivateAgent] 🎯 Gerbang sinyal penutup setelah katalog');
+        const closingProfile = ConversationQualifier.buildProfile(history, userMessage, filters);
+        const closingBrief = ConversationQualifier.buildAgentBrief(closingProfile, filters, history, userMessage);
+        return this.#wrap(builder.agentBrief(closingBrief), {
+          skillInfo, filters, provider: 'closing_signal_gate', responseMode: 'summary',
+        });
+      }
     } catch (pickErr) {
       console.warn('[PrivateAgent] listing selection gate gagal (non-fatal):', pickErr.message);
     }
@@ -5445,8 +5490,113 @@ exports.debugTestRumah123 = async (req, res) => {
 // ─── Shared exports (used by chatbotController.js as fallback) ────────────────
 
 module.exports.generatePrivateChatbotResponse  = (params)  => ChatbotPrivateService.generateResponseForChatbot(params);
-module.exports.generatePrivateTerminalMassege  = (params)  => ChatbotPrivateService.generateResponseForTerminalMassege(params);
 module.exports.generatePrivateContactReply     = (payload) => ChatbotPrivateService.generateContactFormReply(payload);
+
+/* ── M191 (7 Sep 2026) — GATE C: BATAS PANJANG PERCAKAPAN (10 tanya-jawab) ──
+ * Transkrip produksi nyata: satu sesi mencapai 10, lalu 14 tanya-jawab
+ * (disambiguasi area, budget kosong, pilih listing, jadwal survei
+ * tanggal+jam) TANPA PERNAH berhenti atau menawarkan ringkasan — Private
+ * Agent terus menjawab gerbang demi gerbang selamanya. Skill doc 02 §3 Gate C
+ * SUDAH menuliskan aturan ini persis: "10 Q&A -> ask once 'Boleh saya lanjut
+ * gali info sedikit lagi, atau saya ringkas dulu, Kak?'; decline -> summary,
+ * STOP; agree -> max 3 more." — tapi itu instruksi untuk jalur LLM. Private
+ * Agent (jalur deterministik yang kini menangani hampir semua trafik
+ * produksi — DeepSeek 402) TIDAK PUNYA kode untuk Gate C sama sekali: kelas
+ * gap KEEMPAT yang sama dengan M188/M189/M190 — aturan ADA di dokumen,
+ * HILANG di kode yang justru paling sering berjalan.
+ *
+ * Diterapkan di SATU titik (pembungkus export di bawah), bukan disisipkan ke
+ * setiap gerbang (pick/viewing/closing/city/area) satu per satu — titik ini
+ * yang dilewati SEMUA balasan Private Agent, jadi cakupannya otomatis
+ * lengkap tanpa menyentuh logika gerbang M188-M190 yang sudah diuji.
+ */
+const GATE_C_ASK_RE = /boleh saya lanjut gali info sedikit lagi, atau saya ringkas dulu, kak\?|would you like me to continue, or should i summarize/i;
+const GATE_C_DECLINE_RE = /\b(ringkas(?:an)?|cukup|selesai|stop|berhenti|udah\s*aja|sudah\s*saja|summarize)\b/i;
+const GATE_C_SUMMARY_MARKER_RE = /[✓✔]\s*(?:rencana|plan)\s*:/i;
+const GATE_C_SOFT_CAP = 10; // giliran pertama pertanyaan konsen diajukan
+const GATE_C_HARD_CAP = 13; // 10 + "maks 3 lagi" — jaring pengaman bila konsen tak pernah dijawab langsung
+
+function gateCIsAiRow(h) { return /^(ai|assistant|bot)$/i.test(String(h?.role || '')); }
+
+/** Riwayat sejak ringkasan (✓ Rencana/Plan) TERAKHIR — sesi lama tidak ikut terhitung. */
+function gateCScopedHistory(history = []) {
+  const rows = Array.isArray(history) ? history : [];
+  let boundary = -1;
+  for (let i = 0; i < rows.length; i++) {
+    if (gateCIsAiRow(rows[i]) && GATE_C_SUMMARY_MARKER_RE.test(rows[i].message || rows[i].content || '')) boundary = i;
+  }
+  return rows.slice(boundary + 1);
+}
+
+/**
+ * Gate C — batas panjang percakapan. Dipanggil SEKALI setelah Private Agent
+ * menghasilkan balasannya, sebelum dikembalikan ke webhook WhatsApp.
+ * Fail-open MUTLAK: kegagalan apa pun -> balasan asli dikembalikan apa adanya.
+ */
+function applyGateCLengthCap(result, { history = [], userMessage = '', agentName = '' } = {}) {
+  try {
+    if (!result || !result.reply) return result;
+
+    // Ringkasan formal SUDAH terkirim giliran ini (MODE A/B alami, gerbang
+    // M190, atau Gate C sendiri) — itu SUDAH penutupnya Gate C, jangan disentuh.
+    const alreadySummary = result.responseMode === 'summary'
+      || result.provider === 'closing_signal_gate'
+      || result.provider === 'gate_c_length_cap'
+      || GATE_C_SUMMARY_MARKER_RE.test(result.reply);
+    if (alreadySummary) return result;
+
+    const scoped = gateCScopedHistory(history);
+    const exchangeCount = scoped.filter((h) => !gateCIsAiRow(h)).length + 1; // +1 giliran ini
+    const lastAi = lastAiMessage(history);
+
+    const buildForcedSummary = () => {
+      const lang = LanguageDetector.detect(userMessage, history);
+      const filters = extractPropertyFilters(userMessage, history);
+      const profile = ConversationQualifier.buildProfile(history, userMessage, filters);
+      const brief = ConversationQualifier.buildAgentBrief(profile, filters, history, userMessage);
+      const builder = new ResponseBuilderWhatsApp(lang, agentName);
+      return builder.agentBrief(brief);
+    };
+
+    // Konsen barusan ditanyakan giliran sebelumnya — baca jawabannya SEKARANG.
+    if (lastAi && GATE_C_ASK_RE.test(lastAi)) {
+      if (GATE_C_DECLINE_RE.test(userMessage) || customerSignalsClosing(userMessage)) {
+        return { ...result, reply: buildForcedSummary(), provider: 'gate_c_length_cap', responseMode: 'summary' };
+      }
+      // Setuju lanjut ("boleh"/"lanjut"/dst.) -> balasan asli jalan apa adanya;
+      // jatah "maks 3 lagi" ditegakkan oleh HARD_CAP di bawah pada giliran nanti.
+      return result;
+    }
+
+    // Batas keras terlampaui tanpa sempat menanyakan konsen langsung
+    // (jarang — mis. customer terus bicara tanpa menjawab ya/tidak) — jangan
+    // biarkan sesi jalan selamanya, ringkas langsung.
+    if (exchangeCount >= GATE_C_HARD_CAP) {
+      return { ...result, reply: buildForcedSummary(), provider: 'gate_c_length_cap', responseMode: 'summary' };
+    }
+
+    // Baru pertama kali menyentuh 10 dalam sesi ini -> tambahkan pertanyaan
+    // konsen SEKALI (askedAlready mencegah diulang tiap giliran 10-12).
+    const askedAlready = scoped.some((h) => gateCIsAiRow(h) && GATE_C_ASK_RE.test(h.message || h.content || ''));
+    if (exchangeCount >= GATE_C_SOFT_CAP && !askedAlready) {
+      const isId = LanguageDetector.detect(userMessage, history) === 'id';
+      const ask = isId
+        ? `\n\nOh iya Kak, obrolan kita sudah lumayan panjang nih 😊 Boleh saya lanjut gali info sedikit lagi, atau saya ringkas dulu, Kak?`
+        : `\n\nBy the way, we've covered quite a bit already 😊 Would you like me to continue, or should I summarize what we have so far?`;
+      return { ...result, reply: result.reply + ask };
+    }
+
+    return result;
+  } catch (err) {
+    console.error('[GATE C LENGTH CAP ERROR]', err.message);
+    return result;
+  }
+}
+
+module.exports.generatePrivateTerminalMassege = async (params) => {
+  const result = await ChatbotPrivateService.generateResponseForTerminalMassege(params);
+  return applyGateCLengthCap(result, params);
+};
 
 /**
  * Generate private WhatsApp reply for WhatsApp controllers (Fonnte, Kirimi, TimelinesAI).
@@ -5492,3 +5642,4 @@ module.exports.loadPrivateChatbotSkillInfo     = ()        => ChatbotPrivateServ
 // Exposed for unit tests (deterministic qualification flow — 24 combinations + dates)
 module.exports.ConversationQualifier = ConversationQualifier;
 module.exports.ResponseBuilderWhatsApp = ResponseBuilderWhatsApp;
+module.exports.applyGateCLengthCap = applyGateCLengthCap; // M191 — exposed for direct unit testing

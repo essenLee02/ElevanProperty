@@ -398,8 +398,173 @@ function tryListingSelectionAnswer({ message, history = [], isId = true }) {
   }
 }
 
+/* ── M189 (7 Sep 2026) — KONFIRMASI SURVEI PADA GILIRAN BERIKUTNYA ─────────
+ * Bug produksi nyata: AI mengonfirmasi pilihan lalu bertanya "Mau saya
+ * jadwalkan survei ke unit ini?" (satu-satunya penutup yang ADA saat
+ * `customerRequestsViewing(message)` di composeSelectionReply() bernilai
+ * false, mis. saat pemilihan disebut sendirian tanpa kata survei). Customer
+ * menjawab TERPISAH pada giliran berikutnya — "Mau, Kak", atau "Saya mau
+ * survei, Kak" / "Kapan bisa survei?". Tak satu pun jawaban itu menyebut
+ * nomor/harga/judul listing, jadi `detectSelection()` di atas mengembalikan
+ * null (BENAR sesuai desainnya — itu bukan pemilihan). Gerbang ini SENGAJA
+ * terpisah: tugasnya bukan "customer memilih apa", tapi "customer menjawab
+ * pertanyaan yes/no yang barusan AI ajukan sendiri" — kelas pertanyaan yang
+ * berbeda, jadi butuh pengenal berbeda (dijawab dari PESAN AI SEBELUMNYA,
+ * bukan dari katalog).
+ *
+ * Tanpa ini, jawaban itu jatuh ke gerbang ketersediaan area/kota di bawahnya
+ * (tidak mengenali "Mau, Kak" sebagai apa pun), yang lalu MENJALANKAN ULANG
+ * pencarian dan mengirim ulang katalog — persis transkrip produksi 7 Sep
+ * 2026 (Alana Cemandi, 3 kali berturut-turut).
+ */
+const PENDING_VIEWING_OFFER_RE = /mau saya jadwalkan survei ke unit ini\?|shall i arrange a viewing for this unit\?/i;
+const PICK_CONFIRM_LINE_RE = /(?:dicatat pilihannya|your pick)\s*:\s*\*(.+?)\*(?:\s*\(([^)]+)\))?/i;
+const VIEWING_AFFIRM_RE = /^\s*(?:ya+h?|iya+|yoi|yup|yep|yes|mau|boleh|blh|oke?|ok(?:e|ay)?|siap|sip|silak?an|lanjut|gas|deal|bisa)\b[^?]{0,25}$/i;
+const VIEWING_DECLINE_RE = /^\s*(?:tidak|nggak|ga+k?|blm|belum|nanti\s+(?:saja|sj|aja|dulu|dlu)|engga+|no|not\s+now)\b/i;
+
+/** Teks AI paling akhir dalam riwayat (baris apa pun sebelum giliran saat ini). */
+function lastAiMessage(history = []) {
+  const rows = Array.isArray(history) ? history : [];
+  const isAi = (h) => /^(ai|assistant|bot)$/i.test(String(h.role || ''));
+  for (let i = rows.length - 1; i >= 0; i--) {
+    if (isAi(rows[i])) return String(rows[i].message || rows[i].content || '');
+  }
+  return '';
+}
+
+/**
+ * Bila giliran AI SEBELUMNYA barusan menawarkan survei ("Mau saya jadwalkan
+ * survei ke unit ini?") atas sebuah pilihan yang sudah dicatat, dan pesan
+ * customer SEKARANG adalah jawaban ya/tidak atau permintaan survei eksplisit
+ * — jawab langsung, jangan biarkan gerbang lain menjalankan ulang pencarian.
+ *
+ * @returns {null | { reply: string, verdict: 'viewing-confirmed'|'viewing-declined' }}
+ */
+function tryPendingViewingConfirmation({ message, history = [], isId = true }) {
+  try {
+    const text = String(message || '').trim();
+    if (!text) return null;
+
+    const lastAi = lastAiMessage(history);
+    if (!lastAi || !PENDING_VIEWING_OFFER_RE.test(lastAi)) return null;
+
+    if (VIEWING_DECLINE_RE.test(text)) {
+      return {
+        reply: isId
+          ? `Baik, Kak 😊 Kalau berubah pikiran atau mau jadwalkan nanti, tinggal bilang saja ya.`
+          : `No problem 😊 Just let me know whenever you'd like to schedule it.`,
+        verdict: 'viewing-declined',
+      };
+    }
+
+    const { customerRequestsViewing } = require('./customerQuestionGuard');
+    if (VIEWING_AFFIRM_RE.test(text) || customerRequestsViewing(text)) {
+      const m = lastAi.match(PICK_CONFIRM_LINE_RE);
+      const title = m ? String(m[1]).trim() : '';
+      const priceText = m && m[2] ? String(m[2]).trim() : '';
+      const label = title ? `*${title}*${priceText ? ` (${priceText})` : ''}` : (isId ? 'unit ini' : 'this unit');
+      return {
+        reply: isId
+          ? `Siap, Kak 😊 Untuk survei ke ${label}, Kakak bisa tanggal berapa dan jam berapa?`
+          : `Great 😊 For the viewing to ${label}, what date and time work for you?`,
+        verdict: 'viewing-confirmed',
+      };
+    }
+
+    return null;
+  } catch (err) {
+    // Fail-open: gerbang non-kritis tidak boleh menghentikan balasan.
+    console.error('[PENDING VIEWING GATE ERROR]', err.message);
+    return null;
+  }
+}
+
+/* ── M189b (7 Sep 2026) — CUSTOMER MENJAWAB TANGGAL+JAM YANG BARU DITANYA ──
+ * Transkrip produksi lanjutan: gerbang di atas sudah benar bertanya "Kakak
+ * bisa tanggal berapa dan jam berapa?". Customer menjawab "Saya bisa survei
+ * minggu depan Kak. Jam 12 siang ya" — TAPI tak ada gerbang yang menunggu
+ * jawaban itu, jadi pesan jatuh ke gerbang ketersediaan area dan katalog
+ * terkirim ulang untuk KETIGA KALINYA dalam satu sesi. `parseCustomerDate`/
+ * `parseSurveyTime` sudah lama ada (dipakai extractQualificationState untuk
+ * Q9b/Q9c di jalur LLM) — dipakai ULANG di sini, bukan ditulis kedua kali.
+ */
+const { parseCustomerDate, parseSurveyTime } = require('./customerDateParser');
+
+const PENDING_SCHEDULE_ASK_RE = /tanggal berapa dan jam berapa\?|what date and time work for you\?/i;
+
+/**
+ * Bila giliran AI SEBELUMNYA barusan menanyakan tanggal+jam survei (keluaran
+ * `tryPendingViewingConfirmation` di atas), baca tanggal/jam dari jawaban
+ * customer dan tutup jadwalnya — jangan biarkan gerbang lain menjalankan
+ * ulang pencarian selagi customer sedang menjawab jadwal.
+ *
+ * @returns {null | { reply: string, verdict: string }}
+ */
+function tryPendingViewingSchedule({ message, history = [], isId = true }) {
+  try {
+    const text = String(message || '').trim();
+    if (!text) return null;
+
+    const lastAi = lastAiMessage(history);
+    if (!lastAi || !PENDING_SCHEDULE_ASK_RE.test(lastAi)) return null;
+
+    if (VIEWING_DECLINE_RE.test(text)) {
+      return {
+        reply: isId
+          ? `Baik, Kak 😊 Kalau berubah pikiran atau mau jadwalkan nanti, tinggal bilang saja ya.`
+          : `No problem 😊 Just let me know whenever you'd like to schedule it.`,
+        verdict: 'viewing-declined',
+      };
+    }
+
+    const d = parseCustomerDate(text);
+    const dateFormatted = d && d.status === 'ok' ? d.formatted : null;
+    const timeFormatted = parseSurveyTime(text, { requireClockWord: false });
+
+    if (dateFormatted && timeFormatted) {
+      return {
+        reply: isId
+          ? `Baik, Kak 😊 Survei dijadwalkan tanggal *${dateFormatted}*, *${timeFormatted}* ya. Nanti tim kami hubungi untuk konfirmasi.`
+          : `Great 😊 The viewing is scheduled for *${dateFormatted}*, *${timeFormatted}*. Our team will follow up to confirm.`,
+        verdict: 'viewing-scheduled',
+      };
+    }
+    if (dateFormatted && !timeFormatted) {
+      return {
+        reply: isId
+          ? `Siap, tanggal *${dateFormatted}* ya, Kak 😊 Kira-kira jam berapa yang paling pas?`
+          : `Got it, *${dateFormatted}* it is 😊 What time works best?`,
+        verdict: 'viewing-date-only',
+      };
+    }
+    if (!dateFormatted && timeFormatted) {
+      return {
+        reply: isId
+          ? `Baik, jam *${timeFormatted}* dicatat, Kak 😊 Untuk tanggalnya, hari apa yang pas?`
+          : `Noted, *${timeFormatted}* 😊 And what date works for you?`,
+        verdict: 'viewing-time-only',
+      };
+    }
+
+    // Tak satu pun terbaca — jangan biarkan gerbang lain menganggap ini
+    // pesan lain (mis. area kosong) dan menjalankan pencarian ulang.
+    return {
+      reply: isId
+        ? `Maaf, Kak 🙏 Boleh disebutkan tanggal dan jam yang pas untuk surveinya?`
+        : `Sorry 🙏 Could you share the date and time that work for the viewing?`,
+      verdict: 'viewing-schedule-unclear',
+    };
+  } catch (err) {
+    console.error('[PENDING VIEWING SCHEDULE GATE ERROR]', err.message);
+    return null;
+  }
+}
+
 module.exports = {
   tryListingSelectionAnswer,
+  tryPendingViewingConfirmation,
+  tryPendingViewingSchedule,
+  lastAiMessage,
   parseShownListings,
   parseCardsFromText,
   detectSelection,

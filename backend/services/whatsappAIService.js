@@ -54,7 +54,8 @@ const { tryCityAvailabilityAnswer,
         customerAsksAvailability }                  = require('../utils/areaAvailabilityGate');
 const { resolveCityAndArea, findAreaInText,
         findAreaCandidatesInText }                  = require('./areaAvailabilityService');
-const { tryListingSelectionAnswer }                 = require('../utils/listingSelectionGate');
+const { tryListingSelectionAnswer, tryPendingViewingConfirmation, tryPendingViewingSchedule, lastAiMessage } = require('../utils/listingSelectionGate');
+const { customerSignalsClosing } = require('../utils/customerQuestionGuard');
 
 // Jendela history untuk ekstraksi filter & state kualifikasi. Cukup besar agar
 // pesan pembuka (tipe/transaksi/lokasi) tidak keluar scope di alur panjang, tapi
@@ -680,6 +681,45 @@ async function _generateWhatsAppAIReplyCore(params) {
     if (pick && !backendMayCompose) {
       gateFacts.push(`PILIHAN CUSTOMER ATAS KATALOG YANG SUDAH DIKIRIM (fakta, jangan ditebak ulang):\n${pick.reply}`);
     }
+
+    /* M189 (7 Sep 2026) — jawaban giliran berikutnya atas tawaran survei
+     * yang AI sendiri ajukan ("Mau saya jadwalkan survei ke unit ini?").
+     * Hanya dicek bila `pick` di atas TIDAK menangkap apa pun — pesan yang
+     * memilih ULANG unit lain tetap harus lewat tryListingSelectionAnswer.
+     * Lihat catatan panjang di utils/listingSelectionGate.js. */
+    const viewingConfirm = !pick
+      ? tryPendingViewingConfirmation({ message, history, isId: isIdMsg })
+      : null;
+    if (viewingConfirm && backendMayCompose) {
+      console.log(`[WhatsAppAI] 🎯 Gerbang konfirmasi survei pending: ${viewingConfirm.verdict}`);
+      return {
+        reply      : viewingConfirm.reply,
+        replyParts : [viewingConfirm.reply],
+        provider   : 'pending_viewing_gate',
+        contextSource,
+      };
+    }
+    if (viewingConfirm && !backendMayCompose) {
+      gateFacts.push(`KONFIRMASI CUSTOMER ATAS TAWARAN SURVEI SEBELUMNYA (fakta, jangan ditebak ulang):\n${viewingConfirm.reply}`);
+    }
+
+    /* M189b — jawaban tanggal+jam atas pertanyaan yang gerbang di atas baru
+     * saja ajukan. Lihat catatan panjang di utils/listingSelectionGate.js. */
+    const viewingSchedule = (!pick && !viewingConfirm)
+      ? tryPendingViewingSchedule({ message, history, isId: isIdMsg })
+      : null;
+    if (viewingSchedule && backendMayCompose) {
+      console.log(`[WhatsAppAI] 🎯 Gerbang jadwal survei pending: ${viewingSchedule.verdict}`);
+      return {
+        reply      : viewingSchedule.reply,
+        replyParts : [viewingSchedule.reply],
+        provider   : 'pending_viewing_schedule_gate',
+        contextSource,
+      };
+    }
+    if (viewingSchedule && !backendMayCompose) {
+      gateFacts.push(`JADWAL SURVEI DARI CUSTOMER (fakta, jangan ditebak ulang):\n${viewingSchedule.reply}`);
+    }
     // ⭐ M186 (6 Sep 2026) — SEKALI TERPILIH, GERBANG AREA/KOTA TIDAK BOLEH
     // IKUT BICARA LAGI GILIRAN INI. Bug produksi nyata: customer memilih
     // "no 1" LALU LANGSUNG minta survei ("Saya pilih no 1, Kak. Saya mau
@@ -698,7 +738,41 @@ async function _generateWhatsAppAIReplyCore(params) {
     // juga: begitu pemilihan customer dikenali, TIDAK ADA gerbang lokasi
     // lain yang boleh bicara giliran ini — pertanyaan mereka sudah beralih
     // dari "cari area" ke "unit yang sudah dipilih".
-    const pickAlreadyHandledThisTurn = Boolean(pick);
+    /* M190 (7 Sep 2026) — sinyal penutup setelah katalog ditampilkan
+     * ("Tidak ada, Kak. Trma kasih" / "Cukup, Kak. Saya tanya-tanya dlu").
+     * Lihat catatan panjang di controllers/chatbotPrivateController.js dan
+     * utils/customerQuestionGuard.js. Hanya relevan untuk profil 'local'
+     * (backendMayCompose): gerbang area/kota di bawah baru HARD-RETURN
+     * pada profil itu — di profil 'platform' skill doc 04 §3d sudah
+     * menginstruksikan LLM langsung, tidak ada kode yang perlu menyela.
+     * require lokal (bukan di puncak file): ConversationQualifier/
+     * ResponseBuilderWhatsApp hidup di chatbotPrivateController.js, yang
+     * balik me-require modul di sekitar file ini — pola sama dengan
+     * areaAvailabilityGate.js baris ~353.
+     */
+    let closingSummary = null;
+    if (backendMayCompose && !pick && !viewingConfirm && !viewingSchedule) {
+      const lastAi = lastAiMessage(history);
+      if (/ada yang menarik, kak\?|anything catch your eye\?/i.test(lastAi)
+          && customerSignalsClosing(message)) {
+        const { ConversationQualifier, ResponseBuilderWhatsApp } = require('../controllers/chatbotPrivateController');
+        const closingProfile = ConversationQualifier.buildProfile(history, message, filters);
+        const closingBrief = ConversationQualifier.buildAgentBrief(closingProfile, filters, history, message);
+        const closingBuilder = new ResponseBuilderWhatsApp(isIdMsg ? 'id' : 'en');
+        closingSummary = closingBuilder.agentBrief(closingBrief);
+        console.log('[WhatsAppAI] 🎯 Gerbang sinyal penutup setelah katalog');
+      }
+    }
+    if (closingSummary) {
+      return {
+        reply      : closingSummary,
+        replyParts : [closingSummary],
+        provider   : 'closing_signal_gate',
+        contextSource,
+      };
+    }
+
+    const pickAlreadyHandledThisTurn = Boolean(pick) || Boolean(viewingConfirm) || Boolean(viewingSchedule);
 
     // require lokal, BUKAN di puncak file: aiPromptBuilderService berada di sisi
     // lain pipeline dan me-require balik modul-modul di sekitarnya. Menariknya

@@ -228,6 +228,51 @@ function buildAnswerFirstDirective(message, nextQuestion = null) {
       (itu terjadi di produksi dan customer harus mengulang pertanyaannya).${followUp}`;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   M190 — SINYAL PENUTUP SETELAH KATALOG DITAMPILKAN.
+   ═══════════════════════════════════════════════════════════════════════════
+   Transkrip produksi nyata (7 Sep 2026): gerbang area (areaAvailabilityGate.js)
+   menampilkan 2 unit lalu menutup dengan "Ada yang menarik, Kak? Kalau mau
+   saya carikan yang lebih spesifik, boleh sebutkan budget atau kebutuhan
+   lainnya." Customer menjawab "Tidak ada, Kak. Trma kasih" — lalu terpisah
+   "Cukup, Kak. Saya tanya-tanya dlu" — KEDUANYA dibalas dengan MENGIRIM ULANG
+   kedua kartu yang sama plus pertanyaan yang sama, tiga kali berturut-turut.
+
+   Skill doc 04 §3d SUDAH menuliskan aturan ini ("Closing signal -> send the
+   SUMMARY once, then STOP") — tapi itu instruksi untuk jalur LLM (platform
+   AI). Private Agent (jalur deterministik, satu-satunya yang aktif selama
+   provider utama kehabisan saldo — lihat [[project_private_agent_missing_selection_gate_m188]])
+   TIDAK PUNYA kode apa pun untuk ini sama sekali — kelas gap yang sama
+   persis dengan M188/M189: aturan ADA di dokumen, TIDAK ADA di kode
+   deterministik yang justru paling sering menjalankannya.
+   ══════════════════════════════════════════════════════════════════════════ */
+const CLOSING_SIGNAL_RE = new RegExp(
+  '\\b(?:tidak|nggak|ga+k?|blm|belum)\\s+(?:ada|tertarik|cocok|minat)\\b'
+  + '|\\b(?:terima\\s*kasih|trma\\s*kasih|makasih|mksh|thanks?|thank\\s*you)\\b'
+  + '|\\bcukup\\b(?!\\s+(?:luas|besar|banyak|kamar|dekat))'
+  + '|\\b(?:tanya[-\\s]?tanya|liat[-\\s]?liat|lihat[-\\s]?lihat|pikir[-\\s]?pikir)\\s*(?:dulu|dlu|aja|saja)?\\b'
+  // "Saya tanya" dlu" (tanda kutip nyasar, khas pengetikan cepat) — satu kata
+  // "tanya"/"liat"/"lihat"/"pikir" diikuti "dulu/dlu" masih niat yang sama.
+  + '|\\b(?:tanya|liat|lihat|pikir)["\'\\s-]{0,3}(?:dulu|dlu)\\b'
+  + '|\\bitu\\s+saja\\b|\\bsekian\\b',
+  'i'
+);
+
+/**
+ * Customer menutup obrolan / menolak halus setelah katalog ditampilkan
+ * ("tidak ada, terima kasih", "cukup, saya tanya-tanya dulu"). Dibatasi
+ * pesan PENDEK dan TANPA ANGKA — angka hampir selalu berarti budget/spek
+ * baru (lanjutan wajar dari "boleh sebutkan budget atau kebutuhan lainnya"),
+ * bukan penutup.
+ * @returns {boolean}
+ */
+function customerSignalsClosing(message) {
+  const text = String(message || '').trim();
+  if (!text || text.length > 60) return false;
+  if (/\d/.test(text)) return false;
+  return CLOSING_SIGNAL_RE.test(text);
+}
+
 module.exports = {
   QUESTION_CUE_RE,
   DATA_TOPIC_RE,
@@ -240,4 +285,7 @@ module.exports = {
   customerRedirectsFocus,
   customerNeedsDirectAnswer,
   buildViewingRequestDirective,
+  // M190 — sinyal penutup setelah katalog
+  CLOSING_SIGNAL_RE,
+  customerSignalsClosing,
 };

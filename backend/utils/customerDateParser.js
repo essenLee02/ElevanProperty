@@ -444,7 +444,26 @@ function isDontKnowDateAnswer(text = '') {
   return /\b(belum (tahu|tau|pasti|tentu|bisa|ada|menentukan|memutuskan|kepikiran)|tidak tahu|gak tau|ga tau|nggak tau|belum fix|belum decide|not sure|don'?t know|haven'?t decided|undecided|nanti (saja|dulu|aja)|lihat nanti|belum kepastian)\b/.test(t);
 }
 
+/* ── Jam survei (Q9c) — SATU sumber kebenaran ─────────────────────────────
+ * Sebelumnya regex ini hidup HANYA inline di aiPromptBuilderService.js
+ * (dua varian: longgar saat AI baru bertanya jam, ketat/wajib "jam"|"pukul"
+ * saat jam diberikan sukarela). Diekstrak ke sini (M189) supaya
+ * listingSelectionGate.js bisa memakai logika YANG SAMA PERSIS, bukan
+ * menyalin regex kedua yang bisa melenceng — kelas bug M27/M77 yang sudah
+ * pernah menggigit proyek ini untuk hal lain.
+ */
+function parseSurveyTime(text, { requireClockWord = true } = {}) {
+  const t = String(text || '');
+  const re = requireClockWord
+    ? /\b(?:jam|pukul)\s*(\d{1,2})(?:[.:](\d{2}))?\s*(pagi|siang|sore|malam|am|pm)?\b/i
+    : /\b(?:jam|pukul)?\s*(\d{1,2})(?:[.:](\d{2}))?\s*(pagi|siang|sore|malam|am|pm)?\b/i;
+  const m = t.match(re);
+  if (!m) return null;
+  const label = (m[3] || '').toLowerCase();
+  return `Jam ${m[1]}${m[2] ? '.' + m[2] : ''}${label ? ' ' + label : ''}`.trim();
+}
+
 module.exports = {
   parseCustomerDate, isDontKnowDateAnswer, WAITING_THE_UPDATE, MONTHS_ID,
-  addMonthsClamped, addYearsClamped, isLeapYear,
+  addMonthsClamped, addYearsClamped, isLeapYear, parseSurveyTime,
 };

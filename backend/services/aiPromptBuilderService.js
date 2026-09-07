@@ -1,6 +1,6 @@
 const { loadProjectSkillPrompt } = require('./skillPromptService');
 const { detectBudget, detectFacilities, stripCommercialUsePhrases, stripNearPhrases, stripAmbiguousRumah, stripInvestmentIntentPhrases, stripMovingFromPhrases, detectUseCase, isNonResidentialUse, detectLocation, isKnownLocationName, detectCanonicalType, detectCanonicalTransaction } = require('./propertyRecommendationService');
-const { parseCustomerDate, isDontKnowDateAnswer, WAITING_THE_UPDATE } = require('../utils/customerDateParser');
+const { parseCustomerDate, isDontKnowDateAnswer, WAITING_THE_UPDATE, parseSurveyTime } = require('../utils/customerDateParser');
 const { expandAbbreviations }                 = require('../utils/lazyChatNormalizer');
 const { expandStandardFacilities }            = require('../utils/standardFacilities');
 const { detectCustomerFrustration } = require('../utils/propertyKeywordFilter');
@@ -1490,14 +1490,8 @@ function extractQualificationState(history = [], currentMessage = '') {
         // tanpa itu angka seperti "5 hari lagi" atau "3 kamar" bisa salah
         // terbaca sebagai jam. Saat AI memang bertanya jam, pola longgar tetap
         // dipakai supaya jawaban telanjang ("4 sore") tetap tertangkap.
-        const timeRe = aiAsksViewTime
-          ? /\b(?:jam|pukul)?\s*(\d{1,2})(?:[.:](\d{2}))?\s*(pagi|siang|sore|malam|am|pm)?\b/i
-          : /\b(?:jam|pukul)\s*(\d{1,2})(?:[.:](\d{2}))?\s*(pagi|siang|sore|malam|am|pm)?\b/i;
-        const t = custResp.match(timeRe);
-        if (t) {
-          const label = (t[3] || '').toLowerCase();
-          state.viewingTime = `Jam ${t[1]}${t[2] ? '.' + t[2] : ''}${label ? ' ' + label : ''}`.trim();
-        }
+        const parsedTime = parseSurveyTime(custResp, { requireClockWord: !aiAsksViewTime });
+        if (parsedTime) state.viewingTime = parsedTime;
         // ⚠️ FALLBACK tanggal dari kalimat AI sendiri. Bug nyata (4 Agu 2026):
         // AI kadang MENYATAKAN tanggal survei sambil MENANYAKAN jamnya dalam
         // SATU kalimat ("...jadwal survei di tanggal 18 Agustus 2026, kira-
