@@ -303,7 +303,7 @@ function cardLabel(card) {
  * Susun balasan untuk hasil detectSelection(). Hanya dipanggil di profil
  * guardrail 'local'; di profil 'platform' teks yang sama dikirim sebagai FAKTA.
  */
-function composeSelectionReply(sel, { isId = true } = {}) {
+function composeSelectionReply(sel, { isId = true, message = '' } = {}) {
   if (!sel) return null;
 
   if (sel.status === 'matched') {
@@ -313,13 +313,34 @@ function composeSelectionReply(sel, { isId = true } = {}) {
       c.priceText ? (isId ? `💰 Estimasi Harga: ${c.priceText}` : `💰 Estimated Price: ${c.priceText}`) : null,
     ].filter(Boolean).join('\n');
 
+    /* ⭐ M186 (6 Sep 2026) — SURVEI SUDAH DIMINTA DI PESAN YANG SAMA.
+     * Bug produksi nyata: "Saya pilih no 1, Kak. Saya mau survei juga. Kpn
+     * anda ada waktu?" — customer SUDAH menjawab "ya" untuk survei di
+     * kalimat yang sama dia memilih unitnya. Versi lama SELALU menutup
+     * dengan "Mau saya jadwalkan survei ke unit ini?" — pertanyaan yes/no
+     * untuk sesuatu yang sudah dijawab "ya", persis anti-pattern "jangan
+     * tanya ulang yang sudah dijawab" (doc 00/02). customerRequestsViewing()
+     * (utils/customerQuestionGuard.js) dipakai apa adanya — jangan
+     * menduplikasi daftar kata kerja survei di sini (kelas bug M27/M77).
+     * Survei butuh TANGGAL + JAM (doc 04 §3b) — langsung minta keduanya
+     * alih-alih bertanya ya/tidak yang sudah terjawab.
+     */
+    const { customerRequestsViewing } = require('./customerQuestionGuard');
+    const surveyAlreadyRequested = customerRequestsViewing(message);
+
+    const closing = surveyAlreadyRequested
+      ? (isId
+        ? `Siap, Kak 😊 Untuk survei ke unit ini, Kakak bisa tanggal berapa dan jam berapa?`
+        : `Great 😊 For the viewing, what date and time work for you?`)
+      : (isId ? `Mau saya jadwalkan survei ke unit ini?` : `Shall I arrange a viewing for this unit?`);
+
     return isId
       ? `Baik, Kak 😊 Dicatat pilihannya: *${c.title}*${c.priceText ? ` (${c.priceText})` : ''}.\n`
         + (detail ? `\n${detail}\n` : '')
-        + `\nMau saya jadwalkan survei ke unit ini?`
+        + `\n${closing}`
       : `Noted 😊 Your pick: *${c.title}*${c.priceText ? ` (${c.priceText})` : ''}.\n`
         + (detail ? `\n${detail}\n` : '')
-        + `\nShall I arrange a viewing for this unit?`;
+        + `\n${closing}`;
   }
 
   if (sel.status === 'ambiguous') {
@@ -366,7 +387,7 @@ function tryListingSelectionAnswer({ message, history = [], isId = true }) {
     const sel = detectSelection(message, shown);
     if (!sel) return null;
 
-    const reply = composeSelectionReply(sel, { isId });
+    const reply = composeSelectionReply(sel, { isId, message });
     if (!reply) return null;
 
     return { reply, verdict: sel.status, card: sel.card || null, shownCount: shown.length };

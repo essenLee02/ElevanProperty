@@ -680,6 +680,25 @@ async function _generateWhatsAppAIReplyCore(params) {
     if (pick && !backendMayCompose) {
       gateFacts.push(`PILIHAN CUSTOMER ATAS KATALOG YANG SUDAH DIKIRIM (fakta, jangan ditebak ulang):\n${pick.reply}`);
     }
+    // ⭐ M186 (6 Sep 2026) — SEKALI TERPILIH, GERBANG AREA/KOTA TIDAK BOLEH
+    // IKUT BICARA LAGI GILIRAN INI. Bug produksi nyata: customer memilih
+    // "no 1" LALU LANGSUNG minta survei ("Saya pilih no 1, Kak. Saya mau
+    // survei juga. Kpn anda ada waktu?") — SATU pesan gabungan (3 bubble
+    // WhatsApp digabung debounce). Untuk profil 'backend', `pick &&
+    // backendMayCompose` di atas sudah `return` lebih dulu sehingga kode di
+    // bawah baris ini TIDAK PERNAH tereksekusi — aman. Tapi untuk profil
+    // 'platform' TIDAK ADA return sama sekali: eksekusi lanjut ke gerbang
+    // kota (M164) dan gerbang area (M152) di bawah, yang lalu MENYUNTIKKAN
+    // gateFacts KEDUA yang bisa BERTENTANGAN dengan fakta pemilihan yang
+    // baru saja disuntikkan — dalam kasus nyata ini, fakta ketersediaan
+    // area lama/basi ("belum ada yang sesuai budget Rp 36.300.000/tahun")
+    // menimpa perhatian model dari fakta pemilihan yang benar, dan model
+    // (DeepSeek) membalas dengan fakta kedua itu MENTAH-MENTAH — pelajaran
+    // yang PERSIS sama dengan M164 (gerbang kota), sekarang ditutup di sini
+    // juga: begitu pemilihan customer dikenali, TIDAK ADA gerbang lokasi
+    // lain yang boleh bicara giliran ini — pertanyaan mereka sudah beralih
+    // dari "cari area" ke "unit yang sudah dipilih".
+    const pickAlreadyHandledThisTurn = Boolean(pick);
 
     // require lokal, BUKAN di puncak file: aiPromptBuilderService berada di sisi
     // lain pipeline dan me-require balik modul-modul di sekitarnya. Menariknya
@@ -863,7 +882,7 @@ async function _generateWhatsAppAIReplyCore(params) {
       }
     }
 
-    if (realCity && (txDb || typeDb)) {
+    if (realCity && (txDb || typeDb) && !pickAlreadyHandledThisTurn) {
       const cityHit = await tryCityAvailabilityAnswer({
         userId: agentUserId, city: realCity,
         buildingType: typeDb || undefined, transactionType: txDb || undefined,
@@ -928,7 +947,7 @@ async function _generateWhatsAppAIReplyCore(params) {
     const gateShouldSpeak = customerAsksAvailability(message)
       || (fourSlotsKnown && !listingsAlreadyShown);
 
-    if (agentUserId && realArea && txDb && gateShouldSpeak) {
+    if (agentUserId && realArea && txDb && gateShouldSpeak && !pickAlreadyHandledThisTurn) {
       const hit = await tryAreaAvailabilityAnswer({
         userId: agentUserId, city: realCity, area: realArea,
         buildingType: typeDb || undefined, transactionType: txDb,

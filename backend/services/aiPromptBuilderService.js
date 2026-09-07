@@ -2348,6 +2348,45 @@ function extractQualificationState(history = [], currentMessage = '') {
     }
   }
 
+  /* ⭐ M186 (6 Sep 2026) — SANITY GUARD: budget BELI TIDAK PERNAH punya satuan
+   * periode. Bug produksi nyata: customer beli rumah (transaksi "sale",
+   * dikonfirmasi berulang di balasan AI sebagai "dijual") tapi `state.budget`
+   * membawa "Rp 36.300.000/tahun" — angka DAN satuan yang mustahil untuk
+   * transaksi jual-beli (harga jual adalah nilai TUNGGAL, bukan tarif
+   * berkala). Root persis dari MANA nilai ini pertama masuk tidak terlacak
+   * ulang di sesi perbaikan ini (butuh log/DB produksi yang tidak tersedia
+   * saat ini) — tapi kombinasi transactionType='sale' + satuan periode pada
+   * budget adalah kontradiksi LOGIS yang SELALU salah, apa pun sebabnya.
+   *
+   * ⛔ DITARUH DI SINI, BUKAN di dalam loop per-pesan di atas — dicoba di
+   * sana lebih dulu dan TERBUKTI GAGAL (diuji dengan skenario riwayat sewa
+   * lama yang bocor ke pencarian beli baru): `state.transactionType` di
+   * dalam loop masih nilai NAIF first-wins, sedangkan resolusi flip yang
+   * sebenarnya (`P0_RESOLVED.tx`, txChanged reset di atas) baru terjadi
+   * SESUDAH loop itu. Guard yang dipasang di dalam loop memeriksa nilai yang
+   * belum final dan tidak pernah menyala. Di sini, sesudah SEMUA resolusi
+   * kota/tipe/transaksi selesai, `state.transactionType` dan `state.budget`
+   * sudah final — inilah satu-satunya titik yang aman untuk sanity check ini.
+   */
+  if (state.transactionType === 'sale' && /\/(?:tahun|bulan|minggu|malam)\b/i.test(state.budget || '')) {
+    state.budget = null;
+    // Jangan berhenti di "bersih tapi kosong": periksa apakah pesan CUSTOMER
+    // TERBARU (yang paling berhak menang, M161) sebenarnya SUDAH berisi
+    // restatement budget yang valid — periksa langsung menunjukkan gejala
+    // ini nyata: budget lama yang mustahil ("36.3jt/tahun") mengunci lewat
+    // guard first-wins di loop atas SEBELUM kode di sini sempat berjalan,
+    // sehingga "yg badget 400-920 juta" yang customer ketik di pesan yang
+    // SAMA yang memicu pembersihan ini tidak pernah diberi kesempatan
+    // ter-parse. Tanpa baris ini, pembersihan yang benar berubah jadi
+    // regresi baru: budget yang tadinya (walau salah) TERISI, sekarang
+    // malah KOSONG walau customer baru saja menyebutnya dengan jelas.
+    const recovered = detectBudget(currentMessage);
+    if (recovered && !recovered.ambiguous) {
+      state.budget = recovered.preference
+        || (recovered.text + budgetPeriodSuffix(recovered.period, recovered.periodCount));
+    }
+  }
+
   // Alias kompatibilitas — kode & tes lama masih membaca `location`.
   // `city` adalah nama KANONIK; jangan menulis ke `location` di mana pun.
   state.location = state.city;
