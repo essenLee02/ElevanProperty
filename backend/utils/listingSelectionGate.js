@@ -489,13 +489,39 @@ function tryPendingViewingConfirmation({ message, history = [], isId = true }) {
  * Q9b/Q9c di jalur LLM) — dipakai ULANG di sini, bukan ditulis kedua kali.
  */
 const { parseCustomerDate, parseSurveyTime } = require('./customerDateParser');
+// ⛔ NORMALISASI SINGKATAN WAJIB sebelum parseCustomerDate/parseSurveyTime —
+// pola yang sama persis dengan extractQualificationState() di
+// aiPromptBuilderService.js (M73): "bln dpn" tidak cocok regex "bulan depan"
+// mana pun tanpa expandAbbreviations() lebih dulu.
+const { expandAbbreviations } = require('./lazyChatNormalizer');
+const normalizeForDateParsing = (m) => {
+  try { return expandAbbreviations(String(m || '')); }
+  catch (_) { return String(m || ''); } // fail-open
+};
 
 const PENDING_SCHEDULE_ASK_RE = /tanggal berapa dan jam berapa\?|what date and time work for you\?/i;
+/* ── M189c (7 Sep 2026) — GILIRAN SUSULAN: HANYA JAM, ATAU HANYA TANGGAL ──
+ * Transkrip produksi lanjutan lagi: customer menjawab tanggal saja ("Saya
+ * mau survei bln dpn, Kak") → gerbang di bawah BENAR bertanya balik "Kira-
+ * kira jam berapa yang paling pas?" (verdict viewing-date-only). Customer
+ * lalu menjawab "Jam 11 pagi, Kak" — TAPI `PENDING_SCHEDULE_ASK_RE` di atas
+ * hanya mengenali pertanyaan GABUNGAN ("tanggal berapa DAN jam berapa"),
+ * bukan susulan jam-saja ini — gerbang bungkam, jatuh ke gerbang area,
+ * katalog terkirim ulang (DENGAN jumlah unit yang beda pula, karena kueri
+ * diulang dari nol) padahal customer sudah lama memilih & menjadwalkan.
+ * Tanggal/jam yang SUDAH diketahui dibaca balik dari teks tebal di pesan AI
+ * itu SENDIRI (bukan diminta ulang) — sama prinsipnya dengan
+ * PICK_CONFIRM_LINE_RE di atas.
+ */
+const PENDING_DATE_ONLY_FOLLOWUP_RE = /kira-kira jam berapa yang paling pas\?|what time works best\?/i;
+const PENDING_TIME_ONLY_FOLLOWUP_RE = /untuk tanggalnya, hari apa yang pas\?|and what date works for you\?/i;
+const BOLD_FIRST_RE = /\*([^*]+)\*/;
 
 /**
- * Bila giliran AI SEBELUMNYA barusan menanyakan tanggal+jam survei (keluaran
- * `tryPendingViewingConfirmation` di atas), baca tanggal/jam dari jawaban
- * customer dan tutup jadwalnya — jangan biarkan gerbang lain menjalankan
+ * Bila giliran AI SEBELUMNYA barusan menanyakan tanggal+jam survei — baik
+ * pertanyaan gabungan (`tryPendingViewingConfirmation`) maupun susulan
+ * jam-saja/tanggal-saja (keluaran fungsi ini sendiri) — baca jawaban
+ * customer dan tutup jadwalnya. Jangan biarkan gerbang lain menjalankan
  * ulang pencarian selagi customer sedang menjawab jadwal.
  *
  * @returns {null | { reply: string, verdict: string }}
@@ -506,7 +532,11 @@ function tryPendingViewingSchedule({ message, history = [], isId = true }) {
     if (!text) return null;
 
     const lastAi = lastAiMessage(history);
-    if (!lastAi || !PENDING_SCHEDULE_ASK_RE.test(lastAi)) return null;
+    if (!lastAi) return null;
+    const isCombinedAsk   = PENDING_SCHEDULE_ASK_RE.test(lastAi);
+    const isDateOnlyFollow = PENDING_DATE_ONLY_FOLLOWUP_RE.test(lastAi);
+    const isTimeOnlyFollow = PENDING_TIME_ONLY_FOLLOWUP_RE.test(lastAi);
+    if (!isCombinedAsk && !isDateOnlyFollow && !isTimeOnlyFollow) return null;
 
     if (VIEWING_DECLINE_RE.test(text)) {
       return {
@@ -517,9 +547,25 @@ function tryPendingViewingSchedule({ message, history = [], isId = true }) {
       };
     }
 
-    const d = parseCustomerDate(text);
-    const dateFormatted = d && d.status === 'ok' ? d.formatted : null;
-    const timeFormatted = parseSurveyTime(text, { requireClockWord: false });
+    const normText = normalizeForDateParsing(text);
+    let dateFormatted = null;
+    let timeFormatted = null;
+    if (isDateOnlyFollow) {
+      // Tanggal sudah dijawab giliran sebelumnya — dibaca balik dari teks
+      // tebal di pesan AI itu sendiri, bukan diminta ulang ke customer.
+      const m = lastAi.match(BOLD_FIRST_RE);
+      dateFormatted = m ? String(m[1]).trim() : null;
+      timeFormatted = parseSurveyTime(normText, { requireClockWord: false });
+    } else if (isTimeOnlyFollow) {
+      const m = lastAi.match(BOLD_FIRST_RE);
+      timeFormatted = m ? String(m[1]).trim() : null;
+      const d = parseCustomerDate(normText);
+      dateFormatted = d && d.status === 'ok' ? d.formatted : null;
+    } else {
+      const d = parseCustomerDate(normText);
+      dateFormatted = d && d.status === 'ok' ? d.formatted : null;
+      timeFormatted = parseSurveyTime(normText, { requireClockWord: false });
+    }
 
     if (dateFormatted && timeFormatted) {
       return {
@@ -560,10 +606,47 @@ function tryPendingViewingSchedule({ message, history = [], isId = true }) {
   }
 }
 
+/* ── M189d (7 Sep 2026) — JARING PENGAMAN: JANGAN PERNAH TAMPILKAN KATALOG
+ * BARU SELAGI MASIH DI ALUR PASCA-PILIHAN, APA PUN PESANNYA ─────────────────
+ * Permintaan eksplisit pemilik proyek setelah bug M189c: "jika customer sudah
+ * pilih property; AI dilarang memberikan listing baru". Tiga gerbang di atas
+ * menangani pola yang SUDAH dikenal (ya/tidak, tanggal+jam, jam-saja,
+ * tanggal-saja) — tapi pola customer tidak terbatas. Bila SATU PUN dari
+ * ketiganya tidak cocok, jaring ini memastikan gerbang kota/area DI BAWAHNYA
+ * tetap tidak boleh bicara selama pesan AI TERAKHIR masih bagian dari alur
+ * pasca-pilihan (konfirmasi pilihan, tawaran survei, atau pertanyaan
+ * jadwal) — daripada diam-diam mengizinkan pencarian baru yang mengembalikan
+ * katalog LAIN (bisa beda jumlah/urutan unit) dan membuat customer kehilangan
+ * rujukan ke unit yang sudah dipilihnya.
+ */
+const POST_PICK_FINGERPRINT_RE = /dicatat pilihannya:|your pick:|mau saya jadwalkan survei ke unit ini\?|shall i arrange a viewing for this unit\?|tanggal berapa dan jam berapa\?|what date and time work for you\?|kira-kira jam berapa yang paling pas\?|what time works best\?|untuk tanggalnya, hari apa yang pas\?|and what date works for you\?|survei dijadwalkan tanggal|the viewing is scheduled for/i;
+
+/**
+ * @returns {null | { reply: string, verdict: 'post-pick-fallback' }} null bila
+ *   pesan AI terakhir BUKAN bagian dari alur pasca-pilihan (alur normal jalan).
+ */
+function tryPostPickFallback({ history = [], isId = true } = {}) {
+  try {
+    const lastAi = lastAiMessage(history);
+    if (!lastAi || !POST_PICK_FINGERPRINT_RE.test(lastAi)) return null;
+
+    return {
+      reply: isId
+        ? `Maaf, Kak 🙏 Boleh diulang maksudnya? Kita masih bahas unit yang sudah Kakak pilih tadi — mau lanjut ke jadwal surveinya, atau ada yang lain?`
+        : `Sorry 🙏 Could you rephrase that? We're still discussing the unit you picked earlier — want to continue with the viewing schedule, or is there something else?`,
+      verdict: 'post-pick-fallback',
+    };
+  } catch (err) {
+    console.error('[POST PICK FALLBACK GATE ERROR]', err.message);
+    return null;
+  }
+}
+
 module.exports = {
   tryListingSelectionAnswer,
   tryPendingViewingConfirmation,
   tryPendingViewingSchedule,
+  tryPostPickFallback,
   lastAiMessage,
   parseShownListings,
   parseCardsFromText,

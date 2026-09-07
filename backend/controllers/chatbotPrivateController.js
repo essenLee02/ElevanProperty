@@ -68,7 +68,7 @@ const { HTTP } = require('../config/httpStatus');
 // di katalog agent, dan TIDAK LAGI menyarankan area dari daftar statis
 // (locationLandmarks.js) yang bisa sama sekali tidak sesuai katalog nyata.
 const { tryCityAvailabilityAnswer, tryAreaAvailabilityAnswer, customerAsksAvailability } = require('../utils/areaAvailabilityGate');
-const { tryListingSelectionAnswer, tryPendingViewingConfirmation, tryPendingViewingSchedule, lastAiMessage } = require('../utils/listingSelectionGate');
+const { tryListingSelectionAnswer, tryPendingViewingConfirmation, tryPendingViewingSchedule, tryPostPickFallback, lastAiMessage } = require('../utils/listingSelectionGate');
 const { customerSignalsClosing } = require('../utils/customerQuestionGuard');
 const { resolveCityAndArea } = require('../services/areaAvailabilityService');
 const { getAgentCoverage, getAgentAreaNames } = require('../services/agentCoverageService');
@@ -4781,6 +4781,15 @@ class ChatbotPrivateService {
       if (viewingSchedule) {
         console.log(`[PrivateAgent] 🎯 Gerbang jadwal survei pending: ${viewingSchedule.verdict}`);
         return this.#wrap(viewingSchedule.reply, { skillInfo, filters, provider: 'pending_viewing_schedule_gate' });
+      }
+
+      /* M189d — jaring pengaman: pesan AI terakhir masih bagian dari alur
+       * pasca-pilihan tapi tak satu pun gerbang di atas cocok. Jangan
+       * biarkan gerbang kota/area di bawah menampilkan katalog baru. */
+      const postPickFallback = tryPostPickFallback({ history, isId: lang === 'id' });
+      if (postPickFallback) {
+        console.log(`[PrivateAgent] 🎯 Gerbang jaring pengaman pasca-pilihan: ${postPickFallback.verdict}`);
+        return this.#wrap(postPickFallback.reply, { skillInfo, filters, provider: 'post_pick_fallback_gate' });
       }
 
       /* ── M190 (7 Sep 2026) — SINYAL PENUTUP SETELAH KATALOG DITAMPILKAN ★──

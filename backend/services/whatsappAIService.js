@@ -54,7 +54,7 @@ const { tryCityAvailabilityAnswer,
         customerAsksAvailability }                  = require('../utils/areaAvailabilityGate');
 const { resolveCityAndArea, findAreaInText,
         findAreaCandidatesInText }                  = require('./areaAvailabilityService');
-const { tryListingSelectionAnswer, tryPendingViewingConfirmation, tryPendingViewingSchedule, lastAiMessage } = require('../utils/listingSelectionGate');
+const { tryListingSelectionAnswer, tryPendingViewingConfirmation, tryPendingViewingSchedule, tryPostPickFallback, lastAiMessage } = require('../utils/listingSelectionGate');
 const { customerSignalsClosing } = require('../utils/customerQuestionGuard');
 
 // Jendela history untuk ekstraksi filter & state kualifikasi. Cukup besar agar
@@ -720,6 +720,25 @@ async function _generateWhatsAppAIReplyCore(params) {
     if (viewingSchedule && !backendMayCompose) {
       gateFacts.push(`JADWAL SURVEI DARI CUSTOMER (fakta, jangan ditebak ulang):\n${viewingSchedule.reply}`);
     }
+
+    /* M189d — jaring pengaman: pesan AI terakhir masih bagian dari alur
+     * pasca-pilihan tapi tak satu pun gerbang di atas cocok. Lihat catatan
+     * panjang di utils/listingSelectionGate.js. */
+    const postPickFallback = (!pick && !viewingConfirm && !viewingSchedule)
+      ? tryPostPickFallback({ history, isId: isIdMsg })
+      : null;
+    if (postPickFallback && backendMayCompose) {
+      console.log(`[WhatsAppAI] 🎯 Gerbang jaring pengaman pasca-pilihan: ${postPickFallback.verdict}`);
+      return {
+        reply      : postPickFallback.reply,
+        replyParts : [postPickFallback.reply],
+        provider   : 'post_pick_fallback_gate',
+        contextSource,
+      };
+    }
+    if (postPickFallback && !backendMayCompose) {
+      gateFacts.push(`MASIH DI ALUR PASCA-PILIHAN, JANGAN TAMPILKAN KATALOG BARU (fakta):\n${postPickFallback.reply}`);
+    }
     // ⭐ M186 (6 Sep 2026) — SEKALI TERPILIH, GERBANG AREA/KOTA TIDAK BOLEH
     // IKUT BICARA LAGI GILIRAN INI. Bug produksi nyata: customer memilih
     // "no 1" LALU LANGSUNG minta survei ("Saya pilih no 1, Kak. Saya mau
@@ -772,7 +791,7 @@ async function _generateWhatsAppAIReplyCore(params) {
       };
     }
 
-    const pickAlreadyHandledThisTurn = Boolean(pick) || Boolean(viewingConfirm) || Boolean(viewingSchedule);
+    const pickAlreadyHandledThisTurn = Boolean(pick) || Boolean(viewingConfirm) || Boolean(viewingSchedule) || Boolean(postPickFallback);
 
     // require lokal, BUKAN di puncak file: aiPromptBuilderService berada di sisi
     // lain pipeline dan me-require balik modul-modul di sekitarnya. Menariknya
