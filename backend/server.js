@@ -566,22 +566,12 @@ sequelize.sync()
         printBanner('');
       }
 
-      // ─── Warmup Rumah123 cache ─────────────────────────────────────────
-      // Hormati RUMAH123_DATA=OFF juga di sini — sebelumnya hanya cek token
-      // Apify tersedia, jadi warmup tetap jalan (membakar kuota Apify) meski
-      // fitur live-fetch sudah dimatikan lewat toggle. Konsisten dengan gate
-      // yang sama di whatsappPropertyContext.js.
-      const { isRumah123EnabledForAI, warmupCache } = require('./services/rumah123ContextService');
-      const rumah123Enabled = isRumah123EnabledForAI();
-      if (rumah123Enabled && process.env.APIFY_API_TOKEN && process.env.APIFY_API_TOKEN !== 'isi_apify_token_anda') {
-        const warmupLocations = (process.env.RUMAH123_WARMUP_LOCATIONS || 'Jakarta Selatan,Surabaya,Bandung,Bali').split(',').map(s => s.trim());
-        setTimeout(() => {
-          console.log('[Rumah123] Starting background cache warmup...');
-          warmupCache(warmupLocations);
-        }, 5000); // delay 5s after server start
-      } else if (!rumah123Enabled) {
-        console.log('[Rumah123] RUMAH123_DATA=OFF → skip cache warmup (hemat kuota Apify)');
-      }
+      // ⭐ M187 (7 Sep 2026) — WARMUP RUMAH123 CACHE DIHAPUS atas arahan pemilik
+      // proyek: fokus data properti HANYA dari katalog MySQL milik agent
+      // sendiri (lihat catatan sejenis di utils/whatsappPropertyContext.js dan
+      // controllers/chatbotController.js). Tidak ada lagi yang membaca cache
+      // Rumah123 dari jalur obrolan, jadi tidak ada alasan memanaskannya di
+      // startup — dihapus sepenuhnya, bukan cuma dilewati lewat toggle.
     });
   })
   .catch((err) => {

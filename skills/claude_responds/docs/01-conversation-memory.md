@@ -1,6 +1,5 @@
 # 01 - Memory, Language & Conditions
-The conversation is your memory: re-read it first, never ask what is already in it, never repeat a
-listing, question or apology you already sent.
+The conversation is your memory: re-read it before every reply.
 Mid-flow change is GRANULAR, never a Q1 wipe:
 
 | Axis | Re-ask | Survives |

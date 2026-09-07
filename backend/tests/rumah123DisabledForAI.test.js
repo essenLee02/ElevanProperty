@@ -70,19 +70,44 @@ ok('env on (huruf kecil) → true', isRumah123EnabledForAI() === true);
 console.log('\n[2] Tidak ada lagi default fail-OPEN yang tersisa di kode');
 
 const BACKEND = path.resolve(__dirname, '..');
-const AI_PATH_FILES = [
+
+/* ⚠️ M187 (7 Sep 2026) — daftar berkas dipecah dua sejak arahan pemilik
+ * proyek "hapus penggunaan Apify untuk terminal massage; fokus data dari
+ * MySQL". Tiga berkas jalur obrolan TIDAK LAGI menyebut Rumah123 sama
+ * sekali (dihapus, bukan cuma dilewati lewat gate) — memeriksa "masih
+ * memakai gerbang" pada berkas yang sudah tidak menyentuh Rumah123 sama
+ * sekali adalah pemeriksaan yang salah sasaran. `chatbotPrivateController.js`
+ * SENGAJA belum disentuh (lebih dari 60 titik referensi format/reply-builder
+ * Rumah123, terlalu besar/berisiko untuk sesi yang sama) — gate-nya tetap
+ * wajib berfungsi di sana, jadi tetap diuji seperti sebelumnya. */
+const GATE_STILL_USED_FILES = [
+  'controllers/chatbotPrivateController.js'
+];
+const RUMAH123_FULLY_REMOVED_FILES = [
   'utils/whatsappPropertyContext.js',
-  'controllers/chatbotPrivateController.js',
   'controllers/chatbotController.js',
   'server.js'
 ];
 
-AI_PATH_FILES.forEach((rel) => {
+GATE_STILL_USED_FILES.forEach((rel) => {
   const src = fs.readFileSync(path.join(BACKEND, rel), 'utf8');
   ok(`${rel}: tidak lagi memakai default fail-open "RUMAH123_DATA || 'ON'"`,
     !src.includes("RUMAH123_DATA || 'ON'"));
   ok(`${rel}: memakai gerbang tunggal isRumah123EnabledForAI()`,
     src.includes('isRumah123EnabledForAI'));
+});
+
+RUMAH123_FULLY_REMOVED_FILES.forEach((rel) => {
+  const src = fs.readFileSync(path.join(BACKEND, rel), 'utf8');
+  ok(`${rel}: tidak lagi memakai default fail-open "RUMAH123_DATA || 'ON'"`,
+    !src.includes("RUMAH123_DATA || 'ON'"));
+  // Cek REFERENSI FUNGSIONAL saja (require/panggilan fungsi) — bukan sekadar
+  // kemunculan kata "rumah123"/"apify", karena komentar M187 yang menjelaskan
+  // PENGHAPUSANNYA secara sah menyebut nama itu sendiri.
+  const hasFunctionalRef = /require\(['"][^'"]*(?:rumah123|apify)/i.test(src)
+    || /\b(?:getRumah123Listings|formatRumah123ContextForLLM|isRumah123EnabledForAI|mapBuildingTypeToApify|mapTransactionTypeToApify|warmupCache)\s*\(/.test(src);
+  ok(`${rel}: Rumah123/Apify dihapus sepenuhnya (M187), bukan cuma di-gate`,
+    !hasFunctionalRef);
 });
 
 console.log('\n[3] KONTROL NEGATIF — halaman Rumah123 TIDAK ikut dimatikan');

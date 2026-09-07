@@ -10,13 +10,6 @@ const {
   checkAIProviderConfig
 } = require('../services/aiProviderService');
 const { buildRecommendationContextForLLM } = require('../services/propertyRecommendationService');
-const {
-  getRumah123Listings,
-  formatRumah123ContextForLLM,
-  mapBuildingTypeToApify,
-  mapTransactionTypeToApify,
-  isRumah123EnabledForAI,
-} = require('../services/rumah123ContextService');
 const chatbotPrivateController = require('./chatbotPrivateController');
 const { getSkillRegistryStatus } = require('../services/skillPromptService');
 const { hasPropertyKeyword } = require('../utils/propertyKeywordFilter');
@@ -183,8 +176,7 @@ class ChatbotController {
       // lewat instruksi tidak cukup, MENGHILANGKANNYA yang menutup celah.
       //
       // Selama masih ada field wajib kosong, katalog tidak dibangun sama sekali:
-      // AI hanya punya satu hal yang bisa dilakukan — bertanya. Bonus: menghemat
-      // panggilan Apify/Rumah123 dan ribuan token pada tiap giliran tanya-jawab.
+      // AI hanya punya satu hal yang bisa dilakukan — bertanya.
       const qualState  = extractQualificationState(history, payload.message);
       const stillMissing = listMissingMandatory(qualState || {});
       const catalogReady = stillMissing.length === 0;
@@ -202,47 +194,17 @@ class ChatbotController {
       // datanya (lihat combinedContextText di bawah).
       recommendationContext = await buildRecommendationContextForLLM(payload.message, history);
 
-      let rumah123Block = '';
-      try {
-        if (!isRumah123EnabledForAI()) {
-          // ⚠️ Jalur ini DULU tidak punya pengecekan sama sekali: RUMAH123_DATA=OFF
-          // tetap memanggil Apify dan menyuntikkan listing Rumah123 ke prompt LLM
-          // chatbot web. Gerbang yang dikira sudah menutup, ternyata bocor di sini.
-          // AI hanya boleh merekomendasikan katalog agent sendiri (Property +
-          // PropertyImage + PropertyFacility).
-        } else if (!catalogReady) {
-          // Belum saatnya menampilkan listing — lewati juga panggilan Apify.
-        } else {
-        const filters = recommendationContext.filters;
-        const apifyPropertyType = mapBuildingTypeToApify(filters.buildingType);
-        const apifyListingType  = mapTransactionTypeToApify(filters.transactionType);
-        const location = filters.location || payload.location || '';
-
-        if (location || apifyPropertyType) {
-          const rumah123Listings = await getRumah123Listings({
-            location,
-            propertyType: apifyPropertyType,
-            listingType:  apifyListingType,
-          });
-
-          if (rumah123Listings.length > 0) {
-            rumah123Block = formatRumah123ContextForLLM(rumah123Listings);
-            console.log(`[Chatbot] Injected ${rumah123Listings.length} Rumah123 listings into context.`);
-          }
-        }
-        }
-      } catch (rumah123Err) {
-        console.warn('[Chatbot] Rumah123 context fetch failed (non-fatal):', rumah123Err.message);
-      }
-
+      // ⭐ M187 (7 Sep 2026) — RUMAH123/APIFY DIHAPUS dari jalur ini atas arahan
+      // pemilik proyek: fokus data properti HANYA dari katalog MySQL milik
+      // agent sendiri. Blok pemanggilan Apify yang dulu ada di sini (gated di
+      // belakang gerbang RUMAH123_DATA/catalogReady) dihapus sepenuhnya,
+      // bukan hanya dinonaktifkan lewat toggle — supaya tidak ada kuota Apify
+      // yang bisa terpakai lewat jalur chatbot web ini lagi.
+      //
       // Inilah yang benar-benar masuk ke prompt LLM. Selama kualifikasi belum
       // lengkap teksnya dikosongkan: tidak ada listing di depan model = tidak
       // ada yang bisa dibuang sebelum waktunya.
       let combinedContextText = catalogReady ? recommendationContext.contextText : '';
-
-      if (rumah123Block) {
-        combinedContextText = [combinedContextText, '', rumah123Block].join('\n');
-      }
 
       // Katalog kiriman frontend ikut ditahan — sumbernya berbeda, tapi efeknya
       // sama: listing yang hadir di prompt bisa langsung dibuang model.

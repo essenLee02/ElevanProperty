@@ -68,6 +68,7 @@ const { HTTP } = require('../config/httpStatus');
 // di katalog agent, dan TIDAK LAGI menyarankan area dari daftar statis
 // (locationLandmarks.js) yang bisa sama sekali tidak sesuai katalog nyata.
 const { tryCityAvailabilityAnswer, tryAreaAvailabilityAnswer, customerAsksAvailability } = require('../utils/areaAvailabilityGate');
+const { tryListingSelectionAnswer } = require('../utils/listingSelectionGate');
 const { resolveCityAndArea } = require('../services/areaAvailabilityService');
 const { getAgentCoverage, getAgentAreaNames } = require('../services/agentCoverageService');
 
@@ -4731,6 +4732,40 @@ class ChatbotPrivateService {
        belum mengirimkannya) atau area belum jelas → lewati, alur normal
        jalan seperti sebelumnya.
     ══════════════════════════════════════════════════════════════════════ */
+    /* ── ★ M188 (7 Sep 2026) — GERBANG PEMILIHAN LISTING, BELUM PERNAH ADA
+     * DI PRIVATE AGENT ★ ─────────────────────────────────────────────────
+     * Transkrip produksi nyata (7 Sep 2026): customer menjawab "Saya pilih
+     * yg no 1, yg hrg 388.1jt; Kak" lalu "Blh saya survei utk rumah yg
+     * nomer 1" — DUA pesan terpisah, masing-masing sudah cukup eksplisit
+     * sendirian. Private Agent (file ini) membalas dengan MENGIRIM ULANG
+     * kedua kartu yang sama persis, TIGA KALI berturut-turut.
+     *
+     * Akar masalahnya BUKAN pengenalan pemilihan gagal — diverifikasi
+     * langsung: `tryListingSelectionAnswer()` (utils/listingSelectionGate.js,
+     * M165) mengenali KEDUA pesan itu dengan benar bila dipanggil langsung.
+     * Masalahnya file ini TIDAK PERNAH MEMANGGILNYA SAMA SEKALI — hanya
+     * `whatsappAIService.js` (jalur provider LLM utama) yang memilikinya.
+     * Begitu provider utama kehabisan saldo/kuota (M158: Kimi dulu,
+     * DeepSeek 402 Insufficient Balance sekarang), SATU-SATUNYA jalur yang
+     * aktif adalah file ini — dan gerbang pemilihan yang sudah diperbaiki
+     * di M165/M186 tidak pernah tersentuh sama sekali selama periode itu.
+     *
+     * Ditaruh PALING DEPAN, sebelum gerbang kota/area (pola sama dengan
+     * whatsappAIService.js M165): begitu pemilihan dikenali, gerbang lokasi
+     * di bawah TIDAK BOLEH ikut bicara lagi giliran ini — itulah yang
+     * menghasilkan pengiriman ulang katalog di transkrip nyata di atas.
+     */
+    try {
+      const pick = tryListingSelectionAnswer({ message: userMessage, history, isId: lang === 'id' });
+      if (pick) {
+        console.log(`[PrivateAgent] 🎯 Gerbang pemilihan listing: ${pick.verdict}`
+          + `${pick.card ? ` → no.${pick.card.index} "${pick.card.title}" (${pick.card.priceText})` : ''}`);
+        return this.#wrap(pick.reply, { skillInfo, filters, provider: 'listing_selection_gate' });
+      }
+    } catch (pickErr) {
+      console.warn('[PrivateAgent] listing selection gate gagal (non-fatal):', pickErr.message);
+    }
+
     try {
       if (agentUserId) {
         const qs = extractQualificationState(history, userMessage) || {};

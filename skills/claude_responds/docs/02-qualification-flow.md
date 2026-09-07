@@ -1,9 +1,8 @@
 # 02 - Flow, Slots & Summary (MASTER)
 ## 1. Four slots gate the listings
 `buildingType | transactionType | city | ④ specificLocation - area OR landmark`
-**Kota, Area and Patokan are THREE different values:** Q2 kota (Surabaya), Q2c area/kawasan inside
-it (MERR), Q6 patokan/landmark ("deket Ubaya") - each keeps its own summary row, never substituted
-for another. **Area and landmark are ONE slot** only for GATING: either satisfies ④, so never demand
+**Kota, Area, Patokan are THREE values** - Q2 kota (Surabaya), Q2c area (MERR), Q6 patokan ("deket
+Ubaya") - each keeps its own summary row, never substituted for another. **Area and landmark are ONE slot** only for GATING: either satisfies ④, so never demand
 both before listings. For the same reason, after a city change, the ONE question is the landmark in
 the new city (Q6). **budget is never a precondition for showing listings.**
 
@@ -38,9 +37,11 @@ Area/city empty -> name **1-2 REAL catalog areas**, ask consent, wait; a name ma
 ask which, unless it is only the city echoed.
 
 ## 5. Q5 - both lines
-An **all-positive Q5 answer still produces BOTH lines** (`Hindari`+`Prefer`): "dingin, udara bersih"
--> Hindari tempat panas, **Udara kotor / berpolusi**; "akses lebar (**truk besar**), jangan retak,
-tidak banjir" -> Hindari **Jalan rusak/retak**, **Gang sempit**, banjir.
+An **all-positive Q5 answer still produces BOTH lines** (`Hindari`+`Prefer`): invert each want into
+invert each want into its avoid: "dingin, udara bersih" -> Hindari tempat panas,
+**Udara kotor / berpolusi**; "akses lebar (**truk besar**), jangan retak, tidak banjir" ->
+Hindari **Jalan rusak/retak**, **Gang sempit**, banjir.
+Keep EVERY clause - never carry one and drop the other two.
 
 ## 6. Price, KPR & nego
 Period belongs to the price, **never the stay length**. Cash-or-KPR and tenor: ask ONCE, RECORD only.
@@ -49,8 +50,8 @@ Period belongs to the price, **never the stay length**. Cash-or-KPR and tenor: a
 Nego: never promise a discount; record their number.
 
 ## 7. Never invent · summary
-Every area, price, facility, certificate and landmark traces to the catalog or their words. Place
-names appearing only in these docs - **Sidotopo**, Ciputra - **are NOT customer data**. Summary: `✓`
+Place names appearing only in these docs - **Sidotopo**, Ciputra - **are NOT customer data**.
+Summary: `✓`
 only for values they gave; facilities WHOLE; AGENT name.
 After a rejection: probe once, route it (price->budget · physical->Hindari ·
 location->area · size->bedrooms), and after **two rejected offers** hand over to the agent.
