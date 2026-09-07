@@ -3005,8 +3005,17 @@ function buildQualificationStateBlock(state) {
   const typeLabel = state.buildingType    ? (TYPE_LABEL_ID[_typeRaw] || state.buildingType)    : null;
 
   lines.push(
+    /* ⭐ M185 (6 Sep 2026) — "Tipe properti" DULU TANPA NOMOR SLOT.
+     * Barisnya dirender dengan label kosong (spasi), sehingga di state block ia
+     * satu-satunya slot WAJIB tanpa penanda — pemilik proyek menandainya saat
+     * meninjau blok ini. Diberi [Q1b] (turunan Q1: satu pertanyaan menanyakan
+     * transaksi + tipe sekaligus), bukan nomor baru, supaya penomoran Q1..Q14
+     * yang sudah dipakai prompt/summary/tes tidak bergeser.
+     * KOTA vs AREA sengaja TETAP dua baris berbeda: Q2 = kota, Q2c =
+     * area/kecamatan DI DALAM kota itu, Q6 = patokan/landmark. Ketiganya nilai
+     * yang berbeda dan tidak boleh saling menggantikan di summary. */
     row('Tipe transaksi    [Q1]', txLabel),
-    row('Tipe properti         ', typeLabel ? typeLabel + fbNote : null),
+    row('Tipe properti    [Q1b]', typeLabel ? typeLabel + fbNote : null),
     row('Kota              [Q2]', state.city),
     row('Area/Kecamatan  [Q2c]', state.district),
     // Q2b: ✅ = customer answered; ⏭️ = AI asked but customer redirected (skip, don't repeat); ❓ = not asked yet.
