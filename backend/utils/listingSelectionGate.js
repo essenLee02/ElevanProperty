@@ -459,14 +459,17 @@ function tryPendingViewingConfirmation({ message, history = [], isId = true }) {
 
     const { customerRequestsViewing } = require('./customerQuestionGuard');
     if (VIEWING_AFFIRM_RE.test(text) || customerRequestsViewing(text)) {
-      const m = lastAi.match(PICK_CONFIRM_LINE_RE);
-      const title = m ? String(m[1]).trim() : '';
-      const priceText = m && m[2] ? String(m[2]).trim() : '';
-      const label = title ? `*${title}*${priceText ? ` (${priceText})` : ''}` : (isId ? 'unit ini' : 'this unit');
+      /* ⭐ M189e — SATU PERTANYAAN, PENDEK. Versi lama mengulang judul unit +
+       * harga LALU menanyakan DUA hal sekaligus ("tanggal berapa dan jam
+       * berapa?") — panjang, dan melanggar aturan doc 02 §3 "satu pertanyaan
+       * per pesan". Unit-nya baru saja disebut di pesan tepat sebelum ini,
+       * jadi mengulanginya tidak menambah kejelasan. Jam ditanyakan menyusul
+       * — dan HANYA bila surveinya dalam 7 hari (lihat tryPendingViewingSchedule).
+       */
       return {
         reply: isId
-          ? `Siap, Kak 😊 Untuk survei ke ${label}, Kakak bisa tanggal berapa dan jam berapa?`
-          : `Great 😊 For the viewing to ${label}, what date and time work for you?`,
+          ? `Siap, Kak 😊 Enaknya survei tanggal berapa?`
+          : `Great 😊 What date works for the viewing?`,
         verdict: 'viewing-confirmed',
       };
     }
@@ -488,7 +491,7 @@ function tryPendingViewingConfirmation({ message, history = [], isId = true }) {
  * `parseSurveyTime` sudah lama ada (dipakai extractQualificationState untuk
  * Q9b/Q9c di jalur LLM) — dipakai ULANG di sini, bukan ditulis kedua kali.
  */
-const { parseCustomerDate, parseSurveyTime } = require('./customerDateParser');
+const { parseCustomerDate, parseSurveyTime, isDontKnowDateAnswer } = require('./customerDateParser');
 // ⛔ NORMALISASI SINGKATAN WAJIB sebelum parseCustomerDate/parseSurveyTime —
 // pola yang sama persis dengan extractQualificationState() di
 // aiPromptBuilderService.js (M73): "bln dpn" tidak cocok regex "bulan depan"
@@ -499,7 +502,10 @@ const normalizeForDateParsing = (m) => {
   catch (_) { return String(m || ''); } // fail-open
 };
 
-const PENDING_SCHEDULE_ASK_RE = /tanggal berapa dan jam berapa\?|what date and time work for you\?/i;
+/* Pertanyaan TANGGAL survei. Bentuk pendek M189e didahulukan; bentuk gabungan
+ * lama tetap dikenali supaya percakapan yang SEDANG berjalan (sudah menerima
+ * pertanyaan versi lama di riwayatnya) tidak putus saat versi baru dirilis. */
+const PENDING_SCHEDULE_ASK_RE = /enaknya survei tanggal berapa\?|what date works for the viewing\?|tanggal berapa dan jam berapa\?|what date and time work for you\?/i;
 /* ── M189c (7 Sep 2026) — GILIRAN SUSULAN: HANYA JAM, ATAU HANYA TANGGAL ──
  * Transkrip produksi lanjutan lagi: customer menjawab tanggal saja ("Saya
  * mau survei bln dpn, Kak") → gerbang di bawah BENAR bertanya balik "Kira-
@@ -515,6 +521,14 @@ const PENDING_SCHEDULE_ASK_RE = /tanggal berapa dan jam berapa\?|what date and t
  */
 const PENDING_DATE_ONLY_FOLLOWUP_RE = /kira-kira jam berapa yang paling pas\?|what time works best\?/i;
 const PENDING_TIME_ONLY_FOLLOWUP_RE = /untuk tanggalnya, hari apa yang pas\?|and what date works for you\?/i;
+/* Survei sudah dicatat TANPA jam (M189e, tanggalnya >7 hari). Kalau customer
+ * lalu menyebut jamnya sendiri, jam itu harus tetap tertangkap — bukan jatuh
+ * ke gerbang lain. Jamnya sukarela, jadi tidak pernah DIMINTA di sini. */
+const PENDING_SCHEDULED_DATE_ONLY_RE = /survei dicatat tanggal|the viewing is set for/i;
+
+/* Batas "survei masih dekat" — di atas ini JAM tidak ditanyakan lagi, cukup
+ * tanggalnya (pemilik proyek, 9 Sep 2026: semula 7 hari, diperketat ke 5). */
+const VIEWING_HOUR_ASK_MAX_DAYS = 5;
 const BOLD_FIRST_RE = /\*([^*]+)\*/;
 
 /**
@@ -536,9 +550,34 @@ function tryPendingViewingSchedule({ message, history = [], isId = true }) {
     const isCombinedAsk   = PENDING_SCHEDULE_ASK_RE.test(lastAi);
     const isDateOnlyFollow = PENDING_DATE_ONLY_FOLLOWUP_RE.test(lastAi);
     const isTimeOnlyFollow = PENDING_TIME_ONLY_FOLLOWUP_RE.test(lastAi);
+    const isScheduledNoHour = PENDING_SCHEDULED_DATE_ONLY_RE.test(lastAi);
+
+    // Jadwal sudah dicatat tanpa jam, lalu customer menyebut jamnya sendiri →
+    // lengkapi jadwalnya. Tanpa jam yang bisa dibaca, tidak ada yang perlu
+    // diubah: biarkan alur normal jalan (jangan balas apa pun dari sini).
+    if (isScheduledNoHour) {
+      const volunteered = parseSurveyTime(normalizeForDateParsing(text), { requireClockWord: false });
+      if (!volunteered) return null;
+      const m = lastAi.match(BOLD_FIRST_RE);
+      const known = m ? String(m[1]).trim() : '';
+      return {
+        reply: isId
+          ? `Siap, Kak 😊 Survei dijadwalkan tanggal *${known}*, *${volunteered}* ya. Nanti tim kami hubungi untuk konfirmasi.`
+          : `Great 😊 The viewing is scheduled for *${known}*, *${volunteered}*. Our team will follow up to confirm.`,
+        verdict: 'viewing-scheduled',
+      };
+    }
+
     if (!isCombinedAsk && !isDateOnlyFollow && !isTimeOnlyFollow) return null;
 
-    if (VIEWING_DECLINE_RE.test(text)) {
+    /* ⭐ M189e — "BELUM TAHU JAMNYA" BUKAN PENOLAKAN SURVEI.
+     * `VIEWING_DECLINE_RE` cocok pada awalan "belum", sehingga jawaban wajar
+     * seperti "Belum tau jamnya, Kak" (saat AI baru menanyakan JAM, dan
+     * tanggalnya sudah disepakati) terbaca sebagai membatalkan survei — padahal
+     * customer hanya belum menentukan jam. `isDontKnowDateAnswer()` sudah lama
+     * ada untuk kelas jawaban ini; dipakai ulang di sini, bukan ditulis lagi. */
+    const isDontKnow = isDontKnowDateAnswer(text);
+    if (VIEWING_DECLINE_RE.test(text) && !((isDateOnlyFollow || isTimeOnlyFollow) && isDontKnow)) {
       return {
         reply: isId
           ? `Baik, Kak 😊 Kalau berubah pikiran atau mau jadwalkan nanti, tinggal bilang saja ya.`
@@ -564,7 +603,12 @@ function tryPendingViewingSchedule({ message, history = [], isId = true }) {
     } else {
       const d = parseCustomerDate(normText);
       dateFormatted = d && d.status === 'ok' ? d.formatted : null;
-      timeFormatted = parseSurveyTime(normText, { requireClockWord: false });
+      /* ⚠️ WAJIB pakai kata "jam"/"pukul" di cabang ini. Pesan di sini boleh
+       * memuat TANGGAL, dan mode longgar menerima ANGKA TELANJANG — sehingga
+       * "Survei 12 September" terbaca jamnya "Jam 12" (angka tanggalnya!).
+       * Mode longgar hanya aman di cabang susulan, di mana tanggalnya sudah
+       * diketahui dan yang ditunggu memang tinggal jamnya. */
+      timeFormatted = parseSurveyTime(normText, { requireClockWord: true });
     }
 
     if (dateFormatted && timeFormatted) {
@@ -576,6 +620,28 @@ function tryPendingViewingSchedule({ message, history = [], isId = true }) {
       };
     }
     if (dateFormatted && !timeFormatted) {
+      /* ⭐ M189e — JAM TIDAK SELALU PERLU DITANYA. Aturan pemilik proyek:
+       * survei yang lebih dari 7 hari ke depan biasanya BELUM ditentukan
+       * jamnya oleh customer — memaksa "jam berapa?" hanya menghasilkan
+       * pertanyaan yang tidak bisa dijawab. Catat tanggalnya saja; jam
+       * dikonfirmasi tim mendekati hari-H. Di bawah 7 hari, jam masih
+       * ditanyakan sekali (masih wajar dan berguna untuk agent).
+       * Ambang diubah 7 → 5 hari atas permintaan pemilik proyek (9 Sep 2026). */
+      const reparsed = parseCustomerDate(dateFormatted);
+      const dueDate = reparsed && reparsed.date ? new Date(reparsed.date) : null;
+      const daysAhead = dueDate
+        ? Math.round((dueDate.setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86400000)
+        : 0;
+      // Jam sudah pernah ditanya sekali (isDateOnlyFollow) tapi tetap tidak
+      // disebutkan → JANGAN tanya lagi, cukup catat tanggalnya.
+      if (daysAhead > VIEWING_HOUR_ASK_MAX_DAYS || isDateOnlyFollow) {
+        return {
+          reply: isId
+            ? `Baik, Kak 😊 Survei dicatat tanggal *${dateFormatted}* ya. Untuk jamnya nanti tim kami konfirmasi mendekati hari-H.`
+            : `Noted 😊 The viewing is set for *${dateFormatted}*. Our team will confirm the exact time closer to the date.`,
+          verdict: 'viewing-scheduled-date-only',
+        };
+      }
       return {
         reply: isId
           ? `Siap, tanggal *${dateFormatted}* ya, Kak 😊 Kira-kira jam berapa yang paling pas?`
@@ -619,7 +685,7 @@ function tryPendingViewingSchedule({ message, history = [], isId = true }) {
  * katalog LAIN (bisa beda jumlah/urutan unit) dan membuat customer kehilangan
  * rujukan ke unit yang sudah dipilihnya.
  */
-const POST_PICK_FINGERPRINT_RE = /dicatat pilihannya:|your pick:|mau saya jadwalkan survei ke unit ini\?|shall i arrange a viewing for this unit\?|tanggal berapa dan jam berapa\?|what date and time work for you\?|kira-kira jam berapa yang paling pas\?|what time works best\?|untuk tanggalnya, hari apa yang pas\?|and what date works for you\?|survei dijadwalkan tanggal|the viewing is scheduled for/i;
+const POST_PICK_FINGERPRINT_RE = /dicatat pilihannya:|your pick:|mau saya jadwalkan survei ke unit ini\?|shall i arrange a viewing for this unit\?|enaknya survei tanggal berapa\?|what date works for the viewing\?|tanggal berapa dan jam berapa\?|what date and time work for you\?|kira-kira jam berapa yang paling pas\?|what time works best\?|untuk tanggalnya, hari apa yang pas\?|and what date works for you\?|survei dijadwalkan tanggal|the viewing is scheduled for|survei dicatat tanggal|the viewing is set for/i;
 
 /**
  * @returns {null | { reply: string, verdict: 'post-pick-fallback' }} null bila
@@ -642,11 +708,41 @@ function tryPostPickFallback({ history = [], isId = true } = {}) {
   }
 }
 
+/**
+ * Listing yang SUDAH dikonfirmasi dipilih customer, dibaca balik dari pesan
+ * konfirmasi AI ("Dicatat pilihannya: *Judul* (harga)") — satu-satunya catatan
+ * otoritatif tentang unit mana yang dipilih. Dipakai baris "✓ Listing" pada
+ * ringkasan supaya tidak ada regex kedua yang bisa melenceng dari gerbangnya.
+ *
+ * @returns {null | { title: string, priceText: string, label: string }}
+ */
+function readConfirmedPick(history = []) {
+  try {
+    const rows = Array.isArray(history) ? history : [];
+    const isAi = (h) => /^(ai|assistant|bot)$/i.test(String(h.role || ''));
+    for (let i = rows.length - 1; i >= 0; i--) {
+      if (!isAi(rows[i])) continue;
+      const m = String(rows[i].message || rows[i].content || '').match(PICK_CONFIRM_LINE_RE);
+      if (m) {
+        const title = String(m[1] || '').trim();
+        const priceText = m[2] ? String(m[2]).trim() : '';
+        if (!title) continue;
+        return { title, priceText, label: priceText ? `${title} (${priceText})` : title };
+      }
+    }
+    return null;
+  } catch (err) {
+    console.error('[READ CONFIRMED PICK ERROR]', err.message);
+    return null;
+  }
+}
+
 module.exports = {
   tryListingSelectionAnswer,
   tryPendingViewingConfirmation,
   tryPendingViewingSchedule,
   tryPostPickFallback,
+  readConfirmedPick,
   lastAiMessage,
   parseShownListings,
   parseCardsFromText,

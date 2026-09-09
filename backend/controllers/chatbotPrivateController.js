@@ -46,6 +46,7 @@ const { hasPropertyKeyword,
         lastAiMessageAsksQuestion }           = require('../utils/propertyKeywordFilter');
 const { extractQualificationState }           = require('../services/aiPromptBuilderService');
 const { parseCustomerDate }                   = require('../utils/customerDateParser');
+const { expandAbbreviations }                 = require('../utils/lazyChatNormalizer');
 const { tryTerminologyAnswer: matchTerminologyAnswer } = require('../utils/terminologyAnswerGate');
 
 // Per-city landmark reference (Q2c sub-area & Q6 anchor point examples) — moved to its
@@ -68,7 +69,7 @@ const { HTTP } = require('../config/httpStatus');
 // di katalog agent, dan TIDAK LAGI menyarankan area dari daftar statis
 // (locationLandmarks.js) yang bisa sama sekali tidak sesuai katalog nyata.
 const { tryCityAvailabilityAnswer, tryAreaAvailabilityAnswer, customerAsksAvailability } = require('../utils/areaAvailabilityGate');
-const { tryListingSelectionAnswer, tryPendingViewingConfirmation, tryPendingViewingSchedule, tryPostPickFallback, lastAiMessage } = require('../utils/listingSelectionGate');
+const { tryListingSelectionAnswer, tryPendingViewingConfirmation, tryPendingViewingSchedule, tryPostPickFallback, readConfirmedPick, lastAiMessage } = require('../utils/listingSelectionGate');
 const { customerSignalsClosing } = require('../utils/customerQuestionGuard');
 const { resolveCityAndArea } = require('../services/areaAvailabilityService');
 const { getAgentCoverage, getAgentAreaNames } = require('../services/agentCoverageService');
@@ -1147,6 +1148,10 @@ class ResponseBuilderWhatsApp {
     if (ancL) lines.push(ancL);
     const viewL = fmt('Viewing', brief.viewingPreference);
     if (viewL) lines.push(viewL);
+    // M192 — unit yang sudah dipilih customer, ditaruh paling bawah supaya
+    // terbaca sebagai kesimpulan dari seluruh baris di atasnya.
+    const listL = fmt('Listing', brief.selectedListing);
+    if (listL) lines.push(listL);
 
     const bulletBlock = lines.join('\n');
 
@@ -1539,6 +1544,122 @@ class ConversationQualifier {
       else if (/\btoko\b|\bretail\b/i.test(custText))                               recoveredType = 'store';
     }
 
+    /* ── M189f (9 Sep 2026) — TANGGAL SURVEI DIBACA PARSER RESMI, BUKAN KEMBARAN
+     * ───────────────────────────────────────────────────────────────────────
+     * Bug produksi nyata: customer bilang "Saya bisa survei bulan dpn, Kak.
+     * Jam 10 pagi" (9 Sep 2026) dan ringkasan menulis "✓ Viewing: Besok pagi
+     * jam 10" — tanggal yang TIDAK PERNAH disebut siapa pun (halusinasi
+     * ringkasan kelas M92). Dua sebabnya:
+     *   1. Resolver di sini KEMBARAN buatan tangan yang hanya kenal 5 pola
+     *      (nanti/lusa/besok/minggu depan/<hari> depan). "bulan depan" — apalagi
+     *      singkatannya "bln dpn" — tidak dikenali sama sekali → null.
+     *   2. Karena null, `#extractViewingPreference()` memakai default
+     *      `|| (tod ? 'besok' : '')` — MENGARANG harinya.
+     * `parseCustomerDate()` (utils/customerDateParser.js) sudah menangani
+     * SEMUANYA dengan benar — besok, lusa, besok lusa, bulan depan, 2 minggu
+     * lagi, 4 hari lagi, 6 hari kedepan, "4 maret", "17 Oktober",
+     * "8 desember 2026" — plus rollover tahun & kabisat. Kembaran buatan
+     * tangan seperti ini persis kelas bug M162/M27/M77 yang sudah berkali-kali
+     * menggigit proyek ini: dua implementasi untuk satu urusan, yang satu
+     * ketinggalan diam-diam.
+     *
+     * KLAUSA, bukan seluruh sesi: `custText` berisi SEMUA pesan customer di
+     * sesi aktif, jadi memarsing tanggal dari situ bisa mengambil tanggal
+     * MASUK (Q8) sebagai tanggal survei. Diambil klausa TERAKHIR yang benar-
+     * benar menyebut survei; kalau tidak ada, barulah pesan terakhir dipakai
+     * — itu pun hanya saat AI memang baru menanyakan jadwal survei.
+     */
+    const lastAiMsgForViewing = (() => {
+      for (let i = activeHistory.length - 1; i >= 0; i--) {
+        const r = activeHistory[i];
+        if (r && (r.role === 'ai' || r.role === 'assistant')) return String(r.message || '');
+      }
+      return '';
+    })();
+    const viewingDayRefResolved = (() => {
+      try {
+        const VIEWING_CLAUSE_RE = /\b(survei|survey|surver|srvei|viewing|kunjungan|lihat\s+unit|liat\s+unit|lihat\s+lokasi)\b/i;
+
+        // (a) Klausa TERAKHIR yang benar-benar menyebut survei — sinyal terkuat.
+        const clauses = String(custText).split(/[.!?\n;]+/).map(s => s.trim()).filter(Boolean);
+        let scoped = null;
+        for (let i = clauses.length - 1; i >= 0; i--) {
+          if (VIEWING_CLAUSE_RE.test(clauses[i])) { scoped = clauses[i]; break; }
+        }
+
+        /* (b) Customer tidak mengulang kata "survei" (wajar: "besok bisa",
+         * "jam 1 siang") tapi AI memang sedang membahas jadwal survei. Ambil
+         * pesan customer SESUDAH pertanyaan survei PERTAMA.
+         * ⚠️ Pertanyaan AI-nya WAJIB menyebut survei/viewing/kunjungan. Sempat
+         * dicoba dengan "tanggal berapa" saja dan itu langsung menyeret
+         * tanggal CHECK-IN hotel ("Check-in tanggal berapa?" → "15 juli")
+         * masuk ke slot tanggal survei — persis kontaminasi antar-slot yang
+         * mau dicegah di sini. */
+        if (!scoped) {
+          const AI_VIEWING_Q_RE = /\b(survei|survey|viewing|kunjungan)\b/i;
+          let firstIdx = -1;
+          for (let i = 0; i < activeHistory.length; i++) {
+            const r = activeHistory[i];
+            if (r && (r.role === 'ai' || r.role === 'assistant')
+                && AI_VIEWING_Q_RE.test(String(r.message || ''))) { firstIdx = i; break; }
+          }
+          if (firstIdx >= 0) {
+            const after = activeHistory.slice(firstIdx + 1)
+              .filter(r => r && (r.role === 'user' || r.role === 'customer'))
+              .map(r => String(r.message || ''));
+            after.push(String(userMessage || ''));
+            scoped = after.join('. ').trim();
+          }
+        }
+
+        if (!scoped) return undefined;
+        const parsed = parseCustomerDate(expandAbbreviations(scoped), new Date());
+        return parsed && parsed.status === 'ok' ? parsed.formatted : undefined;
+      } catch (_err) {
+        return undefined; // fail-open: jangan pernah menghentikan alur karena parsing tanggal
+      }
+    })();
+
+    /* ── M192 (9 Sep 2026) — "✓ Masuk" HANYA BILA MEMANG DITANYA & DIJAWAB ──
+     * Bug produksi: customer bilang "Saya bisa survei bulan depan, Kak" dan
+     * ringkasan menulis `✓ Masuk: Bulan depan` — tanggal MASUK yang tidak
+     * pernah ditanyakan AI dan tidak pernah dijawab customer. `hasMoveInDate`
+     * lama hanya mencari nama bulan / "bulan depan" DI SELURUH teks sesi,
+     * tanpa peduli kalimat itu sebenarnya bicara soal SURVEI.
+     *
+     * Jalur LLM sudah lama punya penjaga ini (`isViewingOnly`, M63 di
+     * aiPromptBuilderService.js): "tanggal di kalimat viewing bukan tanggal
+     * masuk, KECUALI kalimatnya juga menyebut masuk/check-in". Jalur Private
+     * Agent belum — jadi aturan yang sama diterapkan di sini, per KLAUSA.
+     *
+     * Syaratnya dua, sesuai aturan pemilik proyek: tanggalnya BUKAN milik
+     * kalimat survei, DAN memang ada yang menanyakannya (AI menyinggung
+     * masuk/check-in) atau customer menyatakannya sendiri ("mau pindah
+     * bulan depan"). Kalau tidak keduanya → baris Masuk TIDAK ditampilkan
+     * sama sekali, bukan ditebak.
+     */
+    const moveInScoped = (() => {
+      const MONTH_ID_WB = /\b(januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)\b/i;
+      const MONTH_EN_WB = /\b(january|february|march|may|june|july|august|october|november|december)\b/i;
+      const OTHER_DATE  = /\b(bulan ini|bulan depan|next month|this month|segera|soon|asap|secepatnya|besok|minggu ini|this week|next week|langsung masuk|immediate|sudah mau|ingin segera|ready to move)\b/i;
+      // Sama persis dengan hasMoveInCue/isViewingOnly milik M63 di jalur LLM.
+      const MOVE_IN_CUE = /\b(check[\s-]?in|checkin|masuk|mulai\s+(sewa|tinggal|huni|nginap|menginap)|tempati|menempati|pindah|nginap|menginap|booking\s+dari)\b/i;
+      const VIEWING_CUE = /\b(survei|survey|surver|srvei|viewing|kunjungan|lihat\s+unit|liat\s+unit|lihat\s+lokasi)\b/i;
+      // AI pernah menyinggung masuk/check-in → berarti pertanyaannya memang
+      // pernah diajukan. "Enaknya survei tanggal berapa?" sengaja TIDAK cocok.
+      const aiAskedMoveInLoose = /\b(check[\s-]?in|checkin|masuk|pindah|menempati|tempati|huni)\b/i.test(String(aiText || ''));
+      const hasDate = (t) => MONTH_ID_WB.test(t) || MONTH_EN_WB.test(t) || OTHER_DATE.test(t);
+
+      const eligible = String(custText)
+        .split(/[.!?\n;]+/).map((s) => s.trim()).filter(Boolean)
+        .filter((c) => {
+          if (!hasDate(c)) return false;
+          if (VIEWING_CUE.test(c) && !MOVE_IN_CUE.test(c)) return false; // tanggal SURVEI
+          return MOVE_IN_CUE.test(c) || aiAskedMoveInLoose;              // ditanya / dinyatakan
+        });
+      return { has: eligible.length > 0, text: eligible.join('. ') };
+    })();
+
     const profile = {
       /* ── Core filters (from propertyRecommendationService) ── */
       transactionType : recoveredTx,
@@ -1679,12 +1800,7 @@ class ConversationQualifier {
       ]),
       // Use word-boundary regex for month names so brand names like "indomaret"
       // don't falsely trigger hasMoveInDate (indomaret.includes("maret") = true).
-      hasMoveInDate: (() => {
-        const MONTH_ID_WB = /\b(januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)\b/i;
-        const MONTH_EN_WB = /\b(january|february|march|may|june|july|august|october|november|december)\b/i;
-        const OTHER_DATE  = /\b(bulan ini|bulan depan|next month|this month|segera|soon|asap|secepatnya|besok|minggu ini|this week|next week|langsung masuk|immediate|sudah mau|ingin segera|ready to move)\b/i;
-        return MONTH_ID_WB.test(custText) || MONTH_EN_WB.test(custText) || OTHER_DATE.test(custText);
-      })(),
+      hasMoveInDate: moveInScoped.has,
       hasHouseholdInfo: this.#has(custText, [
         'keluarga', 'suami', 'istri', 'anak', 'orang tua',
         'sendiri', 'pasangan', 'berdua', 'bertiga', 'berempat',
@@ -1877,24 +1993,7 @@ class ConversationQualifier {
         return null;
       })(),
       viewingIsNight: /\bmalam\b/i.test(custText),
-      viewingDayRef: (() => {
-        const M = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
-        const fmt = (d) => `${d.getDate()} ${M[d.getMonth()]} ${d.getFullYear()}`;
-        if (/\bnanti\b|\bhari\s+ini\b|\bsekarang\b|(?:pagi|siang|sore|malam)\s+ini\b|\bini\s+(?:pagi|siang|sore|malam)\b/i.test(custText)) return fmt(new Date());
-        if (/\blusa\b/i.test(custText)) { const d = new Date(); d.setDate(d.getDate() + 2); return fmt(d); }
-        if (/\bbesok\b/i.test(custText)) { const d = new Date(); d.setDate(d.getDate() + 1); return fmt(d); }
-        // "minggu depan" (next week) = +7 hari dari hari ini → resolve ke tanggal konkret
-        if (/\bminggu\s+depan\b/i.test(custText)) {
-          const d = new Date(); d.setDate(d.getDate() + 7);
-          return fmt(d);
-        }
-        // "selasa depan", "rabu depan", dll (hari + depan tanpa "minggu")
-        if (/\b(senin|selasa|rabu|kamis|jumat|sabtu|ahad)\s+depan\b/i.test(custText)) {
-          const d = new Date(); d.setDate(d.getDate() + 7);
-          return fmt(d);
-        }
-        return null;
-      })(),
+      viewingDayRef: viewingDayRefResolved,
       hasViewingHour: /\b(jam|pukul)\s*\d{1,2}(?:[.:]\d{2})?\b/i.test(custText)
                    || /\b(jam|pukul)\s*(satu|dua|tiga|empat|lima|enam|tujuh|delapan|sembilan|sepuluh|sebelas|dua\s*belas)\b/i.test(custText),
       aiAskedViewingHour: this.#has(aiText, [
@@ -2159,6 +2258,10 @@ class ConversationQualifier {
     // Store active-session custText on profile so buildAgentBrief can reuse it
     // without re-reading FULL history (which would leak stale data from old sessions).
     profile._custText = custText;
+    // M192 — hanya klausa yang benar-benar layak jadi tanggal MASUK (bukan
+    // kalimat survei). Dipakai #extractMoveInDate supaya nilainya tidak
+    // diambil dari kalimat lain yang kebetulan memuat tanggal.
+    profile._moveInText = moveInScoped.text;
 
     // ── Re-scope budget to the ACTIVE session (anti-leak) ─────────────────────
     // `filters` di atas diisi extractPropertyFilters() yang membaca FULL history,
@@ -3369,9 +3472,23 @@ class ConversationQualifier {
         // over regex extraction which may pick up stale month names from old sessions.
         value : qualState.moveInDate
           ? this.#capitalizeDate(qualState.moveInDate)
-          : (profile.hasMoveInDate ? this.#extractMoveInDate(custText) : 'UNKNOWN'),
+          // M192 — dibaca HANYA dari klausa yang layak jadi tanggal masuk
+          // (kalimat survei sudah disaring keluar di buildProfile).
+          : (profile.hasMoveInDate
+              ? this.#extractMoveInDate(profile._moveInText || custText)
+              : 'UNKNOWN'),
         source: (qualState.moveInDate || profile.hasMoveInDate) ? 'stated' : 'UNKNOWN',
       },
+      /* M192 — unit yang SUDAH dipilih customer. Dibaca balik dari pesan
+       * konfirmasi AI lewat readConfirmedPick() (utils/listingSelectionGate.js)
+       * — sumber yang sama dengan gerbang pemilihan, bukan regex kedua. */
+      selectedListing: (() => {
+        const picked = readConfirmedPick(history);
+        return {
+          value : picked ? picked.label : 'UNKNOWN',
+          source: picked ? 'stated' : 'UNKNOWN',
+        };
+      })(),
       decisionMaker: {
         // Prefer qualState.decisionMaker (Phase 2 normalized: "Mandiri", "Koordinasi
         // dengan pasangan", etc.) over extraction from full custText.
@@ -3749,10 +3866,14 @@ class ConversationQualifier {
         : `Apologies, Kak — viewings are usually only available from morning to evening. What time (morning–evening) works for you? ⏰`;
     }
 
-    // Susun frasa hari + waktu. Default hari = besok bila hanya time-of-day disebut.
+    // Susun frasa hari + waktu.
+    // ⛔ M189f — TIDAK ADA lagi default "besok". Kalau customer belum menyebut
+    // harinya, pertanyaan ini cukup menyebut waktunya saja ("untuk siang") —
+    // mengarang hari membuat AI seolah sudah menyepakati tanggal yang tidak
+    // pernah disebut siapa pun.
     const tod    = profile.viewingTimeOfDay;                   // pagi/siang/sore/null
-    const dayRef = profile.viewingDayRef || (tod ? 'besok' : '');
-    const phraseId = [dayRef, tod].filter(Boolean).join(' ');  // "besok siang"
+    const dayRef = profile.viewingDayRef || '';
+    const phraseId = [dayRef, tod].filter(Boolean).join(' ');  // "09 Oktober 2026 siang"
     const forId    = phraseId ? ` untuk ${phraseId}` : '';
     const forEn    = phraseId ? ` for ${phraseId}`   : '';
     return isId
@@ -3777,43 +3898,37 @@ class ConversationQualifier {
       /(list|listing|katalog|daftar)\s*(aja|saja|only|dulu)/i.test(custText);
     if (wantsCatalogOnly) return 'Minta listing';
 
-    // AI asked for viewing HOUR and customer gave a specific time ("jam 1 siang")
-    // Triggered by Q9c "mau viewing jam berapa?" — builds "Besok siang jam 1" label,
-    // or "Jam 7 pagi, 9 Juli 2026" when dayRef is a resolved calendar date.
-    if ((profile.aiAskedViewingHour || profile.aiAskedDecisionMaker) && profile.hasViewingHour) {
-      const tod    = profile.viewingTimeOfDay;
-      const dayRef = profile.viewingDayRef || (tod ? 'besok' : '');
-      const dayRefCap = dayRef ? dayRef.charAt(0).toUpperCase() + dayRef.slice(1) : '';
-      const hourM  = custText.match(/\bjam\s*(\d{1,2}(?:[.:]\d{2})?)\b/i);
-      const hourStr = hourM ? `jam ${hourM[1]}` : '';
-      // Resolved date (contains month name, e.g. "9 Juli 2026") → "Jam 7 pagi, 9 Juli 2026"
-      const MONTHS_LO = ['januari','februari','maret','april','mei','juni','juli','agustus','september','oktober','november','desember'];
-      const isResolvedDate = dayRef && MONTHS_LO.some(m => dayRef.toLowerCase().includes(m));
-      if (isResolvedDate && hourStr) {
-        const hourCap = hourStr.charAt(0).toUpperCase() + hourStr.slice(1);
-        const todPart = tod ? ` ${tod}` : '';
-        return `${hourCap}${todPart}, ${dayRefCap}`;
-      }
-      const parts  = [dayRefCap, tod, hourStr].filter(Boolean);
-      return parts.length ? parts.join(' ') : 'Sudah dikonfirmasi';
+    /* ── M189f — JADWAL SURVEI DI RINGKASAN: TANGGAL ABSOLUT DULU, JAM OPSIONAL
+     * Format wajib: "09 Oktober 2026, Jam 10 pagi" — atau hanya
+     * "09 Oktober 2026" bila customer tidak menyebut jamnya (survei berjarak
+     * >7 hari memang biasanya belum ada jamnya; itu BUKAN slot kosong yang
+     * harus dikejar).
+     * ⛔ DILARANG menulis kata relatif ("besok", "minggu depan") di baris ini —
+     * `profile.viewingDayRef` SUDAH absolut hasil parseCustomerDate. Aturan
+     * yang sama sudah lama berlaku di jalur LLM (aiPromptBuilderService.js);
+     * jalur Private Agent ini yang belum mengikutinya sampai sekarang.
+     */
+    const dayAbs = profile.viewingDayRef || '';
+    if (dayAbs) {
+      const tod     = profile.viewingTimeOfDay || '';
+      const hourM   = custText.match(/\bjam\s*(\d{1,2}(?:[.:]\d{2})?)\b/i);
+      const hourLbl = hourM
+        ? `Jam ${hourM[1]}${tod ? ` ${tod}` : ''}`
+        : (tod ? tod.charAt(0).toUpperCase() + tod.slice(1) : '');
+      return [dayAbs, hourLbl].filter(Boolean).join(', ');
     }
 
-    // AI already asked for viewing date — check if customer confirmed a date
+    // Jam disebut tapi HARINYA belum — laporkan apa adanya, jangan mengarang hari.
+    if ((profile.aiAskedViewingHour || profile.aiAskedDecisionMaker) && profile.hasViewingHour) {
+      const tod   = profile.viewingTimeOfDay;
+      const hourM = custText.match(/\bjam\s*(\d{1,2}(?:[.:]\d{2})?)\b/i);
+      const parts = [hourM ? `Jam ${hourM[1]}` : '', tod].filter(Boolean);
+      return parts.length ? `${parts.join(' ')} (tanggal belum disebut)` : 'Sudah dikonfirmasi';
+    }
+
+    // AI already asked for viewing date — customer belum memberi tanggal yang
+    // bisa diresolusi (kalau bisa, cabang dayAbs di atas sudah menanganinya).
     if (profile.aiAskedViewingDate) {
-      if (profile.hasViewingDate) {
-        const datePatterns = [
-          /\b(besok|lusa)\b/i,
-          /\b(senin|selasa|rabu|kamis|jumat|sabtu|ahad|minggu)(?:\s+(?:ini|depan))?\b/i,
-          /\b(\d{1,2}\s*(?:januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember))\b/i,
-          /\b(tanggal\s*\d{1,2})\b/i,
-          /\b(jam\s*\d{1,2}(?:[.:]\d{2})?)\b/i,
-        ];
-        for (const p of datePatterns) {
-          const m = custText.match(p);
-          if (m) return `Survey dijadwalkan: ${m[1]}`;
-        }
-        return 'Mau viewing (tanggal dikonfirmasi)';
-      }
       return 'Mau viewing (tanggal belum dikonfirmasi)';
     }
 

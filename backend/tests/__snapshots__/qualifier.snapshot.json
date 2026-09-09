@@ -306,7 +306,6 @@
       "aiAskedViewingHour": true,
       "aiCount": 2,
       "buildingType": "house",
-      "hasMoveInDate": true,
       "hasViewingDate": true,
       "hasViewingHour": true,
       "location": "Surabaya",

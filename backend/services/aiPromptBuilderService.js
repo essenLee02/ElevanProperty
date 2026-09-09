@@ -1242,8 +1242,21 @@ function extractQualificationState(history = [], currentMessage = '') {
     // memuat tanggal masuk yang SALAH (M63).
     // Kecuali pesan itu juga menyebut isyarat masuk/check-in — mis. "checkin
     // tanggal 6, sekalian viewing" — di situ tanggalnya memang tanggal masuk.
-    const hasMoveInCue  = /\b(check[\s-]?in|checkin|masuk|mulai\s+(sewa|tinggal|huni|nginap|menginap)|tempati|menempati|pindah|nginap|menginap|booking\s+dari)\b/i.test(text);
-    const isViewingOnly = /\b(viewing|survei|survey|lihat\s+unit|lihat\s+propert|kunjungan|jadwal\w*)\b/i.test(text) && !hasMoveInCue;
+    const MOVE_IN_CUE_RE = /\b(check[\s-]?in|checkin|masuk|mulai\s+(sewa|tinggal|huni|nginap|menginap)|tempati|menempati|pindah|nginap|menginap|booking\s+dari)\b/i;
+    const VIEWING_CUE_RE = /\b(viewing|survei|survey|lihat\s+unit|lihat\s+propert|kunjungan|jadwal\w*)\b/i;
+    const hasMoveInCue  = MOVE_IN_CUE_RE.test(text);
+    const isViewingOnly = VIEWING_CUE_RE.test(text) && !hasMoveInCue;
+
+    /* ⭐ M192 (9 Sep 2026) — SARING PER-KLAUSA, BUKAN PER-PESAN.
+     * `isViewingOnly` menilai SELURUH pesan, jadi kalimat campuran lolos begitu
+     * ada satu isyarat masuk: "Saya mau masuk Desember. Survei 17 Oktober ya"
+     * → seluruh kalimat diparsing dan yang tertangkap justru tanggal SURVEI-nya
+     * (17 Oktober), sehingga "✓ Masuk" di ringkasan memuat tanggal yang
+     * customer maksudkan untuk survei. Buang dulu klausa yang murni viewing. */
+    const moveInRaw = String(raw)
+      .split(/[.!?\n;]+/).map((c) => c.trim()).filter(Boolean)
+      .filter((c) => !(VIEWING_CUE_RE.test(c) && !MOVE_IN_CUE_RE.test(c)))
+      .join('. ');
 
     /* ⭐ M184 (6 Sep 2026) — JAWABAN TANGGAL PASTI HARUS MENIMPA JAWABAN BULAN.
      * Bug nyata: customer menjawab "Akhir Desember", AI lalu bertanya "boleh
@@ -1262,7 +1275,7 @@ function extractQualificationState(history = [], currentMessage = '') {
 
     if ((!state.moveInDate && !isViewingOnly) || (isCorrectionMsg && !isViewingOnly)
         || (canOverwriteVague && !isViewingOnly)) {
-      const parsed = parseCustomerDate(raw, now);
+      const parsed = parseCustomerDate(moveInRaw, now);
       if (parsed) {
         if (parsed.status === 'ok') {
           state.moveInDate    = parsed.formatted;
