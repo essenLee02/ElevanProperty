@@ -624,9 +624,9 @@ function stripInvestmentIntentPhrases(text) {
  *   'boarding_house'|'shophouse'|'store'|'office'|'warehouse'|'mansion'|'others'|null
  */
 function detectCanonicalType(txt = '') {
-  const w = stripCommercialUsePhrases(
+  const w = stripLandSizePhrases(stripCommercialUsePhrases(   // M188: "tanah minimal 120 m2" bukan tipe
     stripMovingFromPhrases(stripAmbiguousRumah(stripNearPhrases(String(txt || '').toLowerCase())))
-  );
+  ));
   if (/\bkondotel\b|\bcondotel\b/.test(w))                                    return 'kondotel';
   if (/\bmansion\b|\brumah\s+mewah\b/.test(w))                                return 'mansion';
   if (/\bvill?a\b/.test(w))                                                   return 'villa';
@@ -753,6 +753,22 @@ function includesAnyWordBounded(text, words = []) {
   return words.some((word) => matchesWordBounded(text, word));
 }
 
+/**
+ * M188 (11 Sep 2026) — UKURAN TANAH BUKAN TIPE PROPERTI.
+ * "Saya butuh tanah minimal 120 m2" / "tanahnya kecil" / "luas tanah 90"
+ * adalah kebutuhan LUAS untuk rumah yang sedang dicari, bukan ganti tipe ke
+ * 'tanah/kavling' (others). Simulasi 11 Sep: tipe berubah house→others, banner
+ * "ganti tipe" menyala, dan AI balik bertanya "rumah atau tanah?" dua giliran.
+ * Buang frasa ukuran tanah sebelum deteksi tipe; "cari tanah kavling di X"
+ * (tanpa ukuran/adjektiva) tetap terdeteksi others.
+ */
+function stripLandSizePhrases(text = '') {
+  return String(text || '')
+    .replace(/\bluas\s+tanah(?:nya)?\b[^,.;]*/gi, ' ')
+    .replace(/\btanah(?:nya)?\s*(?:yang\s+)?(?:minimal|maksimal|min\.?|max\.?|sekitar|kurang\s+lebih|seluas|lebar|kecil|besar|luas|sempit|lega|\d)[^,.;]*/gi, ' ')
+    .replace(/\btanah(?:nya)?\s*(?:m2|m²|meter)\b/gi, ' ');
+}
+
 function detectBuildingType(message = '') {
   const text = normalizeText(message);
   // Strip "dekat X" anchors, ambiguous "rumah makan/…", commercial use-phrases
@@ -760,13 +776,21 @@ function detectBuildingType(message = '') {
   // pollutes building-type detection (a restaurant anchor must not become house;
   // a house used as office stays house; "pindah dari apartemen" — the home being
   // LEFT — must not become the desired type).
-  const textForType = stripCommercialUsePhrases(stripMovingFromPhrases(stripAmbiguousRumah(stripNearPhrases(text))));
+  const textForType = stripLandSizePhrases(stripCommercialUsePhrases(stripMovingFromPhrases(stripAmbiguousRumah(stripNearPhrases(text)))));
   return Object.entries(PROPERTY_TYPES).find(([, keywords]) => includesAnyWordBounded(textForType, keywords))?.[0] || '';
 }
 
 function detectTransactionType(message = '') {
-  const text = normalizeText(message);
-  return Object.entries(TRANSACTION_TYPES).find(([, keywords]) => includesAny(text, keywords))?.[0] || '';
+  const raw  = normalizeText(message);
+  // M187: includesAny() mencocokkan SUBSTRING, jadi "untuk investasi DISEWAKAN"
+  // terbaca 'sewa' -> tx=rent dan katalog SEWA dikirim ke investor yang mau
+  // BELI (simulasi 11 Sep). Frasa rencana-menyewakan dibuang dulu (helper yang
+  // sama dengan detektor kanonik); sisa niat investasi tanpa kata transaksi
+  // lain = pembeli.
+  const text = stripInvestmentIntentPhrases(raw);
+  const hit  = Object.entries(TRANSACTION_TYPES).find(([, keywords]) => includesAny(text, keywords))?.[0] || '';
+  if (!hit && /(?<![a-z])invest(?:asi|ment)?(?![a-z])/.test(raw)) return 'sale';
+  return hit;
 }
 
 function cleanLocationCandidate(value = '') {
@@ -1756,7 +1780,12 @@ function _mergeBudget(current, accumulated) {
 
 // Cue bahwa pesan memang MENGGANTI lokasi pencarian (bukan sekadar menyebut kota
 // dalam konteks lain: "orang surabaya", "kota bandung bagus ya", "survei bareng").
-const _LOCATION_CHANGE_CUE = /\b(di|ke|area|kawasan|daerah|lokasi|pindah|cari(?:kan|in)?|nyari|prefer|mau)\b/i;
+// M187: "Yah. Kalau Sidoarjo ada apa saja?" setelah Malang dinyatakan kosong
+// TIDAK punya satu pun cue lama, jadi filters.location tetap "Malang" — katalog
+// dicari di Malang (kosong) padahal state block sudah pindah ke Sidoarjo, dan
+// model menerima dua kebenaran yang bertentangan. Bentuk tanya "kalau X",
+// "coba X", "X aja/saja", "ganti X" adalah cara paling lazim customer pindah kota.
+const _LOCATION_CHANGE_CUE = /\b(di|ke|area|kawasan|daerah|lokasi|pindah|ganti|coba|kalau|klo|kl|gimana|bagaimana|aja|saja|cari(?:kan|in)?|nyari|prefer|mau)\b/i;
 
 /**
  * Haruskah lokasi baru (next) menimpa lokasi yang sudah ada (prev)?
@@ -2287,6 +2316,19 @@ async function searchProperties(filters = {}) {
   let landmarkPropertyIds = null;
   if (filters.landmark) {
     landmarkPropertyIds = await getPropertyIdsForLandmark(filters.landmark);
+  }
+  /* M188 (11 Sep 2026) — NAMA AREA MENANG ATAS TAG LANDMARK.
+   * "Rumah di Pakuwon": detectLandmark() memberi 'PAKUWON', lalu tag landmark
+   * (locations) menunjuk unit Wiyung / Wisata Bukit Mas yang "dekat Pakuwon
+   * Mall" — sementara agent punya 23 rumah di area *Pakuwon City* sendiri yang
+   * tidak pernah muncul di blok katalog. Model lalu mengirim Wiyung/Bukit Mas
+   * (5,2 M) ke customer yang minta Pakuwon. Bila token landmark cocok dengan
+   * nama AREA/alamat unit milik agent, itulah yang dimaksud customer. */
+  if (filters.landmark) {
+    const lm = normalizeText(filters.landmark);
+    const byArea = filterProperties(source, { ...filters, landmarkPropertyIds: null })
+      .filter((p) => [p.district, p.area, p.location, p.address].map(normalizeText).join(' ').includes(lm));
+    if (byArea.length) return byArea;
   }
   const results = filterProperties(source, { ...filters, landmarkPropertyIds });
   if (filters.landmark && results.length === 0) {
@@ -2900,6 +2942,7 @@ module.exports = {
   stripNearPhrases,
   stripAmbiguousRumah,
   stripInvestmentIntentPhrases,
+  stripLandSizePhrases,
   // M162 — detektor kanonik tipe/transaksi (satu-satunya salinan; lihat komentar
   // di atas definisinya sebelum tergoda menulis regex serupa di modul lain).
   detectCanonicalType,

@@ -1,8 +1,8 @@
 ================================================================================
   ELEVAN PROPERTY — COMPREHENSIVE PROJECT CONTEXT (V18)
   Dibuat  : 15 Juni 2026
-  Update  : 6 September 2026 (M183–M185) — ⭐ SUITE HIJAU PENUH PERTAMA KALI:
-            **2837/2837, nol gagal, nol crash**. Rinciannya di §PERUBAHAN
+  Update  : 11 September 2026 (M183–M187) — ⭐ SUITE HIJAU PENUH:
+            **2929/2929, nol gagal, nol crash** (M186–M188 di poin 13–16, paling bawah). Rinciannya di §PERUBAHAN
             BESAR V17 → V18 (paling bawah). Tiga hal yang paling mengubah
             cara kerja sesi berikutnya:
               (1) `SKILL_MAX_RESPONSE_CHARACTERS=3000` DIAM-DIAM MEMOTONG 71%
@@ -5251,7 +5251,176 @@ penuh untuk pertama kalinya sejak berbulan-bulan.
        disinkronkan manual setiap edit (tes membaca root, produksi membaca
        asset) — kandidat penyatuan berikutnya.
 
-  PENOMORAN M — nomor berikutnya untuk sesi mendatang: **M186**.
+  PENOMORAN M — nomor berikutnya untuk sesi mendatang: **M189**.
+
+ 16. ⭐ M188 (11 Sep 2026, malam) — 8 SIMULASI LIVE chat_gpt_responds × DeepSeek.
+     .env dikembalikan: AI_SKILL_CALL=asset\skills\chat_gpt_responds,
+     SKILL_MAX_RESPONSE_CHARACTERS=11000 (skill 10.492 char, tanpa potong).
+     Runner umum: scripts/simulate-platform-skill.js [house|chatgpt]
+     (+ scripts/sim-scenarios-chat-gpt-responds.js, 8 sesi × 10-13 giliran:
+     pertanyaan, keluhan, ganti area/transaksi, penolakan, permintaan,
+     kebutuhan, penutup). Laporan: backend/logs/sim-chatgpt-2026-09-11{-run1..4,}.md.
+     Alat baru: scripts/debug-platform-prompt.js + env opt-in
+     AI_PROMPT_DEBUG_FILE=<path> → prompt yang DITERIMA model ditulis ke berkas.
+     HASIL AKHIR (run 5, 88 giliran): balasan backend 0 · skrip interview 0 ·
+     placeholder 0 · harga di luar katalog 0 · summary di penutup 7/8 (yang
+     tidak: customer menolak semua & pamit tanpa pilihan) · tanggal survei di
+     summary semuanya benar · pembiayaan/target ditanya setelah penolakan 0.
+     LIMA FAKTA BACKEND YANG SALAH (ditemukan run 1-4, semua diperbaiki, tes
+     tests/extractorFactsFromLiveSimM188.test.js 29/29):
+       a) financing: "nggak mau bahas KPR" → KPR; "cash, nggak pakai KPR" →
+          kombinasi. Kini negasi & penolakan topik dihormati.
+       b) "Saya butuh tanah minimal 120 m2" → tipe others + banner ganti tipe →
+          AI tanya "rumah atau tanah?" 2 giliran. stripLandSizePhrases() dipakai
+          di 4 detektor tipe.
+       c) Tanggal survei sukarela "Sabtu ini jam 10" TIDAK terparse (parser tak
+          kenal nama hari) → jam tercatat tanpa tanggal → model menempelkan
+          tanggal masuk sebagai tanggal survei. customerDateParser kini mengenal
+          Senin..Minggu ("X ini", "X depan"; "minggu" = pekan kecuali "hari
+          minggu"); ekstraktor menangkap tanggal survei tanpa harus ditanya AI,
+          dan "mulai November" tidak jadi tanggal survei walau AI barusan tanya.
+       d) searchProperties: "rumah di Pakuwon" → tag landmark menunjuk unit
+          Wiyung/Wisata Bukit Mas (5,2 M) padahal agent punya 23 rumah di area
+          Pakuwon City. Nama AREA kini menang atas tag landmark.
+       e) (dari M187b) tx investor "disewakan", "putuskan sendiri", "paling
+          murah berapa?", kota lengket tanpa cue, gateFacts tak pernah sampai.
+     MASIH TERLIHAT & BUKAN BACKEND: DeepSeek sering mengutip ulang kartu unit
+     yang sedang dibahas (doc 03 mengizinkan echo unit terpilih; pengulangan
+     katalog PENUH sudah jauh berkurang), kadang 2 tanda tanya per balasan
+     (7/88), budget "sekitar 700 juta" ditampilkan model sebagai rentang ±15%
+     hasil detectBudget (fakta backend yang benar tapi bukan kata customer).
+     Tes Private Agent yang dipin 'private' (cityAvailabilityGate dst.) tetap
+     hijau. SUITE: **2929/2929**.
+
+ 15. ⭐ M187b (11 Sep 2026) — VERIFIKASI LIVE 5 SIMULASI (DeepSeek × house_pilot).
+     scripts/simulate-house-pilot-deepseek.js: 5 sesi × 10 giliran customer
+     (pertanyaan, keluhan, ganti area/transaksi, penolakan, permintaan,
+     kebutuhan, penutup) lewat generateWhatsAppAIReply() sungguhan; laporan
+     di backend/logs/house-pilot-sim-<tgl>.md (run1/run2 = sebelum/sesudah).
+     Ukuran 50 giliran (run akhir): backendReplies 0 · skrip interview 0 ·
+     placeholder 0 · harga di luar katalog 0 · pembiayaan/target ditanya
+     setelah penolakan 0 · >700 char tanpa kartu 0 · ≥2 tanda tanya 1.
+     Dump prompt (AI_PROMPT_DEBUG_FILE=<path>, opt-in) membongkar 3 bug
+     "bahan" yang selama ini tak terlihat:
+       a) gateFactsContext (ketersediaan area, definisi istilah, pilihan unit)
+          SEJAK M158 hanya dirangkai ke enrichedPropertyCtx (jalur Private
+          Agent) — TIDAK PERNAH sampai ke platform AI. Model membaca "katalog
+          KOSONG" tanpa pernah melihat "Alana Cemandi: 20 unit". Kini ikut
+          extraContext dan dirender paling atas di blok data.
+       b) filters.location lengket di kota lama: "Yah. Kalau Sidoarjo ada apa
+          saja?" tidak punya cue ganti kota → katalog dicari di Malang (kosong)
+          padahal state block sudah Sidoarjo. _LOCATION_CHANGE_CUE ditambah
+          kalau/klo/coba/ganti/gimana/aja/saja.
+       c) RAG referensi perilaku menyuntik docs chat_gpt_responds ke prompt
+          house_pilot (dua skill bertengkar). includeSkillReference kini hanya
+          bila AI_SKILL_CALL memuat chat_gpt_responds/claude_responds/
+          elevan-property-assistant; RAG pengetahuan tetap.
+     Ekstraktor (fakta yang salah = model dibohongi backend):
+       "investasi disewakan" → tx sale (bukan rent; substring 'sewa' di
+       detectTransactionType & 2 situs aiPromptBuilder); "putuskan sendiri /
+       konsul keluarga" → Q9 Mandiri, bukan penghuni 1 orang/keluarga;
+       "yang paling murah berapa?" (pertanyaan) tidak lagi jadi budget
+       'terjangkau'.
+     Facts block kini memuat memori "kartu listing sudah terkirim N× (alamat
+     …)" — fakta, bukan perintah; pengulangan kartu turun dari 7× berturut
+     (run1) ke sporadis (run3). SISA yang MASIH terlihat & bukan backend:
+     DeepSeek kadang menempel ulang kartu yang sama saat menjawab pertanyaan
+     sampingan (S1 T5/T8/T9) dan sekali "Dekat kok kak, ada beberapa sekolah"
+     sebelum ralat "saya cek dulu" — house_pilot .md TIDAK punya aturan
+     "jangan kirim ulang kartu" (chat_gpt_responds punya); itu keputusan
+     pemilik skill. Placeholder {{AGENT_NAME}} dkk tetap tidak disubstitusi.
+     Tes yang dipin ke AI_PRIMARY_PROVIDER='private' (menguji kalimat gerbang
+     deterministik, selama ini lolos lewat DeepSeek live): privateAgentAreaGate,
+     budgetPersistenceAndAddressRecall, cityAvailabilityGate.
+     SUITE: **2900/2900**.
+
+ 14. ⭐⭐ M187 (11 Sep 2026) — PROFIL 'platform': BACKEND HANYA BAHAN.
+     Pertanyaan pemilik proyek: "apakah ini benar skill house_pilot yang
+     jalan?" atas transkrip Natasha/deepseek 11 Sep. JAWABAN: BUKAN. Setiap
+     pertanyaan setelah customer memilih unit ("sudah lihat berapa?", dua harga
+     kontras, "target kapan proses belinya selesai?" 3x — termasuk setelah
+     "masih tanya-tanya dulu", penghuni, baru/second/inden, furnitur,
+     fasilitas, tanggal survei) adalah kalimat VERBATIM dari
+     buildWhatsappReplyPrompt (aiPromptBuilderService.js), bukan dari skill.
+     Prompt user backend = 33.293 char (> skill 29.199 char yang dikirim
+     sebagai system), memuat "Q8 MANDATORY", "Q_KPR MANDATORY", "DILARANG
+     tampilkan summary jika Q_KPR/Q5/Q6 ❓", Task list bernomor, dan DIREKTIF
+     FINAL "menang atas seluruh instruksi di atas". Model menuruti yang paling
+     spesifik & paling akhir = agenda backend.
+     PERBAIKAN:
+       a) buildPlatformWhatsappPrompt() — dipakai bila extraContext.guardProfile
+          === 'platform' (dikirim whatsappAIService). Isi: bahasa paksa,
+          identitas agent/app, batas layanan agent, CATATAN SLOT sebagai FAKTA
+          (buildQualificationFactsBlock: nilai yang customer sebut + satu baris
+          slot yang belum disebut + catatan perubahan netral; TANPA ❓/⛔/
+          "tanyakan"/"summary diblokir"), katalog, fakta gerbang, RAG, riwayat,
+          pesan terbaru. ≈2.5K char tanpa katalog (dari 33K). Jalur lama utuh
+          untuk profil 'local' & web chatbot (byte-identik bila guardProfile
+          tidak dikirim).
+       b) Gerbang yang MENYUSUN balasan kini jadi gateFacts di profil platform:
+          area ambigu, tawaran kota ditolak/diterima, kota berstok NOL (M164b
+          dibalik — faktanya kini keras: "TIDAK ada satu pun listing di X,
+          kota yang ada stoknya: …"). Yang tetap return teks: agent_scope_guard
+          (batas bisnis) dan guardReplyIdentity (anti-bocor placeholder).
+       c) Temuan sampingan karena tes Private Agent dipin ke
+          AI_PRIMARY_PROVIDER='private' (selama ini lolos lewat DeepSeek live +
+          direktif): fallback kota dari pesan AI mengangkat contoh "Jakarta
+          Selatan" di pertanyaan Q2 lokal jadi state.city; gerbang area
+          mensyaratkan realCity padahal checkAreaAvailability agent-scoped &
+          toleran typo; Q2c lokal masih contoh statis Pakuwon/PTC (kini
+          qualState.agentAreas); pertanyaan jarak diblokir qual gate (pola M132).
+     ATURAN KE DEPAN: teks perilaku TIDAK PERNAH ditambahkan ke prompt platform
+     — taruh di skill .md. Fakta keras (stok nol, ambigu, pilihan unit) →
+     gateFacts. Semua `return { reply }` di whatsappAIService wajib dijaga
+     backendMayCompose kecuali leak-guard/scope-guard.
+     .env: SKILL_MAX_RESPONSE_CHARACTERS=30000 (uji coba house_pilot 29.199
+     char; kembalikan 11000 bila AI_SKILL_CALL kembali ke chat_gpt_responds).
+     Regresi: tests/platformPromptMaterialsOnlyM187.test.js (39/39).
+     SUITE: **2895/2895**, nol gagal, nol crash.
+     MASIH TERBUKA: placeholder {{AGENT_NAME}}/{{INVENTORY}}/{{BROKERAGE}} di
+     house_pilot tidak disubstitusi kode mana pun (berisiko bocor literal);
+     "✓ Listing: Pakuwon City (668.8 juta)" di summary 11 Sep berasal dari blok
+     katalog SESI SEBELUMNYA (batas sesi, lihat M172-class).
+
+ 13. ⭐ M186 (11 Sep 2026) — KALIMAT RED FLAG BUKAN PERMINTAAN LISTING.
+     Transkrip produksi 11 Sep: setelah 2 kartu, customer menulis "Saya cari
+     rumah yang tdk panas, tdk banjir, udaranya segar, dan kawasan asri" lalu
+     "Apakah rmh tersebut banjir dan panas?". AI mengirim ULANG katalog,
+     mencatat area = "Asri", kota = "pakuwon", dan menganggap pertanyaan
+     atribut itu off-topic. EMPAT bug terpisah, semuanya dibetulkan:
+       a) utils/propertyKeywordFilter.js — `isDailyLifeOffTopic` memblokir
+          kalimat banjir/panas tanpa syarat. Ditambah `isUnitAttributeQuestion`
+          (kata atribut + rujukan unit rmh/tersebut/-nya/nomor + bentuk tanya);
+          memotong blok itu DAN meloloskan `hasPropertyKeyword`. "hari ini
+          panas banget" tetap diblokir. `rmh` masuk PROPERTY_TYPES.
+       b) aiPromptBuilderService.js loop district — "kawasan asri" cocok regex
+          `kawasan <X>` → district "Asri". Ditambah `AREA_QUALITY_WORDS`
+          (asri, sepi, ramai, strategis, nyaman, aman, sejuk, panas, ...).
+       c) 4 situs kota mempromosikan SEMUA hasil detectLocation() ke
+          state.city. `_assignLocation()` menghormati `isKnownLocationName`:
+          kota asli → city, token tak dikenal → district.
+       d) Situs Q5 hanya mengisi redFlags. Ditambah `_splitAvoidAndPrefer`
+          yang mengisi klausa positif ke `preferences`. ⛔ `redFlags` HARUS
+          TETAP KALIMAT MENTAH — `#buildAvoidPreferPairs` hilir menurunkan
+          antonim darinya; percobaan pertama menaruh hanya klausa negasi dan
+          merusak 3 suite (avoidPreferPairs, bookingShortStayVersi2,
+          warehouseAreaInventionAndCompoundAvoid).
+     .md aktif: doc 02 §5 kini dibuka dengan daftar eksplisit (tdk banjir,
+     tdk panas, tidak berpolusi, asri, akses strategis, ramai/sepi) = red flag
+     PROPERTI, dicatat + diakui satu klausa, **never re-send the catalog for
+     it**; "kawasan asri" = kualitas, bukan nama area. doc 03: pertanyaan
+     kondisi unit yang dipilih dijawab dari kartu, absen → "Saya catat dulu
+     ya, Kak", lalu SATU pertanyaan survei. doc 04: lingkup memuat red flag/
+     kualitas rumah-kawasan. Ukuran skill aktif: **10.492 char termuat**
+     (cap 11.000, target ≤10.500, tanpa pemotongan); disinkronkan byte-identik
+     ke skills/chat_gpt_responds, claude_responds, elevan-property-assistant.
+     Regresi: tests/redFlagPreferenceAndUnitAttributeM186.test.js (24/24).
+     SUITE: **2861/2861**, nol gagal, nol crash.
+     Kosakata "kualitas tempat" baru wajib masuk TIGA tempat: UNIT_ATTRIBUTE_RE
+     (gate), AREA_QUALITY_WORDS (ekstraktor), doc 02 §5 / doc 04.
+     DIFLAG, belum dikerjakan: summary 18:50 di transkrip yang sama membocorkan
+     slot sesi sebelumnya (Citraland/budget/patokan) — batas sesi; dan
+     transaksi ditanya ulang setelah summary.
 
 
 ================================================================================

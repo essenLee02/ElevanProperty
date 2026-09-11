@@ -1,5 +1,7 @@
 const { loadProjectSkillPrompt } = require('./skillPromptService');
-const { detectBudget, detectFacilities, stripCommercialUsePhrases, stripNearPhrases, stripAmbiguousRumah, stripInvestmentIntentPhrases, stripMovingFromPhrases, detectUseCase, isNonResidentialUse, detectLocation, isKnownLocationName, detectCanonicalType, detectCanonicalTransaction } = require('./propertyRecommendationService');
+const { detectBudget, detectFacilities, stripCommercialUsePhrases, stripNearPhrases, stripAmbiguousRumah, stripInvestmentIntentPhrases, stripMovingFromPhrases, detectUseCase, isNonResidentialUse, detectLocation, isKnownLocationName, detectCanonicalType, detectCanonicalTransaction, stripLandSizePhrases } = require('./propertyRecommendationService');
+// M188: ukuran tanah ("tanah minimal 120 m2") bukan tipe properti — lihat stripLandSizePhrases.
+const _stripLandSize = (t) => { try { return stripLandSizePhrases(t); } catch { return t; } };
 const { parseCustomerDate, isDontKnowDateAnswer, WAITING_THE_UPDATE, parseSurveyTime } = require('../utils/customerDateParser');
 const { expandAbbreviations }                 = require('../utils/lazyChatNormalizer');
 const { expandStandardFacilities }            = require('../utils/standardFacilities');
@@ -1026,8 +1028,14 @@ function extractQualificationState(history = [], currentMessage = '') {
     const isCorrectionMsg = CORRECTION_RE.test(text);
 
     // Q1 — Transaction type. "booking/pesan" = rent frame (hotel/kondotel/villa)
+    // M187: "rumah untuk investasi, nanti DISEWAKAN" = PEMBELI yang akan
+    // menyewakan, bukan penyewa. Simulasi 11 Sep: tx terbaca 'rent' dan katalog
+    // sewa dikirim ke investor yang mau beli. Kata pasif "disewakan/sewakan/
+    // dikontrakkan" bersama investasi/beli tidak dibaca sebagai sewa.
     if (!state.transactionType) {
-      if (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|kos|kost|kosan|kostan|ngekos|ngekost|ngekosan|indekos|indekost|rent|rental|lease|booking|book|pesan|reservasi)\b/.test(text))
+      const rentsOutAsBuyer = /\b(disewakan|sewakan|disewain|dikontrakkan|dikontrakan)\b/.test(text)
+        && /\b(invest(?:asi)?|beli|membeli|dibeli)\b/.test(text);
+      if (!rentsOutAsBuyer && /\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|kos|kost|kosan|kostan|ngekos|ngekost|ngekosan|indekos|indekost|rent|rental|lease|booking|book|pesan|reservasi)\b/.test(text))
         state.transactionType = 'rent';
       else if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase|invest|investasi)\b/.test(text))
         state.transactionType = 'sale';
@@ -1060,7 +1068,7 @@ function extractQualificationState(history = [], currentMessage = '') {
       else if (/\bkantor\b|\boffice\b/.test(tt))                                   state.buildingType = 'office';
       else if (/\bgudang\b|\bwarehouse\b/.test(tt))                                   state.buildingType = 'warehouse';
       else if (/\brumah\b(?!\s+(?:makan|sakit|tangga|ibadah|duka|produksi|tahanan|susun|potong|kos))|\bhouse\b|\bkontrakan\b/.test(tt))           state.buildingType = 'house';
-      else if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(tt)) state.buildingType = 'others';
+      else if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(_stripLandSize(tt))) state.buildingType = 'others';   // M188
     }
 
     // Fallback types — "kalau/jika tidak/enggak ada [type] ... [type] saja"
@@ -1181,7 +1189,12 @@ function extractQualificationState(history = [], currentMessage = '') {
         // punya cabangnya sendiri sama sekali. Sekarang: kategori APA PUN
         // disimpan apa adanya sebagai nama tier-nya (angka konkret di-resolve
         // belakangan di buildAgentBrief, yang butuh tipe+transaksi dulu).
-        if (b.preference) {
+        // M187: "yang paling murah berapa?" adalah PERTANYAAN harga, bukan
+        // pernyataan budget; jangan catat tier 'terjangkau' darinya.
+        const priceQuestion = /\bberapa\b|\?/.test(raw) && !/\b(budget|bujet|dana|anggaran)\b/i.test(raw);
+        if (b.preference && priceQuestion) {
+          // biarkan kosong: customer belum menyebut budget
+        } else if (b.preference) {
           state.budget = b.preference;
         } else {
           state.budget = b.text + budgetPeriodSuffix(b.period, b.periodCount);
@@ -1261,13 +1274,20 @@ function extractQualificationState(history = [], currentMessage = '') {
       }
       // "sendirian" TIDAK match \bsendiri\b (boundary gagal di "-an") dan "sendiran"
       // adalah typo — pakai sendiri(?:an)? agar "Saya tinggal sendirian" tertangkap.
-      if (!state.household && (/\bsendiri(?:an)?\b|\bsendiran\b|\bjust me\b|\balone\b/.test(text))) {
+      // M187: "saya putuskan sendiri / memutuskan sendiri" adalah jawaban
+      // KEPUTUSAN (Q9 = Mandiri), bukan komposisi penghuni. Simulasi 11 Sep:
+      // investor yang bilang begitu tercatat "Penghuni: 1 orang (sendiri)".
+      const sendiriIsDecision = /\b(putus(?:kan|in)?|memutuskan|keputusan|menentukan|tentukan)\b/.test(text);
+      if (sendiriIsDecision && !state.decisionMaker && /\bsendiri\b/.test(text)) state.decisionMaker = 'Mandiri';
+      if (!state.household && !sendiriIsDecision && (/\bsendiri(?:an)?\b|\bsendiran\b|\bjust me\b|\balone\b/.test(text))) {
         state.household = '1 orang (sendiri)';
       } else if (!state.household && /\bsama (istri|suami)\b|\bbersama (istri|suami)\b/.test(text)) {
         state.household = '2 orang (bersama pasangan)';
       } else if (!state.household && /\bberdua\b/.test(text) && !/\bberdua (sama|dengan)\s*(sekolah|kantor|mall)/.test(text)) {
         state.household = '2 orang (berdua)';
-      } else if (!state.household && /\bkeluarga\b/.test(text) && !/\bkeluarga lain\b|\bkoordinasi.*keluarga\b/.test(text)) {
+      } else if (!state.household && !sendiriIsDecision && /\bkeluarga\b/.test(text)
+        // "konsul/diskusi/tanya/izin keluarga" = soal KEPUTUSAN, bukan penghuni (M187)
+        && !/\bkeluarga lain\b|\b(koordinasi|konsul(?:tasi)?|diskusi|tanya|izin|rembug|rundingan|musyawarah)\w*\b[^.]{0,20}\bkeluarga\b/.test(text)) {
         state.household = 'keluarga';
       } else if (!state.household && (/\borangtua\b|\borang tua\b|\bparents\b/.test(text))) {
         state.household = 'dengan orangtua';
@@ -1310,7 +1330,10 @@ function extractQualificationState(history = [], currentMessage = '') {
     // Kecuali pesan itu juga menyebut isyarat masuk/check-in — mis. "checkin
     // tanggal 6, sekalian viewing" — di situ tanggalnya memang tanggal masuk.
     const MOVE_IN_CUE_RE = /\b(check[\s-]?in|checkin|masuk|mulai\s+(sewa|tinggal|huni|nginap|menginap)|tempati|menempati|pindah|nginap|menginap|booking\s+dari)\b/i;
-    const VIEWING_CUE_RE = /\b(viewing|survei|survey|lihat\s+unit|lihat\s+propert|kunjungan|jadwal\w*)\b/i;
+    // M188: toleran salah ketik (surver/survay/survie) + "lihat rumah/apartemen/
+    // langsung/lokasi" — "Saya bisa surver kamis ini" adalah jadwal SURVEI, bukan
+    // tanggal masuk (bocor sejak nama hari bisa diparse).
+    const VIEWING_CUE_RE = /\b(viewing|surv[ea][iy]?\w*|survie|lihat\s+(?:unit|propert\w*|rumah|apart\w*|langsung|lokasi|kos)|cek\s+lokasi|kunjungan|jadwal\w*)\b/i;
     const hasMoveInCue  = MOVE_IN_CUE_RE.test(text);
     const isViewingOnly = VIEWING_CUE_RE.test(text) && !hasMoveInCue;
 
@@ -1373,8 +1396,14 @@ function extractQualificationState(history = [], currentMessage = '') {
           || /\b(?:urusan|soal|masalah|perkara)\b[^.?!]{0,20}\b(?:nanti|ntar|belakangan)\b/i.test(text)
           || /\b(?:belum|blm)\b[^.?!]{0,15}\b(?:mikir|kepikiran|tahu|tau|putus|pasti)\b/i.test(text);
 
-        if (!isDeferral) {
-          const hasKpr  = /\b(kpr|kpa|kpt|kredit|mortgage|dp\s*\d+)\b/.test(text);
+        // M188: NEGASI & PENOLAKAN TOPIK. "nggak pakai KPR" = cash saja (bukan
+        // kombinasi); "nggak mau bahas KPR dulu" = topik ditolak, slot tetap ❓.
+        // Simulasi 11 Sep: keduanya tercatat KPR dan masuk summary customer.
+        const kprNegated  = /\b(?:nggak|ngga|gak|gk|tidak|tdk|bukan|tanpa|no)\b[^.?!,]{0,12}\b(?:pakai|pake|pakek|ambil|lewat|via|perlu|usah)?\s*(?:kpr|kpa|kpt|kredit|mortgage)\b/i.test(text)
+          || /\b(?:kpr|kpa|kpt|kredit)\b[^.?!,]{0,10}\b(?:nggak|ngga|gak|gk|tidak|tdk)\b/i.test(text);
+        const kprRefused  = /\b(?:nggak|ngga|gak|gk|tidak|tdk|jangan|jgn)\b[^.?!]{0,15}\b(?:bahas|tanya|nanya|ngomongin|omongin|singgung)\b[^.?!]{0,15}\b(?:kpr|kpa|kredit|pembiayaan|cicilan|dp)\b/i.test(text);
+        if (!isDeferral && !kprRefused) {
+          const hasKpr  = !kprNegated && /\b(kpr|kpa|kpt|kredit|mortgage|dp\s*\d+)\b/.test(text);
           const hasCash = /\b(cash|tunai)\b/.test(text);
           if (hasKpr && hasCash)  state.financing = 'kombinasi cash + KPR';
           else if (hasKpr)        state.financing = 'KPR';
@@ -1544,7 +1573,16 @@ function extractQualificationState(history = [], currentMessage = '') {
         state.viewingDate = 'Minta listing';
       }
 
-      if (aiAsksViewDate && !state.viewingDate) {
+      // M188: TANGGAL SURVEI YANG DIBERIKAN SUKARELA — prinsip M75 untuk tanggal.
+      // "Saya mau survei hari Sabtu ini jam 10 pagi" tanpa AI bertanya lebih dulu:
+      // dulu jamnya tertangkap, tanggalnya DIBUANG → summary memakai tanggal
+      // masuk sebagai tanggal survei (simulasi 11 Sep).
+      const custVolunteersViewing = /\b(survei|survey|viewing|lihat\s+(?:unit|rumah|apart\w*|langsung|lokasi)|cek\s+lokasi)\b/i.test(custResp);
+      // Jawaban yang jelas soal MASUK/mulai sewa ("Untuk 1 tahun, mulai November")
+      // bukan tanggal survei walau AI barusan menanyakan survei (simulasi 11 Sep:
+      // "Survei: 01 November" muncul di summary padahal customer tak pernah bilang).
+      const custMoveInOnly = /(?<![a-z])(mulai|masuk|check[\s-]?in|checkin|pindah|tempati|menempati)(?![a-z])/i.test(custResp) && !custVolunteersViewing;
+      if ((aiAsksViewDate || custVolunteersViewing) && !state.viewingDate && !custMoveInOnly) {
         if (VIEWING_REFUSAL_RE.test(lo)) {
           state.viewingDate = 'Minta listing';
         } else {
@@ -2112,7 +2150,16 @@ function extractQualificationState(history = [], currentMessage = '') {
     for (let i = ALL.length - 1; i >= 0; i--) {
       const m = ALL[i];
       if (!QS_AI_ROLES.has(m.role)) continue;
-      const loc = detectLocation(String(m.message || ''));
+      const aiTxt = String(m.message || '');
+      // M187: premis "AI tidak pernah menyebut kota yang belum ditetapkan"
+      // TIDAK berlaku untuk pertanyaan kota itu sendiri — buildQualifyReply
+      // (jalur Private Agent) menulis "Di *kota* mana? _(Contoh: Surabaya,
+      // Malang, Bali, Jakarta Selatan)_", dan pemindaian ini mengangkat contoh
+      // TERAKHIR menjadi state.city="Jakarta Selatan" untuk customer yang baru
+      // menjawab "Di daerah Chandramas". Pesan AI yang MENANYAKAN kota atau
+      // memuat daftar contoh bukan bukti Q2 terjawab — lewati.
+      if (/\bkota\b[^\n?]{0,40}\?|which\s+city|\bcontoh\s*:|\be\.g\.,/i.test(aiTxt)) continue;
+      const loc = detectLocation(aiTxt);
       if (loc && isKnownLocationName(loc)) { state.city = loc; break; }   // M186: hanya kota asli
     }
   }
@@ -2216,9 +2263,11 @@ function extractQualificationState(history = [], currentMessage = '') {
       else if (/\bkantor\b|\boffice\b/.test(cur))                                        state.buildingType = 'office';
       else if (/\bgudang\b|\bwarehouse\b/.test(cur))                                        state.buildingType = 'warehouse';
       else if (/\brumah\b(?!\s+(?:makan|sakit|tangga|ibadah|duka|produksi|tahanan|susun|potong|kos))|\bhouse\b|\bkontrakan\b/.test(cur))                state.buildingType = 'house';
-      else if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(cur)) state.buildingType = 'others';
+      else if (/\btanah\b|\bkavling\b|\blahan\b|\bspbu\b|\bpabrik\b/.test(_stripLandSize(cur))) state.buildingType = 'others';   // M188
 
-      if      (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|kos|kost|kosan|kostan|ngekos|ngekost|ngekosan|indekos|indekost|rent|rental|lease|booking|book|pesan|reservasi)\b/.test(cur)) state.transactionType = 'rent';
+      const _rentsOutAsBuyer = /\b(disewakan|sewakan|disewain|dikontrakkan|dikontrakan)\b/.test(cur)
+        && /\b(invest(?:asi)?|beli|membeli|dibeli)\b/.test(cur);   // M187: investor yang menyewakan = pembeli
+      if      (!_rentsOutAsBuyer && /\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|kos|kost|kosan|kostan|ngekos|ngekost|ngekosan|indekos|indekost|rent|rental|lease|booking|book|pesan|reservasi)\b/.test(cur)) state.transactionType = 'rent';
       else if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase|invest|investasi)\b/.test(cur))                               state.transactionType = 'sale';
 
       // ⚠️ Dulu baris ini memakai `CITY_RE` — konstanta 28-kota hardcoded yang SUDAH
@@ -2496,7 +2545,7 @@ function _typeKeyFromWord(word = '') {
   if (/kantor/.test(w))                   return 'office';
   if (/gudang/.test(w))                return 'warehouse';
   if (/rumah|house|kontrakan/.test(w))           return 'house';
-  if (/tanah|kavling|lahan|spbu|pabrik/.test(w)) return 'others';
+  if (/tanah|kavling|lahan|spbu|pabrik/.test(_stripLandSize(w))) return 'others';   // M188
   return null;
 }
 
@@ -3491,6 +3540,183 @@ function buildChatbotReplyPrompt(session, history, userMessage, propertyContext 
   return buildWhatsappReplyPrompt(session, history, userMessage, propertyContext, provider, {});
 }
 
+/* ⭐ M187 (11 Sep 2026) — PROFIL 'platform': BACKEND HANYA MENYIAPKAN BAHAN.
+ *
+ * Arahan pemilik proyek (diulang 24 Agu & 11 Sep 2026): saat AI_PRIMARY_PROVIDER
+ * bukan 'private', backend TIDAK BOLEH ikut campur selain guardrails, vektor,
+ * dan RAG — selebihnya dilempar ke platform AI (DeepSeek/Claude/ChatGPT/
+ * OpenRouter) yang dipandu skill .md pilihan AI_SKILL_CALL.
+ *
+ * Transkrip produksi 11 Sep 2026 (agent Natasha, primary deepseek, skill
+ * house_pilot) membuktikan skill BUKAN yang memegang kendali: setiap pertanyaan
+ * setelah customer memilih unit — "Sudah lihat berapa rumah?", dua harga
+ * kontras, "target kapan proses belinya selesai?" (ditanya 3x, termasuk
+ * setelah "saya masih tanya-tanya dulu"), "tinggal bersama siapa?",
+ * baru/second/inden, furnitur, fasilitas, tanggal survei — adalah kalimat
+ * VERBATIM dari skrip Q1–Q12 di prompt ini, bukan dari skill. Prompt user
+ * buatan backend berukuran 33.293 char, lebih besar dari skill-nya sendiri,
+ * dan memuat "Q8 MANDATORY", "Q_KPR MANDATORY", "DILARANG tampilkan summary
+ * jika Q_KPR/Q5/Q6 ❓", Task list bernomor, dan DIREKTIF FINAL "menang atas
+ * seluruh instruksi di atas". Model menuruti yang paling spesifik dan paling
+ * dekat ke akhir — yaitu agenda backend, bukan agenda customer.
+ *
+ * Di profil 'platform' prompt kini hanya berisi:
+ *   • identitas agent/app + bahasa (guardrail kebocoran placeholder & bahasa)
+ *   • batas layanan agent (guardrail bisnis, users.trans_type dst.)
+ *   • CATATAN SLOT sebagai FAKTA — nilai yang customer sebut, tanpa ❓/⛔,
+ *     tanpa "tanyakan berikutnya", tanpa "summary diblokir"
+ *   • katalog nyata agent, fakta gerbang, RAG (vektor) — bahan, bukan perintah
+ *   • riwayat + pesan terbaru
+ * Skrip Q1–Q12, tabel 24 kombinasi, aturan tanggal, template brief, Summary
+ * Strict Rules, Task list, dan DIREKTIF FINAL TIDAK dikirim. Semua itu tugas
+ * skill .md. Profil 'local' (Private Agent) tetap memakai jalur lama utuh —
+ * di sana memang tidak ada AI lain yang bisa memutuskan.
+ *
+ * Pemilih jalur: extraContext.guardProfile === 'platform' (dikirim
+ * whatsappAIService dari resolveGuardrailProfile). Tanpa nilai itu perilaku
+ * lama berlaku — pemanggil lain (web chatbot, tes lama) tidak berubah. */
+function buildQualificationFactsBlock(state = {}) {
+  const TX_LABEL_ID   = { sale: 'Beli', rent: 'Sewa', buy: 'Beli', beli: 'Beli', sewa: 'Sewa' };
+  const TYPE_LABEL_ID = {
+    house: 'Rumah', apartment: 'Apartemen', villa: 'Villa', hotel: 'Hotel',
+    boarding_house: 'Kos', shophouse: 'Ruko', office: 'Kantor',
+    warehouse: 'Gudang', store: 'Toko', mansion: 'Mansion',
+    kondotel: 'Kondotel', condo: 'Kondominium', others: 'Properti',
+  };
+  const tx   = state.transactionType ? (TX_LABEL_ID[String(state.transactionType).toLowerCase()] || state.transactionType) : null;
+  const type = state.buildingType    ? (TYPE_LABEL_ID[String(state.buildingType).toLowerCase()]   || state.buildingType)    : null;
+  const facilities = (() => {
+    try {
+      const ex = expandStandardFacilities(state.facilities, state.buildingType, state.furnishing || '');
+      return ex.length ? ex.join(', ') : null;
+    } catch { return state.facilities || null; }
+  })();
+  const isSale = /sale|beli|buy/i.test(String(state.transactionType || ''));
+
+  const rows = [
+    ['Q1  Transaksi',        tx],
+    ['Q1b Tipe properti',    type],
+    ['Q2  Kota',             state.city],
+    ['Q2c Area/kecamatan',   state.district],
+    ['Q2b Riwayat pencarian', state.searchHistory],
+    ['Q3  Budget',           state.budget],
+    ['Q4  Penghuni',         state.household],
+    ['Q5  Hindari (red flags)', state.redFlags],
+    ['Q5  Prefer',           state.preferences],
+    ['Q6  Patokan lokasi',   state.anchorPoint],
+    ['Q7  Area alternatif',  state.alternativeAreas],
+    ['Q8  Tanggal masuk/pindah', state.moveInDate],
+    ['Q9  Keputusan',        state.decisionMaker],
+    ['Q9b Tanggal survei',   state.viewingDate],
+    ['Q9c Jam survei',       state.viewingDate === 'Minta listing' ? null : state.viewingTime],
+    ['Q10 Durasi sewa',      state.leaseDuration],
+    ['Q11 Furnitur',         state.furnishing],
+    ['Q14 Fasilitas',        facilities],
+    ['Q12 Tower/lantai',     state.apartmentPref],
+  ];
+  if (state.buildingType === 'office') {
+    rows.push(['Q14 Grade gedung', state.officeGrade], ['Q14 Fit-out', state.officeFitOut]);
+  }
+  if (isSale) {
+    rows.push(['Q13 Pembiayaan (hanya bila customer sendiri membukanya)', state.financing]);
+    if (/kpr|kombinasi/i.test(state.financing || '')) rows.push(['Q13 Detail KPR', state.kprDetails]);
+    rows.push(['Q14 Kondisi unit', state.propertyCondition], ['Use-case', state.useCase]);
+  }
+
+  const known    = rows.filter(([, v]) => v);
+  const notSaid  = rows.filter(([, v]) => !v).map(([k]) => k.replace(/\s+/g, ' ').trim());
+
+  const lines = [
+    '📋 CATATAN SLOT — fakta yang sudah customer sebutkan (hasil ekstraksi backend dari riwayat).',
+    '   Ini MEMORI, bukan perintah: apa yang ditanyakan berikutnya — atau tidak ditanyakan sama sekali —',
+    '   ditentukan oleh skill dan oleh agenda customer, bukan oleh daftar ini.',
+  ];
+  if (known.length) known.forEach(([k, v]) => lines.push(`   • ${k}: ${v}`));
+  else lines.push('   • (belum ada slot yang tersebut)');
+  if (notSaid.length) lines.push(`   Belum disebut customer: ${notSaid.join(' · ')}.`);
+
+  const notes = [];
+  if (state.cityChangedFromHistory) notes.push(`Customer baru saja MENGGANTI KOTA → ${state.city || '(baru)'}; transaksi/tipe/budget/tanggal/survei sebelumnya tetap berlaku.`);
+  if (state.txChangedFromHistory)   notes.push(`Customer baru saja MENGGANTI TRANSAKSI → ${tx || '(baru)'}; kota/area/tipe/tanggal/survei tetap berlaku.`);
+  if (state.typeChangedFromHistory) notes.push(`Customer baru saja MENGGANTI TIPE PROPERTI → ${type || '(baru)'}; kota/area/durasi/red flags/tanggal/survei tetap berlaku.`);
+  if (state.summaryAlreadyShown)    notes.push('Summary untuk pencarian SEBELUMNYA sudah pernah dikirim; nilai di atas berasal dari pesan SESUDAH summary itu.');
+  if (state.customerFrustrated) {
+    notes.push(state.frustrationKind === 'repetition'
+      ? 'Customer menunjukkan KESAL karena merasa ditanya hal yang sudah ia jawab.'
+      : state.frustrationKind === 'ignored'
+        ? 'Customer menunjukkan KESAL karena merasa pesannya tidak dibaca.'
+        : 'Customer menunjukkan KESAL pada alur percakapan.');
+  }
+  if (state.moveInDate === WAITING_THE_UPDATE) notes.push('Tanggal masuk: customer belum tahu dan akan mengabari sendiri (sudah dijawab).');
+  if (notes.length) {
+    lines.push('   Catatan konteks:');
+    notes.forEach((t) => lines.push(`   – ${t}`));
+  }
+  return lines.join('\n');
+}
+
+function buildPlatformWhatsappPrompt({
+  forcedLangInstruction, resolvedAgentName, resolvedAppName, scopeBlock,
+  qualState, session, historyForDisplay, propertyContext, showCatalogAfterBrief, extraContext,
+  userMessage,
+}) {
+  // Memori kartu listing yang SUDAH terkirim di sesi ini — fakta, bukan perintah.
+  // Simulasi 11 Sep: model menempel ulang dua kartu yang sama 7 giliran berturut-
+  // turut karena blok katalog datang lagi tiap giliran dan riwayat panjang.
+  const sentCards = (Array.isArray(historyForDisplay) ? historyForDisplay : [])
+    .filter((h) => /^(ai|assistant)$/i.test(String(h.role || '')))
+    .map((h) => String(h.message || h.content || ''))
+    .filter((t) => /(Rp\s?[\d.,]+\s*(juta|miliar|jt|m)\b|Estimasi Harga)/i.test(t));
+  const sentAddresses = [...new Set(sentCards.flatMap((t) => t.match(/Jl\.?\s[^\n,]{3,60}/g) || []))].slice(0, 12);
+  const sentFact = sentCards.length
+    ? `\n📨 Kartu listing sudah terkirim ${sentCards.length}× di sesi ini${sentAddresses.length ? ` (alamat yang sudah dilihat customer: ${sentAddresses.join(' · ')})` : ''}.`
+    : '';
+  const facts = (qualState ? buildQualificationFactsBlock(qualState) : '') + sentFact;
+  const out = _renderPlatformPrompt();
+  // Opsi debug (opt-in): AI_PROMPT_DEBUG_FILE=<path> → prompt platform ditulis
+  // apa adanya ke berkas itu, supaya "apa yang benar-benar dilihat model" bisa
+  // diaudit tanpa menebak. Tidak aktif bila env kosong.
+  if (process.env.AI_PROMPT_DEBUG_FILE) {
+    try { require('fs').appendFileSync(process.env.AI_PROMPT_DEBUG_FILE, `
+
+===== ${new Date().toISOString()} =====
+${out}`); } catch { /* debug saja */ }
+  }
+  return out;
+
+  function _renderPlatformPrompt() {
+  const catalogNote = showCatalogAfterBrief
+    ? (propertyContext || 'Katalog agent untuk kriteria ini KOSONG — jangan mengarang listing, harga, atau nama properti.')
+    : '(Pengaturan agent: users.catalog_summary = OFF — jangan menampilkan katalog/listing; brief saja.)';
+  return `${forcedLangInstruction}
+🪪 IDENTITAS ANDA (AGENT) — SUDAH DI-RESOLVE, PAKAI APA ADANYA:
+Nama agent (users.name) : ${resolvedAgentName}
+Nama aplikasi (APP_NAME): ${resolvedAppName}
+⚠️ Blok "Customer profile" di bawah adalah LAWAN BICARA. Tanda tangan (hanya pada summary) memakai dua nilai di atas sebagai teks biasa — bukan "[Nama Agen]", bukan "\${agentName}".
+${scopeBlock}
+${facts}
+
+Customer profile (LAWAN BICARA):
+Name: ${session.name}
+Phone: ${session.normalizedPhone}
+Location: ${session.location || session.normalizedLocation || 'Not provided'}
+Source: ${session.source}
+
+Riwayat percakapan (konteks; pesan terbaru di bawah yang menentukan):
+${formatConversationHistory(historyForDisplay)}
+
+Katalog nyata agent untuk pesan ini (satu-satunya sumber listing/harga/area):
+${catalogNote}
+${[extraContext.gateFactsContext, extraContext.agentCoverageContext, extraContext.listingReadinessContext,
+   extraContext.cityContext, extraContext.locationContext, extraContext.facilityContext,
+   extraContext.agentIdentityContext, extraContext.ragContext].filter(Boolean).join('\n')}
+Pesan WhatsApp customer terbaru — agenda customer menentukan giliran ini:
+${userMessage}
+
+Balas sesuai skill (system prompt). Backend tidak menentukan pertanyaan berikutnya.`;
+  }
+}
+
 function buildWhatsappReplyPrompt(session, history, userMessage, propertyContext = '', provider = 'shared', extraContext = {}) {
   // ── Identitas dinamis (JANGAN hardcode "LEO FELIX" / "Elevan Property") ──
   // Nama agent SELALU dari database (session.agentName); nama app dari APP_NAME env.
@@ -3598,6 +3824,16 @@ function buildWhatsappReplyPrompt(session, history, userMessage, propertyContext
   const historyForDisplay  = Array.isArray(history) && history.length > MAX_DISPLAY_TURNS
     ? history.slice(-MAX_DISPLAY_TURNS)
     : (history || []);
+
+  // ⭐ M187 — profil 'platform': bahan saja, tanpa mesin interview (lihat catatan
+  // panjang di atas buildQualificationFactsBlock).
+  if (String(extraContext?.guardProfile || '').toLowerCase() === 'platform') {
+    return buildPlatformWhatsappPrompt({
+      forcedLangInstruction, resolvedAgentName, resolvedAppName, scopeBlock,
+      qualState, session, historyForDisplay, propertyContext, showCatalogAfterBrief, extraContext,
+      userMessage,
+    });
+  }
 
   // Landmark live dari Google Places untuk kota yang dipilih customer. Kosong
   // (dan tidak berbiaya token) bila cache belum hangat atau API tidak tersedia.
@@ -3930,6 +4166,7 @@ ${extraContext.locationContext || ''}
 ${extraContext.agentCoverageContext || ''}
 ${extraContext.agentIdentityContext || ''}
 ${extraContext.listingReadinessContext || ''}
+${extraContext.gateFactsContext || ''}
 ${extraContext.ragContext || ''}
 Latest WhatsApp customer message. This is the highest-priority instruction:
 ${userMessage}
@@ -4006,6 +4243,7 @@ module.exports = {
   buildChatbotReplyPrompt,
   detectLanguage,
   buildWhatsappReplyPrompt,
+  buildQualificationFactsBlock,
   buildIntentDetectionPrompt,
   buildPreferenceExtractionPrompt,
   extractQualificationState,

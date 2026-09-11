@@ -227,7 +227,7 @@ function agentSignature(agentName, isId) {
  * @param {Array}  history   - Conversation history (untuk language detection)
  * @returns {{ reply, provider, contextSource } | null}
  */
-function buildQualifyReply(filters, message, agentName, contextSource, history = [], catalogMode = null) {
+function buildQualifyReply(filters, message, agentName, contextSource, history = [], catalogMode = null, agentAreas = []) {
   const { buildingType: type, transactionType: tx, location: loc } = filters;
   // Slot ke-4. Dibaca lewat evaluateListingReadiness() — SATU definisi, dipakai
   // gerbang ini DAN blok fakta di prompt, supaya keduanya tidak bisa menyimpang
@@ -327,9 +327,15 @@ function buildQualifyReply(filters, message, agentName, contextSource, history =
   // lewat Q3 (dua harga kontras) oleh findNextQuestion()/ConversationQualifier.
   // M127 tetap berlaku: SATU pertanyaan, tanpa basa-basi "Hampir lengkap!".
   else if (!spec) {
+    // M187: contoh area dari KATALOG NYATA agent (qualState.agentAreas, sudah
+    // dimuat pemanggil) — bukan "Pakuwon/PTC" statis yang belum tentu dimiliki
+    // agent ini (pola bug M84/Q2c: mengundang customer ke area berstok nol).
+    const exArea = (Array.isArray(agentAreas) ? agentAreas : []).filter(Boolean).slice(0, 3);
+    const exId = exArea.length ? `_(Contoh: ${exArea.join(', ')})_` : '_(Contoh: nama area, atau patokan seperti dekat mall/kampus)_';
+    const exEn = exArea.length ? `_(e.g., ${exArea.join(', ')})_` : '_(e.g., an area name, or a landmark such as a mall or campus)_';
     question = id
-      ? `Baik, *${txWord} ${typeLbl} di ${loc}*. 📍\n\nDi area/kawasan mana, atau ada patokan lokasi tertentu?\n_(Contoh: area Pakuwon, dekat PTC, dekat kampus)_`
-      : `Great — *${txWord} a ${typeLbl} in ${loc}*. 📍\n\nWhich area or neighbourhood, or is there a nearby landmark?\n_(e.g., Pakuwon area, near PTC, near campus)_`;
+      ? `Baik, *${txWord} ${typeLbl} di ${loc}*. 📍\n\nDi area/kawasan mana, atau ada patokan lokasi tertentu?\n${exId}`
+      : `Great — *${txWord} a ${typeLbl} in ${loc}*. 📍\n\nWhich area or neighbourhood, or is there a nearby landmark?\n${exEn}`;
   }
 
   if (!question) return null;
@@ -585,7 +591,7 @@ async function _generateWhatsAppAIReplyCore(params) {
     console.warn('[WhatsAppAI] agent scope guard failed (non-fatal):', scopeErr.message);
   }
 
-  const qualResponse = buildQualifyReply(filters, message, agentName, contextSource, history, catalogMode);
+  const qualResponse = buildQualifyReply(filters, message, agentName, contextSource, history, catalogMode, qualState?.agentAreas || []);
 
   // ── ★ M132: GERBANG ISTILAH LEGAL/SERTIFIKAT (SHM/SHGB/KPR/dst.) ★ ────────
   // Dicek DI SINI, TIDAK BERSYARAT, bukan hanya di dalam chatbotPrivateController.js
@@ -871,7 +877,11 @@ async function _generateWhatsAppAIReplyCore(params) {
       const reply = isIdMsg
         ? `Di ${realCity || 'kota itu'} saya ada ${opts.length} kawasan dengan nama mirip: ${list}. Yang mana yang Kakak maksud? 📍`
         : `I have ${opts.length} areas with similar names there: ${list}. Which one did you mean? 📍`;
-      return { reply, replyParts: [reply], provider: 'area_disambiguation_gate', contextSource };
+      if (backendMayCompose) {
+        return { reply, replyParts: [reply], provider: 'area_disambiguation_gate', contextSource };
+      }
+      // M187 profil 'platform': ambiguitas = FAKTA untuk model, bukan balasan backend.
+      gateFacts.push(`AREA AMBIGU DI KATALOG AGENT (fakta): sebutan customer cocok ${opts.length} kawasan berbeda — ${opts.join(' / ')}. Jangan memilih sendiri; tanyakan yang mana.`);
     }
     const txRaw   = qs.transactionType || filters.transactionType || '';
     const typeRaw = qs.buildingType   || filters.buildingType    || '';
@@ -942,7 +952,8 @@ async function _generateWhatsAppAIReplyCore(params) {
         const reply = isIdMsg
           ? 'Baik, Kak 🙏 Terima kasih sudah menghubungi saya. Kalau nanti butuh properti di area lain, silakan chat saya lagi ya 😊'
           : 'Understood 🙏 Thank you for reaching out. Feel free to message me again anytime.';
-        return { reply, replyParts: [reply], provider: 'city_offer_declined', contextSource };
+        if (backendMayCompose) return { reply, replyParts: [reply], provider: 'city_offer_declined', contextSource };
+        gateFacts.push('TAWARAN KOTA LAIN DITOLAK CUSTOMER (fakta): jangan menawar ulang; tutup dengan sopan.');   // M187
       }
       /* Bukan penolakan → customer menerima tawaran. Lanjut SATU langkah:
        * tanya kota mana, jangan ulangi kalimat "belum punya listing".
@@ -971,7 +982,8 @@ async function _generateWhatsAppAIReplyCore(params) {
         const reply = isIdMsg
           ? 'Siap, Kak 😊 Kota mana yang Kakak mau saya carikan?'
           : 'Great 😊 Which city would you like me to look in?';
-        return { reply, replyParts: [reply], provider: 'city_offer_followup', contextSource };
+        if (backendMayCompose) return { reply, replyParts: [reply], provider: 'city_offer_followup', contextSource };
+        gateFacts.push('CUSTOMER MENERIMA TAWARAN KOTA LAIN (fakta): kota lamanya berstok NOL; yang dibutuhkan sekarang hanya kota mana.');   // M187
       }
     }
 
@@ -1002,14 +1014,25 @@ async function _generateWhatsAppAIReplyCore(params) {
        * Ini bukan "backend menyusun interview" (yang memang milik platform) —
        * ini jalan buntu faktual, sekelas dengan gerbang disambiguasi area.
        */
-      if (cityHit) {
-        console.log(`[WhatsAppAI] 🏙️ Gerbang kota: "${realCity}" tidak ada di katalog agent — dijawab dengan kota alternatif nyata${backendMayCompose ? '' : ' (profil platform: tetap dikunci, jalan buntu faktual)'}.`);
+      if (cityHit && backendMayCompose) {
+        console.log(`[WhatsAppAI] 🏙️ Gerbang kota: "${realCity}" tidak ada di katalog agent — dijawab dengan kota alternatif nyata.`);
         return {
           reply      : cityHit.reply,
           replyParts : [cityHit.reply],
           provider   : 'city_availability_gate',
           contextSource,
         };
+      }
+      if (cityHit && !backendMayCompose) {
+        /* M187 — arahan pemilik proyek 11 Sep 2026: di profil 'platform' backend
+         * TIDAK menyusun balasan apa pun; kota kosong disampaikan sebagai FAKTA
+         * KERAS (stok NOL + daftar kota nyata) dan platform AI yang menyusun
+         * kalimatnya sesuai skill. M164b dulu memaksa balasan backend karena
+         * gateFacts lama hanya berbunyi "jangan menyebut angka lain" — fakta di
+         * bawah kini eksplisit menyatakan tidak ada yang bisa ditanyakan di kota itu. */
+        console.log(`[WhatsAppAI] 🏙️ Kota "${realCity}" berstok NOL di katalog agent — dikirim sebagai fakta ke platform AI (M187).`);
+        gateFacts.push(`KOTA TANPA STOK (fakta keras): agent ini TIDAK punya satu pun listing di ${realCity}. Tidak ada area/harga/unit yang bisa ditanyakan atau ditawarkan di kota itu. Kota yang BENAR-BENAR ada stoknya:
+${cityHit.reply}`);
       }
     }
 
@@ -1037,8 +1060,15 @@ async function _generateWhatsAppAIReplyCore(params) {
     const listingsAlreadyShown = history.some((h) => /^(ai|assistant)$/i.test(String(h.role || ''))
       && /Estimasi Harga|Estimated Price/i.test(String(h.message || h.content || '')));
     const fourSlotsKnown = Boolean(txDb && typeDb && realCity && realArea);
+    /* M187 — AREA DISEBUT TANPA KOTA ("Di daerah Chandramas") tetap boleh
+     * dijawab gerbang: checkAreaAvailability() bekerja agent-scoped dengan
+     * cityId=null dan sudah toleran salah ketik (Chandramas→Candramas).
+     * Dulu pemicu (b) mensyaratkan realCity, jadi di profil 'local' customer
+     * malah ditanya "di kota mana?" untuk area yang JELAS ada di katalog. Di
+     * profil 'platform' hasilnya tetap hanya menjadi fakta (bukan balasan). */
+    const areaKnownWithoutCity = Boolean(txDb && typeDb && realArea && !realCity);
     const gateShouldSpeak = customerAsksAvailability(message)
-      || (fourSlotsKnown && !listingsAlreadyShown);
+      || ((fourSlotsKnown || areaKnownWithoutCity) && !listingsAlreadyShown);
 
     if (agentUserId && realArea && txDb && gateShouldSpeak && !pickAlreadyHandledThisTurn) {
       const hit = await tryAreaAvailabilityAnswer({
@@ -1097,7 +1127,20 @@ async function _generateWhatsAppAIReplyCore(params) {
   // Dikonfirmasi ulang pemilik proyek 24 Agu 2026 ("keep the safety nets").
   // guardProfile sudah dihitung di awal fungsi (M158) — jangan hitung ulang.
 
-  if (qualResponse && guardProfile === 'local') {
+  /* M187 — pola M132 terulang untuk JARAK: #tryDistanceAnswer (M130) hidup di
+   * chatbotPrivateController, yang baru dipanggil SETELAH gerbang ini. Pesan
+   * pembuka "berapa jarak dari Kota X ke properti ini?" di sesi baru selalu
+   * kekurangan slot → gerbang menjawab sapaan Q1 dan pertanyaan jaraknya
+   * tidak pernah sampai ke penanganan jujur "saya cek dahulu". Pertanyaan
+   * jarak dilewatkan ke Private Agent; fail-open bila detektor gagal dimuat. */
+  const isDistanceAsk = (() => {
+    try { return require('./distanceEstimationService').looksLikeDistanceQuestion(message); }
+    catch { return false; }
+  })();
+  if (qualResponse && guardProfile === 'local' && isDistanceAsk) {
+    console.log('[WhatsAppAI] 📏 Pertanyaan jarak — gerbang kualifikasi dilewati, diserahkan ke Private Agent (M187).');
+  }
+  if (qualResponse && guardProfile === 'local' && !isDistanceAsk) {
     console.log('[WhatsAppAI] 🛑 Qualification gate triggered — asking for missing info:', {
       hasType    : !!filters.buildingType,
       hasTx      : !!filters.transactionType,
@@ -1224,7 +1267,13 @@ async function _generateWhatsAppAIReplyCore(params) {
       // 07/08/10/11/12/13/14/15), BUKAN listing. Blok katalog semantik
       // (includeAgentCatalog) TETAP opt-in & mati — itu yang berisiko bocor
       // sebelum brief (lihat catatan panjang di ragRetrievalService.js).
-      includeSkillReference: true,
+      // M187: referensi PERILAKU di indeks RAG berasal dari docs
+      // chat_gpt_responds/claude_responds. Bila AI_SKILL_CALL memuat skill
+      // LAIN (mis. house_pilot), menyuntikkan aturan skill lama = dua skill
+      // bertengkar di satu prompt. Pengetahuan faktual (legal/pajak/KPR)
+      // tetap dipakai; hanya referensi perilaku yang mengikuti skill aktif.
+      includeSkillReference: !process.env.AI_SKILL_CALL
+        || /chat_gpt_responds|claude_responds|elevan-property-assistant/i.test(process.env.AI_SKILL_CALL),
     });
   } catch (err) {
     console.warn('[WhatsAppAI] RAG context gagal, dilewati:', err.message);
@@ -1268,7 +1317,12 @@ async function _generateWhatsAppAIReplyCore(params) {
         history,
         message,
         propertyCtx,
-        { facilityContext, cityContext, locationContext, agentCoverageContext, agentIdentityContext, listingReadinessContext, ragContext }
+        // M187: profil guardrail ikut ke prompt builder — 'platform' = bahan saja.
+        // gateFactsContext: sejak M158 hanya dirangkai ke enrichedPropertyCtx
+        // (jalur Private Agent) — tidak pernah sampai ke platform AI. Baru ketahuan
+        // lewat dump prompt M187: model membaca "katalog KOSONG" tanpa pernah
+        // melihat fakta "Alana Cemandi: 20 unit tersedia" yang sudah dihitung.
+        { facilityContext, cityContext, locationContext, agentCoverageContext, agentIdentityContext, listingReadinessContext, ragContext, guardProfile, gateFactsContext }
       );
 
       // ★ M131: sinyal diam dari platform API ★ — model memutuskan SENDIRI

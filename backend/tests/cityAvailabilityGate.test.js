@@ -19,6 +19,10 @@
  * memanggil chatbotPrivateController langsung.
  */
 require('dotenv').config();
+// M187: tes ini menguji KALIMAT gerbang kota deterministik (M164). Di profil
+// 'platform' gerbang itu kini hanya mengirim fakta dan kalimatnya milik LLM —
+// jadi tes wajib berjalan di profil 'local' (Private Agent), bukan ikut .env.
+process.env.AI_PRIMARY_PROVIDER = 'private';
 
 let pass = 0; let fail = 0;
 function ok(label, cond, detail = '') {

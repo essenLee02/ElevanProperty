@@ -19,6 +19,11 @@
  * Bagian yang menyentuh database hanya berjalan bila koneksi tersedia.
  */
 require('dotenv').config();
+// M187: tes ini menguji JALUR PRIVATE AGENT (balasan deterministik backend).
+// Tanpa pin ini ia mengikuti AI_PRIMARY_PROVIDER produksi (deepseek) — memanggil
+// API berbayar sungguhan dan menilai kalimat bebas LLM, yang sejak M187 memang
+// tidak lagi didikte backend. Profil 'local' = jalur yang dimaksud tes ini.
+process.env.AI_PRIMARY_PROVIDER = 'private';
 
 let pass = 0; let fail = 0;
 function ok(label, cond, detail = '') {

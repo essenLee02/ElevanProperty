@@ -20,7 +20,6 @@
 require('dotenv').config();
 const { extractQualificationState } = require('../services/aiPromptBuilderService');
 const { hasPropertyKeyword, isPropertyContextContinuation } = require('../utils/propertyKeywordFilter');
-const skillPromptService = require('../services/skillPromptService');
 
 let pass = 0, fail = 0;
 const ok = (label, cond, extra = '') => {
@@ -83,13 +82,18 @@ console.log('\n[4] Context continuation treats attribute question as property ta
   ok('attribute question about the chosen unit is a continuation', cont === true || (cont && cont.isContinuation !== false), JSON.stringify(cont));
 }
 
-console.log('\n[5] Active skill docs carry the M186 rule and load untruncated');
+console.log('\n[5] chat_gpt_responds docs carry the M186 rule and fit the cap');
 {
-  const raw = skillPromptService.loadSkillGroupPrompt('chatgpt', { maxCharacters: 99999 });
-  const cap = Number(process.env.SKILL_MAX_RESPONSE_CHARACTERS) || 11000;
-  const capped = skillPromptService.loadSkillGroupPrompt('chatgpt', { maxCharacters: cap });
+  // ⚠️ Dibaca LANGSUNG dari folder chat_gpt_responds, bukan lewat AI_SKILL_CALL —
+  // env produksi bisa menunjuk skill lain (11 Sep: house_pilot untuk uji coba),
+  // dan tes ini menguji ISI dokumen, bukan skill mana yang sedang aktif.
+  const fs = require('fs'); const path = require('path');
+  const dir = path.join(__dirname, '..', 'asset', 'skills', 'chat_gpt_responds');
+  const files = ['SKILL.md', ...fs.readdirSync(path.join(dir, 'docs')).filter((f) => f.endsWith('.md')).sort().map((f) => path.join('docs', f))];
+  const raw = files.map((f) => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n');
+  const cap = 11000;
   ok(`loaded ${raw.length} chars ≤ cap ${cap}`, raw.length <= cap);
-  ok('not truncated', !/truncated for prompt size/i.test(capped));
+  ok('6 files (SKILL.md + docs 00-04)', files.length === 6, files.join(','));
   ok('Q5 rule: never re-send the catalog for a red flag', raw.includes('never re-send the catalog for it'));
   ok('Q5 rule: "kawasan asri" is a quality, not an area', raw.includes('"kawasan asri" is a quality, not an area'));
   ok('doc 03: unit-condition question handled from the card', raw.includes("They ask about that unit's condition"));

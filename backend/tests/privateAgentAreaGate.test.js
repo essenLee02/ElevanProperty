@@ -19,6 +19,11 @@
  * tanpa DB, dilewati dengan pesan eksplisit, bukan diam-diam skip.
  */
 require('dotenv').config();
+// M187: tes ini menguji JALUR PRIVATE AGENT (balasan deterministik backend).
+// Tanpa pin ini ia mengikuti AI_PRIMARY_PROVIDER produksi (deepseek) — memanggil
+// API berbayar sungguhan dan menilai kalimat bebas LLM, yang sejak M187 memang
+// tidak lagi didikte backend. Profil 'local' = jalur yang dimaksud tes ini.
+process.env.AI_PRIMARY_PROVIDER = 'private';
 
 let pass = 0; let fail = 0;
 function ok(label, cond, detail = '') {
@@ -66,7 +71,9 @@ async function main() {
     await say(sid, 'Natasha', 'Hello.. Saya mau beli rumah');
     const r2 = await say(sid, 'Natasha', 'Di daerah Chandramas');
     ok('gerbang ketersediaan AKTIF (bukan interview kosong)',
-      r2.provider === 'private_agent' && /Candramas|belum ada di data saya/i.test(r2.reply),
+      // M187: gerbang ketersediaan kini boleh menjawab area tanpa kota — provider
+      // 'area_availability_gate' (listing langsung) sama sahnya dengan Private Agent.
+      /^(private_agent|area_availability_gate)$/.test(r2.provider) && /Candramas|belum ada di data saya/i.test(r2.reply),
       r2.reply.slice(0, 80));
 
     /* ── 2. Koreksi salah ketik: "Chandramas" → "Candramas" ── */

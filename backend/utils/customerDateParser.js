@@ -277,6 +277,33 @@ function parseCustomerDate(text, now = new Date()) {
   }
 
   if (/\b(hari ini|sekarang|today)\b/.test(t)) return ok(curY, curM, curD);
+
+  /* M188 (11 Sep 2026) — NAMA HARI: "Sabtu ini", "hari Selasa depan", "Jumat besok".
+   * Cara paling lazim customer menyebut jadwal survei, dan parser ini
+   * mengembalikan null untuk semuanya. Akibat nyata (simulasi 11 Sep): jam
+   * survei "10 pagi" tercatat tapi TANPA tanggal, lalu model menempelkan tanggal
+   * masuk (05 Desember) sebagai tanggal survei di summary — data yang customer
+   * tidak pernah ucapkan.
+   * Aturan: "<hari> ini" / "<hari>" polos = kemunculan berikutnya (hari yang sama
+   * hari ini → hari ini bila tanpa "depan"); "<hari> depan" = kemunculan
+   * berikutnya + 7 hari bila hari itu jatuh di minggu berjalan (≤ 6 hari lagi). */
+  {
+    const DAYS = { minggu: 0, ahad: 0, senin: 1, selasa: 2, rabu: 3, kamis: 4, jumat: 5, "jum'at": 5, sabtu: 6,
+      sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 };
+    const dm = t.match(/\b(?:hari\s+)?(minggu|ahad|senin|selasa|rabu|kamis|jum'?at|sabtu|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b(?:\s+(ini|depan|besok|next|this))?/);
+    // "minggu depan" (= pekan depan) sudah ditangani di bawah; hanya "minggu ini/hari minggu" yang berarti hari Minggu.
+    // "minggu" = PEKAN kecuali ditulis "hari minggu": "2 minggu", "minggu ini",
+    // "minggu depan" semuanya pekan, bukan hari Minggu.
+    const sundayOk = dm && (dm[1] !== 'minggu' || /(?<![a-z])hari\s+minggu(?![a-z])/.test(t));
+    if (dm && sundayOk) {
+      const target = DAYS[dm[1].replace('’', "'")];
+      const todayDow = now.getDay();
+      let delta = (target - todayDow + 7) % 7;
+      if (dm[2] === 'depan' || dm[2] === 'next') delta = delta === 0 ? 7 : delta + 7;
+      const d = new Date(curY, curM - 1, curD + delta);
+      return { status: 'ok', date: d, formatted: fmt(d) };
+    }
+  }
   // "besok lusa" = lusa (+2) — cek sebelum "besok" polos.
   if (/\bbesok\s+lusa\b|\blusa\b/.test(t)) {
     const d = new Date(curY, curM - 1, curD + 2);
