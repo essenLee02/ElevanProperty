@@ -623,6 +623,74 @@ function joinAnchorTokens(parts = []) {
  * @param {string} city    nilai Q2 yang sudah terdeteksi (boleh kosong)
  * @returns {boolean} true → JANGAN simpan sebagai district
  */
+/* ⭐ M186 (11 Sep 2026) — KOTA vs AREA: JANGAN NAIKKAN NAMA AREA JADI KOTA.
+ * Bug produksi: pembuka "Saya cari rumah di Pakuwon, Kak" membuat state.city =
+ * "pakuwon". Pakuwon adalah AREA di dalam Surabaya, bukan kota — akibatnya Q2c
+ * bertanya "di area mana di *pakuwon*?" (tidak masuk akal) dan state block
+ * menampilkan Kota yang salah. detectLocation() SUDAH memberi sinyalnya:
+ * kota asli kembali kapital & isKnownLocationName()=true; token tak dikenal
+ * kembali huruf kecil & false. Router ini menghormati sinyal itu: kota → city,
+ * token tak dikenal → district (bila kosong), city dibiarkan untuk kota asli. */
+function _assignLocation(state, loc) {
+  if (!loc) return;
+  if (isKnownLocationName(loc)) {
+    if (!state.city) state.city = loc;
+    return;
+  }
+  const cand = String(loc).trim();
+  if (!cand || _isAreaQualityWord(cand)) return;
+  if (!state.district) state.district = cand.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/* ⭐ M186 (11 Sep 2026) — KATA SIFAT SETELAH "kawasan/area/daerah" BUKAN NAMA AREA.
+ * Bug produksi: "…dan kawasan asri" membuat state.district = "Asri". Karena
+ * area dianggap BERUBAH (Pakuwon City → "Asri"), gerbang katalog menyala lagi
+ * dan listing dikirim ulang — padahal customer sedang menyebut PREFERENSI.
+ * Daftar ini = kualitas/suasana sebuah kawasan, bukan nama tempat. */
+const AREA_QUALITY_WORDS = new Set([
+  'asri', 'sepi', 'ramai', 'rame', 'strategis', 'nyaman', 'aman', 'tenang', 'hijau',
+  'bersih', 'sejuk', 'adem', 'dingin', 'panas', 'gerah', 'elit', 'elite', 'padat',
+  'macet', 'banjir', 'bagus', 'baik', 'oke', 'ok', 'favorit', 'premium', 'mewah',
+  'murah', 'terjangkau', 'dekat', 'deket', 'jauh', 'pinggir', 'pusat', 'baru', 'lama',
+  'tertentu', 'khusus', 'sekitar', 'lain', 'lainnya', 'mana', 'manapun', 'itu', 'ini',
+  'yang', 'kota', 'perumahan', 'industri', 'komersial', 'bisnis', 'wisata', 'hunian',
+  'residensial', 'terpadu', 'rindang', 'teduh', 'gelap', 'terang', 'kumuh', 'kotor',
+]);
+function _isAreaQualityWord(cand = '') {
+  const w = String(cand).trim().toLowerCase();
+  if (!w) return true;
+  // "asri" / "yang asri" / "sangat asri" / "cukup tenang" → semua kata sifat.
+  const tokens = w.split(/\s+/).filter((t) => !/^(yang|yg|sangat|cukup|agak|lebih|paling|dan|serta|tapi)$/.test(t));
+  return tokens.length === 0 || tokens.every((t) => AREA_QUALITY_WORDS.has(t));
+}
+
+/* ⭐ M186 — PISAHKAN KLAUSA "HINDARI" DARI KLAUSA "PREFER" DALAM SATU KALIMAT.
+ * Bug produksi: "Saya cari rumah yang tdk panas, tdk banjir, udaranya segar,
+ * dan kawasan asri" disimpan BULAT-BULAT ke redFlags — sehingga "udaranya
+ * segar" dan "kawasan asri" (KEINGINAN) tampil di brief agent sebagai hal yang
+ * harus DIHINDARI, dan slot preferences kosong. Doc 02 §5 sudah lama menuntut
+ * "BOTH lines" tapi ekstraktornya tidak pernah membelah kalimat campuran.
+ * Aturan: pecah per klausa (koma / "dan" / "serta" / titik-koma); klausa yang
+ * memuat penanda negasi/penghindaran → Hindari, sisanya yang bermakna → Prefer.
+ * Frasa pembuka ("saya cari rumah yang", "saya mau", "yang penting") dibuang
+ * karena bukan isi preferensi. */
+const AVOID_MARKER_RE = /\b(tidak|tdk|ga|gak|gk|nggak|ngga|enggak|ndak|jangan|hindari|dihindari|anti|bukan|tanpa|jauh\s+dari|bebas|rawan|hadap\s+barat|gang\s+sempit|rumah\s+tua|bising|berisik|banjir|macet|kumuh|panas|bau|polusi|berpolusi)\b/i;
+const OPENER_RE = /^(?:saya|aku|sy|kami|kita)?\s*(?:cari|mau|ingin|pengen|pingin|butuh|prefer|maunya|lagi\s+cari|sedang\s+cari)?\s*(?:rumah|rmh|apartemen|unit|tempat|properti|yang|yg|itu)?\s*(?:yang|yg)?\s*/i;
+function _splitAvoidAndPrefer(text = '') {
+  const clean = String(text).replace(/\s+/g, ' ').trim();
+  if (!clean) return { avoid: null, prefer: null };
+  const clauses = clean
+    .split(/\s*(?:,|;|\bdan\b|\bserta\b|\bjuga\b|&|\bplus\b)\s*/i)
+    .map((c) => c.replace(OPENER_RE, '').replace(/[.!?]+$/, '').trim())
+    .filter((c) => c.length >= 3);
+  const avoid = [], prefer = [];
+  for (const c of clauses) (AVOID_MARKER_RE.test(c) ? avoid : prefer).push(c);
+  return {
+    avoid : avoid.length  ? avoid.join(', ')  : null,
+    prefer: prefer.length ? prefer.join(', ') : null,
+  };
+}
+
 function _isJustTheCity(cleaned = '', city = '') {
   let s = String(cleaned || '').toLowerCase().trim();
   if (!s) return true;
@@ -923,7 +991,7 @@ function extractQualificationState(history = [], currentMessage = '') {
           && !loc.toLowerCase().includes(runLoc.toLowerCase())
           && !runLoc.toLowerCase().includes(loc.toLowerCase())) {
         runLoc = loc; runLocIdx = i;
-      } else if (loc && !runLoc) { runLoc = loc; }
+      } else if (loc && !runLoc && isKnownLocationName(loc)) { runLoc = loc; }   // M186
     }
     // Did the LATEST genuine flip land on the current (last) message? Only
     // then should the dependent fields be reset — a flip several turns back
@@ -1034,8 +1102,7 @@ function extractQualificationState(history = [], currentMessage = '') {
     // ("kisaran" = range/approximately in Indonesian, must never be read as the city
     // Kisaran, North Sumatra) — no need to pre-strip it here.
     if (!state.city) {
-      const loc = detectLocation(raw);
-      if (loc) state.city = loc;
+      _assignLocation(state, detectLocation(raw));   // M186: area tidak naik jadi kota
     }
 
     // Sinyal BOOKING / menginap jangka pendek (M89). Loop ini SUDAH difilter ke
@@ -1975,7 +2042,16 @@ function extractQualificationState(history = [], currentMessage = '') {
         // (dan menurunkan lawan-negatifnya ke Hindari, lihat doc 04 §Q5).
         if (!state.preferences) state.preferences = custResp;
       } else {
+        // M186: kalimat campuran ("tdk banjir, udaranya segar, kawasan asri")
+        // dipecah — Hindari hanya klausa bernegasi, sisanya jadi Prefer.
+        // ⚠️ redFlags TETAP kalimat MENTAH — #buildAvoidPreferPairs (Private Agent)
+        // menurunkan antonim dari teks utuh ("sejuk" → Hindari "Tempat panas") dan
+        // tesnya mengunci kontrak itu. Yang diperbaiki hanya slot Prefer yang
+        // sebelumnya kosong pada kalimat campuran, supaya jalur LLM melihat
+        // keinginan customer sebagai baris terpisah, bukan tercampur ke Hindari.
         state.redFlags = custResp;
+        const split = _splitAvoidAndPrefer(custResp);
+        if (split.prefer && !state.preferences) state.preferences = split.prefer;
       }
     }
     // ⚠️ RED FLAG YANG DIBERIKAN SUKARELA (di luar giliran Q5) JUGA DICATAT.
@@ -1991,7 +2067,12 @@ function extractQualificationState(history = [], currentMessage = '') {
     if (!state.redFlags) {
       const avoidHits = (custResp.match(/\b(?:tidak|tdk|ga|gak|gk|nggak|ngga|enggak|jangan|hindari|anti|bukan|tanpa)\s+\S+/gi) || []).length;
       const explicitAvoid = /\b(hindari|dihindari|jangan|jauh\s+dari|anti)\b/i.test(custResp);
-      if (avoidHits >= 2 || explicitAvoid) state.redFlags = custResp;
+      if (avoidHits >= 2 || explicitAvoid) {
+        // M186: pisahkan keinginan dari penghindaran — "udaranya segar" bukan red flag.
+        state.redFlags = custResp;   // mentah — kontrak #buildAvoidPreferPairs (lihat di atas)
+        const split = _splitAvoidAndPrefer(custResp);
+        if (split.prefer && !state.preferences) state.preferences = split.prefer;
+      }
     }
     // Q12 — apartment preference (tower/lantai/orientasi)
     // Simpan bentuk RINGKAS, bukan kalimat mentah. Tanpa ini summary menulis
@@ -2032,7 +2113,7 @@ function extractQualificationState(history = [], currentMessage = '') {
       const m = ALL[i];
       if (!QS_AI_ROLES.has(m.role)) continue;
       const loc = detectLocation(String(m.message || ''));
-      if (loc) { state.city = loc; break; }
+      if (loc && isKnownLocationName(loc)) { state.city = loc; break; }   // M186: hanya kota asli
     }
   }
 
@@ -2058,6 +2139,7 @@ function extractQualificationState(history = [], currentMessage = '') {
         if (!cand || cand.length < 3) continue;
         if (/^(lain|lainnya|sekitar|sekitarnya|mana|manapun|tertentu|itu|ini)$/i.test(cand)) continue;
         if (_isJustTheCity(cand, state.city)) continue;
+        if (_isAreaQualityWord(cand)) continue;   // M186: "kawasan asri" bukan area "Asri"
         state.district = cand;   // pesan terbaru menimpa yang lama
       }
     }
@@ -2146,8 +2228,7 @@ function extractQualificationState(history = [], currentMessage = '') {
       // → extractQualificationState GAGAL → jalur LLM batal → sistem jatuh ke Private
       // Agent yang membalas template Q1 ("mau sewa atau beli? Dan tipe propertinya
       // apa?") BERULANG-ULANG walau customer sudah menyebut tipe & lokasi (M52).
-      const curLoc = detectLocation(currentMessage || '');
-      if (curLoc) state.city = curLoc;
+      _assignLocation(state, detectLocation(currentMessage || ''));   // M186
 
       state.location = state.city;   // alias kompatibilitas (lihat return utama)
       return state;  // summary reset takes full priority — skip 3B

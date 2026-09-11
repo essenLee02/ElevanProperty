@@ -43,6 +43,9 @@ const PROPERTY_TYPES = [
   'kost', 'kos', 'kosan', 'kostan', 'ngekos', 'ngekosan',
   'indekos', 'indekost', 'boarding house', 'boarding',
   'kontrakan', 'kontrakkan', 'bedeng',
+  // M186: singkatan WA paling umum untuk 'rumah'. Tanpa ini "Apakah rmh tersebut
+  // banjir?" tidak punya tipe properti sama sekali dan jatuh ke off-topic.
+  'rmh',
   // Komersial
   'ruko', 'rukan', 'shophouse', 'shop house',
   'kantor', 'perkantoran',
@@ -317,6 +320,10 @@ function hasPropertyKeyword(message) {
 
   // Kondisi A: Kata kunci mandiri (tidak perlu kondisi lain)
   if (hasStandaloneKeyword(lower)) return true;
+
+  // M186: pertanyaan atribut unit ("apakah rumah tersebut banjir dan panas?",
+  // "rumahnya panas ga?") adalah query properti walau tanpa kata aksi.
+  if (isUnitAttributeQuestion(lower)) return true;
 
   // Kondisi B: Tipe properti + kata aksi/pertanyaan
   return hasPropertyType(lower) && hasActionWord(lower);
@@ -622,7 +629,31 @@ const DAILY_LIFE_OFFTOPIC = [
 ];
 
 /** Pesan adalah obrolan harian non-properti (mati listrik, banjir, macet, dll)? */
+/* ⭐ M186 (11 Sep 2026) — PERTANYAAN TENTANG ATRIBUT UNIT BUKAN OBROLAN HARIAN.
+ * Bug produksi: setelah memilih listing no. 2, customer bertanya "Apakah rmh
+ * tersebut banjir dan panas?" — dan AI membalas "Maaf, boleh diulang
+ * maksudnya?". Penyebab: BANJIR_DAILY dicek TANPA SYARAT di atas semua sinyal
+ * lain, dan satu-satunya pengecualiannya adalah bentuk NEGASI ("tidak banjir").
+ * Pertanyaan ("apakah … banjir?", "rumahnya banjir ga?") tidak memuat negasi di
+ * DEPAN kata itu, jadi diperlakukan sebagai "rumahku kebanjiran" (curhat).
+ * Padahal ini pertanyaan properti paling wajar yang ada: kondisi unit yang
+ * baru saja ditawarkan. Aturan: kata atribut + (bentuk tanya ATAU rujukan ke
+ * unit "rumah/rmh/unit/tersebut/itu/-nya") = pertanyaan atribut properti,
+ * BUKAN obrolan harian. Daftar atribut sengaja luas (banjir, panas, bising,
+ * macet, aman, ramai, sepi, asri, polusi, bau, lembab, gelap, akses,
+ * strategis, sinyal, air, listrik, lingkungan) — semuanya hal yang lazim
+ * ditanyakan calon pembeli/penyewa tentang sebuah unit. */
+const UNIT_REF_RE = /\b(rumah|rmh|unit|propert\w*|apartemen?|apt|villa|vila|ruko|kos|kost|tersebut|tsb|itu|ini|yg\s+(?:tadi|itu|nomor|no)|nomor|nomer|no\.?\s*\d)\b|\bnya\b|[a-z]+nya\b/i;
+const ASK_FORM_RE = /\b(apakah|apa|gimana|bagaimana|kira[- ]?kira|beneran|benarkah|ada\s+(?:nggak|ngga|ga|gak|gk|tidak)|nggak|ngga|gak|gk|ga|tidak|tdk|kah)\b|\?/i;
+const UNIT_ATTRIBUTE_RE = /\b(banjir|kebanjiran|panas|gerah|pengap|bising|berisik|ribut|macet|kemacetan|aman|rawan|ramai|rame|sepi|asri|sejuk|adem|dingin|polusi|berpolusi|bau|lembab|lembap|gelap|terang|akses|strategis|sinyal|air\s+(?:bersih|pam|sumur|lancar)|listrik|lingkungan|tetangga|kotor|kumuh|padat|nyaman|tenang|hijau|rindang|dekat\s+jalan\s+raya|pinggir\s+jalan)\b/i;
+
+function isUnitAttributeQuestion(lower) {
+  return UNIT_ATTRIBUTE_RE.test(lower) && UNIT_REF_RE.test(lower) && ASK_FORM_RE.test(lower);
+}
+
 function isDailyLifeOffTopic(lower) {
+  // Pertanyaan atribut unit menang atas SEMUA pola obrolan harian di bawah.
+  if (isUnitAttributeQuestion(lower)) return false;
   for (const p of DAILY_LIFE_OFFTOPIC) {
     if (!p.test(lower)) continue;
     // Pengecualian: "banjir"/"macet" sebagai preferensi menghindari (red-flag Q5)
