@@ -109,11 +109,19 @@ function customerAsksPropertyData(message) {
  * dijawab. Yang menentukan justru kata kerja survei + penanda niat/izin.
  */
 const VIEWING_REQUEST_RE = new RegExp(
-  '\\b(?:mau|ingin|pengen|pingin|bisa|bisakah|boleh|blh|bolehkah|minta|rencana|niat)\\b'
+  '\\b(?:mau|ingin|pengen|pingin|bisa|bisakah|boleh|blh|bolehkah|minta|rencana|niat|ayo|yuk|yok|kapan)\\b'
   + '[^.?!]{0,40}?'
-  + '\\b(?:survei|survey|surver|srvei|viewing|visit|lihat|liat|liht|cek|ngecek|datang|kunjung)\\b'
+  + '\\b(?:survei|survey|surver|srvei|survie|viewing|visit|lihat|liat|liht|cek|ngecek|datang|kunjung\\w*|ketemu\\w*|ketemuan|mampir|nengok|tengok|meninjau|tinjau|jadwal\\w*)\\b'
   + '|'
-  + '\\b(?:survei|survey|viewing)\\b[^.?!]{0,30}?\\b(?:dulu|dlu|dl)\\b',
+  + '\\b(?:survei|survey|viewing|ketemuan)\\b[^.?!]{0,30}?\\b(?:dulu|dlu|dl|yuk|ayo|dong)\\b'
+  + '|'
+  // M196: berbagai cara customer mengajak survei — "ayo ketemuan", "lihat langsung",
+  // "cek unitnya", "mampir ke lokasi", "jadwalkan viewing", "meet up".
+  + '\\b(?:ayo|yuk|yok)\\s+(?:ketemu\\w*|lihat|liat|cek|survei|viewing|mampir|datang)'
+  + '|'
+  + '\\b(?:lihat|liat|cek|tengok|nengok)\\s+(?:langsung|unit\\w*|rumah\\w*|lokasi\\w*|propert\\w*|apart\\w*)'
+  + '|'
+  + '\\b(?:meet\\s*up|site\\s*visit|jadwalkan\\s+(?:survei|viewing|kunjungan)|mampir\\s+(?:ke|dulu|lihat)|ketemuan)\\b',
   'i'
 );
 
@@ -136,7 +144,7 @@ const FOCUS_REDIRECT_RE = new RegExp(
 );
 
 /** Kata kerja survei/viewing dalam segala ejaan yang lazim di WhatsApp. */
-const VIEWING_VERB_RE = /\b(?:survei|survey|surver|srvei|viewing|visit|kunjungan)\b/i;
+const VIEWING_VERB_RE = /\b(?:survei|survey|surver|srvei|survie|viewing|visit|kunjungan|ketemuan|ketemu|site\s*visit|meet\s*up)\b/i;
 
 /** @returns {boolean} customer meminta/menanyakan survei pada giliran ini. */
 function customerRequestsViewing(message) {

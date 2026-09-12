@@ -48,5 +48,28 @@ console.log('\n[4] M194: kartu format LLM (tanpa label) tetap terbaca; count req
   ok('gerbang pilihan/pasca-pilihan dilewati saat ganti transaksi/kota/tipe', /const changeTurn = Boolean\(qualState\?\.txChangedFromHistory/.test(svc) && /!changeTurn && !pick && !viewingConfirm/.test(svc));
 }
 
+console.log('\n[5] M195: summary otomatis di pesan ke-10-12 — fakta hitungan giliran & jam survei tidak salah baca');
+{
+  const p = require('../services/aiPromptBuilderService');
+  const h = []; for (let i = 1; i <= 11; i++) { h.push(C('pesan ' + i)); h.push(A('ok ' + i)); }
+  const out = p.buildWhatsappReplyPrompt({ name: 'X', normalizedPhone: '0', source: 'whatsapp', agentName: 'A' }, h, 'pesan 12', '', 'deepseek', { guardProfile: 'platform' });
+  ok('facts block menghitung pesan customer ke-12 (riwayat penuh, bukan yang dipangkas)', /Pesan customer ke-12/.test(out));
+  ok('tanpa perubahan: hitungan sejak-perubahan = 12 juga', /ke-12 sejak kota\/transaksi\/tipe terakhir tetap/.test(out));
+  const hc = []; for (const m of ['Beli rumah di Sidoarjo area Candramas', 'Yang 3 kamar?', 'Ganti pikiran, di Gresik saja area Driyorejo', 'Yang nomor 1 luasnya?']) { hc.push(C(m)); hc.push(A('ok')); }
+  const outc = p.buildWhatsappReplyPrompt({ name: 'X', normalizedPhone: '0', source: 'whatsapp', agentName: 'A' }, hc, 'Banjir nggak?', '', 'deepseek', { guardProfile: 'platform' });
+  ok('M196: ganti kota di pesan ke-3 → pesan ke-5 = ke-3 sejak perubahan', /ke-5 di sesi ini; ke-3 sejak/.test(outc), (outc.match(/🔢[^\n]*/) || [''])[0]);
+  const { customerRequestsViewing } = require('../utils/customerQuestionGuard');
+  ok('sinonim survei: ayo ketemuan / lihat langsung / mampir / cek unit / viewing', ['Ayo ketemuan kak', 'Bisa lihat langsung unitnya?', 'Mampir ke lokasi boleh?', 'yuk cek unitnya', 'Kapan bisa viewing?'].every(customerRequestsViewing));
+  ok('bukan survei: harga / sudah lihat brosur', !['Harganya berapa?', 'Saya sudah lihat brosurnya'].some(customerRequestsViewing));
+  const st3 = p.extractQualificationState([C('beli rumah'), A('Dicatat pilihannya: *X*.')], 'Ayo ketemuan Sabtu depan jam 10');
+  ok('"Ayo ketemuan Sabtu depan jam 10" → tanggal & jam survei tercatat', /September|Oktober/.test(st3.viewingDate || '') && /10/.test(st3.viewingTime || ''));
+  const st = p.extractQualificationState([C('beli rumah candramas'), A('ini 2, mana yang paling pas?')], 'Yang 3 kamar ada?');
+  ok('"Yang 3 kamar" tidak menjadi jam survei 3', st.viewingTime == null, String(st.viewingTime));
+  const st2 = p.extractQualificationState([C('beli rumah'), A('Survei jam berapa yang paling pas?')], '4 sore');
+  ok('jawaban telanjang "4 sore" saat AI bertanya jam tetap terbaca', /4/.test(st2.viewingTime || ''));
+  const d02 = fs.readFileSync(path.join(__dirname, '../asset/skills/chat_gpt_responds/docs/02-qualification-flow.md'), 'utf8');
+  ok('doc 02 Gate C: summary otomatis di pesan ke-10-12', /10th-12th customer message/.test(d02) && /do not wait for "itu saja"/.test(d02));
+}
+
 console.log(`\nRESULT: ${pass}/${pass + fail} passed${fail ? ` (${fail} FAILED)` : ' ALL PASS'}`);
 process.exit(fail ? 1 : 0);

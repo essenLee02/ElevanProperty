@@ -5380,6 +5380,42 @@ penuh untuk pertama kalinya sejak berbulan-bulan.
      sebut nilai sebenarnya), 1 kartu saat ganti transaksi (doc 03: 2).
      SUITE **2981/2981**.
 
+ 23. M195 (12 Sep 2026) — SUMMARY OTOMATIS DI PESAN KE-10-12 (arahan pemilik).
+     Customer tidak harus mengucapkan "itu saja/terima kasih"; skill Gate C
+     (doc 02 §3) kini: "at the 10th-12th customer message send the SUMMARY on
+     your own… after it only answer what they ask, never re-send it"; doc 04
+     §3d selaras. Backend memberi FAKTA hitungan: "🔢 Pesan customer ke-N di
+     sesi ini (summary sudah pernah dikirim - jangan diulang)" — dihitung dari
+     riwayat PENUH (historyForDisplay dipangkas 20 pesan → sempat salah ke-11).
+     Bug ikutan yang ketahuan di uji live 12 giliran: "Yang 3 kamar ada?"
+     tercatat Q9c "Jam 3" (parser jam longgar saat kalimat AI memuat "paling
+     pas") → model bertanya "betul jam 10? sempat tertulis jam 3". Kini jawaban
+     jam tanpa kata jam/pukul hanya sah bila pesannya cuma angka jam.
+     Live DeepSeek (12 pesan tanpa frasa penutup): summary muncul sendiri di
+     pesan ke-12. Total .md 14.676 ≤ 14.700. SUITE **2990/2990**.
+
+ 24. M196 (12 Sep 2026) — GATE C BERSYARAT, SINONIM SURVEI, .env DIRAPIKAN.
+     a) Summary otomatis di pesan ke-10-12 HANYA bila kota/transaksi/tipe
+        tetap sama; perubahan memulai hitungan dari 1 (pesan pengubah = ke-1
+        segmen baru). Fakta: "🔢 Pesan customer ke-N di sesi ini; ke-M sejak
+        kota/transaksi/tipe terakhir tetap" (+ "summary sudah pernah dikirim -
+        jangan diulang; tetap jawab pertanyaan properti berikutnya"). Riwayat
+        yang sudah memuat pesan saat ini tidak dihitung dua kali. doc 02 Gate C
+        + doc 04 §3d diperbarui (total .md 14.674).
+     b) Sinonim ajakan survei di 4 tempat (customerQuestionGuard.VIEWING_
+        REQUEST_RE/VERB_RE, ekstraktor custVolunteersViewing/aiAsksViewDate,
+        VIEWING_CUE_RE Q8): ayo/yuk ketemuan, viewing, lihat langsung/unit/
+        rumah, mampir, nengok/tengok, cek unit/lokasi, site visit, meet up,
+        jadwalkan. Live: "Ayo ketemuan Sabtu depan jam 10" → 19 Sep 10.00.
+     c) backend/.env: 420 → 176 baris, 117 → 115 key (dibuang: NGROK_WEBHOOK_URL
+        & RUMAH123_WARMUP_LOCATIONS — tidak dirujuk 356 berkas); semua nilai
+        efektif IDENTIK dengan cadangan .env.bak-20260912 (dotenv: definisi
+        terakhir menang — 10 key sempat ganda). Komentar lama diganti satu
+        catatan singkat per seksi; kebijakan billing & anti-hardcode tetap di
+        kepala berkas. MESSAGE_TERMINAL & MASSEGE_TERMINAL keduanya dipakai
+        kode (ejaan berbeda di server.js) — dipertahankan.
+     SUITE **2995/2995**.
+
  17. ⭐ M189 (12 Sep 2026) — TIGA DOC BACKUP JULI KEMBALI KE chat_gpt_responds.
      Arahan: 15-date-money ≤300 char; 10-playbooks & 19-landmark "diolah".
        docs/07-date-money-parsing-reference.md — 248 char, SELALU dimuat.

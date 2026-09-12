@@ -1333,7 +1333,7 @@ function extractQualificationState(history = [], currentMessage = '') {
     // M188: toleran salah ketik (surver/survay/survie) + "lihat rumah/apartemen/
     // langsung/lokasi" — "Saya bisa surver kamis ini" adalah jadwal SURVEI, bukan
     // tanggal masuk (bocor sejak nama hari bisa diparse).
-    const VIEWING_CUE_RE = /\b(viewing|surv[ea][iy]?\w*|survie|lihat\s+(?:unit|propert\w*|rumah|apart\w*|langsung|lokasi|kos)|cek\s+lokasi|kunjungan|jadwal\w*)\b/i;
+    const VIEWING_CUE_RE = /\b(viewing|surv[ea][iy]?\w*|survie|ketemuan|ketemu\w*|mampir|nengok|tengok|site\s*visit|meet\s*up|lihat\s+(?:unit|propert\w*|rumah|apart\w*|langsung|lokasi|kos)|cek\s+(?:lokasi|unit\w*)|kunjungan|jadwal\w*)\b/i;
     const hasMoveInCue  = MOVE_IN_CUE_RE.test(text);
     const isViewingOnly = VIEWING_CUE_RE.test(text) && !hasMoveInCue;
 
@@ -1551,7 +1551,7 @@ function extractQualificationState(history = [], currentMessage = '') {
     // Customer BERHAK menolak survei; penolakan adalah jawaban yang sah dan
     // dicatat sebagai "Minta listing" — bukan slot kosong yang ditanya ulang.
     {
-      const aiAsksViewDate = /tanggal berapa|kapan.{0,20}(lihat|survei|survey|viewing)|mau lihat unit|jadwal.{0,15}(survei|viewing)/i.test(ai.message || '');
+      const aiAsksViewDate = /tanggal berapa|kapan.{0,20}(lihat|survei|survey|viewing|ketemu)|mau lihat unit|jadwal.{0,15}(survei|viewing|ketemu)|hari apa.{0,20}(survei|viewing|ketemu|lihat)/i.test(ai.message || '');
       const aiAsksViewTime = /jam berapa|pukul berapa|jam yang|paling pas/i.test(ai.message || '');
       const lo = custResp.toLowerCase();
 
@@ -1582,7 +1582,8 @@ function extractQualificationState(history = [], currentMessage = '') {
       // "Saya mau survei hari Sabtu ini jam 10 pagi" tanpa AI bertanya lebih dulu:
       // dulu jamnya tertangkap, tanggalnya DIBUANG → summary memakai tanggal
       // masuk sebagai tanggal survei (simulasi 11 Sep).
-      const custVolunteersViewing = /\b(survei|survey|viewing|lihat\s+(?:unit|rumah|apart\w*|langsung|lokasi)|cek\s+lokasi)\b/i.test(custResp);
+      // M196: berbagai ajakan survei — ketemuan/viewing/lihat langsung/mampir/nengok/cek unit/site visit.
+      const custVolunteersViewing = /\b(survei|survey|surver|survie|viewing|site\s*visit|meet\s*up|ketemuan|ketemu\w*|mampir|nengok|tengok|lihat\s+(?:unit|rumah|apart\w*|langsung|lokasi|propert\w*)|cek\s+(?:lokasi|unit\w*|rumah\w*))\b/i.test(custResp);
       // Jawaban yang jelas soal MASUK/mulai sewa ("Untuk 1 tahun, mulai November")
       // bukan tanggal survei walau AI barusan menanyakan survei (simulasi 11 Sep:
       // "Survei: 01 November" muncul di summary padahal customer tak pernah bilang).
@@ -1615,7 +1616,10 @@ function extractQualificationState(history = [], currentMessage = '') {
         // tanpa itu angka seperti "5 hari lagi" atau "3 kamar" bisa salah
         // terbaca sebagai jam. Saat AI memang bertanya jam, pola longgar tetap
         // dipakai supaya jawaban telanjang ("4 sore") tetap tertangkap.
-        const parsedTime = parseSurveyTime(custResp, { requireClockWord: !aiAsksViewTime });
+        // M195: tanpa kata jam/pukul, jawaban telanjang hanya sah bila pesannya
+        // memang cuma angka jam ("4 sore", "10") — "Yang 3 kamar ada?" bukan jam 3.
+        const bareClockAnswer = /^\s*(?:jam\s*)?\d{1,2}(?:[.:]\d{2})?\s*(?:pagi|siang|sore|malam|am|pm)?\s*[.!]?\s*$/i.test(custResp);
+        const parsedTime = parseSurveyTime(custResp, { requireClockWord: !(aiAsksViewTime && bareClockAnswer) });
         if (parsedTime) state.viewingTime = parsedTime;
         // ⚠️ FALLBACK tanggal dari kalimat AI sendiri. Bug nyata (4 Agu 2026):
         // AI kadang MENYATAKAN tanggal survei sambil MENANYAKAN jamnya dalam
@@ -3664,7 +3668,7 @@ function buildQualificationFactsBlock(state = {}) {
 
 function buildPlatformWhatsappPrompt({
   forcedLangInstruction, resolvedAgentName, resolvedAppName, scopeBlock,
-  qualState, session, historyForDisplay, propertyContext, showCatalogAfterBrief, extraContext,
+  qualState, session, historyForDisplay, history, propertyContext, showCatalogAfterBrief, extraContext,
   userMessage,
 }) {
   // Memori kartu listing yang SUDAH terkirim di sesi ini — fakta, bukan perintah.
@@ -3686,7 +3690,48 @@ function buildPlatformWhatsappPrompt({
   const sentFact = sentCards.length
     ? `\n📨 Kartu listing sudah terkirim: ${sentCards.length} unit di sesi ini${sentAddresses.length ? ` (alamat yang sudah dilihat customer: ${sentAddresses.slice(0, 20).join(' · ')})` : ''}. Jangan kirim ulang unit-unit itu; bila customer minta N listing, kirim N dikurangi yang sudah terkirim.`
     : '';
-  let facts = (qualState ? buildQualificationFactsBlock(qualState) : '') + sentFact;
+  // M195: hitungan pesan customer di sesi ini — fakta untuk Gate C skill
+  // (summary otomatis di pesan ke-10-12, tanpa menunggu "itu saja").
+  // Dihitung dari riwayat PENUH (historyForDisplay dipangkas 20 pesan → salah hitung).
+  // M196: hitungan dimulai ULANG sejak pesan customer terakhir yang mengganti
+  // kota/transaksi/tipe — Gate C (summary otomatis di pesan ke-10-12) hanya
+  // berlaku bila ketiganya tetap sama sepanjang hitungan itu.
+  const custMsgs = (Array.isArray(history) ? history : [])
+    .filter((h) => /^(customer|user|human)$/i.test(String(h.role || '')))
+    .map((h) => String(h.message || h.content || ''));
+  let sinceChange = custMsgs.length;
+  try {
+    const curCity = String(qualState?.city || '').toLowerCase();
+    const curTx = String(detectCanonicalTransaction(qualState?.transactionType || '') || qualState?.transactionType || '').toLowerCase();
+    const curType = String(qualState?.buildingType || '').toLowerCase();
+    // Titik perubahan = pesan yang menyebut kota/transaksi/tipe BERBEDA dari
+    // nilai yang terakhir disebut SEBELUMNYA (bukan dibanding state akhir —
+    // pesan "ganti ke Gresik" sama dengan state akhir, tapi itu justru resetnya).
+    let resetAt = -1;
+    let lastC = '', lastTx = '', lastTy = '';
+    for (let i = 0; i < custMsgs.length; i++) {
+      const m = custMsgs[i];
+      const c = String(detectLocation(m) || '').toLowerCase();
+      const tx = String(detectCanonicalTransaction(m) || '').toLowerCase();
+      const ty = String(detectCanonicalType(m) || '').toLowerCase();
+      if (c && isKnownLocationName(c)) { if (lastC && c !== lastC) resetAt = i; lastC = c; }
+      if (tx) { if (lastTx && tx !== lastTx) resetAt = i; lastTx = tx; }
+      if (ty) { if (lastTy && ty !== lastTy) resetAt = i; lastTy = ty; }
+    }
+    // Pesan saat ini sendiri bisa jadi titik perubahan (banner dari ekstraktor).
+    if (qualState?.cityChangedFromHistory || qualState?.txChangedFromHistory || qualState?.typeChangedFromHistory) resetAt = custMsgs.length;
+    // Pesan yang mengganti dihitung sebagai pesan ke-1 segmen baru.
+    sinceChange = resetAt < 0 ? custMsgs.length : custMsgs.length - resetAt;
+  } catch { /* fail-open: hitung seluruh sesi */ }
+  // Riwayat kadang SUDAH memuat pesan saat ini (disimpan sebelum diambil) — jangan dihitung dua kali.
+  const lastCust = custMsgs.length ? custMsgs[custMsgs.length - 1].trim() : '';
+  const currentIncluded = lastCust && lastCust === String(userMessage || '').trim();
+  const customerTurns = custMsgs.length + (currentIncluded ? 0 : 1);
+  const turnsSinceChange = Math.max(1, sinceChange + (currentIncluded ? 0 : 1));
+  const summaryAlreadySent = (Array.isArray(historyForDisplay) ? historyForDisplay : [])
+    .some((h) => /^(ai|assistant)$/i.test(String(h.role || '')) && /ringkasan|summary/i.test(String(h.message || h.content || '')) && /(✓|•)\s*(Transaksi|Rencana|Tipe)/.test(String(h.message || h.content || '')));
+  const turnFact = `\n🔢 Pesan customer ke-${customerTurns} di sesi ini; ke-${turnsSinceChange} sejak kota/transaksi/tipe terakhir tetap${summaryAlreadySent ? ' (summary sudah pernah dikirim - jangan diulang; tetap jawab pertanyaan properti berikutnya)' : ''}.`;
+  let facts = (qualState ? buildQualificationFactsBlock(qualState) : '') + sentFact + turnFact;
   // M191: unit yang sudah dipilih customer adalah fakta memori terpenting —
   // tanpa baris ini model "lupa" pilihan begitu topik lain (budget/patokan) muncul.
   try {
@@ -3876,7 +3921,7 @@ function buildWhatsappReplyPrompt(session, history, userMessage, propertyContext
   if (String(extraContext?.guardProfile || '').toLowerCase() === 'platform') {
     return buildPlatformWhatsappPrompt({
       forcedLangInstruction, resolvedAgentName, resolvedAppName, scopeBlock,
-      qualState, session, historyForDisplay, propertyContext, showCatalogAfterBrief, extraContext,
+      qualState, session, historyForDisplay, history, propertyContext, showCatalogAfterBrief, extraContext,
       userMessage,
     });
   }
