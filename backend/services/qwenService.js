@@ -4,6 +4,7 @@ const {
   buildContactReplyPrompt,
   buildChatbotReplyPrompt,
   buildWhatsappReplyPrompt,
+  buildSkillContext,
 } = require('./aiPromptBuilderService');
 const { sanitizeEnvValue } = require('./openaiService');
 
@@ -135,7 +136,8 @@ function generateQwenChatbotReply(session, history, userMessage, propertyContext
 
 function generateQwenWhatsappReply(session, history, userMessage, propertyContext = '', extraContext = {}) {
   const prompt = buildWhatsappReplyPrompt(session, history, userMessage, propertyContext, 'qwen', extraContext);
-  return callQwenChatAPI(getProjectSkillInstruction('qwen'), prompt, {
+  // M189: konteks giliran ini menentukan doc kondisional (05/06) yang ikut dimuat.
+  return callQwenChatAPI(getProjectSkillInstruction('qwen', buildSkillContext(history, userMessage)), prompt, {
     metadata: { source: _waSource(), channel: 'whatsapp', sessionId: String(session.id || ''), provider: 'qwen' },
   });
 }

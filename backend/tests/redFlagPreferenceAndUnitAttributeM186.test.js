@@ -91,9 +91,13 @@ console.log('\n[5] chat_gpt_responds docs carry the M186 rule and fit the cap');
   const dir = path.join(__dirname, '..', 'asset', 'skills', 'chat_gpt_responds');
   const files = ['SKILL.md', ...fs.readdirSync(path.join(dir, 'docs')).filter((f) => f.endsWith('.md')).sort().map((f) => path.join('docs', f))];
   const raw = files.map((f) => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n');
-  const cap = 11000;
-  ok(`loaded ${raw.length} chars ≤ cap ${cap}`, raw.length <= cap);
-  ok('6 files (SKILL.md + docs 00-04)', files.length === 6, files.join(','));
+  // M189: 05/06 kondisional (dimuat hanya bila konteks memicu) — yang selalu dimuat
+  // adalah SKILL.md + 00-04 + 07 dan harus ≤ 11000; total 9 berkas.
+  const always = files.filter((f) => !/0[56]-/.test(f)).map((f) => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n');
+  const total = files.map((f) => fs.readFileSync(path.join(dir, f), 'utf8')).join('').length;
+  ok(`total semua .md ${total} ≤ 14700 (anggaran pemilik proyek, M193)`, total <= 14700);
+  ok(`always-loaded ${always.length} chars ≤ 12500`, always.length <= 12500);
+  ok('9 files (SKILL.md + docs 00-07)', files.length === 9, files.join(','));
   ok('Q5 rule: never re-send the catalog for a red flag', raw.includes('never re-send the catalog for it'));
   ok('Q5 rule: "kawasan asri" is a quality, not an area', raw.includes('"kawasan asri" is a quality, not an area'));
   ok('doc 03: unit-condition question handled from the card', raw.includes("They ask about that unit's condition"));

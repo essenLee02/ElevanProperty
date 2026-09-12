@@ -2,7 +2,7 @@
   ELEVAN PROPERTY — COMPREHENSIVE PROJECT CONTEXT (V18)
   Dibuat  : 15 Juni 2026
   Update  : 11 September 2026 (M183–M187) — ⭐ SUITE HIJAU PENUH:
-            **2929/2929, nol gagal, nol crash** (M186–M188 di poin 13–16, paling bawah). Rinciannya di §PERUBAHAN
+            **2957/2957, nol gagal, nol crash** (M186–M189 di poin 13–17, paling bawah). Rinciannya di §PERUBAHAN
             BESAR V17 → V18 (paling bawah). Tiga hal yang paling mengubah
             cara kerja sesi berikutnya:
               (1) `SKILL_MAX_RESPONSE_CHARACTERS=3000` DIAM-DIAM MEMOTONG 71%
@@ -5251,7 +5251,160 @@ penuh untuk pertama kalinya sejak berbulan-bulan.
        disinkronkan manual setiap edit (tes membaca root, produksi membaca
        asset) — kandidat penyatuan berikutnya.
 
-  PENOMORAN M — nomor berikutnya untuk sesi mendatang: **M189**.
+  PENOMORAN M — nomor berikutnya untuk sesi mendatang: **M191**.
+
+ 18. M190 (12 Sep 2026) — AUDIT 7 POIN + SKILL 14.500 CHAR + JARAK JADI FAKTA.
+     Pemilik proyek meralat: bukan −30-40%, melainkan total .md ≤ 14.500 dengan
+     teks lama dikembalikan dan hanya redundansi yang dibuang. Hasil: total
+     **14.490 char** (SKILL 949 · 00 1.361 · 01 1.424 · 02 3.755 · 03 1.939 ·
+     04 2.075 · 05 1.951 · 06 1.011 · 07 248); selalu-dimuat 11.885, semua 9
+     doc 14.747 (cap 15.000, tanpa pemotongan). Frontmatter YAML & header
+     loader tidak lagi dikirim ke model (skillPromptService).
+     7 poin dipetakan: (1) slot Q1-Q14 termasuk tower/lantai/hadap, KPR,
+     kamar, furnitur → 02 §2, 05; (2) legal SHM/SHGB/SHMSRS/SHP/surat hijau/
+     AJB/PPJB + "unit ini SHM?" dari field kartu → 04 §3a; (3) survei/
+     pindahan/jarak → 02 §2, 04 §3b, 07; (4) guardrail/vektor/leksikal/dedup/
+     typo → 00 "Source ladder", 03 dedup, 01 singkatan; (5) pilot/identitas/
+     kualifikasi/diagnosis/eskalasi/intent → SKILL, 00, 01 "Conditions -
+     diagnose", 02, 04 §3c; (6) rekomendasi/alternatif → 03 "Match, don't
+     guess" (prioritas type>tx>kota>area>budget>kamar>fasilitas, budget ±15%
+     lalu ±30% berlabel, "cocok 3 dari 4"); (7) agenda customer > interview →
+     SKILL baris 1, 02 Gate A "answer EVERY part", anti-loop.
+     Dari guidance_responds.zip (Juli, 21 doc/330 KB) diambil ringkasnya saja:
+     diagnosis per-kondisi (terse/vague/price-first/frustrated/wavering/
+     first-timer/non-answer), "infer don't ask", completeness (jawab semua
+     bagian pertanyaan majemuk), matching priority & budget expansion,
+     privacy (jangan bocorkan kontak pemilik). Tabel 45 kota, 83 kategori,
+     dialog contoh panjang, dan referensi fasilitas TIDAK diambil (redundan
+     dengan blok katalog/coverage yang sudah dikirim backend).
+     PIPELINE diverifikasi: Kirimi webhook → ChatMessage.create (customer) →
+     generateWhatsAppAIReply (profil platform: hanya scope guard, facts,
+     katalog/vektor, gateFacts, RAG) → DeepSeek → ChatMessage.create (AI) →
+     Kirimi API. Satu jalur lagi yang masih MEMBALAS SENDIRI di profil platform
+     ditemukan & diubah: intercept jarak M130 (`distance_estimation`) kini
+     dikirim sebagai FAKTA "ESTIMASI JARAK/WAKTU (deterministik)"; live:
+     DeepSeek menyalin 80 km / 1j27m-2j apa adanya dan menyebutnya estimasi.
+     Yang sengaja tetap deterministik di semua profil: agent_scope_guard
+     (batas bisnis agent), guardReplyIdentity (anti-bocor placeholder),
+     ask-name swap (customers.ask_name — alur registrasi pemilik proyek).
+     tests/distanceWiringGate dipin ke profil 'private'. SUITE **2959/2959**.
+
+ 19. M191 (12 Sep 2026) — 4 SESI LIVE DeepSeek × chat_gpt_responds + ARTIFACT.
+     scripts/simulate-platform-skill.js chatgpt dengan SIM_ONLY=S1,S3,S5,S6
+     (44 giliran/run) + dump prompt. Artifact diagnosis (sebelum/sesudah,
+     tiap penyimpangan diatribusikan backend/DeepSeek/detektor):
+     https://claude.ai/code/artifact/350ba976-9b3f-413b-b822-f8a0ba4d75a6
+     TIGA FAKTA BACKEND SALAH (semua diperbaiki, tes
+     tests/listingSelectionCrossBlockM191.test.js 8/8):
+       a) parseShownListings hanya membaca BLOK kartu terakhir; DeepSeek
+          melanjutkan nomor (1-2 lalu 3-4) sesuai doc 03 → "pilih nomer 2"
+          divonis out-of-range → fakta "belum ada no. 2". Kini lintas blok.
+       b) listingsAlreadyShown hanya mengenali "Estimasi Harga" → kartu
+          DeepSeek ("💰 Harga:") tak terhitung → gerbang ketersediaan
+          menyuntik 2 kartu sebagai fakta TIAP giliran → katalog berulang.
+          Kini isCardMessage + baris alamat/harga.
+       c) "Patokannya dekat Pakuwon Mall" → landmark jadi kandidat AREA →
+          fakta "belum ada di Pakuwon Mall + area lain". Kini kalimat bercue
+          patokan/dekat tidak pernah jadi area.
+       + facts block: baris "Unit dipilih customer (MELEKAT…)" dari
+         readConfirmedPick yang kini mengenali kata-kata bebas LLM.
+     Doc: 02 §5 "NO cards that turn"; 03 pick vs budget/patokan → tanya
+     "tetap atau ganti?" (total .md 14.494).
+     Sisa = perilaku DeepSeek: kutip ulang kartu unit yang dibahas, kartu
+     baru saat red flag (1×), 2 tanda tanya ±10%. Run 8: backend 0, skrip 0,
+     placeholder 0, harga karangan 0, pembiayaan-setelah-tolak 0.
+     SUITE **2967/2967**.
+
+ 20. M192 (12 Sep 2026) — KONTRAK PENGIRIMAN LISTING INKREMENTAL (arahan).
+     Listing yang sudah dikirim TIDAK PERNAH dikirim ulang; kirim ulang hanya
+     bila customer mengganti area/kota/transaksi (sewa<->beli) atau tipe;
+     angka permintaan bersifat KUMULATIF: sudah 2 minta 3 → 1 BARU; sudah 2
+     minta 5 → 3 BARU; minta ≤ yang sudah ada → katakan sudah dikirim.
+     Implementasi (satu sumber kebenaran = utils/listingSelectionGate
+     .listSentCards: semua blok kartu di riwayat, alamat sebagai identitas):
+       a) utils/areaAvailabilityGate.tryAreaAvailabilityAnswer({history,
+          resetSent}) — dipakai KEDUA jalur (whatsappAIService & Private
+          Agent): wantNew = diminta − terkirim; buang yang sudah terkirim;
+          area baru = reset; kepala "…TAMBAHAN…"; verdict 'already-sent' /
+          'nothing-new' bila tidak ada yang baru.
+       b) Prompt platform (buildPlatformWhatsappPrompt): unit yang sudah
+          terkirim DIHILANGKAN dari blok katalog (dedup di sumber; alamat
+          dicocokkan prefix karena kartu memotong di koma) + catatan "(N unit
+          sudah pernah dikirim disembunyikan…)"; facts block "📨 Kartu
+          listing sudah terkirim: N unit … kirim N dikurangi yang sudah".
+          Banner ganti kota/transaksi/tipe → dedup dimatikan (boleh ulang).
+       c) doc 03: "Check what is already sent first… A count is CUMULATIVE…
+          Re-sending is allowed only when they change city, area, or
+          sewa<->beli" (total .md 14.456 ≤ 14.500).
+     Live DeepSeek: Candramas 2 → "minta 3" = 1 tambahan (no. 3) → "minta 5"
+     = 2 tambahan (no. 4-5) → "Tropodo?" = 2 kartu baru. Tes:
+     tests/listingIncrementalSendM192.test.js 10/10 (katalog nyata).
+     SUITE **2977/2977**.
+
+ 21. M193 (12 Sep 2026) — STOK KURANG DARI PERMINTAAN + anggaran .md 14.700.
+     Aturan pemilik: ganti transaksi/kota/area = wajar kirim ulang dari awal
+     (minimum 2); minta 4 → 2 baru; minta 6 → 4 baru; minta 5 tapi agent hanya
+     punya 4 → minta maaf, sebut jumlah nyata, kirim 2 baru (2 lama + 2 baru).
+     Gerbang bersama (areaAvailabilityGate): over-fetch 10, totalAvailable =
+     terkirim + cocok-belum-terkirim; shortfall → kepala "Mohon maaf… hanya
+     punya N unit (M sudah dikirim)". Catatan katalog platform ikut memuat
+     aturan shortfall. doc 03: "ask 4 -> 2 new; ask 6 -> 4 new. Stock short
+     (ask 5, only 4 exist) -> apologise…; re-sending from scratch (2 first)
+     ONLY on city/area/sewa<->beli change - never because the turn is quiet".
+     Total .md 14.617 ≤ 14.700 (tes budget dinaikkan ke 14.700).
+     Live DeepSeek Driyorejo (stok 4): 2 → "minta 6" → "totalnya baru 4, ini
+     2 unit berikutnya" → "sewa saja" → set sewa baru. Tes M192 kini 14/14.
+     SUITE **2981/2981**.
+
+ 22. M194 (12 Sep 2026) — 5 SESI LIVE (S1,S2,S4,S8,S9-baru) + artifact diperbarui.
+     Artifact (run 9 → run 10): https://claude.ai/code/artifact/350ba976-9b3f-413b-b822-f8a0ba4d75a6
+     S9 baru = uji kontrak listing inkremental (minta 4, minta 6 stok 4, ganti
+     area, ganti transaksi, keluhan palsu, pilih, survei, masuk, tutup).
+     TIGA FAKTA BACKEND SALAH (diperbaiki, tests/listingSelectionCrossBlockM191
+     13/13):
+       a) parseCardsFromText buta format kartu DeepSeek ("🏡 Jl. …" / "💰 *Rp …*"
+          tanpa label) → fakta pilihan tanpa alamat/harga → model mengarang
+          "No. 93, Rp 415 juta (SHM/Cash)". Kini ada regex cadangan tanpa label.
+       b) "Minta 4 listing" cocok VIEWING_REFUSAL_RE ("minta … listing") →
+          Q9b="Minta listing" seumur sesi → "Survei Sabtu depan jam 10"
+          diabaikan. Kini permintaan JUMLAH bukan penolakan; tanggal survei
+          eksplisit menimpa penolakan lama.
+       c) Ganti transaksi masih dibalas gerbang pasca-pilihan ("masih di alur
+          pasca-pilihan") → kontradiksi banner. Kini gerbang pilihan/survei/
+          pasca-pilihan dilewati pada giliran ganti kota/transaksi/tipe.
+     Run 10 (55 giliran): backend 0 · skrip 0 · placeholder 0 · harga karangan
+     0 · kartu diulang 11→4 · 2 tanda tanya 8→3 · S9: 2 → minta 4 = 2 tambahan
+     (no. 3-4) → minta 6 = "hanya 4, semua sudah" → Cerme set baru → sewa set
+     baru → "Sabtu depan jam 10" = 19 Sep 2026 10.00 → masuk 05 Nov → summary.
+     Sisa = model: mengiyakan keluhan palsu "kok dikirim lagi" (doc 00 minta
+     sebut nilai sebenarnya), 1 kartu saat ganti transaksi (doc 03: 2).
+     SUITE **2981/2981**.
+
+ 17. ⭐ M189 (12 Sep 2026) — TIGA DOC BACKUP JULI KEMBALI KE chat_gpt_responds.
+     Arahan: 15-date-money ≤300 char; 10-playbooks & 19-landmark "diolah".
+       docs/07-date-money-parsing-reference.md — 248 char, SELALU dimuat.
+       docs/05-property-type-playbooks.md — 10 tipe non-rumah/apartemen, hanya
+         slot PEMBEDA per tipe (1-2 pertanyaan, setelah listing), KONDISIONAL.
+       docs/06-landmark-reference.md — aturan saja, KONDISIONAL. Tabel 45 kota
+         statis SENGAJA TIDAK diikutkan (priming hazard M92a/Q2c): contoh area
+         HANYA dari katalog agent; landmark customer diterima apa adanya; nama
+         area menang atas tag landmark (M188d).
+     Mekanisme: CONDITIONAL_FILE_TRIGGERS (kunci nama berkas persis) di
+     skillPromptService; konteks = pesan terbaru + jendela riwayat
+     (buildSkillContext). TEMUAN: hanya Claude yang mengirim konteks — deepseek/
+     chatgpt/kimi/openrouter/qwen/hf memanggil getProjectSkillInstruction(prov)
+     tanpa konteks → doc kondisional akan SELALU ikut. Kini semua provider
+     mengirim `system` berkonteks.
+     ⛔ BUG LATEN: jalur ChatGPT (Responses API) hanya mengirim `input` — TIDAK
+     ADA skill sama sekali sejak M178 menghapus salinan di user prompt.
+     Ditambah `instructions` = system. (AI_PRIMARY_PROVIDER=chatgpt selama ini
+     berjalan tanpa .md.)
+     Ukuran: selalu-dimuat 10.784 char (≤11000); 05+06 ikut = 14.699.
+     Plafon yang DIPAKAI system prompt WhatsApp adalah SKILL_MAX_PROJECT_
+     CHARACTERS (bukan RESPONSE) — live 12 Sep: 11000 memotong doc 07 saat
+     05/06 ikut. Keduanya kini 15000. Diverifikasi live: turn "villa dekat
+     pantai" → 9 doc utuh 15.206 char; turn "beli rumah" → 7 doc 11.291.
+     Tes: tests/conditionalSkillDocsM189.test.js 28/28. SUITE **2957/2957**.
 
  16. ⭐ M188 (11 Sep 2026, malam) — 8 SIMULASI LIVE chat_gpt_responds × DeepSeek.
      .env dikembalikan: AI_SKILL_CALL=asset\skills\chat_gpt_responds,

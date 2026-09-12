@@ -4,6 +4,7 @@ const {
   buildContactReplyPrompt,
   buildChatbotReplyPrompt,
   buildWhatsappReplyPrompt,
+  buildSkillContext,
 } = require('./aiPromptBuilderService');
 const { sanitizeEnvValue } = require('./openaiService');
 
@@ -200,6 +201,8 @@ async function generateKimiChatbotReply(session, history, userMessage, propertyC
 
 async function generateKimiWhatsappReply(session, history, userMessage, propertyContext = '', extraContext = {}) {
   return callKimiChatAPI(buildWhatsappReplyPrompt(session, history, userMessage, propertyContext, 'kimi', extraContext), {
+    // M189: konteks giliran ini menentukan doc kondisional (05/06) yang ikut dimuat.
+    system: getProjectSkillInstruction('kimi', buildSkillContext(history, userMessage)),
     metadata: { source: _waSource(), channel: 'whatsapp', sessionId: String(session.id || ''), provider: 'kimi' },
   });
 }

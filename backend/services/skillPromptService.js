@@ -183,7 +183,14 @@ function getMarkdownFiles(directoryPath) {
  * menunjuk berkas 06/10/11/12/13/14 yang kini SUDAH TIDAK ADA, dan entri yang
  * menunjuk berkas hilang tidak pernah cocok (gagal senyap).
  * ⛔ Kalau menambah doc kondisional lagi: kunci pada NAMA BERKAS PERSIS. */
-const CONDITIONAL_FILE_TRIGGERS = {};
+/* M189 (12 Sep 2026) — dua doc referensi dimuat HANYA saat relevan (kunci = NAMA
+ * BERKAS PERSIS). Konteks = pesan terbaru + jendela riwayat pendek dari
+ * buildSkillContext() di aiPromptBuilderService. Tanpa konteks (pemanggil lama)
+ * keduanya ikut dimuat. */
+const CONDITIONAL_FILE_TRIGGERS = {
+  '05-property-type-playbooks.md': /\b(hotel|villa|vila|kos|kost|kosan|indekos|ruko|rukan|shophouse|kantor|office|gudang|warehouse|toko|kios|retail|mansion|rumah\s+mewah|kondotel|condotel|tanah|kavling|kaveling|lahan|spbu|pabrik|sewa\s+(?:harian|malam)|booking|check[\s-]?in|lantai|tower|hadap)\b/i,
+  '06-landmark-reference.md': /\b(patokan|landmark|dekat|deket|near|mall|mal|kampus|universitas|sekolah|stasiun|bandara|tol|pasar|rumah\s+sakit|rs\b|area|kawasan|daerah|jarak|km\b|menit)\b/i,
+};
 // ⚠️ M171 (29 Agu 2026): doc 16-counterpart-roles-and-division-routing.md
 // DIHAPUS atas arahan pemilik proyek — fokus skill HANYA properti (kualifikasi
 // sewa/beli, rekomendasi katalog, jadwal & jarak survei), bukan routing
@@ -207,7 +214,10 @@ function readSkillFile(filePath) {
   try {
     if (!fs.existsSync(filePath)) return '';
 
-    const text = fs.readFileSync(filePath, 'utf8').replace(/\r\n/g, '\n').trim();
+    // M190: YAML frontmatter (name/description) adalah metadata registri, bukan
+    // instruksi — dibuang dari prompt (≈110 char per panggilan, nol makna).
+    const text = fs.readFileSync(filePath, 'utf8').replace(/\r\n/g, '\n')
+      .replace(/^---\n[\s\S]*?\n---\n?/, '').trim();
     if (!text) return '';
 
     return [
@@ -246,9 +256,8 @@ function loadSkillGroupPrompt(groupKey, options = {}) {
   const group = SKILL_GROUPS[groupKey] || { title: groupKey };
   return trimForPrompt(
     [
-      `# LOADED SKILL GROUP: ${group.title}`,
-      `Skill group key: ${groupKey}`,
-      `Loaded markdown files: ${files.length}`,
+      // M190: satu baris header — nama grup/jumlah berkas tidak mengubah perilaku model.
+      `# SKILL: ${group.title} (${files.length} files)`,
       loaded
     ].join('\n\n'),
     maxCharacters

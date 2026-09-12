@@ -142,4 +142,21 @@ module.exports = [
       'Ok segitu dulu, makasih.',
     ],
   },
+  {
+    name: 'S9 — Listing inkremental: minta 4, minta 6 (stok terbatas), ganti area, ganti transaksi, tutup',
+    phone: '6280000032009', customer: 'Sim Sembilan',
+    turns: [
+      'Ada rumah dijual di Gresik, area Driyorejo?',
+      'Minta 4 listing ya.',
+      'Boleh 6 listing?',
+      'Hmm harganya tinggi semua. Kalau area Cerme ada?',
+      'Yang nomor 1 sertifikatnya apa?',
+      'Saya ganti pikiran, sewa saja di Gresik.',
+      'Kok dikirim lagi yang tadi? Saya minta yang belum pernah.',
+      'Oke yang nomor 2 saya minati.',
+      'Survei Sabtu depan jam 10 pagi bisa?',
+      'Masuknya awal November.',
+      'Cukup, terima kasih infonya.',
+    ],
+  },
 ];

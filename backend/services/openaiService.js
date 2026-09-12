@@ -5,6 +5,7 @@ const {
   buildContactReplyPrompt,
   buildChatbotReplyPrompt,
   buildWhatsappReplyPrompt,
+  buildSkillContext,
   buildIntentDetectionPrompt,
   buildPreferenceExtractionPrompt
 } = require('./aiPromptBuilderService');
@@ -150,6 +151,13 @@ async function callChatGPTResponseAPI(input, options = {}) {
 
   const payload = {
     model: options.model || config.model,
+    /* ⛔ M189 (12 Sep 2026) — SKILL TIDAK PERNAH SAMPAI KE CHATGPT.
+     * M178 menghapus salinan skill dari USER prompt dengan alasan "setiap
+     * provider sudah mengirimnya sebagai SYSTEM" — tetapi jalur Responses API
+     * ini hanya mengirim `input`, tidak ada `instructions`/system sama sekali.
+     * Sejak itu ChatGPT membalas TANPA skill .md. Diperbaiki: `instructions`
+     * = system (skill + konteks doc kondisional) — field resmi Responses API. */
+    instructions: options.system || getProjectSkillInstruction('chatgpt'),
     input,
     store: options.store !== undefined ? options.store : config.store
   };
@@ -235,6 +243,8 @@ async function generateChatGPTWhatsappReply(session, history, userMessage, prope
   // jawaban baru mendorong pesan lama makin jauh keluar → loop tak berujung.
   // Ini persis bug M35 (window 24→60) yang muncul kembali.
   return callChatGPTResponseAPI(buildWhatsappReplyPrompt(session, history, userMessage, propertyContext, 'chatgpt', extraContext), {
+    // M189: konteks giliran ini menentukan doc kondisional (05/06) yang ikut dimuat.
+    system: getProjectSkillInstruction('chatgpt', buildSkillContext(history, userMessage)),
     store: true,
     metadata: {
       source: _waSource(),

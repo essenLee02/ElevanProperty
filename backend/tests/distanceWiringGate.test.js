@@ -12,6 +12,12 @@
 'use strict';
 
 require('dotenv').config();
+// M190: intercept jarak yang MEMBALAS SENDIRI hanya berlaku di profil 'local'
+// (Private Agent). Di profil 'platform' angkanya dikirim sebagai FAKTA ke model
+// (arahan pemilik proyek: backend hanya guardrails + vektor + RAG). Tes ini
+// menguji intercept-nya, jadi dipin ke profil 'local' — sekaligus berhenti
+// memanggil API DeepSeek berbayar dari tes.
+process.env.AI_PRIMARY_PROVIDER = 'private';
 const { generatePrivateTerminalMassege } = require('../controllers/chatbotPrivateController');
 const { generateWhatsAppAIReply } = require('../services/whatsappAIService');
 

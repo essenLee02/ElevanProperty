@@ -286,10 +286,25 @@ async function tryCityAvailabilityAnswer({
 async function tryAreaAvailabilityAnswer({
   userId, city, area, buildingType, transactionType,
   typeLabel = 'properti', message = '', isId = true, persistedBudgetText = '',
+  history = [], resetSent = false,
 }) {
   if (!userId || !area || !transactionType) return null;
   try {
     const requestedCount = detectRequestedCount(message);
+    /* M192 (12 Sep 2026) — KONTRAK PENGIRIMAN LISTING INKREMENTAL (arahan
+     * pemilik proyek): listing yang SUDAH dikirim tidak pernah dikirim ulang.
+     * Kirim ulang hanya bila customer mengganti area/kota/transaksi
+     * (`resetSent`, dihitung pemanggil dari banner perubahan) — di luar itu:
+     *   sudah 2, minta 5 → kirim 3 BARU · sudah 2, minta 3 → kirim 1 BARU ·
+     *   tanpa angka → DEFAULT_SHOWN unit BARU. Semua yang sudah dikirim
+     *   dibaca dari riwayat (listSentCards), bukan ditebak. */
+    const { listSentCards, isRowAlreadySent } = require('./listingSelectionGate');
+    const sentAll = listSentCards(history);
+    // Area BARU (belum ada kartu area itu yang pernah dikirim) = customer
+    // mengganti area → boleh mulai dari awal untuk area tersebut.
+    const areaKey = String(area || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const areaIsNew = sentAll.areas.size > 0 && ![...sentAll.areas].some((a) => a.includes(areaKey) || areaKey.includes(a));
+    const sent = (resetSent || areaIsNew) ? { addresses: new Set(), keys: new Set(), areas: new Set(), count: 0 } : sentAll;
     // require lokal: propertyRecommendationService besar dan saling terkait —
     // menariknya ke puncak file berisiko siklus require (sama pola dengan
     // fetchAreaListings di areaAvailabilityService.js).
@@ -317,16 +332,36 @@ async function tryAreaAvailabilityAnswer({
      * ditanyakan SETELAH customer melihat barangnya.
      */
     if (av.ok && av.verdict === 'available') {
-      const limit = requestedCount || DEFAULT_SHOWN;
+      // Jumlah BARU yang harus dikirim: (diminta − sudah dikirim), minimal 0;
+      // tanpa angka: DEFAULT_SHOWN unit yang belum pernah dikirim.
+      const wantNew = requestedCount ? Math.max(0, requestedCount - sent.count) : DEFAULT_SHOWN;
+      const limit = wantNew;
+      if (requestedCount && wantNew === 0) {
+        const reply = isId
+          ? `Kak, ${sent.count} listing itu sudah saya kirim sebelumnya ya 😊 Mau saya tambahkan yang lain lagi, atau ada yang menarik dari yang sudah ada?`
+          : `I've already sent you ${sent.count} listings 😊 Want me to add more, or did any of them catch your eye?`;
+        return { reply, verdict: 'already-sent', requestedCount };
+      }
       // M160: bila checkAreaAvailability() mengoreksi salah ketik ("Chandramas"
       // → "Candramas"), ambil listing untuk nama yang BENAR — bukan nama yang
       // diketik customer, yang memang tidak ada satu unit pun di katalog.
       const areaForListing = av.correctedArea || area;
-      const rows  = await fetchAreaListings({
-        userId, city, area: areaForListing, buildingType, transactionType, limit,
+      // Ambil lebih banyak lalu buang yang sudah dikirim, sisakan `limit` yang BARU.
+      const rowsAll = await fetchAreaListings({
+        userId, city, area: areaForListing, buildingType, transactionType, limit: 10,   // cukup untuk mengetahui stok nyata (shortfall) & membuang yang sudah terkirim
         minPrice: hasBudget ? budget.min : null,
         maxPrice: hasBudget ? budget.max : null,
       });
+      const rows = rowsAll.filter((r) => !isRowAlreadySent(typeof r.toJSON === 'function' ? r.toJSON() : r, sent)).slice(0, limit);
+
+      if (!rows.length && rowsAll.length && sent.count) {
+        // Semua yang cocok sudah pernah dikirim — katakan apa adanya (doc 03
+        // "Nothing new left -> say so"), jangan kirim ulang.
+        const reply = isId
+          ? `Untuk kriteria itu, semua ${rowsAll.length} unit di *${titleCaseArea(areaForListing)}* sudah pernah saya kirim, Kak 🙏 Ada yang menarik dari yang sudah ada, atau mau coba area/kriteria lain?`
+          : `All ${rowsAll.length} matching units in *${titleCaseArea(areaForListing)}* were already sent 🙏 Did any catch your eye, or shall we try another area?`;
+        return { reply, verdict: 'nothing-new', requestedCount };
+      }
 
       if (!rows.length) {
         // Budget disebutkan tapi TIDAK SATU PUN listing area ini yang cocok —
@@ -360,9 +395,19 @@ async function tryAreaAvailabilityAnswer({
       // ⚠️ Tidak menyebut "diurutkan dari yang termurah" — itu detail internal
       // penyortiran, bukan informasi untuk customer (permintaan pemilik proyek,
       // 27 Agu 2026: "itu rahasia backend saja, AI cukup tampilkan data saja").
+      /* M193 — STOK KURANG DARI PERMINTAAN: minta 5, agent hanya punya 4 →
+       * minta maaf, sebut jumlah nyata, kirim yang BARU saja (2 lama + 2 baru).
+       * Total nyata = yang sudah terkirim + yang cocok & belum terkirim. */
+      const totalAvailable = sent.count + rowsAll.filter((r) => !isRowAlreadySent(typeof r.toJSON === 'function' ? r.toJSON() : r, sent)).length;
+      const shortfall = requestedCount && totalAvailable < requestedCount;
+      const sorry = shortfall
+        ? (isId
+          ? `Mohon maaf, Kak 🙏 untuk kriteria ini saya hanya punya ${totalAvailable} unit di *${titleCaseArea(areaForListing)}*${sent.count ? ` (${sent.count} sudah dikirim)` : ''}. `
+          : `Sorry, Kak 🙏 I only have ${totalAvailable} matching units in *${titleCaseArea(areaForListing)}*${sent.count ? ` (${sent.count} already sent)` : ''}. `)
+        : '';
       const head = isId
-        ? `Ini ${rows.length} ${typeLabel} ${txWord(transactionType, true)} di *${titleCaseArea(areaForListing)}* ya, Kak 😊\n\n`
-        : `Here ${rows.length === 1 ? 'is' : 'are'} ${rows.length} ${typeLabel} ${txWord(transactionType, false)} in *${titleCaseArea(areaForListing)}* 😊\n\n`;
+        ? `${sorry}Ini ${rows.length} ${typeLabel} ${txWord(transactionType, true)}${sent.count ? ' TAMBAHAN' : ''} di *${titleCaseArea(areaForListing)}* ya, Kak 😊\n\n`
+        : `${sorry}Here ${rows.length === 1 ? 'is' : 'are'} ${rows.length} ${typeLabel} ${txWord(transactionType, false)}${sent.count ? ' more' : ''} in *${titleCaseArea(areaForListing)}* 😊\n\n`;
       const tail = isId
         ? `\n\nAda yang menarik, Kak? Kalau mau saya carikan yang lebih spesifik, boleh sebutkan budget atau kebutuhan lainnya.`
         : `\n\nAnything catch your eye? If you'd like something more specific, let me know your budget or other needs.`;

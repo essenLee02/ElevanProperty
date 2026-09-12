@@ -124,7 +124,10 @@ const HOUSE_SCENARIOS = [
   },
 ];
 
-const SCENARIOS = SET === 'house' ? HOUSE_SCENARIOS : require('./sim-scenarios-chat-gpt-responds');
+const ALL_SCENARIOS = SET === 'house' ? HOUSE_SCENARIOS : require('./sim-scenarios-chat-gpt-responds');
+// SIM_ONLY=S1,S3 → hanya sesi yang namanya diawali kode itu.
+const ONLY = String(process.env.SIM_ONLY || '').split(',').map((x) => x.trim()).filter(Boolean);
+const SCENARIOS = ONLY.length ? ALL_SCENARIOS.filter((sc) => ONLY.some((k) => sc.name.startsWith(k + ' '))) : ALL_SCENARIOS;
 
 const priceTokens = (text) => {
   const out = [];

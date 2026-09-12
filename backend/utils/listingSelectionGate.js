@@ -121,7 +121,15 @@ function extractPrices(text) {
  * skill-doc (jalur LLM) memakai dua. Sama seperti replySplitter.js.
  */
 const CARD_HEAD_RE = /^\s*(\d{1,2})\.\s+\*{1,2}(.+?)\*{1,2}\s*$/m;
-const PRICE_LINE_RE = /(?:Estimasi Harga|Estimated Price)\s*:\s*\*{0,2}([^*\n]+)\*{0,2}/i;
+const PRICE_LINE_RE = /(?:Estimasi Harga|Estimated Price|Harga|Price)\s*:\s*\*{0,2}([^*\n]+)\*{0,2}/i;
+/* M194 (12 Sep 2026) — FORMAT KARTU BUATAN PLATFORM AI. DeepSeek menulis
+ * "🏡 Jl. Candramas No. 92, Sidoarjo" (tanpa label "Alamat:") dan
+ * "💰 *Rp 351,7 juta*" (tanpa "Estimasi Harga:"). Parser lama membaca
+ * address/price kosong → fakta pilihan "Dicatat pilihannya: *Judul*" tanpa
+ * alamat/harga → model mengarang "No. 93, Rp 415.000.000". Kini ada cadangan
+ * tanpa label: baris apa pun yang memuat "Jl." / 💰 / Rp. */
+const PRICE_LINE_FALLBACK_RE = /(?:💰|💸)\s*\*{0,2}((?:Rp\s?)?[\d.,]+\s*(?:juta|jt|miliar|milyar|m)\b[^*\n]*)\*{0,2}/i;
+const ADDRESS_LINE_FALLBACK_RE = /(?:🏡|📍)?\s*\*{0,2}((?:Jl|Jalan)\.?\s[^\n*]{3,80})/i;
 const AREA_LINE_RE = /(?:🗺️\s*)?\bArea\s*:\s*([^\n]+)/i;
 const ADDRESS_LINE_RE = /(?:🏡\s*)?(?:Alamat|Address)\s*:\s*([^\n]+)/i;
 
@@ -142,15 +150,17 @@ function parseCardsFromText(text) {
   const chunks = t.split(/\n(?=\s*\d{1,2}\.\s+\*{1,2})/).filter((c) => isCardMessage(c));
   return chunks.map((chunk) => {
     const head = chunk.match(CARD_HEAD_RE);
-    const priceRaw = (chunk.match(PRICE_LINE_RE) || [])[1] || '';
+    const priceRaw = (chunk.match(PRICE_LINE_RE) || chunk.match(PRICE_LINE_FALLBACK_RE) || [])[1] || '';
     const prices = extractPrices(priceRaw);
+    const addressRaw = ((chunk.match(ADDRESS_LINE_RE) || chunk.match(ADDRESS_LINE_FALLBACK_RE) || [])[1] || '')
+      .replace(/\s*[·—-]\s*$/, '').trim();
     return {
       index: parseInt(head[1], 10),
       title: String(head[2] || '').trim(),
       priceText: priceRaw.trim(),
       priceValue: prices.length ? prices[0] : null,
       area: ((chunk.match(AREA_LINE_RE) || [])[1] || '').trim(),
-      address: ((chunk.match(ADDRESS_LINE_RE) || [])[1] || '').trim(),
+      address: addressRaw,
     };
   }).filter((c) => Number.isFinite(c.index) && c.title);
 }
@@ -186,10 +196,21 @@ function parseShownListings(history = []) {
   const cards = [];
   for (let i = start; i <= end; i++) cards.push(...parseCardsFromText(textOf(rows[i])));
 
-  // Nomor cetak adalah identitas kartu. Bila satu blok terkirim dua kali
-  // (retry Kirimi), nomor yang sama muncul dua kali — ambil yang terakhir.
+  /* M191 (12 Sep 2026) — NOMOR KARTU BERLANJUT LINTAS PESAN.
+   * Platform AI (sesuai doc 03: "never renumber") melanjutkan nomor kartu di
+   * pesan berikutnya: blok pertama 1-2, blok berikut 3-4. Versi lama hanya
+   * membaca BLOK TERAKHIR, jadi "Saya pilih nomer 2" saat blok terakhir
+   * bernomor 3-4 divonis out-of-range dan backend mengirim FAKTA SALAH
+   * "belum ada no. 2" — padahal no. 2 jelas pernah tampil. Kini blok-blok
+   * sebelumnya ikut dibaca; nomor yang sama diambil dari blok TERBARU. */
+  for (let i = start - 1; i >= 0; i--) {
+    if (isAi(rows[i]) && isCardMessage(textOf(rows[i]))) cards.push(...parseCardsFromText(textOf(rows[i])));
+  }
+
+  // Nomor cetak adalah identitas kartu. Bila nomor yang sama muncul dua kali
+  // (retry Kirimi / blok ulang), yang TERBARU (dibaca lebih dulu) menang.
   const byIndex = new Map();
-  for (const c of cards) byIndex.set(c.index, c);
+  for (const c of cards) if (!byIndex.has(c.index)) byIndex.set(c.index, c);
   return [...byIndex.values()].sort((a, b) => a.index - b.index);
 }
 
@@ -418,7 +439,10 @@ function tryListingSelectionAnswer({ message, history = [], isId = true }) {
  * 2026 (Alana Cemandi, 3 kali berturut-turut).
  */
 const PENDING_VIEWING_OFFER_RE = /mau saya jadwalkan survei ke unit ini\?|shall i arrange a viewing for this unit\?/i;
-const PICK_CONFIRM_LINE_RE = /(?:dicatat pilihannya|your pick)\s*:\s*\*(.+?)\*(?:\s*\(([^)]+)\))?/i;
+// M191: platform AI menulis konfirmasi pilihan dengan kata-kata bebas
+// ("Pilihannya sudah dicatat:", "Tercatat pilihannya:", "pilihan Kakak jatuh ke",
+// "Unit dipilih:") — bukan hanya "Dicatat pilihannya:" milik Private Agent.
+const PICK_CONFIRM_LINE_RE = /(?:dicatat pilihannya|pilihannya (?:sudah |telah )?(?:di|ter)catat|tercatat pilihannya|pilihan kakak jatuh ke|unit (?:yang )?dipilih|your pick)\s*:?\s*\*(.+?)\*(?:\s*(?:\(([^)]+)\)|[—-]\s*[^,\n]*?(?:,|\s)\s*(?:harga\s*)?\*?(Rp\s?[\d.,]+\s*(?:juta|jt|miliar|m)?[^*\n]*)))?/i;
 const VIEWING_AFFIRM_RE = /^\s*(?:ya+h?|iya+|yoi|yup|yep|yes|mau|boleh|blh|oke?|ok(?:e|ay)?|siap|sip|silak?an|lanjut|gas|deal|bisa)\b[^?]{0,25}$/i;
 const VIEWING_DECLINE_RE = /^\s*(?:tidak|nggak|ga+k?|blm|belum|nanti\s+(?:saja|sj|aja|dulu|dlu)|engga+|no|not\s+now)\b/i;
 
@@ -716,6 +740,39 @@ function tryPostPickFallback({ history = [], isId = true } = {}) {
  *
  * @returns {null | { title: string, priceText: string, label: string }}
  */
+/**
+ * M192 (12 Sep 2026) — SEMUA kartu yang sudah pernah dikirim di sesi ini
+ * (semua blok, bukan hanya yang terakhir), untuk dedup pengiriman listing.
+ * Identitas kartu = alamat (unik per unit), cadangan judul+harga.
+ * @returns {{ addresses:Set<string>, keys:Set<string>, count:number }}
+ */
+function listSentCards(history = []) {
+  const rows = Array.isArray(history) ? history : [];
+  const isAi = (h) => /^(ai|assistant|bot)$/i.test(String(h.role || ''));
+  const addresses = new Set(); const keys = new Set(); const areas = new Set(); let count = 0;
+  for (const h of rows) {
+    if (!isAi(h)) continue;
+    const text = String(h.message || h.content || '');
+    if (!isCardMessage(text)) continue;
+    for (const c of parseCardsFromText(text)) {
+      count += 1;
+      if (c.address) addresses.add(normTitle(c.address));
+      if (c.area) areas.add(normTitle(c.area));
+      keys.add(normTitle(`${c.title} ${c.priceText || ''}`));
+    }
+  }
+  return { addresses, keys, areas, count };
+}
+
+/** Apakah baris properti (DB row) sudah pernah dikirim sebagai kartu? */
+function isRowAlreadySent(row, sent) {
+  if (!sent || !row) return false;
+  const addr = normTitle(row.address || '');
+  if (addr && sent.addresses.has(addr)) return true;
+  const key = normTitle(`${row.title || ''} ${row.priceText || row.price || ''}`);
+  return Boolean(key.trim()) && sent.keys.has(key);
+}
+
 function readConfirmedPick(history = []) {
   try {
     const rows = Array.isArray(history) ? history : [];
@@ -725,7 +782,7 @@ function readConfirmedPick(history = []) {
       const m = String(rows[i].message || rows[i].content || '').match(PICK_CONFIRM_LINE_RE);
       if (m) {
         const title = String(m[1] || '').trim();
-        const priceText = m[2] ? String(m[2]).trim() : '';
+        const priceText = (m[2] || m[3]) ? String(m[2] || m[3]).trim() : '';
         if (!title) continue;
         return { title, priceText, label: priceText ? `${title} (${priceText})` : title };
       }
@@ -743,6 +800,8 @@ module.exports = {
   tryPendingViewingSchedule,
   tryPostPickFallback,
   readConfirmedPick,
+  listSentCards,
+  isRowAlreadySent,
   lastAiMessage,
   parseShownListings,
   parseCardsFromText,

@@ -4978,6 +4978,9 @@ class ChatbotPrivateService {
             buildingType: typeDb || undefined, transactionType: txDb,
             typeLabel: typeRaw ? PropertyFormatter.humanBuildingType(typeRaw, lang) : 'properti',
             message: userMessage, isId: lang === 'id', persistedBudgetText: qs.budget || '',
+            // M192: dedup listing lintas giliran; kirim ulang hanya saat area/kota/transaksi berganti.
+            history,
+            resetSent: Boolean(qs.cityChangedFromHistory || qs.txChangedFromHistory || qs.typeChangedFromHistory),
           });
           if (hit) return this.#wrap(hit.reply, { skillInfo, filters, provider: 'area_availability_gate' });
         }

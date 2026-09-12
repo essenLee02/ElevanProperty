@@ -1569,7 +1569,12 @@ function extractQualificationState(history = [], currentMessage = '') {
       // sedang terbuka — sekali customer bilang tidak mau survei / minta
       // listing / katalog / rekomendasi, itu jawaban FINAL untuk Q9b DAN Q9c.
       // (Prinsip yang sama dengan M75 untuk jam survei sukarela.)
-      if (!state.viewingDate && VIEWING_REFUSAL_RE.test(lo)) {
+      /* M194 — "Minta 4 listing ya" adalah PERMINTAAN JUMLAH, bukan penolakan
+       * survei; versi lama mengunci Q9b='Minta listing' seumur sesi sehingga
+       * "Survei Sabtu depan jam 10" berikutnya tidak pernah tercatat. */
+      const isCountRequest = /\b(?:minta|kirim|lihat|mau|boleh|tampilkan|kasih)\s*\d{1,2}\s*(?:listing|unit|pilihan|opsi|properti|rumah|apartemen)/i.test(lo)
+        || /\b\d{1,2}\s*listing\b/i.test(lo);
+      if (!state.viewingDate && !isCountRequest && VIEWING_REFUSAL_RE.test(lo)) {
         state.viewingDate = 'Minta listing';
       }
 
@@ -1582,7 +1587,9 @@ function extractQualificationState(history = [], currentMessage = '') {
       // bukan tanggal survei walau AI barusan menanyakan survei (simulasi 11 Sep:
       // "Survei: 01 November" muncul di summary padahal customer tak pernah bilang).
       const custMoveInOnly = /(?<![a-z])(mulai|masuk|check[\s-]?in|checkin|pindah|tempati|menempati)(?![a-z])/i.test(custResp) && !custVolunteersViewing;
-      if ((aiAsksViewDate || custVolunteersViewing) && !state.viewingDate && !custMoveInOnly) {
+      // Tanggal survei eksplisit SETELAH penolakan sebelumnya ("Minta listing") menang.
+      const canReplaceRefusal = state.viewingDate === 'Minta listing' && custVolunteersViewing && !VIEWING_REFUSAL_RE.test(lo);
+      if ((aiAsksViewDate || custVolunteersViewing) && (!state.viewingDate || canReplaceRefusal) && !custMoveInOnly) {
         if (VIEWING_REFUSAL_RE.test(lo)) {
           state.viewingDate = 'Minta listing';
         } else {
@@ -3663,15 +3670,30 @@ function buildPlatformWhatsappPrompt({
   // Memori kartu listing yang SUDAH terkirim di sesi ini — fakta, bukan perintah.
   // Simulasi 11 Sep: model menempel ulang dua kartu yang sama 7 giliran berturut-
   // turut karena blok katalog datang lagi tiap giliran dan riwayat panjang.
-  const sentCards = (Array.isArray(historyForDisplay) ? historyForDisplay : [])
-    .filter((h) => /^(ai|assistant)$/i.test(String(h.role || '')))
-    .map((h) => String(h.message || h.content || ''))
-    .filter((t) => /(Rp\s?[\d.,]+\s*(juta|miliar|jt|m)\b|Estimasi Harga)/i.test(t));
-  const sentAddresses = [...new Set(sentCards.flatMap((t) => t.match(/Jl\.?\s[^\n,]{3,60}/g) || []))].slice(0, 12);
+  // M192: satu sumber kebenaran untuk "kartu yang sudah terkirim" — parser kartu
+  // bersama (listingSelectionGate.listSentCards), semua blok, tanpa syarat "Rp".
+  let sentCards = [];
+  let sentAddresses = [];
+  try {
+    const { listSentCards } = require('../utils/listingSelectionGate');
+    const sent = listSentCards(historyForDisplay);
+    sentCards = new Array(sent.count).fill(1);
+    const raw = (Array.isArray(historyForDisplay) ? historyForDisplay : [])
+      .filter((h) => /^(ai|assistant)$/i.test(String(h.role || '')))
+      .flatMap((h) => String(h.message || h.content || '').match(/Jl\.?\s[^\n,]{3,60}/g) || []);
+    sentAddresses = [...new Set(raw.map((x) => x.trim()))];
+  } catch { /* fail-open */ }
   const sentFact = sentCards.length
-    ? `\n📨 Kartu listing sudah terkirim ${sentCards.length}× di sesi ini${sentAddresses.length ? ` (alamat yang sudah dilihat customer: ${sentAddresses.join(' · ')})` : ''}.`
+    ? `\n📨 Kartu listing sudah terkirim: ${sentCards.length} unit di sesi ini${sentAddresses.length ? ` (alamat yang sudah dilihat customer: ${sentAddresses.slice(0, 20).join(' · ')})` : ''}. Jangan kirim ulang unit-unit itu; bila customer minta N listing, kirim N dikurangi yang sudah terkirim.`
     : '';
-  const facts = (qualState ? buildQualificationFactsBlock(qualState) : '') + sentFact;
+  let facts = (qualState ? buildQualificationFactsBlock(qualState) : '') + sentFact;
+  // M191: unit yang sudah dipilih customer adalah fakta memori terpenting —
+  // tanpa baris ini model "lupa" pilihan begitu topik lain (budget/patokan) muncul.
+  try {
+    const pick = require('../utils/listingSelectionGate').readConfirmedPick(historyForDisplay);
+    if (pick && pick.label) facts += `
+   • Unit dipilih customer (pilihan MELEKAT sampai customer sendiri menggantinya): ${pick.label}`;
+  } catch { /* fail-open */ }
   const out = _renderPlatformPrompt();
   // Opsi debug (opt-in): AI_PROMPT_DEBUG_FILE=<path> → prompt platform ditulis
   // apa adanya ke berkas itu, supaya "apa yang benar-benar dilihat model" bisa
@@ -3685,8 +3707,32 @@ ${out}`); } catch { /* debug saja */ }
   return out;
 
   function _renderPlatformPrompt() {
+  /* M192 (12 Sep 2026) — DEDUP DI SUMBER: unit yang sudah pernah dikirim sebagai
+   * kartu DIHILANGKAN dari blok katalog (kecuali customer mengganti kota/
+   * transaksi/tipe — banner perubahan), lalu disebutkan jumlahnya. Model tidak
+   * bisa mengirim ulang apa yang tidak ia lihat; permintaan "minta 5 listing"
+   * pun otomatis terpenuhi dengan unit BARU saja (2 sudah + 3 baru). */
+  const changeReset = Boolean(qualState && (qualState.cityChangedFromHistory || qualState.txChangedFromHistory || qualState.typeChangedFromHistory));
+  const sentAddrNorm = new Set(sentAddresses.map((x) => x.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()));
+  let hiddenCount = 0;
+  const dedupCatalog = (text) => {
+    if (!text || changeReset || !sentAddrNorm.size) return text;
+    const parts = String(text).split(/\n(?=\d{1,2}\.\s)/);
+    const kept = parts.filter((blk, i) => {
+      if (i === 0 && !/^\d{1,2}\.\s/.test(blk)) return true;          // header
+      const m = blk.match(/Address:\s*([^\n]+)/i) || blk.match(/Alamat:\s*([^\n]+)/i);
+      const addr = m ? m[1].toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() : '';
+      // Alamat kartu terkirim terpotong di koma ("Jl. X No. 9"), katalog memuat kota di belakangnya.
+      const dup = Boolean(addr) && [...sentAddrNorm].some((sa) => sa && (addr.startsWith(sa) || sa.startsWith(addr)));
+      if (dup) hiddenCount += 1;
+      return !dup;
+    });
+    return kept.join('\n');
+  };
+  const dedupedContext = dedupCatalog(propertyContext);
   const catalogNote = showCatalogAfterBrief
-    ? (propertyContext || 'Katalog agent untuk kriteria ini KOSONG — jangan mengarang listing, harga, atau nama properti.')
+    ? ((dedupedContext || 'Katalog agent untuk kriteria ini KOSONG \u2014 jangan mengarang listing, harga, atau nama properti.')
+      + (hiddenCount ? `\n(${hiddenCount} unit yang SUDAH pernah dikirim disembunyikan dari daftar ini \u2014 jangan kirim ulang; bila customer minta N listing, kirim N dikurangi yang sudah terkirim, dari daftar di atas saja; bila daftar di atas lebih sedikit dari itu, minta maaf, sebut jumlah nyata, kirim yang ada.)` : ''))
     : '(Pengaturan agent: users.catalog_summary = OFF — jangan menampilkan katalog/listing; brief saja.)';
   return `${forcedLangInstruction}
 🪪 IDENTITAS ANDA (AGENT) — SUDAH DI-RESOLVE, PAKAI APA ADANYA:
@@ -4244,6 +4290,7 @@ module.exports = {
   detectLanguage,
   buildWhatsappReplyPrompt,
   buildQualificationFactsBlock,
+  buildSkillContext: _skillContext,
   buildIntentDetectionPrompt,
   buildPreferenceExtractionPrompt,
   extractQualificationState,

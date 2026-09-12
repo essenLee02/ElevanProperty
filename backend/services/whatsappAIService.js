@@ -54,7 +54,7 @@ const { tryCityAvailabilityAnswer,
         customerAsksAvailability }                  = require('../utils/areaAvailabilityGate');
 const { resolveCityAndArea, findAreaInText,
         findAreaCandidatesInText }                  = require('./areaAvailabilityService');
-const { tryListingSelectionAnswer, tryPendingViewingConfirmation, tryPendingViewingSchedule, tryPostPickFallback, lastAiMessage } = require('../utils/listingSelectionGate');
+const { tryListingSelectionAnswer, tryPendingViewingConfirmation, tryPendingViewingSchedule, tryPostPickFallback, lastAiMessage, isCardMessage } = require('../utils/listingSelectionGate');
 const { customerSignalsClosing } = require('../utils/customerQuestionGuard');
 
 // Jendela history untuk ekstraksi filter & state kualifikasi. Cukup besar agar
@@ -559,6 +559,9 @@ async function _generateWhatsAppAIReplyCore(params) {
 
   // Fakta hasil gerbang untuk profil 'platform' — dikumpulkan, TIDAK dikirim.
   const gateFacts = [];
+  // M190: estimasi jarak deterministik (lihat generateWhatsAppAIReply) sebagai fakta.
+  if (params.distanceFact) gateFacts.push(`ESTIMASI JARAK/WAKTU (deterministik, sampaikan sebagai estimasi, jangan ubah angkanya):
+${params.distanceFact}`);
 
   // ── ★ GERBANG BATAS LAYANAN AGENT ★ ───────────────────────────────────────
   // Ditempatkan SEBELUM qualification gate dan SEBELUM percabangan LLM/Private
@@ -673,7 +676,13 @@ async function _generateWhatsAppAIReplyCore(params) {
      * adalah FAKTA yang hanya bisa dibaca dari teks yang sudah terkirim —
      * bukan gaya percakapan. Membiarkan LLM menebaknya justru sumber bug ini.
      */
-    const pick = tryListingSelectionAnswer({ message, history, isId: isIdMsg });
+    /* M194 — PERUBAHAN TRANSAKSI/KOTA/TIPE MEMBATALKAN PILIHAN LAMA. Simulasi
+     * 12 Sep: "Saya ganti pikiran, sewa saja di Gresik" masih dibalas gerbang
+     * pasca-pilihan ("Kita masih bahas unit yang sudah Kakak pilih…") — fakta
+     * yang bertentangan dengan banner MENGGANTI TRANSAKSI. Pilihan unit beli
+     * tidak relevan untuk pencarian sewa. */
+    const changeTurn = Boolean(qualState?.txChangedFromHistory || qualState?.cityChangedFromHistory || qualState?.typeChangedFromHistory);
+    const pick = changeTurn ? null : tryListingSelectionAnswer({ message, history, isId: isIdMsg });
     if (pick && backendMayCompose) {
       console.log(`[WhatsAppAI] 🎯 Gerbang pemilihan listing: ${pick.verdict}`
         + `${pick.card ? ` → no.${pick.card.index} "${pick.card.title}" (${pick.card.priceText})` : ''}`);
@@ -730,7 +739,7 @@ async function _generateWhatsAppAIReplyCore(params) {
     /* M189d — jaring pengaman: pesan AI terakhir masih bagian dari alur
      * pasca-pilihan tapi tak satu pun gerbang di atas cocok. Lihat catatan
      * panjang di utils/listingSelectionGate.js. */
-    const postPickFallback = (!pick && !viewingConfirm && !viewingSchedule)
+    const postPickFallback = (!changeTurn && !pick && !viewingConfirm && !viewingSchedule)
       ? tryPostPickFallback({ history, isId: isIdMsg })
       : null;
     if (postPickFallback && backendMayCompose) {
@@ -827,9 +836,17 @@ async function _generateWhatsAppAIReplyCore(params) {
     // detectLandmark(message)/filters.landmark membaca pesan SAAT INI saja,
     // jadi ditaruh paling depan; qs.* tetap jadi cadangan bila pesan saat ini
     // sama sekali tidak menyebut area (mis. jawaban pendek "Ya benar").
+    /* M191 — PATOKAN BUKAN AREA. "Patokannya dekat Pakuwon Mall" membuat
+     * detectLandmark() = "Pakuwon Mall" masuk sebagai kandidat AREA, gerbang
+     * menjawab "rumah dijual di *Pakuwon Mall* belum ada" + daftar area lain —
+     * fakta salah yang membuat model menawarkan area lain padahal customer
+     * sudah memilih unit. Landmark hanya dipakai bila TIDAK ADA area sama
+     * sekali, dan tidak pernah bila kalimatnya jelas patokan (dekat/patokan). */
+    const lmToken = detectLandmark(message);
+    const isAnchorPhrase = /\b(patokan|dekat|deket|near|sekitar)\b/i.test(message);
     const { city: realCity, area: resolvedArea } = await resolveCityAndArea([
-      detectLandmark(message), filters.landmark, qs.district, qs.city, qs.anchorPoint,
-      filters.location,
+      isAnchorPhrase ? '' : lmToken, isAnchorPhrase ? '' : filters.landmark, qs.district, qs.city,
+      isAnchorPhrase ? '' : qs.anchorPoint, filters.location,
     ]);
 
     // ⚠️ Cadangan terakhir: detectLandmark() hanya mengenali PATOKAN (mal,
@@ -1057,8 +1074,17 @@ ${cityHit.reply}`);
      * sama tiap giliran. Pemicu (a) tetap hidup — kalau customer memang minta
      * lagi ("minta 4 listing"), itu permintaan eksplisit dan harus dilayani.
      */
+    /* M191 (12 Sep 2026) — KARTU BUATAN PLATFORM AI JUGA DIHITUNG.
+     * Pola lama hanya mengenali "Estimasi Harga" (format Private Agent). DeepSeek
+     * menulis "💰 Harga:" / "💰 Rp …", jadi backend mengira listing BELUM pernah
+     * tampil dan gerbang ketersediaan menyuntik ulang blok 2 kartu sebagai
+     * "fakta" di SETIAP giliran setelah 4 slot terisi — itulah sumber kartu
+     * berulang (ULANG-KARTU) di simulasi 11-12 Sep. Kini kartu dikenali dari
+     * kepala kartu "N. *Judul*" (listingSelectionGate) atau baris alamat+harga. */
     const listingsAlreadyShown = history.some((h) => /^(ai|assistant)$/i.test(String(h.role || ''))
-      && /Estimasi Harga|Estimated Price/i.test(String(h.message || h.content || '')));
+      && (/Estimasi Harga|Estimated Price/i.test(String(h.message || h.content || ''))
+        || isCardMessage(String(h.message || h.content || ''))
+        || /Jl\.?\s[^\n]{3,60}\n[^\n]*(?:💰|Rp\s?\d)/.test(String(h.message || h.content || ''))));
     const fourSlotsKnown = Boolean(txDb && typeDb && realCity && realArea);
     /* M187 — AREA DISEBUT TANPA KOTA ("Di daerah Chandramas") tetap boleh
      * dijawab gerbang: checkAreaAvailability() bekerja agent-scoped dengan
@@ -1078,6 +1104,9 @@ ${cityHit.reply}`);
         // sudah ada supaya tidak lahir daftar tipe kedua yang bisa menyimpang.
         typeLabel: typeRaw ? humanBuildingType(String(typeRaw).toLowerCase()) : 'properti',
         message, isId: isIdMsg, persistedBudgetText: qs.budget || '',
+        // M192: dedup listing lintas giliran; kirim ulang hanya saat area/kota/transaksi berganti.
+        history,
+        resetSent: Boolean(qs.cityChangedFromHistory || qs.txChangedFromHistory || qs.typeChangedFromHistory),
       });
       if (hit && backendMayCompose) {
         console.log(`[WhatsAppAI] 📊 Gerbang ketersediaan: ${hit.verdict} untuk "${realArea}" (${txDb}) — dijawab dengan data katalog, alur interview dilewati.`);
@@ -1478,7 +1507,15 @@ async function generateWhatsAppAIReply(params) {
   try {
     const { tryAnswerDistanceQuery } = require('./distanceEstimationService');
     const distanceReply = tryAnswerDistanceQuery(params.message);
-    if (distanceReply) {
+    /* M190 (12 Sep 2026) — profil 'platform': estimasi jarak menjadi FAKTA, bukan
+     * balasan. Arahan pemilik proyek: backend yang menyentuh platform AI hanya
+     * guardrails + vektor + RAG. Angkanya tetap deterministik (tabel koordinat
+     * statis) dan dikirim ke model sebagai fakta terverifikasi; profil 'local'
+     * (Private Agent) tetap menjawab langsung seperti M130. */
+    const distProfile = resolveGuardrailProfile(params.agentAiPrimary || params.session?.agentAiPrimary);
+    if (distanceReply && distProfile === 'platform') {
+      params = { ...params, distanceFact: distanceReply };
+    } else if (distanceReply) {
       return {
         reply: distanceReply,
         replyParts: [distanceReply],

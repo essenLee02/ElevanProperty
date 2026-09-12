@@ -4,6 +4,7 @@ const {
   buildContactReplyPrompt,
   buildChatbotReplyPrompt,
   buildWhatsappReplyPrompt,
+  buildSkillContext,
 } = require('./aiPromptBuilderService');
 const { sanitizeEnvValue } = require('./openaiService');
 
@@ -193,6 +194,8 @@ async function generateOpenRouterChatbotReply(session, history, userMessage, pro
 
 async function generateOpenRouterWhatsappReply(session, history, userMessage, propertyContext = '', extraContext = {}) {
   return callOpenRouterChatAPI(buildWhatsappReplyPrompt(session, history, userMessage, propertyContext, 'openrouter', extraContext), {
+    // M189: konteks giliran ini menentukan doc kondisional (05/06) yang ikut dimuat.
+    system: getProjectSkillInstruction('openrouter', buildSkillContext(history, userMessage)),
     metadata: { source: _waSource(), channel: 'whatsapp', sessionId: String(session.id || ''), provider: 'openrouter' },
   });
 }

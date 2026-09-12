@@ -4,6 +4,7 @@ const {
   buildContactReplyPrompt,
   buildChatbotReplyPrompt,
   buildWhatsappReplyPrompt,
+  buildSkillContext,
 } = require('./aiPromptBuilderService');
 const { sanitizeEnvValue } = require('./openaiService');
 
@@ -116,6 +117,15 @@ async function callDeepSeekChatAPI(userPrompt, options = {}) {
   }
 
   const systemPrompt = options.system || getProjectSkillInstruction('deepseek');
+  // M189 debug opt-in: catat berkas skill yang benar-benar terkirim sebagai system.
+  if (process.env.AI_PROMPT_DEBUG_FILE) {
+    try {
+      const names = (systemPrompt.match(/^--- .*\.md ---$/gm) || []).map((x) => x.slice(4, -4)).join(', ');
+      require('fs').appendFileSync(process.env.AI_PROMPT_DEBUG_FILE, `
+[system deepseek] ${systemPrompt.length} chars | docs: ${names}
+`);
+    } catch { /* debug only */ }
+  }
   const payload = {
     model      : options.model       || config.model,
     messages   : [
@@ -203,6 +213,8 @@ async function generateDeepSeekChatbotReply(session, history, userMessage, prope
 
 async function generateDeepSeekWhatsappReply(session, history, userMessage, propertyContext = '', extraContext = {}) {
   return callDeepSeekChatAPI(buildWhatsappReplyPrompt(session, history, userMessage, propertyContext, 'deepseek', extraContext), {
+    // M189: konteks giliran ini menentukan doc kondisional (05/06) yang ikut dimuat.
+    system: getProjectSkillInstruction('deepseek', buildSkillContext(history, userMessage)),
     metadata: { source: _waSource(), channel: 'whatsapp', sessionId: String(session.id || ''), provider: 'deepseek' },
   });
 }

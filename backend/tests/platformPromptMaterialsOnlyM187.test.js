@@ -96,6 +96,7 @@ ok('city offer declined → fact', /TAWARAN KOTA LAIN DITOLAK CUSTOMER \(fakta\)
 ok('city offer accepted → fact', /CUSTOMER MENERIMA TAWARAN KOTA LAIN \(fakta\)/.test(svc));
 ok('city with zero stock → hard fact, not a backend reply', /KOTA TANPA STOK \(fakta keras\)/.test(svc) && /if \(cityHit && backendMayCompose\)/.test(svc));
 ok('qualification gate still skipped for platform', /qualResponse && guardProfile === 'platform'/.test(svc));
+ok('distance estimate → fact in platform profile (M190)', /distanceFact/.test(svc) && /ESTIMASI JARAK\/WAKTU \(deterministik/.test(svc));
 
 console.log(`\n${'='.repeat(60)}`);
 console.log(`RESULT: ${pass}/${pass + fail} passed${fail ? ` (${fail} FAILED)` : ' ALL PASS'}`);
