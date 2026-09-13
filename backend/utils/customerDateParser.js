@@ -290,16 +290,25 @@ function parseCustomerDate(text, now = new Date()) {
   {
     const DAYS = { minggu: 0, ahad: 0, senin: 1, selasa: 2, rabu: 3, kamis: 4, jumat: 5, "jum'at": 5, sabtu: 6,
       sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 };
-    const dm = t.match(/\b(?:hari\s+)?(minggu|ahad|senin|selasa|rabu|kamis|jum'?at|sabtu|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b(?:\s+(ini|depan|besok|next|this))?/);
     // "minggu depan" (= pekan depan) sudah ditangani di bawah; hanya "minggu ini/hari minggu" yang berarti hari Minggu.
     // "minggu" = PEKAN kecuali ditulis "hari minggu": "2 minggu", "minggu ini",
     // "minggu depan" semuanya pekan, bukan hari Minggu.
-    const sundayOk = dm && (dm[1] !== 'minggu' || /(?<![a-z])hari\s+minggu(?![a-z])/.test(t));
-    if (dm && sundayOk) {
+    // M198: "minggu depan Rabu" — ambil nama hari PERTAMA yang benar-benar hari
+    // (bukan "minggu" = pekan); "minggu/pekan depan" di kalimat yang sama = +7 hari.
+    const dayRe = /\b(?:hari\s+)?(minggu|ahad|senin|selasa|rabu|kamis|jum'?at|sabtu|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b(?:\s+(ini|depan|besok|next|this))?/g;
+    let dm = null;
+    for (const cand of t.matchAll(dayRe)) {
+      if (cand[1] !== 'minggu' || /(?<![a-z])hari\s+minggu(?![a-z])/.test(t)) { dm = cand; break; }
+    }
+    if (dm) {
       const target = DAYS[dm[1].replace('’', "'")];
       const todayDow = now.getDay();
       let delta = (target - todayDow + 7) % 7;
-      if (dm[2] === 'depan' || dm[2] === 'next') delta = delta === 0 ? 7 : delta + 7;
+      const nextWeek = dm[2] === 'depan' || dm[2] === 'next' || /\b(?:minggu|pekan)\s+depan|next\s+week\b/.test(t);
+      if (nextWeek) delta = delta === 0 ? 7 : delta + 7;
+      // M199: nama hari yang SAMA dengan hari ini tanpa "ini/hari ini" = pekan depan
+      // ("Minggu saja jam 10" diucapkan hari Minggu → Minggu berikutnya).
+      else if (delta === 0 && dm[2] !== 'ini' && dm[2] !== 'this' && !/\bhari\s+ini\b/.test(t)) delta = 7;
       const d = new Date(curY, curM - 1, curD + delta);
       return { status: 'ok', date: d, formatted: fmt(d) };
     }
@@ -333,7 +342,15 @@ function parseCustomerDate(text, now = new Date()) {
     // diucap bulan Juli akan salah jadi Desember TAHUN INI karena belum lewat).
     const hasExplicitDate = new RegExp(`\\b\\d{1,2}\\s+(${MONTH_ALT})\\b`).test(t)
       || new RegExp(`\\b(${MONTH_ALT})\\b\\.?,?\\s+\\d{1,2}\\b`).test(t);
+    // M199: "Januari tahun depan" (bulan saja) → 1 Januari tahun depan, bukan hari ini +1 tahun.
+    const monthOnly = t.match(new RegExp(`\\b(${MONTH_ALT})\\b`));
+    if (!hasExplicitDate && monthOnly && MONTH_LOOKUP[monthOnly[1]]) return ok(curY + 1, MONTH_LOOKUP[monthOnly[1]], 1);
     if (!hasExplicitDate) {
+      // M198: "awal tahun depan" = Januari, "pertengahan" = Juni/Juli, "akhir" = Desember;
+      // "tahun depan" polos = tanggal yang sama tahun depan (perilaku lama).
+      if (/\b(awal|permulaan)\b/.test(t)) return ok(curY + 1, 1, 1);
+      if (/\b(pertengahan|tengah)\b/.test(t)) return ok(curY + 1, 7, 1);
+      if (/\b(akhir|ujung)\b/.test(t)) return ok(curY + 1, 12, 1);
       const d = addYearsClamped(now, 1);
       return { status: 'ok', date: d, formatted: fmt(d) };
     }

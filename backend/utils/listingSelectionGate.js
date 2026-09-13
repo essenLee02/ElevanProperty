@@ -214,6 +214,50 @@ function parseShownListings(history = []) {
   return [...byIndex.values()].sort((a, b) => a.index - b.index);
 }
 
+/**
+ * M199 — SEMUA kartu yang pernah dikirim di sesi (semua blok, urut kronologis),
+ * dedup per (judul+alamat); `index` = nomor cetak di bloknya, `block` = urutan blok.
+ * Berbeda dari parseShownListings (nomor cetak = identitas, blok terbaru menang):
+ * saat area berganti nomor kartu dimulai ulang dari 1 (kontrak M192), sehingga
+ * kartu blok lama HILANG dari parseShownListings — padahal customer plin-plan
+ * masih merujuknya ("yang tadi di MERR nomor 2"). Fungsi ini menyimpannya.
+ */
+function parseAllShownCards(history = []) {
+  const rows = Array.isArray(history) ? history : [];
+  const isAi = (h) => /^(ai|assistant|bot)$/i.test(String(h.role || ''));
+  const out = []; let block = 0; let prevWasCard = false;
+  for (const h of rows) {
+    const text = String(h.message || h.content || '');
+    const isCard = isAi(h) && isCardMessage(text);
+    if (isCard) {
+      if (!prevWasCard) block += 1;
+      for (const c of parseCardsFromText(text)) {
+        const key = normTitle(`${c.title} ${c.address || ''}`);
+        const j = out.findIndex((x) => normTitle(`${x.title} ${x.address || ''}`) === key);
+        const item = { ...c, block };
+        if (j >= 0) out[j] = item; else out.push(item);
+      }
+    }
+    if (isAi(h)) prevWasCard = isCard;
+  }
+  return out;
+}
+
+/** M199 — customer membandingkan beberapa unit ("bedanya", "masing-masing", "lebih murah"). */
+const COMPARE_CUE_RE = /\b(bedanya|perbedaan|banding\w*|masing[-\s]?masing|lebih\s+(?:murah|mahal|luas|besar|kecil)|termurah|termahal|paling\s+(?:murah|mahal|luas))\b/i;
+
+/** Nama area yang disebut di pesan, dicocokkan ke area kartu yang pernah dikirim (nama PERSIS menang). */
+function mentionedCardArea(message, cards) {
+  const text = String(message || '');
+  const areas = [...new Set(cards.map((c) => String(c.area || '').trim()).filter(Boolean))].sort((a, b) => b.length - a.length);
+  const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const hits = areas.filter((a) => new RegExp(`\\b${esc(a)}\\b`, 'i').test(text));
+  if (!hits.length) return '';
+  // "Tropodo" & "Wisma Tropodo" keduanya cocok pada "…Wisma Tropodo…" → yang terpanjang;
+  // pada "…Tropodo…" saja hanya "Tropodo" yang cocok.
+  return hits[0];
+}
+
 /** Normalisasi judul untuk pembandingan longgar. */
 function normTitle(s) {
   return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -400,13 +444,144 @@ function composeSelectionReply(sel, { isId = true, message = '' } = {}) {
  * @param {Array}    p.history  riwayat percakapan (sessionService.getConversationHistory)
  * @param {boolean}  p.isId
  */
+/* ── M198 (13 Sep 2026) — PERTANYAAN ATRIBUT UNIT (jalur Private Agent) ────
+ * "Yang nomor 2 luas tanahnya berapa?", "Sertifikatnya apa?", "Sudah termasuk
+ * IPL?", "Apakah rumah tersebut banjir?" dulu dijawab "Dicatat pilihannya…"
+ * (dianggap memilih) atau "Boleh diulang maksudnya?" (post-pick fallback).
+ * Kini dijawab dari KARTU + baris DB agent (sertifikat, luas, kamar, fasilitas);
+ * atribut yang tidak tercatat (banjir/panas/IPL/lantai/jam malam) dijawab
+ * jujur "belum tercatat, nanti dikonfirmasi agent". */
+const ATTR_RE = {
+  certificate: /\b(sertifikat\w*|shm|shgb|shmsrs|hak\s*milik|hak\s*guna)\b/i,
+  land: /\b(luas\s*tanah|tanahnya|lt\b|luas\s*lahan)\b/i,
+  building: /\b(luas\s*bangunan|bangunannya|lb\b)\b/i,
+  area_any: /\b(luas(?:nya)?\s*(?:berapa|\?)|berapa\s+luas|luas\s+(?:tanah|bangunan|rumah|unit)|ukuran|berapa\s*meter|m2|m²)\b/i,
+  rooms: /\b(kamar|kt\b|km\b|kamar\s*mandi|bedroom|bathroom)\b/i,
+  address: /\b(alamat\w*|lokasinya\s+di\s+mana|di\s+mana\s+(?:persis|tepat)nya|share\s*lok\w*|maps)\b/i,
+  price: /\b(harga\w*|berapa\s*duit|hrg\w*|berapa\s*(?:per|se)\s*(?:bulan|tahun|hari|malam)|per\s*bulan|sebulan|per\s*tahun|setahun|sewanya\s*berapa)\b/i,
+  availability: /\b(masih\s+(?:ada|tersedia|available|kosong)|sudah\s+(?:laku|terjual|tersewa|dibooking|di-?booking)|belum\s+laku)\b/i,
+  facilities: /\b(fasilitas|ada\s+(?:ac|gym|kolam|lift|carport|garasi)|furnished|furnitur|perabot)\b/i,
+  unknown: /\b(banjir|panas|bising|berisik|ipl|lantai\s*berapa|tower|jam\s*malam|pasangan|suami\s*istri|pemilik|owner|nego|diskon|dekat\s+sekolah|sekolah|tetangga|lingkungan|air|listrik\s*berapa|watt|hadap|renovasi|direnovasi|tahun\s+dibangun|usia\s+bangunan|umur\s+bangunan|pbb|lunas|tunggakan|patokan\w*|dekat\s+apa|imb|pbg|denah|floor\s*plan|legalitas|dokumen\w*|berkas|surat[-\s]surat)\b/i,
+};
+// M198b: "Yang tidak dekat jalan raya ya, berisik" adalah PERNYATAAN (red flag), bukan
+// pertanyaan — negasi hanya dihitung bila di UJUNG kalimat ("banjir nggak?", "dekat sekolah nggak").
+const ATTR_QUESTION_RE = /\?|\b(apa|berapa|brp|apakah|gimana|bagaimana|kah|bisa|boleh|tolong|minta|kirim\w*|share)\b|\b(nggak|ngga|gak|tidak|tdk|sudah|belum)\s*\??\s*$/i;
+
+function isAttributeQuestion(message) {
+  const t = String(message || '');
+  if (!ATTR_QUESTION_RE.test(t)) return false;
+  return Object.values(ATTR_RE).some((re) => re.test(t));
+}
+
+async function findRowForCard(userId, card) {
+  if (!userId || !card) return null;
+  try {
+    const { getDbPropertiesForAgent } = require('../services/propertyRecommendationService');
+    const rows = await getDbPropertiesForAgent(userId);
+    const addr = normTitle(card.address || '');
+    if (addr) {
+      const hit = rows.find((r) => normTitle(r.address || '') === addr);
+      if (hit) return hit;
+    }
+    const key = normTitle(`${card.title} ${card.priceText || ''}`);
+    return rows.find((r) => normTitle(`${r.title} ${r.price || ''}`) === key) || null;
+  } catch { return null; }
+}
+
+/**
+ * Jawab pertanyaan atribut tentang SATU kartu. Mengembalikan null bila pesan
+ * bukan pertanyaan atribut.
+ */
+async function answerCardAttribute({ message, card, userId = null, isId = true }) {
+  if (!card || !isAttributeQuestion(message)) return null;
+  const t = String(message || '');
+  const row = await findRowForCard(userId, card);
+  const label = `*${card.title}*${card.address ? ` (${card.address})` : ''}`;
+  const parts = [];
+  const unknownLine = isId
+    ? 'belum tercatat di data unit ini, Kak — saya catat dulu, nanti dikonfirmasi langsung oleh agent kami 🙏'
+    : 'is not recorded for this unit — I have noted it and our agent will confirm 🙏';
+  if (ATTR_RE.certificate.test(t)) {
+    const c = row && row.certificateType ? String(row.certificateType).toUpperCase() : '';
+    parts.push(c ? (isId ? `sertifikatnya *${c}*` : `the certificate is *${c}*`) : (isId ? `sertifikatnya ${unknownLine}` : `the certificate ${unknownLine}`));
+  }
+  if (ATTR_RE.land.test(t) || (ATTR_RE.area_any.test(t) && !ATTR_RE.building.test(t))) {
+    const v = row && row.landArea ? `${String(row.landArea).replace(/\s*(m2|m²|sqm)\s*$/i, '')} m²` : '';
+    parts.push(v ? (isId ? `luas tanah *${v}*` : `land area *${v}*`) : (isId ? `luas tanahnya ${unknownLine}` : `land area ${unknownLine}`));
+  }
+  if (ATTR_RE.building.test(t)) {
+    const v = row && row.buildingArea ? `${String(row.buildingArea).replace(/\s*(m2|m²|sqm)\s*$/i, '')} m²` : '';
+    parts.push(v ? (isId ? `luas bangunan *${v}*` : `building area *${v}*`) : (isId ? `luas bangunannya ${unknownLine}` : `building area ${unknownLine}`));
+  }
+  if (ATTR_RE.rooms.test(t) && !ATTR_RE.unknown.test(t)) {
+    const v = row && (row.bedrooms || row.bathrooms) ? `${row.bedrooms || '-'} KT, ${row.bathrooms || '-'} KM` : '';
+    parts.push(v ? (isId ? `kamarnya *${v}*` : `rooms *${v}*`) : (isId ? `jumlah kamarnya ${unknownLine}` : `rooms ${unknownLine}`));
+  }
+  if (ATTR_RE.address.test(t)) {
+    const v = row && row.address ? row.address : card.address;
+    parts.push(v ? (isId ? `alamatnya *${v}*` : `the address is *${v}*`) : (isId ? `alamat lengkapnya ${unknownLine}` : `the full address ${unknownLine}`));
+  }
+  if (ATTR_RE.availability.test(t)) {
+    parts.push(isId
+      ? 'masih tercatat *tersedia* di data agent kami per hari ini — agent akan konfirmasi ulang sebelum survei'
+      : 'is still listed as *available* in our agent\'s data as of today — the agent will reconfirm before the viewing');
+  }
+  if (ATTR_RE.price.test(t) && !/nego|diskon/i.test(t)) {
+    const v = card.priceText || (row && row.price) || '';
+    parts.push(v ? (isId ? `harganya *${v}*` : `the price is *${v}*`) : (isId ? `harganya ${unknownLine}` : `the price ${unknownLine}`));
+  }
+  if (ATTR_RE.facilities.test(t)) {
+    const f = row && row.facilities ? (Array.isArray(row.facilities) ? row.facilities.join(', ') : String(row.facilities)) : '';
+    const furn = row && row.furnishedStatus ? String(row.furnishedStatus) : '';
+    const v = [f, furn].filter(Boolean).join(' · ');
+    parts.push(v ? (isId ? `fasilitasnya: *${v}*` : `facilities: *${v}*`) : (isId ? `fasilitasnya ${unknownLine}` : `facilities ${unknownLine}`));
+  }
+  if (/nego|diskon/i.test(t)) {
+    parts.push(isId ? 'soal nego saya tidak bisa menjanjikan angkanya — nanti dibantu langsung oleh agent kami; kalau Kakak punya angka yang diharapkan, saya catat' : 'I cannot promise a negotiated figure — our agent will handle that; tell me your target and I will note it');
+  }
+  if (/\b(imb|pbg|pbb|denah|floor\s*plan|legalitas|dokumen\w*|berkas|surat[-\s]surat|ajb|akta)\b/i.test(t)) {
+    const c = row && row.certificateType ? String(row.certificateType).toUpperCase() : '';
+    parts.push(isId
+      ? `${c ? `sertifikat tercatat *${c}*; ` : ''}dokumen lain (IMB/PBG, PBB, denah, salinan sertifikat) dipegang agent kami — saya minta agent mengirimkannya ke Kakak`
+      : `${c ? `certificate on file: *${c}*; ` : ''}other documents (building permit, tax, floor plan, certificate copy) are with our agent — I'll ask them to send these to you`);
+  }
+  if (ATTR_RE.unknown.test(t) && !parts.length) {
+    parts.push(isId ? `soal itu ${unknownLine}` : `that ${unknownLine}`);
+  }
+  if (!parts.length) return null;
+  const body = isId ? `Untuk ${label}: ${parts.join('; ')}.` : `For ${label}: ${parts.join('; ')}.`;
+  return { reply: body, verdict: 'attribute-answer', card };
+}
+
 function tryListingSelectionAnswer({ message, history = [], isId = true }) {
   try {
     const shown = parseShownListings(history);
     if (!shown.length) return null;
 
-    const sel = detectSelection(message, shown);
+    /* M199 — "Yang tadi di MERR nomor 2" / "MERR nomor 2 saja yang saya ambil":
+     * bila customer menyebut AREA dari blok lama, nomor dihitung di blok area itu —
+     * bukan di blok terbaru (yang bisa saja area lain dengan nomor mulai 1 lagi). */
+    const allCards = parseAllShownCards(history);
+    const area = mentionedCardArea(message, allCards);
+    const scoped = area
+      ? (() => {
+        const inArea = allCards.filter((c) => String(c.area || '').toLowerCase() === area.toLowerCase());
+        const byIdx = new Map();
+        for (const c of inArea) byIdx.set(c.index, c);   // blok terbaru di area itu menang
+        return [...byIdx.values()].sort((a, b) => a.index - b.index);
+      })()
+      : shown;
+    let sel = detectSelection(message, scoped.length ? scoped : shown);
     if (!sel) return null;
+    // "Nomor 1 yang Wisma Tropodo" saat blok Wisma Tropodo tercetak 3-4 → nomor urut DI AREA itu.
+    if (area && sel.status === 'out-of-range' && Number.isFinite(sel.askedIndex) && scoped.length >= sel.askedIndex && sel.askedIndex >= 1) {
+      sel = { status: 'matched', card: scoped[sel.askedIndex - 1] };
+    }
+
+    // M198: "nomor 2 luas tanahnya berapa?" = pertanyaan atribut kartu no. 2, bukan memilih.
+    if (sel.status === 'matched' && isAttributeQuestion(message) && !/\b(pilih|ambil|milih|minat|mau yang|jadi yang|take|choose)\b/i.test(message)) {
+      return { reply: null, verdict: 'attribute-question', card: sel.card, shownCount: shown.length, attributeQuestion: true };
+    }
 
     const reply = composeSelectionReply(sel, { isId, message });
     if (!reply) return null;
@@ -480,6 +655,14 @@ function tryPendingViewingConfirmation({ message, history = [], isId = true }) {
         verdict: 'viewing-declined',
       };
     }
+
+    /* M198 (13 Sep 2026) — "Survei Sabtu depan jam 10 bisa?" / "Minggu depan
+     * Rabu jam 2 siang": tanggal (dan jam) SUDAH ada di pesan yang sama —
+     * menyebut jadwal atas tawaran survei = setuju. Jangan balas "Enaknya
+     * survei tanggal berapa?" (customer baru saja menyebutnya). Pakai
+     * penjadwal yang sama dengan giliran susulan. */
+    const direct = scheduleViewingFromText(text, isId);
+    if (direct) return direct;
 
     const { customerRequestsViewing } = require('./customerQuestionGuard');
     if (VIEWING_AFFIRM_RE.test(text) || customerRequestsViewing(text)) {
@@ -593,6 +776,8 @@ function tryPendingViewingSchedule({ message, history = [], isId = true }) {
     }
 
     if (!isCombinedAsk && !isDateOnlyFollow && !isTimeOnlyFollow) return null;
+    // M198b: "Masuknya rencana awal Desember" = tanggal MASUK, bukan jawaban jadwal survei.
+    if (/\b(masuk\w*|pindah\w*|huni\w*|nempat\w*|check[- ]?in)\b/i.test(text) && !/\b(survei|survey|viewing|lihat|liat|ketemu\w*)\b/i.test(text)) return null;
 
     /* ⭐ M189e — "BELUM TAHU JAMNYA" BUKAN PENOLAKAN SURVEI.
      * `VIEWING_DECLINE_RE` cocok pada awalan "belum", sehingga jawaban wajar
@@ -619,11 +804,15 @@ function tryPendingViewingSchedule({ message, history = [], isId = true }) {
       const m = lastAi.match(BOLD_FIRST_RE);
       dateFormatted = m ? String(m[1]).trim() : null;
       timeFormatted = parseSurveyTime(normText, { requireClockWord: false });
+      if (!timeFormatted && !isDontKnow && String(text).trim().split(/\s+/).length > 3) return null;   // M199
     } else if (isTimeOnlyFollow) {
       const m = lastAi.match(BOLD_FIRST_RE);
       timeFormatted = m ? String(m[1]).trim() : null;
-      const d = parseCustomerDate(normText);
+      const d = parseCustomerDate(sundayInViewingContext(normText));
       dateFormatted = d && d.status === 'ok' ? d.formatted : null;
+      // M199: bukan jawaban tanggal ("nanti saya minta agentnya jemput", "terima kasih")
+      // → jangan mengulang pertanyaan tanggal; biarkan gerbang lain menjawab.
+      if (!dateFormatted && String(text).trim().split(/\s+/).length > 3) return null;
     } else {
       const d = parseCustomerDate(normText);
       dateFormatted = d && d.status === 'ok' ? d.formatted : null;
@@ -635,6 +824,36 @@ function tryPendingViewingSchedule({ message, history = [], isId = true }) {
       timeFormatted = parseSurveyTime(normText, { requireClockWord: true });
     }
 
+    return composeViewingScheduleReply({ dateFormatted, timeFormatted, isDateOnlyFollow, isId });
+  } catch (err) {
+    console.error('[PENDING VIEWING SCHEDULE GATE ERROR]', err.message);
+    return null;
+  }
+}
+
+/**
+ * M198 — tanggal (+jam) yang disebut customer di pesan yang SAMA dengan
+ * persetujuan survei. null bila tidak ada tanggal/jam yang terbaca (biarkan
+ * pemanggil bertanya tanggal seperti biasa).
+ */
+/** Dalam konteks SURVEI, "Minggu ini/depan" = hari Minggu (bukan pekan). */
+function sundayInViewingContext(text) {
+  return String(text || '').replace(/\b(?:hari\s+)?minggu\s+(ini|depan|besok)\b/gi, 'hari minggu $1');
+}
+
+function scheduleViewingFromText(text, isId = true) {
+  try {
+    const normText = sundayInViewingContext(normalizeForDateParsing(text));
+    const d = parseCustomerDate(normText);
+    const dateFormatted = d && d.status === 'ok' ? d.formatted : null;
+    const timeFormatted = parseSurveyTime(normText, { requireClockWord: true });
+    if (!dateFormatted && !timeFormatted) return null;
+    return composeViewingScheduleReply({ dateFormatted, timeFormatted, isDateOnlyFollow: false, isId });
+  } catch (_) { return null; }
+}
+
+function composeViewingScheduleReply({ dateFormatted, timeFormatted, isDateOnlyFollow, isId }) {
+  {
     if (dateFormatted && timeFormatted) {
       return {
         reply: isId
@@ -690,9 +909,6 @@ function tryPendingViewingSchedule({ message, history = [], isId = true }) {
         : `Sorry 🙏 Could you share the date and time that work for the viewing?`,
       verdict: 'viewing-schedule-unclear',
     };
-  } catch (err) {
-    console.error('[PENDING VIEWING SCHEDULE GATE ERROR]', err.message);
-    return null;
   }
 }
 
@@ -715,10 +931,29 @@ const POST_PICK_FINGERPRINT_RE = /dicatat pilihannya:|your pick:|mau saya jadwal
  * @returns {null | { reply: string, verdict: 'post-pick-fallback' }} null bila
  *   pesan AI terakhir BUKAN bagian dari alur pasca-pilihan (alur normal jalan).
  */
-function tryPostPickFallback({ history = [], isId = true } = {}) {
+async function tryPostPickFallback({ history = [], isId = true, message = '', userId = null } = {}) {
   try {
     const lastAi = lastAiMessage(history);
     if (!lastAi || !POST_PICK_FINGERPRINT_RE.test(lastAi)) return null;
+
+    /* M198 — pesan sesudah pilihan HAMPIR SELALU bermakna: pertanyaan atribut
+     * unit dijawab dari kartu/DB; budget, penghuni, tanggal, keluhan, permintaan
+     * diteruskan ke alur normal (null). "Boleh diulang maksudnya?" hanya untuk
+     * pesan yang benar-benar tidak terbaca (≤2 kata tanpa huruf/angka bermakna). */
+    // M199: pertanyaan PEMBANDING beberapa unit ditangani gerbang lanjutan Private Agent.
+    if (COMPARE_CUE_RE.test(String(message || ''))) return null;
+    const pickedCard = (() => {
+      const pick = readConfirmedPick(history);
+      if (!pick) return null;
+      const shown = parseAllShownCards(history);   // M199: pilihan bisa dari blok area lama
+      return shown.find((c) => normTitle(c.title) === normTitle(pick.title) && (!pick.priceText || normTitle(c.priceText || '') === normTitle(pick.priceText))) || shown.find((c) => normTitle(c.title) === normTitle(pick.title)) || null;
+    })();
+    if (pickedCard) {
+      const ans = await answerCardAttribute({ message, card: pickedCard, userId, isId });
+      if (ans) return { reply: ans.reply, verdict: 'post-pick-attribute' };
+    }
+    const words = String(message || '').trim().split(/\s+/).filter(Boolean);
+    if (words.length > 2 || /[a-z0-9]{3,}/i.test(String(message || ''))) return null;
 
     return {
       reply: isId
@@ -764,6 +999,28 @@ function listSentCards(history = []) {
   return { addresses, keys, areas, count };
 }
 
+/**
+ * M199 — AREA yang DICARI pada pengiriman kartu terakhir: dibaca dari judul
+ * blok ("Ini 2 rumah dijual di *Tropodo* ya"), bukan dari area per kartu —
+ * pencarian "Tropodo" bisa memuat kartu ber-area "Wisma Tropodo", sehingga area
+ * kartu terakhir menyesatkan deteksi pergantian area.
+ * @returns {string} huruf kecil, '' bila belum ada kartu.
+ */
+function lastSentAreaLabel(history = []) {
+  const rows = Array.isArray(history) ? history : [];
+  const isAi = (h) => /^(ai|assistant|bot)$/i.test(String(h.role || ''));
+  for (let i = rows.length - 1; i >= 0; i--) {
+    if (!isAi(rows[i])) continue;
+    const text = String(rows[i].message || rows[i].content || '');
+    if (!isCardMessage(text)) continue;
+    const m = text.match(/^[^\n]*\b(?:di|in)\s+\*([^*\n]+)\*/m);
+    if (m) return String(m[1]).trim().toLowerCase();
+    const cards = parseCardsFromText(text);
+    return String((cards[cards.length - 1] || {}).area || '').trim().toLowerCase();
+  }
+  return '';
+}
+
 /** Apakah baris properti (DB row) sudah pernah dikirim sebagai kartu? */
 function isRowAlreadySent(row, sent) {
   if (!sent || !row) return false;
@@ -771,6 +1028,95 @@ function isRowAlreadySent(row, sent) {
   if (addr && sent.addresses.has(addr)) return true;
   const key = normTitle(`${row.title || ''} ${row.priceText || row.price || ''}`);
   return Boolean(key.trim()) && sent.keys.has(key);
+}
+
+/**
+ * M199 — SEMUA pilihan yang pernah dicatat di sesi ini, urut kronologis, masing-
+ * masing dipetakan ke kartunya (area/alamat) bila ditemukan. Untuk customer
+ * plin-plan: "balik ke Pakuwon, yang tadi saya pilih" harus bisa menemukan
+ * pilihan LAMA walau pilihan terbaru ada di area lain.
+ * @returns {Array<{title:string, priceText:string, card:object|null, at:number}>}
+ */
+function listConfirmedPicks(history = []) {
+  const rows = Array.isArray(history) ? history : [];
+  const isAi = (h) => /^(ai|assistant|bot)$/i.test(String(h.role || ''));
+  const shown = parseAllShownCards(rows);
+  const out = [];
+  rows.forEach((h, i) => {
+    if (!isAi(h)) return;
+    const m = String(h.message || h.content || '').match(PICK_CONFIRM_LINE_RE);
+    if (!m) return;
+    const title = String(m[1] || '').trim();
+    const priceText = (m[2] || m[3]) ? String(m[2] || m[3]).trim() : '';
+    if (!title) return;
+    const card = shown.find((c) => normTitle(c.title) === normTitle(title) && (!priceText || normTitle(c.priceText || '') === normTitle(priceText)))
+      || shown.find((c) => normTitle(c.title) === normTitle(title)) || null;
+    out.push({ title, priceText, card, at: i });
+  });
+  return out;
+}
+
+/* Customer merujuk pilihan LAMA: "balik ke Pakuwon, yang tadi saya pilih",
+ * "nggak jadi, tetap beli rumah Pakuwon yang nomor 1 tadi", "yang mana ya? saya lupa",
+ * "bukan deh, balik ke Tropodo nomor 1 yang pertama". */
+const RECALL_CUE_RE = /\b(?:balik|kembali|tetap|nggak\s+jadi|ga\s+jadi|gak\s+jadi|batal\s+ganti|jadi\s+yang)\b[^.?!]{0,40}\b(?:tadi|pertama|sebelumnya|semula|awal|yang\s+saya\s+pilih|pilihan\s+saya|nomor\s*\d|no\.?\s*\d|yang\s+\w+\s+tadi)\b|\b(?:yang\s+mana\s+ya|saya\s+lupa|pilihan\s+saya\s+(?:tadi|apa|yang\s+mana)|yang\s+tadi\s+saya\s+pilih|tadi\s+saya\s+pilih\s+(?:yang\s+)?(?:mana|apa))\b/i;
+
+/**
+ * @returns {null | {reply:string, verdict:'pick-recalled', card:object}}
+ */
+function tryRecallPreviousPick({ message, history = [], isId = true } = {}) {
+  try {
+    const text = String(message || '').trim();
+    if (!text || !RECALL_CUE_RE.test(text)) return null;
+    const picks = listConfirmedPicks(history);
+    if (!picks.length) return null;
+    const shown = parseAllShownCards(history);
+    const lower = text.toLowerCase();
+
+    // 1) area yang disebut ("Pakuwon", "Tropodo") → kartu di area itu (nama area PERSIS
+    //    lebih dulu supaya "Tropodo" tidak tertukar dengan "Wisma Tropodo").
+    const areaTokens = [...new Set(shown.map((c) => String(c.area || '').trim()).filter(Boolean))]
+      .sort((a, b) => b.length - a.length);
+    const mentioned = areaTokens.filter((a) => new RegExp(`\\b${a.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(text));
+    const exactArea = mentioned.length
+      ? mentioned.find((a) => !mentioned.some((b) => b !== a && b.toLowerCase().includes(a.toLowerCase()) && new RegExp(`\\b${b.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(text) && b.length > a.length))
+        || mentioned[0]
+      : '';
+    const numM = text.match(/\b(?:nomor|nomer|no\.?)\s*(\d{1,2})\b/i);
+    const wantsFirst = /\b(pertama|semula|awal|paling\s+awal)\b/i.test(lower);
+
+    let candidates = picks.slice();
+    if (exactArea) candidates = candidates.filter((p) => p.card && String(p.card.area || '').toLowerCase() === exactArea.toLowerCase());
+    if (numM && exactArea) {
+      const n = parseInt(numM[1], 10);
+      const byNum = candidates.filter((p) => p.card && p.card.index === n);
+      if (byNum.length) candidates = byNum;
+      else {
+        // pilihan bernomor N di area itu belum pernah dicatat → kartu bernomor N di area itu
+        const card = shown.filter((c) => String(c.area || '').toLowerCase() === exactArea.toLowerCase() && c.index === n);
+        if (card.length) candidates = [{ title: card[0].title, priceText: card[0].priceText, card: card[0], at: -1 }];
+      }
+    } else if (numM && !exactArea) {
+      const n = parseInt(numM[1], 10);
+      const byNum = candidates.filter((p) => p.card && p.card.index === n);
+      if (byNum.length) candidates = byNum;
+    }
+    if (!candidates.length) return null;
+    const chosen = wantsFirst ? candidates[0] : candidates[candidates.length - 1];
+    const c = chosen.card || { title: chosen.title, priceText: chosen.priceText, address: '' };
+    const detail = [
+      c.address ? (isId ? `🏡 Alamat: ${c.address}` : `🏡 Address: ${c.address}`) : null,
+      c.priceText ? (isId ? `💰 Estimasi Harga: ${c.priceText}` : `💰 Estimated Price: ${c.priceText}`) : null,
+      c.area ? (isId ? `🗺️ Area: ${c.area}` : `🗺️ Area: ${c.area}`) : null,
+    ].filter(Boolean).join('\n');
+    const reply = isId
+      ? `Baik, Kak 😊 Kembali ke pilihan Kakak sebelumnya — Dicatat pilihannya: *${c.title}*${c.priceText ? ` (${c.priceText})` : ''}.\n\n${detail}\n\nMau saya jadwalkan survei ke unit ini?`
+      : `Sure 😊 Back to your earlier choice — Your pick: *${c.title}*${c.priceText ? ` (${c.priceText})` : ''}.\n\n${detail}\n\nShall I arrange a viewing for this unit?`;
+    return { reply, verdict: 'pick-recalled', card: c };
+  } catch (err) {
+    console.error('[RECALL PICK ERROR]', err.message);
+    return null;
+  }
 }
 
 function readConfirmedPick(history = []) {
@@ -797,9 +1143,18 @@ function readConfirmedPick(history = []) {
 module.exports = {
   tryListingSelectionAnswer,
   tryPendingViewingConfirmation,
+  scheduleViewingFromText,
   tryPendingViewingSchedule,
   tryPostPickFallback,
   readConfirmedPick,
+  listConfirmedPicks,
+  parseAllShownCards,
+  mentionedCardArea,
+  lastSentAreaLabel,
+  COMPARE_CUE_RE,
+  tryRecallPreviousPick,
+  answerCardAttribute,
+  isAttributeQuestion,
   listSentCards,
   isRowAlreadySent,
   lastAiMessage,

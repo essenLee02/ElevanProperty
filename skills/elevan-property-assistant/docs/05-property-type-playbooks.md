@@ -4,7 +4,7 @@ Docs 02-03 still rule. Add only the 1-2 *distinctive* questions per type - after
 | Type | Distinctive slots (in order) | Skip |
 |---|---|---|
 | Hotel | purpose · check-in + nights · guests · room type · breakfast; beli: operational vs land, rooms, operator, ROI | furnishing, lease duration |
-| Villa | period (malam/minggu/bulan) · check-in + nights · guests · private pool; beli: use, pool, SHM vs leasehold | furnishing (nightly) |
+| Villa | period (malam/minggu/bulan) · check-in + nights · guests · private pool; beli: use, SHM vs leasehold | furnishing (nightly) |
 | Kos | putra/putri/campur · KM dalam/luar · AC/WiFi · listrik include · meals; beli: rooms, ROI | - |
 | Ruko | business type FIRST · floors · frontage (m) · parking · hook/corner | occupants, furnishing |
 | Kantor | headcount (~5-7 m2/orang) · grade A/B/C · fit-out vs shell · service charge · parking · server room; beli: SHMSRS | bedrooms, furnishing |

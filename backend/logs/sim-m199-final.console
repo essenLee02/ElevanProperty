@@ -1,0 +1,2499 @@
+[SKILL] AI_SKILL_CALL aktif — semua provider membaca: C:\Users\HP\OneDrive\Documents\Elevan_Property\backend\asset\skills\chat_gpt_responds
+[LandmarkCache] Loaded 1738 landmarks from DB (for detectLandmark()).
+[CityCache] Loaded 650 cities from DB (for detectLocation()).
+[FacilityCache] Loaded 284 facilities → 345 keyword tokens from DB.
+[PropertyContext] Params — location: "sidoarjo" | type: "house" | tx: "sale"
+[PropertyRecommendationService] Loaded 1046 properties for agent NA40D8N007 (scoped, status=1).
+[PropertyContext] ✅ DB catalog: 33 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "CANDRAMAS" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P1 T1] area_availability_gate 1690ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 33 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "CANDRAMAS" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P1 T2] area_availability_gate 139ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 33 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Sidoarjo', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: SIDOARJO
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1615,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-browsing
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T3] private_agent/follow_up_gate 539ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 33 exact, 0 alternatives
+[WhatsAppAI] 📖 Pertanyaan istilah legal/sertifikat terdeteksi — dijawab sebelum melanjutkan qualification flow.
+[P1 T4] terminology_gate 115ms ⚠️ gate=terminology_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 33 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Sidoarjo', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1615,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: post-summary-which-card
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T5] private_agent/follow_up_gate 346ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: "sale"
+[PropertyContext] ✅ DB catalog: 33 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Sidoarjo', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1615,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: post-summary-kpr-refused
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T6] private_agent/follow_up_gate 307ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 33 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Sidoarjo', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1615,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: post-summary-which-card
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T7] private_agent/follow_up_gate 355ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 33 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang pemilihan listing: matched → no.1 "Candramas House Sale Sidoarjo" (351.7 juta)
+[P1 T8] listing_selection_gate 183ms ⚠️ gate=listing_selection_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 4 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'sale',
+  location: 'Sidoarjo',
+  budget: 'Rp 450.000.000'
+}
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1615,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'sale',
+  type: 'house',
+  location: 'Sidoarjo',
+  readiness: 4,
+  aiCount: 8
+}
+[PropertyRecommendationService] Loaded 10213 properties from database.
+[PrivateAgent/CatalogMode] Asking Q (aiCount=8)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T9] private_agent 6964ms ⚠️ gate=private_agent · SKRIP-BACKEND · TANYA-TARGET-SETELAH-TOLAK
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 4 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'sale',
+  location: 'Sidoarjo',
+  budget: 'Rp 450.000.000'
+}
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1615,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang sinyal penutup setelah katalog
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T10] private_agent/closing_signal_gate 669ms ⚠️ gate=private_agent/closing_signal_gate
+[PropertyContext] Params — location: "surabaya" | type: "apartment" | tx: "rent"
+[PropertyContext] ✅ DB catalog: 5 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "KALIJUDAN" (Rent) — dijawab dengan data katalog, alur interview dilewati.
+[P2 T1] area_availability_gate 96ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 5 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "KALIJUDAN" (Rent) — dijawab dengan data katalog, alur interview dilewati.
+[P2 T2] area_availability_gate 97ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 5 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang pemilihan listing: matched → no.3 "Kalijudan Apartment Rent Surabaya" (4.4 juta/bulan)
+[P2 T3] listing_selection_gate 95ms ⚠️ gate=listing_selection_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 5 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang jaring pengaman pasca-pilihan: post-pick-attribute
+[P2 T4] post_pick_fallback_gate 84ms ⚠️ gate=post_pick_fallback_gate · ULANG-KARTU:1
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 5 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'apartment', tx: 'rent', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1616,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: post-summary-viewing
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T5] private_agent/follow_up_gate 248ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 5 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'apartment', tx: 'rent', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1616,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'rent',
+  type: 'apartment',
+  location: 'Surabaya',
+  readiness: 3,
+  aiCount: 5
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=5)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T6] private_agent 498ms ⚠️ gate=private_agent
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 5 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'apartment', tx: 'rent', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1616,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'rent',
+  type: 'apartment',
+  location: 'Surabaya',
+  readiness: 4,
+  aiCount: 6
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=6)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T7] private_agent 469ms ⚠️ gate=private_agent
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 5 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'apartment', tx: 'rent', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1616,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'rent',
+  type: 'apartment',
+  location: 'Surabaya',
+  readiness: 4,
+  aiCount: 7
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=7)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T8] private_agent 585ms ⚠️ gate=private_agent · 2×?
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 5 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'apartment', tx: 'rent', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1616,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-media
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T9] private_agent/follow_up_gate 412ms ⚠️ gate=private_agent/follow_up_gate · ULANG-KARTU:1
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 5 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'apartment', tx: 'rent', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1616,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang sinyal penutup setelah katalog
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T10] private_agent/closing_signal_gate 591ms ⚠️ gate=private_agent/closing_signal_gate · SKRIP-BACKEND
+[PropertyContext] Params — location: "" | type: "house" | tx: "sale"
+[PropertyContext] ✅ DB catalog: 4 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "DRIYOREJO" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P3 T1] area_availability_gate 79ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: "rent"
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'rent', location: 'Gresik', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: GRESIK
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1617,
+  language: 'id',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P3 T2] private_agent/area_availability_gate 214ms ⚠️ gate=private_agent/area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'rent', location: 'Gresik', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: GRESIK
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1617,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'rent',
+  type: 'house',
+  location: 'Gresik',
+  readiness: 3,
+  aiCount: 1
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=1)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P3 T3] private_agent 250ms ⚠️ gate=private_agent
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang pemilihan listing: matched → no.2 "Driyorejo House Sale Gresik" (776.9 juta)
+[P3 T4] listing_selection_gate 106ms ⚠️ gate=listing_selection_gate
+[PropertyContext] Params — location: "manado" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang jaring pengaman pasca-pilihan: post-pick-attribute
+[P3 T5] post_pick_fallback_gate 106ms ⚠️ gate=post_pick_fallback_gate · ULANG-KARTU:2
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'rent', location: 'Gresik', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1617,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: post-summary-viewing
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P3 T6] private_agent/follow_up_gate 284ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'rent', location: 'Gresik', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1617,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-viewing-already-set
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P3 T7] private_agent/follow_up_gate 328ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'rent', location: 'Gresik', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1617,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'rent',
+  type: 'house',
+  location: 'Gresik',
+  readiness: 4,
+  aiCount: 6
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=6)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P3 T8] private_agent 592ms ⚠️ gate=private_agent
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'rent', location: 'Gresik', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1617,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'rent',
+  type: 'house',
+  location: 'Gresik',
+  readiness: 4,
+  aiCount: 7
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=7)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P3 T9] private_agent 683ms ⚠️ gate=private_agent · 2×?
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'rent', location: 'Gresik', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1617,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang sinyal penutup setelah katalog
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P3 T10] private_agent/closing_signal_gate 564ms ⚠️ gate=private_agent/closing_signal_gate
+[PropertyContext] Params — location: "malang" | type: "house" | tx: "sale"
+[PropertyContext] DB catalog returned 0 properties
+[PropertyContext] DB catalog kosong untuk agent NA40D8N007 → skip flat JSON (hindari bocor listing non-agent)
+[WhatsAppAI] 🏙️ Gerbang kota: "Malang" tidak ada di katalog agent — dijawab dengan kota alternatif nyata.
+[P4 T1] city_availability_gate 64ms ⚠️ gate=city_availability_gate
+[PropertyContext] Params — location: "sidoarjo" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 184 exact, 0 alternatives
+[WhatsAppAI] 📍 "Sidoarjo" hanya gema nama kota (Puri Indah Sidoarjo, Sidoarjo Kota) — bukan area ambigu, lanjut.
+[WhatsAppAI] 🛑 Qualification gate triggered — asking for missing info: {
+  hasType: true,
+  hasTx: true,
+  hasCity: true,
+  hasSpecific: false,
+  budgetKnown: false,
+  profile: 'local'
+}
+[P4 T2] qualification 67ms ⚠️ gate=qualification
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 20 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "ALANA CEMANDI" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P4 T3] area_availability_gate 103ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 3 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Sidoarjo', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: MALANG, SIDOARJO
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1618,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'sale',
+  type: 'house',
+  location: 'Sidoarjo',
+  readiness: 3,
+  aiCount: 3
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=3)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P4 T4] private_agent 342ms ⚠️ gate=private_agent · SKRIP-BACKEND
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "TROPODO" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P4 T5] area_availability_gate 132ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Sidoarjo', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1618,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'sale',
+  type: 'house',
+  location: 'Sidoarjo',
+  readiness: 3,
+  aiCount: 5
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=5)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P4 T6] private_agent 406ms ⚠️ gate=private_agent · SKRIP-BACKEND
+[PropertyContext] Params — location: "" | type: "land" | tx: ""
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Sidoarjo', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1618,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'sale',
+  type: 'house',
+  location: 'Sidoarjo',
+  readiness: 3,
+  aiCount: 6
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=6)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P4 T7] private_agent 469ms ⚠️ gate=private_agent · 2×?
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Sidoarjo', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1618,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'sale',
+  type: 'house',
+  location: 'Sidoarjo',
+  readiness: 3,
+  aiCount: 7
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=7)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P4 T8] private_agent 604ms ⚠️ gate=private_agent
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Sidoarjo', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1618,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang sinyal penutup setelah katalog
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P4 T9] private_agent/closing_signal_gate 473ms ⚠️ gate=private_agent/closing_signal_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1046 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Sidoarjo', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1618,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: post-summary-closing
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P4 T10] private_agent/follow_up_gate 161ms ⚠️ gate=private_agent/follow_up_gate · TANPA-SUMMARY-DI-PENUTUP
+[PropertyContext] Params — location: "sidoarjo" | type: "house" | tx: "sale"
+[PropertyContext] ✅ DB catalog: 10 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: area-empty untuk "BUDURAN" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P5 T1] area_availability_gate 105ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 10 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: area-empty untuk "BUDURAN" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P5 T2] area_availability_gate 89ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 33 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "CANDRAMAS" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P5 T3] area_availability_gate 122ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 3 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "CANDRAMAS" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P5 T4] area_availability_gate 111ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 3 exact, 0 alternatives
+[P5 T5] card_attribute_gate 113ms ⚠️ gate=card_attribute_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 3 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'sale',
+  location: 'Sidoarjo',
+  budget: 'Rp 400.000.000'
+}
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1619,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-conversation-request
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P5 T6] private_agent/follow_up_gate 262ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 3 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: already-sent untuk "CANDRAMAS" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P5 T7] area_availability_gate 179ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 3 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang pemilihan listing: out-of-range
+[P5 T8] listing_selection_gate 171ms ⚠️ gate=listing_selection_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 3 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'sale',
+  location: 'Sidoarjo',
+  budget: 'Rp 400.000.000'
+}
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1619,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-browsing
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P5 T9] private_agent/follow_up_gate 408ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 3 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'sale',
+  location: 'Sidoarjo',
+  budget: 'Rp 400.000.000'
+}
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1619,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang sinyal penutup setelah katalog
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P5 T10] private_agent/closing_signal_gate 507ms ⚠️ gate=private_agent/closing_signal_gate
+[PropertyContext] Params — location: "" | type: "house" | tx: ""
+[PropertyContext] ✅ DB catalog: 22 exact, 0 alternatives
+[WhatsAppAI] 🛑 Qualification gate triggered — asking for missing info: {
+  hasType: true,
+  hasTx: false,
+  hasCity: true,
+  hasSpecific: true,
+  budgetKnown: false,
+  profile: 'local'
+}
+[P6 T1] qualification 74ms ⚠️ gate=qualification
+[PropertyContext] Params — location: "" | type: "house" | tx: "sale"
+[PropertyContext] ✅ DB catalog: 22 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "PAKUWON" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P6 T2] area_availability_gate 91ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "house" | tx: ""
+[PropertyContext] ✅ DB catalog: 22 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1620,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'sale',
+  type: 'house',
+  location: 'Surabaya',
+  readiness: 3,
+  aiCount: 2
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=2)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P6 T3] private_agent 365ms ⚠️ gate=private_agent · SKRIP-BACKEND
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 22 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang pemilihan listing: matched → no.2 "Pakuwon City House Sale Surabaya" (668.8 juta)
+[P6 T4] listing_selection_gate 95ms ⚠️ gate=listing_selection_gate
+[PropertyContext] Params — location: "" | type: "house" | tx: ""
+[PropertyContext] ✅ DB catalog: 22 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang jaring pengaman pasca-pilihan: post-pick-attribute
+[P6 T5] post_pick_fallback_gate 117ms ⚠️ gate=post_pick_fallback_gate · ULANG-KARTU:1
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 22 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1620,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: post-summary-attribute
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P6 T6] private_agent/follow_up_gate 299ms ⚠️ gate=private_agent/follow_up_gate · ULANG-KARTU:1
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1620,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'sale',
+  type: 'house',
+  location: 'Surabaya',
+  readiness: 3,
+  aiCount: 6
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=6)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P6 T7] private_agent 513ms ⚠️ gate=private_agent · SKRIP-BACKEND
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1620,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: post-summary-viewing
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P6 T8] private_agent/follow_up_gate 368ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1620,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-participants
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P6 T9] private_agent/follow_up_gate 423ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1620,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang sinyal penutup setelah katalog
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P6 T10] private_agent/closing_signal_gate 541ms ⚠️ gate=private_agent/closing_signal_gate
+[PropertyContext] Params — location: "surabaya" | type: "apartment" | tx: "rent"
+[PropertyContext] ✅ DB catalog: 45 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: area-empty untuk "KAMPUS ITS" (Rent) — dijawab dengan data katalog, alur interview dilewati.
+[P7 T1] area_availability_gate 108ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 45 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'apartment', tx: 'rent', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: SURABAYA
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1621,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'rent',
+  type: 'apartment',
+  location: 'Surabaya',
+  readiness: 4,
+  aiCount: 1
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=1)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P7 T2] private_agent 195ms ⚠️ gate=private_agent · SKRIP-BACKEND · 2×?
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 2 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'apartment',
+  tx: 'rent',
+  location: 'Surabaya',
+  budget: 'Rp 1.700.000 - Rp 2.300.000'
+}
+[WhatsAppAI] 🏙️ Detected cities in message: SURABAYA
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1621,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'rent',
+  type: 'apartment',
+  location: 'Surabaya',
+  readiness: 5,
+  aiCount: 2
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=2)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P7 T3] private_agent 282ms ⚠️ gate=private_agent · SKRIP-BACKEND
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 11 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'apartment',
+  tx: 'rent',
+  location: 'Surabaya',
+  budget: 'Rp 2.550.000 - Rp 3.450.000'
+}
+[WhatsAppAI] 🏙️ Detected cities in message: SURABAYA
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1621,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'rent',
+  type: 'apartment',
+  location: 'Surabaya',
+  readiness: 5,
+  aiCount: 3
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=3)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P7 T4] private_agent 363ms ⚠️ gate=private_agent
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 11 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: area-empty untuk "Sukolilo" (Rent) — dijawab dengan data katalog, alur interview dilewati.
+[P7 T5] area_availability_gate 148ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 11 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'apartment',
+  tx: 'rent',
+  location: 'Surabaya',
+  budget: 'Rp 2.550.000 - Rp 3.450.000'
+}
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1621,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'rent',
+  type: 'apartment',
+  location: 'Surabaya',
+  readiness: 5,
+  aiCount: 5
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=5)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P7 T6] private_agent 473ms ⚠️ gate=private_agent
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 11 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'apartment',
+  tx: 'rent',
+  location: 'Surabaya',
+  budget: 'Rp 2.550.000 - Rp 3.450.000'
+}
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1621,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-no-cards-yet
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P7 T7] private_agent/follow_up_gate 313ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 11 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'apartment',
+  tx: 'rent',
+  location: 'Surabaya',
+  budget: 'Rp 2.550.000 - Rp 3.450.000'
+}
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1621,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'rent',
+  type: 'apartment',
+  location: 'Surabaya',
+  readiness: 5,
+  aiCount: 7
+}
+[PrivateController] Rumah123 data disabled (RUMAH123_DATA=OFF) — using catalog only
+[WhatsAppAI] Private Agent used (13 exact, 0 alt, 0 rumah123)
+[P7 T8] private_agent 637ms ⚠️ gate=private_agent · SKRIP-BACKEND
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1046 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'apartment', tx: 'rent', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1621,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-which-card
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P7 T9] private_agent/follow_up_gate 195ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1046 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'apartment', tx: 'rent', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1621,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: post-summary-closing
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P7 T10] private_agent/follow_up_gate 225ms ⚠️ gate=private_agent/follow_up_gate · TANPA-SUMMARY-DI-PENUTUP
+[PropertyContext] Params — location: "surabaya" | type: "commercial" | tx: ""
+[PropertyContext] ✅ DB catalog: 0 exact, 8 alternatives
+[WhatsAppAI] 🛑 Qualification gate triggered — asking for missing info: {
+  hasType: true,
+  hasTx: false,
+  hasCity: true,
+  hasSpecific: true,
+  budgetKnown: false,
+  profile: 'local'
+}
+[P8 T1] qualification 75ms ⚠️ gate=qualification
+[PropertyContext] Params — location: "" | type: "house" | tx: "sale"
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "MERR" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P8 T2] area_availability_gate 120ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "MERR" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P8 T3] area_availability_gate 100ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: SURABAYA
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1622,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-apology
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P8 T4] private_agent/follow_up_gate 214ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[P8 T5] card_attribute_gate 122ms ⚠️ gate=card_attribute_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1622,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: post-summary-attribute
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P8 T6] private_agent/follow_up_gate 281ms ⚠️ gate=private_agent/follow_up_gate · ULANG-KARTU:1
+[PropertyContext] Params — location: "" | type: "" | tx: "sale"
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1622,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-browsing
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P8 T7] private_agent/follow_up_gate 338ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1622,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-conversation-request
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P8 T8] private_agent/follow_up_gate 416ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "MERR" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P8 T9] area_availability_gate 247ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang sinyal penutup setelah katalog
+[P8 T10] closing_signal_gate 393ms ⚠️ gate=closing_signal_gate
+[PropertyContext] Params — location: "sidoarjo" | type: "house" | tx: "sale"
+[PropertyContext] ✅ DB catalog: 33 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "CANDRAMAS" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P9 T1] area_availability_gate 75ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 33 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "CANDRAMAS" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P9 T2] area_availability_gate 95ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 4 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Gresik', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: GRESIK, SIDOARJO
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1623,
+  language: 'id',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P9 T3] private_agent/area_availability_gate 221ms ⚠️ gate=private_agent/area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 4 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Gresik', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: GRESIK, SIDOARJO
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1623,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'sale',
+  type: 'house',
+  location: 'Gresik',
+  readiness: 3,
+  aiCount: 3
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=3)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P9 T4] private_agent 375ms ⚠️ gate=private_agent · SKRIP-BACKEND
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 4 exact, 0 alternatives
+[P9 T5] card_attribute_gate 143ms ⚠️ gate=card_attribute_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 4 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang pemilihan listing: matched → no.1 "Driyorejo House Sale Gresik" (387.2 juta)
+[P9 T6] listing_selection_gate 131ms ⚠️ gate=listing_selection_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 4 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang konfirmasi survei pending: viewing-scheduled
+[P9 T7] pending_viewing_gate 134ms ⚠️ gate=pending_viewing_gate
+[PropertyContext] Params — location: "" | type: "" | tx: "sale"
+[PropertyContext] ✅ DB catalog: 4 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Gresik', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1623,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'sale',
+  type: 'house',
+  location: 'Gresik',
+  readiness: 3,
+  aiCount: 7
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=7)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P9 T8] private_agent 580ms ⚠️ gate=private_agent · SKRIP-BACKEND
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 4 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Gresik', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1623,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'sale',
+  type: 'house',
+  location: 'Gresik',
+  readiness: 4,
+  aiCount: 8
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=8)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P9 T9] private_agent 629ms ⚠️ gate=private_agent · 2×?
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 4 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Gresik', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1623,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang sinyal penutup setelah katalog
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P9 T10] private_agent/closing_signal_gate 498ms ⚠️ gate=private_agent/closing_signal_gate
+[PropertyContext] Params — location: "sidoarjo" | type: "house" | tx: "sale"
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "TROPODO" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P1 T1] area_availability_gate 81ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "TROPODO" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P1 T2] area_availability_gate 83ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'sale',
+  location: 'Sidoarjo',
+  budget: 'Rp 382.500.000 - Rp 517.500.000'
+}
+[WhatsAppAI] 🏙️ Detected cities in message: SIDOARJO
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1624,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'sale',
+  type: 'house',
+  location: 'Sidoarjo',
+  readiness: 4,
+  aiCount: 2
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=2)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T3] private_agent 275ms ⚠️ gate=private_agent · SKRIP-BACKEND
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[P1 T4] card_attribute_gate 126ms ⚠️ gate=card_attribute_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'sale',
+  location: 'Sidoarjo',
+  budget: 'Rp 382.500.000 - Rp 517.500.000'
+}
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1624,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: post-summary-attribute
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T5] private_agent/follow_up_gate 265ms ⚠️ gate=private_agent/follow_up_gate · ULANG-KARTU:1
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'sale',
+  location: 'Sidoarjo',
+  budget: 'Rp 382.500.000 - Rp 517.500.000'
+}
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1624,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'sale',
+  type: 'house',
+  location: 'Sidoarjo',
+  readiness: 4,
+  aiCount: 5
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=5)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T6] private_agent 504ms ⚠️ gate=private_agent · 2×?
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'sale',
+  location: 'Sidoarjo',
+  budget: 'Rp 382.500.000 - Rp 517.500.000'
+}
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1624,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: post-summary-which-card
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T7] private_agent/follow_up_gate 363ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'sale',
+  location: 'Sidoarjo',
+  budget: 'Rp 382.500.000 - Rp 517.500.000'
+}
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1624,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: post-summary-which-card
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T8] private_agent/follow_up_gate 354ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[P1 T9] card_attribute_gate 203ms ⚠️ gate=card_attribute_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang pemilihan listing: matched → no.1 "Tropodo House Sale Sidoarjo" (413.3 juta)
+[P1 T10] listing_selection_gate 228ms ⚠️ gate=listing_selection_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang konfirmasi survei pending: viewing-scheduled
+[P1 T11] pending_viewing_gate 231ms ⚠️ gate=pending_viewing_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'sale',
+  location: 'Sidoarjo',
+  budget: 'Rp 382.500.000 - Rp 517.500.000'
+}
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1624,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'sale',
+  type: 'house',
+  location: 'Sidoarjo',
+  readiness: 5,
+  aiCount: 11
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=11)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T12] private_agent/gate_c_length_cap 1109ms ⚠️ gate=private_agent/gate_c_length_cap
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1046 exact, 0 alternatives
+[P1 T13] card_attribute_gate 77ms ⚠️ gate=card_attribute_gate · TANPA-SUMMARY-DI-PENUTUP
+[PropertyContext] Params — location: "surabaya" | type: "house" | tx: "sale"
+[PropertyContext] ✅ DB catalog: 22 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "PAKUWON" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P1 T1] area_availability_gate 81ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 22 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang pemilihan listing: matched → no.2 "Pakuwon City House Sale Surabaya" (668.8 juta)
+[P1 T2] listing_selection_gate 53ms ⚠️ gate=listing_selection_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 14 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: SURABAYA
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1625,
+  language: 'id',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T3] private_agent/area_availability_gate 217ms ⚠️ gate=private_agent/area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 14 exact, 0 alternatives
+[P1 T4] card_attribute_gate 126ms ⚠️ gate=card_attribute_gate
+[PropertyContext] Params — location: "bali" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 22 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1625,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Pilihan lama dipanggil kembali: "Pakuwon City House Sale Surabaya"
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T5] private_agent/pick_recall_gate 233ms ⚠️ gate=private_agent/pick_recall_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 22 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1625,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Pilihan lama dipanggil kembali: "Pakuwon City House Sale Surabaya"
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T6] private_agent/pick_recall_gate 294ms ⚠️ gate=private_agent/pick_recall_gate · ULANG-KARTU:1
+[PropertyContext] Params — location: "manado" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 22 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang jaring pengaman pasca-pilihan: post-pick-attribute
+[P1 T7] post_pick_fallback_gate 152ms ⚠️ gate=post_pick_fallback_gate · ULANG-KARTU:2
+[PropertyContext] Params — location: "" | type: "house" | tx: ""
+[PropertyContext] ✅ DB catalog: 22 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1625,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: post-summary-viewing
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T8] private_agent/follow_up_gate 348ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 22 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang jadwal survei pending: viewing-scheduled
+[P1 T9] pending_viewing_schedule_gate 166ms ⚠️ gate=pending_viewing_schedule_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 22 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1625,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang sinyal penutup setelah katalog
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T10] private_agent/closing_signal_gate 503ms ⚠️ gate=private_agent/closing_signal_gate
+[PropertyContext] Params — location: "sidoarjo" | type: "house" | tx: "sale"
+[PropertyContext] ✅ DB catalog: 33 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "CANDRAMAS" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P1 T1] area_availability_gate 75ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 4 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "DRIYOREJO" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P1 T2] area_availability_gate 97ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "surabaya" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 14 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: GRESIK, SIDOARJO, SURABAYA
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1626,
+  language: 'id',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T3] private_agent/area_availability_gate 239ms ⚠️ gate=private_agent/area_availability_gate
+[PropertyContext] Params — location: "sidoarjo" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 33 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Sidoarjo', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: GRESIK, SIDOARJO, SURABAYA
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1626,
+  language: 'id',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T4] private_agent/area_availability_gate 252ms ⚠️ gate=private_agent/area_availability_gate · ULANG-KARTU:2
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 33 exact, 0 alternatives
+[P1 T5] card_attribute_gate 124ms ⚠️ gate=card_attribute_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 33 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang pemilihan listing: matched → no.1 "Candramas House Sale Sidoarjo" (351.7 juta)
+[P1 T6] listing_selection_gate 154ms ⚠️ gate=listing_selection_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 6 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'sale',
+  location: 'Sidoarjo',
+  budget: 'Rp 340.000.000 - Rp 460.000.000'
+}
+[WhatsAppAI] 🏙️ Detected cities in message: SIDOARJO
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1626,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'sale',
+  type: 'house',
+  location: 'Sidoarjo',
+  readiness: 4,
+  aiCount: 6
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=6)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T7] private_agent 508ms ⚠️ gate=private_agent · SKRIP-BACKEND
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 6 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'sale',
+  location: 'Sidoarjo',
+  budget: 'Rp 340.000.000 - Rp 460.000.000'
+}
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1626,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: post-summary-viewing
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T8] private_agent/follow_up_gate 313ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 6 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang jadwal survei pending: viewing-scheduled
+[P1 T9] pending_viewing_schedule_gate 165ms ⚠️ gate=pending_viewing_schedule_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 6 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'sale',
+  location: 'Sidoarjo',
+  budget: 'Rp 340.000.000 - Rp 460.000.000'
+}
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1626,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang sinyal penutup setelah katalog
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T10] private_agent/closing_signal_gate 517ms ⚠️ gate=private_agent/closing_signal_gate
+[PropertyContext] Params — location: "surabaya" | type: "house" | tx: "sale"
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "MERR" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P1 T1] area_availability_gate 67ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang pemilihan listing: matched → no.2 "MERR House Sale Surabaya" (471.1 juta)
+[P1 T2] listing_selection_gate 85ms ⚠️ gate=listing_selection_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 22 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "PAKUWON" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P1 T3] area_availability_gate 93ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 14 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "WIYUNG" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P1 T4] area_availability_gate 127ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'sale',
+  location: 'Surabaya',
+  budget: 'eksklusif'
+}
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1627,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'sale',
+  type: 'house',
+  location: 'Surabaya',
+  readiness: 4,
+  aiCount: 4
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=4)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T5] private_agent 417ms ⚠️ gate=private_agent · SKRIP-BACKEND
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'sale',
+  location: 'Surabaya',
+  budget: 'eksklusif'
+}
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1627,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-browsing
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T6] private_agent/follow_up_gate 273ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[P1 T7] card_attribute_gate 156ms ⚠️ gate=card_attribute_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang pemilihan listing: matched → no.2 "MERR House Sale Surabaya" (471.1 juta)
+[P1 T8] listing_selection_gate 148ms ⚠️ gate=listing_selection_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang konfirmasi survei pending: viewing-declined
+[P1 T9] pending_viewing_gate 190ms ⚠️ gate=pending_viewing_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'sale',
+  location: 'Surabaya',
+  budget: 'eksklusif'
+}
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1627,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'sale',
+  type: 'house',
+  location: 'Surabaya',
+  readiness: 4,
+  aiCount: 9
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=9)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T10] private_agent/gate_c_length_cap 898ms ⚠️ gate=private_agent/gate_c_length_cap
+[PropertyContext] Params — location: "surabaya" | type: "house" | tx: "sale"
+[PropertyContext] ✅ DB catalog: 22 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "PAKUWON" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P1 T1] area_availability_gate 65ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 22 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang pemilihan listing: matched → no.1 "Pakuwon City House Sale Surabaya" (641 juta)
+[P1 T2] listing_selection_gate 55ms ⚠️ gate=listing_selection_gate
+[PropertyContext] Params — location: "" | type: "apartment" | tx: "rent"
+[PropertyContext] ✅ DB catalog: 5 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "KALIJUDAN" (Rent) — dijawab dengan data katalog, alur interview dilewati.
+[P1 T3] area_availability_gate 104ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 5 exact, 0 alternatives
+[P1 T4] card_attribute_gate 94ms ⚠️ gate=card_attribute_gate
+[PropertyContext] Params — location: "" | type: "house" | tx: "sale"
+[PropertyContext] ✅ DB catalog: 22 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1628,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Pilihan lama dipanggil kembali: "Pakuwon City House Sale Surabaya"
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T5] private_agent/pick_recall_gate 231ms ⚠️ gate=private_agent/pick_recall_gate
+[PropertyContext] Params — location: "" | type: "" | tx: "sale"
+[PropertyContext] ✅ DB catalog: 22 exact, 0 alternatives
+[WhatsAppAI] 📖 Pertanyaan istilah legal/sertifikat terdeteksi — dijawab sebelum melanjutkan qualification flow.
+[P1 T6] terminology_gate 126ms ⚠️ gate=terminology_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 180 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1628,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'sale',
+  type: 'house',
+  location: 'Surabaya',
+  readiness: 3,
+  aiCount: 2
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=2)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T7] private_agent 535ms ⚠️ gate=private_agent
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 180 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1628,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-viewing
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T8] private_agent/follow_up_gate 471ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 180 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1628,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-participants
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T9] private_agent/follow_up_gate 487ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 180 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1628,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang sinyal penutup setelah katalog
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T10] private_agent/closing_signal_gate 502ms ⚠️ gate=private_agent/closing_signal_gate
+[PropertyContext] Params — location: "surabaya" | type: "house" | tx: "sale"
+[PropertyContext] ✅ DB catalog: 14 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "WIYUNG" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P1 T1] area_availability_gate 69ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 14 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang pemilihan listing: matched → no.1 "Wiyung House Sale Surabaya" (355 juta)
+[P1 T2] listing_selection_gate 88ms ⚠️ gate=listing_selection_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 13 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "PAKUWON INDAH" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P1 T3] area_availability_gate 84ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 13 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang pemilihan listing: matched → no.2 "Pakuwon Indah House Sale Surabaya" (1.45 miliar)
+[P1 T4] listing_selection_gate 123ms ⚠️ gate=listing_selection_gate
+[PropertyContext] Params — location: "" | type: "land" | tx: ""
+[PropertyContext] ✅ DB catalog: 13 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1629,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-compare
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T5] private_agent/follow_up_gate 239ms ⚠️ gate=private_agent/follow_up_gate · ULANG-KARTU:2
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'sale',
+  location: 'Surabaya',
+  budget: 'terjangkau'
+}
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1629,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-compare-price
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T6] private_agent/follow_up_gate 275ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 11 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang pemilihan listing: matched → no.1 "Wiyung House Sale Surabaya" (355 juta)
+[P1 T7] listing_selection_gate 148ms ⚠️ gate=listing_selection_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 11 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang konfirmasi survei pending: viewing-date-only
+[P1 T8] pending_viewing_gate 218ms ⚠️ gate=pending_viewing_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 11 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang jadwal survei pending: viewing-scheduled
+[P1 T9] pending_viewing_schedule_gate 181ms ⚠️ gate=pending_viewing_schedule_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 11 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'sale',
+  location: 'Surabaya',
+  budget: 'terjangkau'
+}
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1629,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang sinyal penutup setelah katalog
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T10] private_agent/closing_signal_gate 581ms ⚠️ gate=private_agent/closing_signal_gate
+[PropertyContext] Params — location: "sidoarjo" | type: "house" | tx: "sale"
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "TROPODO" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P1 T1] area_availability_gate 76ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang pemilihan listing: matched → no.2 "Wisma Tropodo House Sale Sidoarjo" (625 juta)
+[P1 T2] listing_selection_gate 63ms ⚠️ gate=listing_selection_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang pemilihan listing: matched → no.1 "Tropodo House Sale Sidoarjo" (413.3 juta)
+[P1 T3] listing_selection_gate 73ms ⚠️ gate=listing_selection_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 3 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "WISMA TROPODO" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P1 T4] area_availability_gate 88ms ⚠️ gate=area_availability_gate · ULANG-KARTU:1
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 3 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang pemilihan listing: matched → no.1 "Wisma Tropodo House Sale Sidoarjo" (625 juta)
+[P1 T5] listing_selection_gate 116ms ⚠️ gate=listing_selection_gate
+[PropertyContext] Params — location: "bali" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang pemilihan listing: matched → no.1 "Tropodo House Sale Sidoarjo" (413.3 juta)
+[P1 T6] listing_selection_gate 122ms ⚠️ gate=listing_selection_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang jaring pengaman pasca-pilihan: post-pick-attribute
+[P1 T7] post_pick_fallback_gate 209ms ⚠️ gate=post_pick_fallback_gate · ULANG-KARTU:2
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Sidoarjo', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1630,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-confirm-pick
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T8] private_agent/follow_up_gate 390ms ⚠️ gate=private_agent/follow_up_gate · ULANG-KARTU:1
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Sidoarjo', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1630,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-viewing-deferred
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T9] private_agent/follow_up_gate 416ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Sidoarjo', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1630,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang sinyal penutup setelah katalog
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T10] private_agent/closing_signal_gate 597ms ⚠️ gate=private_agent/closing_signal_gate
+[PropertyContext] Params — location: "" | type: "house" | tx: "sale"
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "DRIYOREJO" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P1 T1] area_availability_gate 49ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'sale',
+  location: 'Gresik',
+  budget: 'Rp 340.000.000 - Rp 460.000.000'
+}
+[WhatsAppAI] 🏙️ Detected cities in message: GRESIK
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1631,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'sale',
+  type: 'house',
+  location: 'Gresik',
+  readiness: 5,
+  aiCount: 1
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=1)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T2] private_agent 201ms ⚠️ gate=private_agent · SKRIP-BACKEND
+[PropertyContext] Params — location: "surabaya" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 2 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "WIYUNG" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P1 T3] area_availability_gate 90ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "bali" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'sale',
+  location: 'Gresik',
+  budget: 'Rp 340.000.000 - Rp 460.000.000'
+}
+[WhatsAppAI] 🏙️ Detected cities in message: GRESIK, SURABAYA
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1631,
+  language: 'id',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T4] private_agent/area_availability_gate 261ms ⚠️ gate=private_agent/area_availability_gate · ULANG-KARTU:1
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[P1 T5] card_attribute_gate 124ms ⚠️ gate=card_attribute_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang pemilihan listing: matched → no.1 "Driyorejo House Sale Gresik" (387.2 juta)
+[P1 T6] listing_selection_gate 137ms ⚠️ gate=listing_selection_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'sale',
+  location: 'Gresik',
+  budget: 'Rp 340.000.000 - Rp 460.000.000'
+}
+[WhatsAppAI] 🏙️ Detected cities in message: GRESIK
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1631,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'sale',
+  type: 'house',
+  location: 'Gresik',
+  readiness: 5,
+  aiCount: 6
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=6)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T7] private_agent 597ms ⚠️ gate=private_agent · 2×?
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'sale',
+  location: 'Gresik',
+  budget: 'Rp 340.000.000 - Rp 460.000.000'
+}
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1631,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: post-summary-viewing
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T8] private_agent/follow_up_gate 396ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang jadwal survei pending: viewing-scheduled
+[P1 T9] pending_viewing_schedule_gate 204ms ⚠️ gate=pending_viewing_schedule_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'sale',
+  location: 'Gresik',
+  budget: 'Rp 340.000.000 - Rp 460.000.000'
+}
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1631,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang sinyal penutup setelah katalog
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T10] private_agent/closing_signal_gate 620ms ⚠️ gate=private_agent/closing_signal_gate
+[PropertyContext] Params — location: "surabaya" | type: "house" | tx: "sale"
+[PropertyContext] ✅ DB catalog: 9 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "PAKUWON CITY" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P1 T1] area_availability_gate 43ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 9 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang pemilihan listing: matched → no.1 "Pakuwon City House Sale Surabaya" (641 juta)
+[P1 T2] listing_selection_gate 63ms ⚠️ gate=listing_selection_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 9 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: SURABAYA
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1632,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-media
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T3] private_agent/follow_up_gate 173ms ⚠️ gate=private_agent/follow_up_gate · ULANG-KARTU:1
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 9 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: SURABAYA
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1632,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-media
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T4] private_agent/follow_up_gate 187ms ⚠️ gate=private_agent/follow_up_gate · ULANG-KARTU:1
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 9 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1632,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-media
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T5] private_agent/follow_up_gate 237ms ⚠️ gate=private_agent/follow_up_gate · ULANG-KARTU:1
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 9 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1632,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: post-summary-attribute
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T6] private_agent/follow_up_gate 291ms ⚠️ gate=private_agent/follow_up_gate · ULANG-KARTU:1
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 9 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1632,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: post-summary-attribute
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T7] private_agent/follow_up_gate 324ms ⚠️ gate=private_agent/follow_up_gate · ULANG-KARTU:1
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 9 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1632,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: post-summary-attribute
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T8] private_agent/follow_up_gate 373ms ⚠️ gate=private_agent/follow_up_gate · ULANG-KARTU:1
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 9 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1632,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-waiting-agent
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T9] private_agent/follow_up_gate 397ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 9 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1632,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang sinyal penutup setelah katalog
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T10] private_agent/closing_signal_gate 516ms ⚠️ gate=private_agent/closing_signal_gate
+[PropertyContext] Params — location: "sidoarjo" | type: "house" | tx: "sale"
+[PropertyContext] ✅ DB catalog: 33 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "CANDRAMAS" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P1 T1] area_availability_gate 73ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 33 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang pemilihan listing: matched → no.2 "Candramas House Sale Sidoarjo" (359.4 juta)
+[P1 T2] listing_selection_gate 65ms ⚠️ gate=listing_selection_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 33 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang jaring pengaman pasca-pilihan: post-pick-attribute
+[P1 T3] post_pick_fallback_gate 78ms ⚠️ gate=post_pick_fallback_gate · ULANG-KARTU:2
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 3 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Sidoarjo', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: SIDOARJO
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1633,
+  language: 'id',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T4] private_agent/distance_gate 190ms ⚠️ gate=private_agent/distance_gate · ULANG-KARTU:1
+[PropertyContext] Params — location: "surabaya" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 180 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: SURABAYA
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1633,
+  language: 'id',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T5] private_agent/distance_gate 222ms ⚠️ gate=private_agent/distance_gate · HARGA-TAK-DIKENAL:23000jt · ULANG-KARTU:1
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 180 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: SURABAYA
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1633,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-media
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T6] private_agent/follow_up_gate 270ms ⚠️ gate=private_agent/follow_up_gate · ULANG-KARTU:1
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 180 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: SURABAYA
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1633,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: post-summary-viewing
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T7] private_agent/follow_up_gate 309ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 180 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang jadwal survei pending: viewing-scheduled
+[P1 T8] pending_viewing_schedule_gate 190ms ⚠️ gate=pending_viewing_schedule_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] DB catalog returned 0 properties
+[PropertyContext] DB catalog kosong untuk agent NA40D8N007 → skip flat JSON (hindari bocor listing non-agent)
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'gerbang ya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1633,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-viewing-logistics
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T9] private_agent/follow_up_gate 444ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] DB catalog returned 0 properties
+[PropertyContext] DB catalog kosong untuk agent NA40D8N007 → skip flat JSON (hindari bocor listing non-agent)
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'gerbang ya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1633,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang sinyal penutup setelah katalog
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P1 T10] private_agent/closing_signal_gate 536ms ⚠️ gate=private_agent/closing_signal_gate
+[PropertyContext] Params — location: "surabaya" | type: "house" | tx: "sale"
+[PropertyContext] ✅ DB catalog: 14 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "WIYUNG" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P2 T1] area_availability_gate 63ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 14 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang pemilihan listing: matched → no.1 "Wiyung House Sale Surabaya" (355 juta)
+[P2 T2] listing_selection_gate 62ms ⚠️ gate=listing_selection_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 14 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang konfirmasi survei pending: viewing-declined
+[P2 T3] pending_viewing_gate 75ms ⚠️ gate=pending_viewing_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 14 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: SURABAYA
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1634,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: post-summary-attribute
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T4] private_agent/follow_up_gate 206ms ⚠️ gate=private_agent/follow_up_gate · ULANG-KARTU:1
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 14 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1634,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: post-summary-attribute
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T5] private_agent/follow_up_gate 254ms ⚠️ gate=private_agent/follow_up_gate · ULANG-KARTU:1
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 14 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1634,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-conversation-request
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T6] private_agent/follow_up_gate 357ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 14 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1634,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: post-summary-attribute
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T7] private_agent/follow_up_gate 312ms ⚠️ gate=private_agent/follow_up_gate · ULANG-KARTU:1
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 14 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1634,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: post-summary-attribute
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T8] private_agent/follow_up_gate 449ms ⚠️ gate=private_agent/follow_up_gate · ULANG-KARTU:1
+[PropertyContext] Params — location: "surabaya" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 14 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: SURABAYA
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1634,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-viewing-deferred
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T9] private_agent/follow_up_gate 387ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 14 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: SURABAYA
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1634,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang sinyal penutup setelah katalog
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T10] private_agent/closing_signal_gate 656ms ⚠️ gate=private_agent/closing_signal_gate
+[PropertyContext] Params — location: "" | type: "house" | tx: "sale"
+[PropertyContext] ✅ DB catalog: 4 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "DRIYOREJO" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P2 T1] area_availability_gate 62ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 4 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang pemilihan listing: matched → no.1 "Driyorejo House Sale Gresik" (387.2 juta)
+[P2 T2] listing_selection_gate 66ms ⚠️ gate=listing_selection_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 4 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang konfirmasi survei pending: viewing-scheduled
+[P2 T3] pending_viewing_gate 68ms ⚠️ gate=pending_viewing_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 4 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Gresik', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: GRESIK
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1635,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-viewing-rescheduled
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T4] private_agent/follow_up_gate 241ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 4 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Gresik', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1635,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-viewing-rescheduled
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T5] private_agent/follow_up_gate 367ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 4 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Gresik', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1635,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-viewing-cancelled
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T6] private_agent/follow_up_gate 287ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 4 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Gresik', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1635,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-viewing-rebooked
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T7] private_agent/follow_up_gate 346ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 4 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Gresik', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1635,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-participants
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T8] private_agent/follow_up_gate 498ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 4 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Gresik', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1635,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-viewing-checklist
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T9] private_agent/follow_up_gate 389ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 4 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Gresik', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1635,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang sinyal penutup setelah katalog
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T10] private_agent/closing_signal_gate 547ms ⚠️ gate=private_agent/closing_signal_gate
+[PropertyContext] Params — location: "surabaya" | type: "house" | tx: "sale"
+[PropertyContext] ✅ DB catalog: 13 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "PAKUWON INDAH" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P2 T1] area_availability_gate 69ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 13 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang pemilihan listing: matched → no.1 "Pakuwon Indah House Sale Surabaya" (763.2 juta)
+[P2 T2] listing_selection_gate 45ms ⚠️ gate=listing_selection_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 13 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: SURABAYA
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1636,
+  language: 'id',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T3] private_agent/distance_gate 132ms ⚠️ gate=private_agent/distance_gate · ULANG-KARTU:1
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 180 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: SURABAYA
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1636,
+  language: 'id',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T4] private_agent/distance_gate 164ms ⚠️ gate=private_agent/distance_gate · ULANG-KARTU:1
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1636,
+  language: 'id',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T5] private_agent/distance_gate 208ms ⚠️ gate=private_agent/distance_gate · ULANG-KARTU:1
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1636,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: post-summary-attribute
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T6] private_agent/follow_up_gate 229ms ⚠️ gate=private_agent/follow_up_gate · ULANG-KARTU:1
+[PropertyContext] Params — location: "sidoarjo" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 184 exact, 0 alternatives
+[WhatsAppAI] 📍 "Sidoarjo" hanya gema nama kota (Puri Indah Sidoarjo, Sidoarjo Kota) — bukan area ambigu, lanjut.
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Sidoarjo', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: SIDOARJO
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1636,
+  language: 'id',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T7] private_agent/distance_gate 259ms ⚠️ gate=private_agent/distance_gate · HARGA-TAK-DIKENAL:23000jt · ULANG-KARTU:1
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 184 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Sidoarjo', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: SIDOARJO
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1636,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: post-summary-viewing
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T8] private_agent/follow_up_gate 341ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 184 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang jaring pengaman pasca-pilihan: post-pick-attribute
+[P2 T9] post_pick_fallback_gate 194ms ⚠️ gate=post_pick_fallback_gate · ULANG-KARTU:2
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 184 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Sidoarjo', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: SIDOARJO
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1636,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang sinyal penutup setelah katalog
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T10] private_agent/closing_signal_gate 477ms ⚠️ gate=private_agent/closing_signal_gate
+[PropertyContext] Params — location: "sidoarjo" | type: "house" | tx: "sale"
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] 📊 Gerbang ketersediaan: listings-shown untuk "TROPODO" (Sale) — dijawab dengan data katalog, alur interview dilewati.
+[P2 T1] area_availability_gate 77ms ⚠️ gate=area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang pemilihan listing: matched → no.2 "Wisma Tropodo House Sale Sidoarjo" (625 juta)
+[P2 T2] listing_selection_gate 70ms ⚠️ gate=listing_selection_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] 🎯 Gerbang jaring pengaman pasca-pilihan: post-pick-attribute
+[P2 T3] post_pick_fallback_gate 105ms ⚠️ gate=post_pick_fallback_gate · ULANG-KARTU:2
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Sidoarjo', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: SIDOARJO
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1637,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: post-summary-attribute
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T4] private_agent/follow_up_gate 225ms ⚠️ gate=private_agent/follow_up_gate · ULANG-KARTU:1
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Sidoarjo', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1637,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-video-call
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T5] private_agent/follow_up_gate 237ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Sidoarjo', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1637,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-viewing-deferred
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T6] private_agent/follow_up_gate 283ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Sidoarjo', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1637,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: post-summary-attribute
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T7] private_agent/follow_up_gate 363ms ⚠️ gate=private_agent/follow_up_gate · ULANG-KARTU:1
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Sidoarjo', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1637,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-callback
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T8] private_agent/follow_up_gate 357ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Sidoarjo', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1637,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-callback-number
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T9] private_agent/follow_up_gate 386ms ⚠️ gate=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 12 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'sale', location: 'Sidoarjo', budget: 'set' }
+[WhatsAppAI] 🛑 AI_PRIMARY_PROVIDER=private → using Private Agent only
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 1637,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang sinyal penutup setelah katalog
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[P2 T10] private_agent/closing_signal_gate 523ms ⚠️ gate=private_agent/closing_signal_gate
+
+TOTALS {
+  turns: 233,
+  backendReplies: 0,
+  scriptLeaks: 15,
+  placeholderLeaks: 0,
+  priceInvented: 2,
+  multiQ: 7,
+  tooLong: 0,
+  financeAfterDecline: 0,
+  targetAfterDecline: 1,
+  cardRepeats: 38,
+  noSummaryAtClose: 3,
+  listingAfterSummary: 0,
+  summaryFieldBad: 0
+}
+report → C:\Users\HP\OneDrive\Documents\Elevan_Property\backend\logs\sim-private-2026-09-13.md

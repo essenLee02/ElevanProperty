@@ -54,7 +54,7 @@ const { tryCityAvailabilityAnswer,
         customerAsksAvailability }                  = require('../utils/areaAvailabilityGate');
 const { resolveCityAndArea, findAreaInText,
         findAreaCandidatesInText }                  = require('./areaAvailabilityService');
-const { tryListingSelectionAnswer, tryPendingViewingConfirmation, tryPendingViewingSchedule, tryPostPickFallback, lastAiMessage, isCardMessage } = require('../utils/listingSelectionGate');
+const { tryListingSelectionAnswer, tryPendingViewingConfirmation, tryPendingViewingSchedule, tryPostPickFallback, lastAiMessage, isCardMessage, lastSentAreaLabel } = require('../utils/listingSelectionGate');
 const { customerSignalsClosing } = require('../utils/customerQuestionGuard');
 
 // Jendela history untuk ekstraksi filter & state kualifikasi. Cukup besar agar
@@ -98,7 +98,7 @@ function normalizeAiResponderLabel(rawProvider) {
   const KNOWN_PROVIDERS = new Set(['chatgpt', 'claude', 'qwen', 'deepseek', 'kimi', 'openrouter']);
   const p = String(rawProvider || '').toLowerCase().trim();
   if (KNOWN_PROVIDERS.has(p)) return p;
-  if (p === 'private_agent') return 'private';
+  if (p === 'private_agent' || p.startsWith('private_agent/')) return 'private';
   return null;   // 'qualification' / 'fallback_generic' / kosong / tidak dikenal
 }
 
@@ -238,6 +238,19 @@ function buildQualifyReply(filters, message, agentName, contextSource, history =
 
   // Semua 4 info sudah ada → proceed to AI
   if (type && tx && loc && spec) return null;
+
+  // M198 (13 Sep 2026): "Makasih ya" / "Cukup, itu saja" SESUDAH summary/kartu bukan
+  // awal pencarian baru — jangan tanya ulang area/kota. Biarkan gerbang lanjutan
+  // (Private Agent) / model yang menjawab penutupnya.
+  if (Array.isArray(history) && history.length && customerSignalsClosing(message)) return null;
+  // M199: unit sudah DIPILIH di sesi ini → pertanyaan lanjutan ("share lokasi maps-nya?")
+  // bukan awal pencarian; jangan tanya ulang kota/area.
+  if (Array.isArray(history) && history.some((h) => /^(ai|assistant)$/i.test(String(h.role || '')) && /dicatat pilihannya|your pick/i.test(String(h.message || h.content || '')))
+      && !/\b(sewa|menyewa|ngontrak|beli|membeli|rumah|apartemen|apartment|villa|ruko|kos|kantor|gudang|tanah|cari|carikan|nyari)\b/i.test(String(message || ''))) return null;
+  // Sesudah summary terkirim, hanya niat pencarian BARU (sewa/beli/tipe/kota disebut)
+  // yang boleh memulai Q1 lagi; "boleh dikirim lokasinya di maps?" bukan pencarian baru.
+  if (Array.isArray(history) && history.some((h) => /^(ai|assistant)$/i.test(String(h.role || '')) && /[✓✔]\s*(?:rencana|plan)\s*:/i.test(String(h.message || h.content || '')))
+      && !/\b(sewa|menyewa|ngontrak|beli|membeli|rumah|apartemen|apartment|villa|ruko|kos|kantor|gudang|tanah|cari|carikan|nyari)\b/i.test(String(message || ''))) return null;
 
   // ── RESPOND_CATALOG_RUN=OFF (Q1–Q12 Summary Mode) ─────────────────────────
   //
@@ -618,7 +631,14 @@ ${params.distanceFact}`);
   // customer bertanya balik. Bila info kualifikasi sudah lengkap, jawab
   // istilahnya saja — giliran berikutnya tetap berjalan normal ke AI/Private
   // Agent seperti biasa.
-  const termAnswer = tryTerminologyAnswer(message);
+  // M199: "Sertifikatnya apa? Ada IMB/PBG-nya?" tentang UNIT yang sudah dipilih = data unit
+  // (gerbang atribut Private Agent), bukan permintaan definisi istilah.
+  const asksPickedUnitDocs = Array.isArray(history)
+    && history.some((h) => /^(ai|assistant)$/i.test(String(h.role || '')) && /dicatat pilihannya|your pick/i.test(String(h.message || h.content || '')))
+    && /\b(sertifikat\w*|imb|pbg|pbb|dokumen\w*|legalitas|shm|shgb|hgb)\b/i.test(message)
+    && /(?:nya\b|\bunit|\brumah\s+(?:ini|itu|tersebut)|\bdokumen|\bada\b|\blengkap)/i.test(message)
+    && !/\b(apa\s+itu|apa\s+bedanya|maksudnya|artinya|apa\s+sih)\b/i.test(message);
+  const termAnswer = asksPickedUnitDocs ? null : tryTerminologyAnswer(message);
   if (termAnswer && backendMayCompose) {
     console.log('[WhatsAppAI] 📖 Pertanyaan istilah legal/sertifikat terdeteksi — dijawab sebelum melanjutkan qualification flow.');
     const combinedReply = qualResponse
@@ -682,7 +702,19 @@ ${params.distanceFact}`);
      * yang bertentangan dengan banner MENGGANTI TRANSAKSI. Pilihan unit beli
      * tidak relevan untuk pencarian sewa. */
     const changeTurn = Boolean(qualState?.txChangedFromHistory || qualState?.cityChangedFromHistory || qualState?.typeChangedFromHistory);
-    const pick = changeTurn ? null : tryListingSelectionAnswer({ message, history, isId: isIdMsg });
+    let pick = changeTurn ? null : tryListingSelectionAnswer({ message, history, isId: isIdMsg });
+    // M198: pertanyaan atribut tentang kartu no. N → jawab dari kartu/DB (local) atau
+    // kirim sebagai fakta (platform), jangan dianggap memilih.
+    if (pick && pick.attributeQuestion) {
+      const { answerCardAttribute } = require('../utils/listingSelectionGate');
+      const ans = await answerCardAttribute({ message, card: pick.card, userId: agentUserId, isId: isIdMsg });
+      if (ans && backendMayCompose) {
+        return { reply: ans.reply, replyParts: [ans.reply], provider: 'card_attribute_gate', contextSource };
+      }
+      if (ans) gateFacts.push(`DATA UNIT YANG DITANYAKAN (fakta dari database agent):
+${ans.reply}`);
+      pick = null;
+    }
     if (pick && backendMayCompose) {
       console.log(`[WhatsAppAI] 🎯 Gerbang pemilihan listing: ${pick.verdict}`
         + `${pick.card ? ` → no.${pick.card.index} "${pick.card.title}" (${pick.card.priceText})` : ''}`);
@@ -740,7 +772,7 @@ ${params.distanceFact}`);
      * pasca-pilihan tapi tak satu pun gerbang di atas cocok. Lihat catatan
      * panjang di utils/listingSelectionGate.js. */
     const postPickFallback = (!changeTurn && !pick && !viewingConfirm && !viewingSchedule)
-      ? tryPostPickFallback({ history, isId: isIdMsg })
+      ? await tryPostPickFallback({ history, isId: isIdMsg, message, userId: agentUserId })
       : null;
     if (postPickFallback && backendMayCompose) {
       console.log(`[WhatsAppAI] 🎯 Gerbang jaring pengaman pasca-pilihan: ${postPickFallback.verdict}`);
@@ -843,7 +875,8 @@ ${params.distanceFact}`);
      * sudah memilih unit. Landmark hanya dipakai bila TIDAK ADA area sama
      * sekali, dan tidak pernah bila kalimatnya jelas patokan (dekat/patokan). */
     const lmToken = detectLandmark(message);
-    const isAnchorPhrase = /\b(patokan|dekat|deket|near|sekitar)\b/i.test(message);
+    // M198b: patokan tetap jadi kandidat area bila customer sekaligus minta listing ("ada apartemen dekat ITS?").
+    const isAnchorPhrase = /\b(patokan|dekat|deket|near|sekitar)\b/i.test(message) && !customerAsksAvailability(message);
     const { city: realCity, area: resolvedArea } = await resolveCityAndArea([
       isAnchorPhrase ? '' : lmToken, isAnchorPhrase ? '' : filters.landmark, qs.district, qs.city,
       isAnchorPhrase ? '' : qs.anchorPoint, filters.location,
@@ -1093,10 +1126,14 @@ ${cityHit.reply}`);
      * malah ditanya "di kota mana?" untuk area yang JELAS ada di katalog. Di
      * profil 'platform' hasilnya tetap hanya menjadi fakta (bukan balasan). */
     const areaKnownWithoutCity = Boolean(txDb && typeDb && realArea && !realCity);
+    // M198b: "belum ada di *X*" cukup sekali — pemicu (b) tidak mengulanginya tiap giliran
+    // selama customer tidak minta lagi (simulasi P7: 9 giliran berturut-turut).
+    const areaEmptyAlreadySaid = Boolean(realArea) && (Array.isArray(history) ? history : []).some((h) => /^(ai|assistant)$/i.test(String(h.role || ''))
+      && /belum ada di data saya|not in my data/i.test(String(h.message || h.content || '')) && String(h.message || h.content || '').toLowerCase().includes(String(realArea).toLowerCase()));
     const gateShouldSpeak = customerAsksAvailability(message)
-      || ((fourSlotsKnown || areaKnownWithoutCity) && !listingsAlreadyShown);
+      || ((fourSlotsKnown || areaKnownWithoutCity) && !listingsAlreadyShown && !areaEmptyAlreadySaid);
 
-    if (agentUserId && realArea && txDb && gateShouldSpeak && !pickAlreadyHandledThisTurn) {
+    if (agentUserId && realArea && txDb && gateShouldSpeak && !pickAlreadyHandledThisTurn && !customerSignalsClosing(message)) {
       const hit = await tryAreaAvailabilityAnswer({
         userId: agentUserId, city: realCity, area: realArea,
         buildingType: typeDb || undefined, transactionType: txDb,
@@ -1106,7 +1143,15 @@ ${cityHit.reply}`);
         message, isId: isIdMsg, persistedBudgetText: qs.budget || '',
         // M192: dedup listing lintas giliran; kirim ulang hanya saat area/kota/transaksi berganti.
         history,
-        resetSent: Boolean(qs.cityChangedFromHistory || qs.txChangedFromHistory || qs.typeChangedFromHistory),
+        // M199: pergantian AREA juga memulai set kartu baru dari nomor 1 (kontrak M192).
+        resetSent: Boolean(qs.cityChangedFromHistory || qs.txChangedFromHistory || qs.typeChangedFromHistory || (() => {
+          try {
+            const prevArea = lastSentAreaLabel(history);
+            const curArea = String(realArea || '').toLowerCase();
+            const same = !prevArea || curArea === prevArea || prevArea.startsWith(curArea + ' ') || curArea.startsWith(prevArea + ' ');
+            return !same;
+          } catch (_) { return false; }
+        })()),
       });
       if (hit && backendMayCompose) {
         console.log(`[WhatsAppAI] 📊 Gerbang ketersediaan: ${hit.verdict} untuk "${realArea}" (${txDb}) — dijawab dengan data katalog, alur interview dilewati.`);
@@ -1410,7 +1455,8 @@ ${cityHit.reply}`);
     return {
       reply         : result.reply,
       replyParts    : result.replyParts || splitCatalogReply(result.reply),
-      provider      : 'private_agent',
+      // M198: gerbang Private Agent yang menjawab ikut tercatat (diagnosis simulasi/log).
+      provider      : result.provider && result.provider !== 'private_agent' ? `private_agent/${result.provider}` : 'private_agent',
       contextSource,
     };
   } catch (privateErr) {

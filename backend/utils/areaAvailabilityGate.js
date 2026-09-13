@@ -48,6 +48,19 @@ const AVAILABILITY_RE = new RegExp([
   /\bbutuh\s+rekomendasi\b/,
   /\bada\s+di\s+(?:area|daerah|kawasan)\b/, /\bdaerah\s+mana\s+saja\b/,
   /\barea\s+mana\s+saja\b/, /\bdi\s*mana\s+saja\b/,
+  // M198 (13 Sep 2026): "Ada yang di bawah 400 juta?", "Yang dekat Waru ada?",
+  // "Ada apartemen sewa … dekat ITS?", "ada apa saja?", "yang 3 kamar ada?"
+  /\bada\s+yang\b/, /\byang\b[^.?!]{0,40}\bada\s*(?:\?|$)/, /\bada\s+apa\s+(?:saja|aja)\b/,
+  /^\s*ada\s+(?:rumah|apartemen|apart|villa|ruko|kos|kantor|gudang|tanah|unit|properti)\b[^.?!]{0,80}\?/,
+  /\bada\s+(?:rumah|apartemen|apart|villa|ruko|kos|kantor|gudang|tanah|unit|properti)\b[^.?!]{0,60}\b(?:di|dekat|deket|sekitar|area|daerah)\b[^.?!]{0,40}\?/,
+  /\b(?:lihat|liat|tampilkan|carikan|cariin)\s+(?:\d{1,2}\s+)?(?:pilihan|unit|listing|opsi|lagi)\b/,
+  // "Kalau yang dekat Buduran?" / "Kalau di Tropodo?" — menanyakan alternatif area.
+  /\bkalau\s+(?:yang\s+)?(?:dekat|deket|sekitar|di)\s+[A-Za-z][\w' -]{2,30}\?/,
+  // M199: "Pakuwon juga bagus ya, ada?", "Pakuwon Indah ada juga?", "Kalau Wiyung?"
+  /\bada\s*(?:juga|jg|kah|nggak|ga|gak)?\s*\?\s*$/,
+  /^\s*(?:kalau|klo|kl)\s+(?:di\s+|yang\s+di\s+)?(?!(?:nego|harga|budget|kpr|cash|sewa|beli|survei|survey|besok|nanti|foto|dp|jam|tanggal|itu|ini|saya|ada|yang)\b)[A-Za-z][\w'-]*(?:\s+[A-Za-z][\w'-]*)?\s*\?\s*$/,
+  // "Yang 3 kamar?" / "yang 2 lantai ada?" — saringan atribut = minta listing yang cocok.
+  /\byang\s+\d{1,2}\s*(?:kamar|kt|km|lantai)\b[^.?!]{0,15}(?:\?|\bada\b)/,
 ].map((r) => r.source).join('|'), 'i');
 
 /**
@@ -71,6 +84,11 @@ function detectRequestedCount(message) {
 function customerAsksAvailability(message) {
   const t = String(message || '').trim();
   if (!t) return false;
+  // M198b: "jangan kirim listing yang sama" / "tidak usah kasih data" = permintaan
+  // BERHENTI, bukan minta listing.
+  if (/\b(?:jangan|jgn|tidak\s+usah|tdk\s+usah|nggak\s+usah|gak\s+usah|ga\s+usah)\b[^.?!]{0,12}\b(?:kirim|kasih|tampilkan|minta|lihat|liat)\b/i.test(t)) return false;
+  // M199: "Denah rumahnya ada?", "ada videonya?", "IMB-nya ada?" = dokumentasi unit, bukan minta listing.
+  if (/\b(denah|foto\w*|video\w*|dokumen\w*|sertifikat\w*|imb|pbg|pbb|brosur|maps|patokan\w*|garasi|carport|kolam|ac)\b/i.test(t) && !/\b(listing|unit\s+lain|pilihan\s+lain|yang\s+lain|lainnya)\b/i.test(t)) return false;
   return AVAILABILITY_RE.test(t);
 }
 
@@ -336,6 +354,9 @@ async function tryAreaAvailabilityAnswer({
       // tanpa angka: DEFAULT_SHOWN unit yang belum pernah dikirim.
       const wantNew = requestedCount ? Math.max(0, requestedCount - sent.count) : DEFAULT_SHOWN;
       const limit = wantNew;
+      // Balasan "sudah dikirim" / "tidak ada yang baru" hanya masuk akal bila customer
+      // memang MEMINTA listing; pada pesan lain (budget, penghuni) biarkan alur normal.
+      const asksListings = customerAsksAvailability(message) || Boolean(requestedCount);
       if (requestedCount && wantNew === 0) {
         const reply = isId
           ? `Kak, ${sent.count} listing itu sudah saya kirim sebelumnya ya 😊 Mau saya tambahkan yang lain lagi, atau ada yang menarik dari yang sudah ada?`
@@ -354,6 +375,7 @@ async function tryAreaAvailabilityAnswer({
       });
       const rows = rowsAll.filter((r) => !isRowAlreadySent(typeof r.toJSON === 'function' ? r.toJSON() : r, sent)).slice(0, limit);
 
+      if (!rows.length && rowsAll.length && sent.count && !asksListings) return null;   // M198
       if (!rows.length && rowsAll.length && sent.count) {
         // Semua yang cocok sudah pernah dikirim — katakan apa adanya (doc 03
         // "Nothing new left -> say so"), jangan kirim ulang.
@@ -387,8 +409,9 @@ async function tryAreaAvailabilityAnswer({
       // menariknya ke puncak file berisiko siklus require.
       const { ResponseBuilderWhatsApp } = require('../controllers/chatbotPrivateController');
       const builder = new ResponseBuilderWhatsApp(isId ? 'id' : 'en');
+      // M197: nomor kartu BERLANJUT dari jumlah yang sudah terkirim (2 lama → 3, 4, 5).
       const cards   = builder.renderListingCards(
-        rows.map((r) => (typeof r.toJSON === 'function' ? r.toJSON() : r)), isId ? 'id' : 'en', limit
+        rows.map((r) => (typeof r.toJSON === 'function' ? r.toJSON() : r)), isId ? 'id' : 'en', limit, sent.count
       );
       if (!cards || !cards.trim()) return null;
 
@@ -402,7 +425,7 @@ async function tryAreaAvailabilityAnswer({
       const shortfall = requestedCount && totalAvailable < requestedCount;
       const sorry = shortfall
         ? (isId
-          ? `Mohon maaf, Kak 🙏 untuk kriteria ini saya hanya punya ${totalAvailable} unit di *${titleCaseArea(areaForListing)}*${sent.count ? ` (${sent.count} sudah dikirim)` : ''}. `
+          ? `Mohon maaf, Kak 🙏 listing ${typeLabel} ${txWord(transactionType, true)} di *${titleCaseArea(areaForListing)}* hanya ada ${totalAvailable} saja${sent.count ? ` (${sent.count} sudah dikirim sebelumnya)` : ''}. `
           : `Sorry, Kak 🙏 I only have ${totalAvailable} matching units in *${titleCaseArea(areaForListing)}*${sent.count ? ` (${sent.count} already sent)` : ''}. `)
         : '';
       const head = isId

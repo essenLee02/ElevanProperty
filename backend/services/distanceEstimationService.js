@@ -70,7 +70,11 @@ function formatHours(hoursLow, hoursHigh) {
  * @param {string} destLabel   - nama kota/alamat tujuan untuk teks
  * @returns {{distanceKm:number, sameIsland:boolean, text:string}}
  */
-function buildEstimate(origin, destination, originLabel, destLabel) {
+function buildEstimate(origin, destination, originLabelRaw, destLabelRaw) {
+  // M199: nama kota dari kunci tabel (huruf kecil) → Title Case di kalimat balasan.
+  const titleCase = (s) => String(s || '').replace(/\b\w/g, (c) => c.toUpperCase());
+  const originLabel = titleCase(originLabelRaw);
+  const destLabel = titleCase(destLabelRaw);
   const distanceKm = Math.round(haversineKm(origin.lat, origin.lng, destination.lat, destination.lng));
   const sameIsland = origin.island === destination.island;
 

@@ -5416,6 +5416,140 @@ penuh untuk pertama kalinya sejak berbulan-bulan.
         kode (ejaan berbeda di server.js) — dipertahankan.
      SUITE **2995/2995**.
 
+ 25. M197 (13 Sep 2026) — NOMOR KARTU BERLANJUT + STOK TERBATAS (kasus produksi).
+     Transkrip 13 Sep 18:04: 2 kartu Kalijudan → "minta 5 listing lainnya" →
+     backend mengirim "1 Apartemen sewa TAMBAHAN" bernomor **1** lagi → "pilih
+     no 3" dijawab "belum ada no. 3". Balasan itu dari GERBANG (Private Agent
+     fallback — DeepSeek 402 Insufficient Balance; sesuai kebijakan TIDAK ada
+     auto-topup). Perbaikan: renderListingCards(..., startIndex=sent.count) →
+     kartu tambahan bernomor 3,4,5; parseShownListings sudah lintas blok →
+     "no 3" cocok. Permintaan maaf memakai kata-kata pemilik: "listing X di
+     *Area* hanya ada N saja (M sudah dikirim sebelumnya)". doc 03: "Extra
+     cards CONTINUE the numbering… Stock short (ask 5, only 3 exist) ->
+     apologise". Total .md 14.695. Verifikasi live (Private Agent, DeepSeek
+     402): 2 → "minta 5 lainnya" → kartu no. 3-5 → "pilih no 3" → Jl. Kalijudan
+     No. 86 dicatat. Tes M192 18/18. SUITE **2999/2999**.
+
+ 26. ⭐ M198 (13 Sep 2026) — PRIVATE AGENT 10 SESI: PERCAKAPAN TETAP HIDUP.
+     Arahan: buat 10 case customer vs chatbotPrivateController (keluhan, ganti
+     kota/transaksi/area, pilih unit, tolak survei/KPR, minta foto), perbaiki
+     bug, update artifact yang sama. Runner: scripts/simulate-platform-skill.js
+     private (sim-scenarios-private.js P1-P10); log logs/sim-private-run1.md
+     (sebelum) → logs/sim-private-final.md (sesudah).
+     Run 1 = 12 kelas bug, semua di kode deterministik (bukan .md):
+       a) Sesudah summary sesi "mati": Phase 0 memotong riwayat → sapaan Q1
+          "Halo! sewa atau beli?" 10× di tengah sesi. Kini #tryFollowUpAnswer
+          (controller) menjawab lanjutan bila kartu sudah ada / summary sudah
+          terkirim: penutup (terima kasih, TANPA summary kedua), survei
+          (+tanggal di pesan yang sama), peserta survei, foto/maps, keluhan
+          lambat, "jangan kirim/tanya…", KPR tidak mau dibahas, atribut unit
+          (kartu terpilih / unit yang baru dibahas / minta nomor), budget,
+          menjelajah. Niat pencarian BARU tetap memulai Q1.
+       b) "tanya-tanya dulu, belum mau survei" = penutup → summary di giliran
+          3. Kini customerIsBrowsing + customerDeclinesViewing (guard);
+          CLOSING_SIGNAL_RE dipersempit; kalimat yang masih bertanya bukan
+          penutup; buildQualifyReply tidak bertanya ulang pada penutup/pasca-
+          summary tanpa niat baru.
+       c) Jaring pasca-pilihan "Boleh diulang maksudnya?" 7× → answerCardAttribute
+          (kartu + baris DB agent; tak tercatat → jujur). ATTR_RE toleran akhiran
+          (sertifikatnya/alamatnya/harganya); negasi hanya di ujung kalimat.
+       d) Gate C lama bertanya "boleh lanjut/ringkas?" → summary LANGSUNG di
+          pesan ke-10-12 bila kota/transaksi/tipe tetap; countCustomerTurns()
+          di-ekspor dari aiPromptBuilderService (dipakai prompt platform juga);
+          balasan berupa pertanyaan Q-flow diganti summary saja.
+       e) Tanggal: "minggu depan Rabu" = Rabu pekan depan (dulu +7 hari);
+          "awal/pertengahan/akhir tahun depan" = 1 Jan/1 Jul/1 Des; tawaran
+          survei dijawab jadwal di pesan yang sama → scheduleViewingFromText;
+          "Masuknya awal Desember" tidak menimpa jadwal survei.
+       f) Slot terisi kalimat bukan jawaban: penutup → Patokan; "tidak dekat
+          jalan raya"/"dekat sekolah nggak?" → Patokan; "tanah minimal 120 m2"
+          → budget 102-138 MILIAR (stripLandSizePhrases kini di detectBudget);
+          "di maps" → Kota (NON_LOCATION_AFTER_DI); "nggak mau bahas KPR"/
+          "banjir nggak?"/"selain X jangan, maunya dekat ITS" → Hindari
+          (#redFlagStatements hanya pernyataan; conversationRequest);
+          Tower/Lantai berisi seluruh percakapan; "Alana Cemandi boleh, lihat
+          2 pilihan" → Area "Alana Cemandi".
+       g) financingRefused MELEKAT (ekstraktor) → Private Agent tidak tanya
+          bank/DP; "cash, nggak pakai KPR" tetap cash.
+       h) buildProfile: hasDistrict/kota dari ekstraktor bersama + kartu
+          terkirim (Candramas/Kalijudan/Driyorejo tidak ada di daftar statis);
+          Q2b dilewati bila kartu sudah tampil; ganti transaksi "tetap di
+          Driyorejo" tidak menanyakan kota lagi.
+       i) customerAsksAvailability: +"ada yang…", "yang … ada?", "kalau yang
+          dekat X?", "ada <tipe> … dekat …?", "yang 3 kamar?"; MINUS "jangan
+          kirim listing". Patokan boleh jadi area pencarian hanya bila customer
+          sekaligus minta listing (isAnchorPhrase && !asks).
+       j) Gerbang area (kedua jalur) tidak mengulang "belum ada di X" tiap
+          giliran dan tidak bicara pada penutup; gateMaySpeak (private).
+       k) Label provider: private_agent/<gerbang> (whatsappAIService);
+          normalizeAiResponderLabel menerima prefiksnya.
+     Hasil akhir 103 giliran: sapaan Q1 ulang 10→0; "Boleh diulang" 7→0;
+     Q1-ulang/summary-ganda 0. Tes baru privateAgentFollowUpM198 (40);
+     qualifierCharacterization di-rekam ulang (aiAskedLocation mengenali
+     "kota atau area mana"; type-switch mempertahankan kota dari ekstraktor).
+     SUITE **3039/3039**. Tidak ada perubahan .md (semua bug di kode).
+     Artifact diperbarui: https://claude.ai/code/artifact/350ba976-9b3f-413b-b822-f8a0ba4d75a6
+     PELAJARAN: heredoc Python via Git Bash merusak escape regex (\b, \s, \n)
+     — tulis .py ke
+     scratchpad lalu jalankan; grep byte 0x08 sesudah tiap patch regex.
+
+ 27. ⭐ M199 (14 Sep 2026) — PRIVATE AGENT 13 SESI LANJUTAN: PLIN-PLAN AREA/KOTA,
+     DOKUMENTASI, SURVEI, JARAK, ALAMAT. Arahan: 7 sim customer bolak-balik
+     (Pakuwon → Wiyung → Pakuwon; Sidoarjo → Gresik → Surabaya → Sidoarjo di
+     tengah sesi; AI harus masih bisa merespon pilihan lama) + 6 sim beli rumah
+     (dokumentasi, survei, estimasi jarak, bingung alamat, tolak survei).
+     Skenario P11-P23 di scripts/sim-scenarios-private.js; log
+     logs/sim-private-m199-run1.md → logs/sim-private-m199-final.md.
+     Run 1: 40 dari 130 giliran jatuh ke skrip interview; akhir: 5 (semua
+     jawaban slot yang wajar). Perbaikan (semua kode):
+       a) PERGANTIAN AREA dikenali (dulu hanya kota/tx/tipe): detectAreaName()
+          baru di propertyRecommendationService (hanya location_type='area';
+          BANK BCA / PAKUWON MALL / "kerja saya di Waru" bukan area) → set
+          kartu baru dari nomor 1 di KEDUA jalur (resetSent); kembali ke area
+          yang kartunya sudah ada sambil merujuk unit/survei = konteks lama.
+          Area "sebelumnya" = judul blok kartu terakhir (lastSentAreaLabel),
+          bukan area kartu (pencarian Tropodo bisa memuat kartu Wisma Tropodo).
+       b) parseAllShownCards() (listingSelectionGate): semua blok, dedup
+          judul+alamat, field block — parseShownListings (nomor = identitas,
+          blok terbaru menang) membuang blok lama begitu nomor mulai 1 lagi.
+          Dipakai: listConfirmedPicks, tryRecallPreviousPick, follow-up gate,
+          post-pick fallback, distance gate.
+       c) tryRecallPreviousPick(): "balik ke Pakuwon, yang tadi saya pilih" /
+          "nggak jadi, tetap beli Pakuwon nomor 1 tadi" / "yang mana ya? saya
+          lupa" / "balik ke Tropodo nomor 1 yang pertama" → pilihan lama
+          dipanggil kembali (area PERSIS menang; "pertama" = paling awal);
+          balasan memakai fingerprint "Dicatat pilihannya:" supaya alur pasca-
+          pilihan lanjut. Dicek SEBELUM deteksi ganti area (pick_recall_gate).
+       d) Nomor kartu per AREA: "yang tadi di MERR nomor 2" dibatasi ke blok
+          area yang disebut (mentionedCardArea); nomor di luar cetakan =
+          urutan di blok area itu.
+       e) Ekstraktor: district dari master lokasi (DB), sebutan TERAKHIR menang;
+          "Januari tahun depan" = 1 Jan; hari yang sama dengan hari ini tanpa
+          "ini" = pekan depan; "survei Minggu ini/depan" = hari Minggu.
+       f) customerAsksAvailability: +"…ada?" di ujung, "Kalau Wiyung?" (≤2 kata,
+          stopword nego/harga/kpr…); MINUS denah/foto/video/dokumen/sertifikat.
+       g) Atribut: harga per bulan, "masih ada?" (ketersediaan), renovasi, PBB,
+          IMB/PBG/denah/dokumen (sertifikat dari DB + dokumen lain ke agent),
+          patokan; ATTR_QUESTION_RE menerima tolong/minta/kirim/share; "kan
+          luas" bukan pertanyaan luas. Gerbang istilah (kedua jalur) dilewati
+          bila pertanyaan tentang dokumen UNIT yang sudah dipilih.
+       h) Jarak: distance_gate di controller — antar-kota dihitung (kota unit
+          dari alamat kartu), antar-area/landmark jujur + alamat unit; nama
+          kota Title Case.
+       i) Follow-up gate: pembanding unit (COMPARE_CUE_RE; luas masing-masing,
+          termurah), survei kata kerja+tanggal tanpa niat, ganti jadwal (tanggal
+          /jam saja), batal (fingerprint "dibatalkan dulu"), jadwal ulang
+          sesudah batal, peserta ("saya sama suami yang datang"), checklist
+          bawaan, titik jemput, video call, telepon dari agent + nomor WA,
+          "nanti saya kabari"/"belum tahu kapan"/"masih di luar kota" (ditunda),
+          menunggu agent, "Oke fix yang itu" (konfirmasi), "mikir-mikir" (jelajah),
+          "itu dulu" (penutup). Gerbang jadwal tidak mengulang "hari apa yang
+          pas?" untuk pesan bukan tanggal (null).
+       j) buildQualifyReply (whatsappAIService) tidak memulai Q1 lagi bila unit
+          sudah dipilih dan tidak ada niat pencarian baru.
+     Tes baru privateAgentPlinPlanM199 (30). SUITE **3069/3069**. Artifact
+     (URL sama) bagian ketiga "13 sesi lanjutan". .md tidak berubah.
+
  17. ⭐ M189 (12 Sep 2026) — TIGA DOC BACKUP JULI KEMBALI KE chat_gpt_responds.
      Arahan: 15-date-money ≤300 char; 10-playbooks & 19-landmark "diolah".
        docs/07-date-money-parsing-reference.md — 248 char, SELALU dimuat.

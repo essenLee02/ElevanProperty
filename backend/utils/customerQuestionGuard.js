@@ -113,7 +113,7 @@ const VIEWING_REQUEST_RE = new RegExp(
   + '[^.?!]{0,40}?'
   + '\\b(?:survei|survey|surver|srvei|survie|viewing|visit|lihat|liat|liht|cek|ngecek|datang|kunjung\\w*|ketemu\\w*|ketemuan|mampir|nengok|tengok|meninjau|tinjau|jadwal\\w*)\\b'
   + '|'
-  + '\\b(?:survei|survey|viewing|ketemuan)\\b[^.?!]{0,30}?\\b(?:dulu|dlu|dl|yuk|ayo|dong)\\b'
+  + '\\b(?:survei|survey|viewing|ketemuan)\\b[^.?!]{0,30}?\\b(?:dulu|dlu|dl|yuk|ayo|dong|saja|aja)\\b'
   + '|'
   // M196: berbagai cara customer mengajak survei — "ayo ketemuan", "lihat langsung",
   // "cek unitnya", "mampir ke lokasi", "jadwalkan viewing", "meet up".
@@ -147,9 +147,14 @@ const FOCUS_REDIRECT_RE = new RegExp(
 const VIEWING_VERB_RE = /\b(?:survei|survey|surver|srvei|survie|viewing|visit|kunjungan|ketemuan|ketemu|site\s*visit|meet\s*up)\b/i;
 
 /** @returns {boolean} customer meminta/menanyakan survei pada giliran ini. */
+/* M198: "belum mau survei", "nggak mau ketemuan dulu", "tidak perlu viewing" = MENOLAK survei. */
+const VIEWING_NEGATED_RE = /\b(?:belum|blm|nggak|ngga|gak|ga|tidak|tdk|enggak|jangan|males|malas)\s+(?:mau|ingin|perlu|usah|bisa)?\s*(?:dulu\s+)?(?:tanya\w*\s+|nanya\w*\s+|bahas\s+)?(?:survei|survey|viewing|ketemu\w*|lihat|liat|datang|mampir|visit)\b/i;
+function customerDeclinesViewing(message) { return VIEWING_NEGATED_RE.test(String(message || '')); }
+
 function customerRequestsViewing(message) {
   const text = String(message || '').trim();
   if (!text) return false;
+  if (customerDeclinesViewing(text) && !/\b(?:tapi|tetapi|namun|cuma|hanya)\b/i.test(text)) return false;
   if (VIEWING_REQUEST_RE.test(text)) return true;
 
   // BERTANYA TENTANG survei (bukan meminta) tetap wajib dijawab.
@@ -254,17 +259,21 @@ function buildAnswerFirstDirective(message, nextQuestion = null) {
    persis dengan M188/M189: aturan ADA di dokumen, TIDAK ADA di kode
    deterministik yang justru paling sering menjalankannya.
    ══════════════════════════════════════════════════════════════════════════ */
+/* M198 (13 Sep 2026) — "tanya-tanya dulu / lihat-lihat dulu" BUKAN penutup:
+ * itu berarti customer masih menjelajah (doc 01: browsing → lanjutkan, jangan
+ * survei/KPR). Penutup = terima kasih / cukup / itu saja / sekian / "tidak ada"
+ * (setelah "ada yang menarik?"). Penolakan ("nggak cocok") juga bukan penutup —
+ * doc 02 §7: probe sekali, rutekan. */
 const CLOSING_SIGNAL_RE = new RegExp(
-  '\\b(?:tidak|nggak|ga+k?|blm|belum)\\s+(?:ada|tertarik|cocok|minat)\\b'
+  '\\b(?:tidak|nggak|ga+k?|blm|belum)\\s+(?:ada|tertarik|minat)\\b'
   + '|\\b(?:terima\\s*kasih|trma\\s*kasih|makasih|mksh|thanks?|thank\\s*you)\\b'
   + '|\\bcukup\\b(?!\\s+(?:luas|besar|banyak|kamar|dekat))'
-  + '|\\b(?:tanya[-\\s]?tanya|liat[-\\s]?liat|lihat[-\\s]?lihat|pikir[-\\s]?pikir)\\s*(?:dulu|dlu|aja|saja)?\\b'
-  // "Saya tanya" dlu" (tanda kutip nyasar, khas pengetikan cepat) — satu kata
-  // "tanya"/"liat"/"lihat"/"pikir" diikuti "dulu/dlu" masih niat yang sama.
-  + '|\\b(?:tanya|liat|lihat|pikir)["\'\\s-]{0,3}(?:dulu|dlu)\\b'
-  + '|\\bitu\\s+saja\\b|\\bsekian\\b',
+  + '|\\b(?:itu|segitu)\\s+(?:saja|aja|dulu|dlu)\\b|\\bsekian\\b',
   'i'
 );
+/** Customer masih menjelajah ("tanya-tanya dulu", "lihat-lihat dulu") — lanjutkan tanpa dorongan survei/KPR. */
+const BROWSING_RE = /\b(?:tanya[-\s]?tanya|liat[-\s]?liat|lihat[-\s]?lihat|pikir[-\s]?pikir|mikir[-\s]?mikir|mikir)\s*(?:dulu|dlu|aja|saja)?\b|\b(?:tanya|liat|lihat|pikir|mikir)["'\s-]{0,3}(?:dulu|dlu)\b|\bbelum\s+tentu\b|\bmasih\s+(?:mikir|pikir|bimbang|ragu)\b/i;
+function customerIsBrowsing(message) { return BROWSING_RE.test(String(message || '')); }
 
 /**
  * Customer menutup obrolan / menolak halus setelah katalog ditampilkan
@@ -278,6 +287,9 @@ function customerSignalsClosing(message) {
   const text = String(message || '').trim();
   if (!text || text.length > 60) return false;
   if (/\d/.test(text)) return false;
+  // M198b: kalimat yang MASIH BERTANYA ("Yah nggak ada ya. Kalau yang dekat
+  // Buduran?") bukan penutup — kecuali memang berterima kasih.
+  if (/\?/.test(text) && !/\b(?:terima\s*kasih|trma\s*kasih|makasih|mksh|thanks?)\b/i.test(text)) return false;
   return CLOSING_SIGNAL_RE.test(text);
 }
 
@@ -290,10 +302,12 @@ module.exports = {
   VIEWING_REQUEST_RE,
   FOCUS_REDIRECT_RE,
   customerRequestsViewing,
+  customerDeclinesViewing,
   customerRedirectsFocus,
   customerNeedsDirectAnswer,
   buildViewingRequestDirective,
   // M190 — sinyal penutup setelah katalog
   CLOSING_SIGNAL_RE,
+  customerIsBrowsing,
   customerSignalsClosing,
 };

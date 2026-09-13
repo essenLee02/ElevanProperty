@@ -67,13 +67,21 @@ const addrs = (t) => parseCardsFromText(t).map((c) => c.address);
     const n2 = d2 ? addrs(d2.reply) : [];
     ok('2 kartu awal', d1 && addrs(d1.reply).length === 2);
     ok('minta 6 dari stok 4 → hanya 2 BARU', n2.length === 2, JSON.stringify(n2));
-    ok('minta maaf & sebut stok nyata 4 (2 sudah dikirim)', /hanya punya 4 unit/.test(d2 ? d2.reply : '') && /2 sudah dikirim/.test(d2 ? d2.reply : ''), (d2 ? d2.reply : '').slice(0, 160));
+    ok('minta maaf & sebut stok nyata 4 (2 sudah dikirim)', /Mohon maaf/.test(d2 ? d2.reply : '') && /2 sudah dikirim/.test(d2 ? d2.reply : ''), (d2 ? d2.reply : '').slice(0, 160));
     ok('tidak mengulang 2 kartu lama', n2.every((x) => !addrs(d1.reply).includes(x)));
+    // M197: nomor kartu tambahan BERLANJUT (3, 4), bukan mulai dari 1 lagi
+    const idx2 = parseCardsFromText(d2 ? d2.reply : '').map((c) => c.index);
+    ok('kartu tambahan bernomor 3 dan 4', idx2.join(',') === '3,4', idx2.join(','));
+    ok('permintaan maaf memakai kata-kata pemilik: "hanya ada N saja"', /hanya ada 4 saja/.test(d2 ? d2.reply : ''));
+    const shownAll = require('../utils/listingSelectionGate').parseShownListings([...h2, C('minta 6 listing dong'), A(d2 ? d2.reply : '')]);
+    const sel3 = require('../utils/listingSelectionGate').detectSelection('Saya pilih yg no 3', shownAll);
+    ok('"pilih no 3" setelah tambahan → cocok kartu no. 3', sel3 && sel3.status === 'matched' && sel3.card.index === 3, JSON.stringify(sel3 && sel3.status));
   }
 
   console.log('\n[8] listSentCards membaca semua blok');
   const sent = listSentCards(hist);
   ok(`sent.count = 5 (2+1+2)`, sent.count === 5, String(sent.count));
+  ok('nomor kartu lintas pengiriman 1..5 tanpa duplikat', require('../utils/listingSelectionGate').parseShownListings(hist).map((c) => c.index).join(',') === '1,2,3,4,5');
 
   console.log(`\nRESULT: ${pass}/${pass + fail} passed${fail ? ` (${fail} FAILED)` : ' ALL PASS'}`);
   process.exit(fail ? 1 : 0);

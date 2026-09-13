@@ -1,5 +1,5 @@
 const { loadProjectSkillPrompt } = require('./skillPromptService');
-const { detectBudget, detectFacilities, stripCommercialUsePhrases, stripNearPhrases, stripAmbiguousRumah, stripInvestmentIntentPhrases, stripMovingFromPhrases, detectUseCase, isNonResidentialUse, detectLocation, isKnownLocationName, detectCanonicalType, detectCanonicalTransaction, stripLandSizePhrases } = require('./propertyRecommendationService');
+const { detectBudget, detectFacilities, stripCommercialUsePhrases, stripNearPhrases, stripAmbiguousRumah, stripInvestmentIntentPhrases, stripMovingFromPhrases, detectUseCase, isNonResidentialUse, detectLocation, isKnownLocationName, detectCanonicalType, detectCanonicalTransaction, stripLandSizePhrases, detectAreaName } = require('./propertyRecommendationService');
 // M188: ukuran tanah ("tanah minimal 120 m2") bukan tipe properti — lihat stripLandSizePhrases.
 const _stripLandSize = (t) => { try { return stripLandSizePhrases(t); } catch { return t; } };
 const { parseCustomerDate, isDontKnowDateAnswer, WAITING_THE_UPDATE, parseSurveyTime } = require('../utils/customerDateParser');
@@ -725,6 +725,10 @@ function _cleanDistrictAnswer(raw = '') {
     .replace(/\b(mempertimbangkan|pertimbangkan|mikirin|memikirkan|pengen|pingin|ingin|mau|cari|carikan|prefer|lebih\s+suka|tertarik|minat)\b\s*/gi, '')
     .replace(/\b(di|daerah|area|kawasan|wilayah|sekitar|sekitaran|bagian|deket|dekat)\b\s*/gi, ' ')
     .replace(/\b(aja|saja|dulu|dong|kak|ya|yaa|sih|nih|deh)\b/gi, ' ')
+    // M198: "Alana Cemandi boleh, lihat 2 pilihan" → hanya klausa pertama; buang
+    // ekor permintaan/persetujuan ("boleh", "lihat 2 pilihan", "minta 3 listing").
+    .replace(/\s*[,;].*$/, '')
+    .replace(/\b(boleh|bisa|oke|ok|tolong|minta|lihat|liat|kirim|tampilkan)\b.*$/i, '')
     .replace(/[.,;!?]+\s*$/g, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
@@ -816,6 +820,7 @@ function extractQualificationState(history = [], currentMessage = '') {
   const state = {
     transactionType : null,   // Q1
     buildingType    : null,   // from first message
+    financingRefused: false,  // M198: "nggak mau bahas KPR dulu" — topik ditolak, jangan diangkat lagi
     fallbackTypes   : [],     // "kalau tidak ada X, Y saja"
     // ⚠️ ISTILAH "location" SENGAJA TIDAK DIPAKAI — ambigu, bisa berarti kota
     // ATAU area/kecamatan, dan kerancuan itu sudah beberapa kali membuat
@@ -1159,6 +1164,23 @@ function extractQualificationState(history = [], currentMessage = '') {
         if (found) state.district = found.replace(/\b\w/g, c => c.toUpperCase());
       }
     }
+    /* M199 (14 Sep 2026) — AREA DARI MASTER LOKASI (DB), TERBARU MENANG.
+     * Daftar statis di atas tidak mengenal Driyorejo/Tropodo/Candramas/Kalijudan,
+     * jadi district null → Private Agent bertanya "area mana?" padahal kartu area
+     * itu sudah dikirim. detectLandmark() (cache tabel locations, agent-scoped)
+     * mengenalinya. Customer yang plin-plan (Pakuwon → Wiyung → Pakuwon) harus
+     * membuat district mengikuti sebutan TERAKHIR — bukan yang pertama.
+     * Patokan ("dekat/patokan Pakuwon Mall") bukan area. */
+    // "kerja saya di Waru", "kantor di Rungkut", "berangkat dari Waru" = tempat lain, bukan area yang dicari.
+    if (!/\b(patokan|dekat|deket|near|sekitar)\b/i.test(raw)
+        && !/\b(kerja|kantor|kuliah|sekolah|tinggal|rumah\s+saya|asal|berangkat|dari)\b[^.?!]{0,12}\bdi\b|\bdari\s+[A-Za-z]/i.test(raw)) {
+      try {
+        const lm = String(detectAreaName(raw) || '').trim();
+        if (lm && lm.length >= 3 && !isKnownLocationName(lm)) {
+          state.district = lm.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+        }
+      } catch (_) { /* fail-open: cache belum siap */ }
+    }
 
     // Q2b — Direct Phase-1 capture for explicit "belum/sudah lihat" answers.
     // This runs independently of Phase-2 AI→customer pair detection so Q2b is
@@ -1220,7 +1242,10 @@ function extractQualificationState(history = [], currentMessage = '') {
     // debounce-joins consecutive WhatsApp messages with '\n' ("Dekat Suncity mall\n
     // Dekat stasiun bus"), so a \s-based class swallowed the newline into ONE
     // anchor phrase and only the first "dekat" was ever matched.
-    {
+    // M198: "tidak dekat jalan raya" (red flag) dan "dekat sekolah nggak?" (pertanyaan)
+    // bukan patokan yang diinginkan customer.
+    if (!/\b(?:tidak|tdk|nggak|ngga|gak|jangan|jauh\s+dari)\s+(?:dekat|deket|near)\b/i.test(raw)
+        && !/\?|\b(?:nggak|ngga|gak|tidak|apakah)\s*\??\s*$/i.test(String(raw).trim())) {
       for (const t of extractAnchorTokens(raw)) {
         if (!_anchorParts.some((p) => p.toLowerCase() === t.toLowerCase())) {
           _anchorParts.push(t);
@@ -1402,6 +1427,8 @@ function extractQualificationState(history = [], currentMessage = '') {
         const kprNegated  = /\b(?:nggak|ngga|gak|gk|tidak|tdk|bukan|tanpa|no)\b[^.?!,]{0,12}\b(?:pakai|pake|pakek|ambil|lewat|via|perlu|usah)?\s*(?:kpr|kpa|kpt|kredit|mortgage)\b/i.test(text)
           || /\b(?:kpr|kpa|kpt|kredit)\b[^.?!,]{0,10}\b(?:nggak|ngga|gak|gk|tidak|tdk)\b/i.test(text);
         const kprRefused  = /\b(?:nggak|ngga|gak|gk|tidak|tdk|jangan|jgn)\b[^.?!]{0,15}\b(?:bahas|tanya|nanya|ngomongin|omongin|singgung)\b[^.?!]{0,15}\b(?:kpr|kpa|kredit|pembiayaan|cicilan|dp)\b/i.test(text);
+        // M198: penolakan topik MELEKAT — Private Agent tidak boleh bertanya bank/DP sesudahnya.
+        if (kprRefused) state.financingRefused = true;
         if (!isDeferral && !kprRefused) {
           const hasKpr  = !kprNegated && /\b(kpr|kpa|kpt|kredit|mortgage|dp\s*\d+)\b/.test(text);
           const hasCash = /\b(cash|tunai)\b/.test(text);
@@ -1511,6 +1538,12 @@ function extractQualificationState(history = [], currentMessage = '') {
 
     const aiText   = (ai.message   || '').toLowerCase();
     const custResp = (cust.message || '').trim();
+
+    // M198 (13 Sep 2026): kalimat PENUTUP ("Cukup segitu dulu, nanti saya kabari",
+    // "Oke itu saja, terima kasih") bukan jawaban atas pertanyaan AI apa pun —
+    // simulasi: masuk ke slot Patokan lokasi karena AI barusan bertanya Q6.
+    // ("Tidak ada" sengaja TIDAK termasuk — itu jawaban sah untuk Q5/Q6.)
+    if (/^\s*(?:oke?|ok|baik|sip|ya|yaudah|ya\s+sudah)?[\s,.!]*(?:cukup|itu\s+saja|itu\s+aja|segitu\s+(?:dulu|saja|aja)|sekian)\b|\b(?:terima\s*kasih|trma\s*kasih|makasih|mksh|thanks?|thank\s*you)\b/i.test(custResp)) continue;
 
     // Q3 — customer MENERIMA / MENOLAK harga yang ditawarkan AI (anchor).
     // Butuh pasangan AI↔jawaban: nilainya berasal dari nominal di PERTANYAAN AI,
@@ -1775,7 +1808,9 @@ function extractQualificationState(history = [], currentMessage = '') {
         const facils = detectFacilities(custResp);
         const hasLocationCue = /\b(dekat|deket|dekay|dekt|dkt|near|di\s+jalan|di\s+sekitar|sekitar|kawasan|daerah|jalan|jl\.?|komplek|perumahan|cluster)\b/i.test(custResp);
         const isFacilityOnly = facils.length >= 1 && !hasLocationCue && !detectLocation(custResp);
-        if (!isFacilityOnly) state.anchorPoint = custResp;
+        // M198: "Yang tidak dekat jalan raya, berisik" = red flag; "Dekat sekolah nggak?" = pertanyaan.
+        const negatedOrQuestion = /\b(?:tidak|tdk|nggak|ngga|gak|jangan|jauh\s+dari)\s+(?:dekat|deket|near)\b/i.test(custResp) || /\?|\b(?:nggak|ngga|gak|tidak|apakah)\s*\??\s*$/i.test(custResp);
+        if (!isFacilityOnly && !negatedOrQuestion) state.anchorPoint = custResp;
       }
     }
     // Q7 — alternative areas
@@ -2116,7 +2151,12 @@ function extractQualificationState(history = [], currentMessage = '') {
     if (!state.redFlags) {
       const avoidHits = (custResp.match(/\b(?:tidak|tdk|ga|gak|gk|nggak|ngga|enggak|jangan|hindari|anti|bukan|tanpa)\s+\S+/gi) || []).length;
       const explicitAvoid = /\b(hindari|dihindari|jangan|jauh\s+dari|anti)\b/i.test(custResp);
-      if (avoidHits >= 2 || explicitAvoid) {
+      // M198: "jangan kirim listing yang sama dua kali" / "jangan tanya survei" adalah
+      // permintaan tentang PERCAKAPAN, bukan ciri rumah yang dihindari.
+      const conversationRequest = /\b(?:jangan|tidak\s+usah|nggak\s+usah|gak\s+usah|nggak\s+mau|gak\s+mau|tidak\s+mau|belum\s+mau)\b[^.?!]{0,25}\b(?:kirim|tanya|nanya|ulang|repeat|listing|survei|survey|viewing|katalog|ditanya|ditanyakan|bahas|kpr|dipaksa)\b/i.test(custResp)
+        // "Selain Sukolilo jangan, maunya dekat ITS" = preferensi AREA (patokan), bukan ciri rumah.
+        || /\bselain\s+\w+(?:\s+\w+)?\s+(?:jangan|nggak|gak|tidak)\b|\bmaunya\s+(?:dekat|deket|di)\b/i.test(custResp);
+      if ((avoidHits >= 2 || explicitAvoid) && !conversationRequest) {
         // M186: pisahkan keinginan dari penghindaran — "udaranya segar" bukan red flag.
         state.redFlags = custResp;   // mentah — kontrak #buildAvoidPreferPairs (lihat di atas)
         const split = _splitAvoidAndPrefer(custResp);
@@ -2141,7 +2181,9 @@ function extractQualificationState(history = [], currentMessage = '') {
       // "Belum, tapi saya cari yang dekat dengan cafe, indomaret dan jalan Demak."
       // Capture it now so the brief doesn't need to fall back to the regex extractor
       // (which joins all messages and can pick up wrong "dekat" fragments).
-      if (!state.anchorPoint && /\b(dekat|deket|near)\b/i.test(custResp)) {
+      if (!state.anchorPoint && /\b(dekat|deket|near)\b/i.test(custResp)
+          && !/\b(?:tidak|tdk|nggak|ngga|gak|jangan|jauh\s+dari)\s+(?:dekat|deket|near)\b/i.test(custResp)
+          && !/\?|\b(?:nggak|ngga|gak|tidak|apakah)\s*\??\s*$/i.test(custResp)) {
         const am = custResp.match(/\b(?:dekat|deket|near)\s+(?:dengan\s+)?[^\n.!?]{4,120}/i);
         if (am) state.anchorPoint = am[0].trim();
       }
@@ -3524,6 +3566,46 @@ Message: ${message}`;
 }
 
 /**
+ * M195/M196/M198 — hitung pesan customer di sesi ini dan sejak pesan customer
+ * terakhir yang MENGGANTI kota/transaksi/tipe. Dipakai fakta turn-count prompt
+ * platform DAN Gate C Private Agent (summary otomatis di pesan ke-10-12 hanya
+ * bila ketiganya tetap). Riwayat kadang sudah memuat pesan saat ini (disimpan
+ * sebelum diambil) — tidak dihitung dua kali.
+ * @returns {{customerTurns:number, turnsSinceChange:number}}
+ */
+function countCustomerTurns(history, userMessage, qualState = null) {
+  const custMsgs = (Array.isArray(history) ? history : [])
+    .filter((h) => /^(customer|user|human)$/i.test(String(h.role || '')))
+    .map((h) => String(h.message || h.content || ''));
+  let sinceChange = custMsgs.length;
+  try {
+    // Titik perubahan = pesan yang menyebut kota/transaksi/tipe BERBEDA dari
+    // nilai yang terakhir disebut SEBELUMNYA (bukan dibanding state akhir —
+    // pesan "ganti ke Gresik" sama dengan state akhir, tapi itu justru resetnya).
+    let resetAt = -1;
+    let lastC = '', lastTx = '', lastTy = '';
+    for (let i = 0; i < custMsgs.length; i++) {
+      const m = custMsgs[i];
+      const c = String(detectLocation(m) || '').toLowerCase();
+      const tx = String(detectCanonicalTransaction(m) || '').toLowerCase();
+      const ty = String(detectCanonicalType(m) || '').toLowerCase();
+      if (c && isKnownLocationName(c)) { if (lastC && c !== lastC) resetAt = i; lastC = c; }
+      if (tx) { if (lastTx && tx !== lastTx) resetAt = i; lastTx = tx; }
+      if (ty) { if (lastTy && ty !== lastTy) resetAt = i; lastTy = ty; }
+    }
+    // Pesan saat ini sendiri bisa jadi titik perubahan (banner dari ekstraktor).
+    if (qualState?.cityChangedFromHistory || qualState?.txChangedFromHistory || qualState?.typeChangedFromHistory) resetAt = custMsgs.length;
+    // Pesan yang mengganti dihitung sebagai pesan ke-1 segmen baru.
+    sinceChange = resetAt < 0 ? custMsgs.length : custMsgs.length - resetAt;
+  } catch { /* fail-open: hitung seluruh sesi */ }
+  const lastCust = custMsgs.length ? custMsgs[custMsgs.length - 1].trim() : '';
+  const currentIncluded = Boolean(lastCust && lastCust === String(userMessage || '').trim());
+  const customerTurns = custMsgs.length + (currentIncluded ? 0 : 1);
+  const turnsSinceChange = Math.max(1, sinceChange + (currentIncluded ? 0 : 1));
+  return { customerTurns, turnsSinceChange };
+}
+
+/**
  * Prompt chatbot WEBSITE — kini IDENTIK dengan jalur WhatsApp/terminal message.
  *
  * ⚠️ DULU prompt terpisah & JAUH lebih tipis: tanpa QUALIFICATION STATE, tanpa
@@ -3696,38 +3778,7 @@ function buildPlatformWhatsappPrompt({
   // M196: hitungan dimulai ULANG sejak pesan customer terakhir yang mengganti
   // kota/transaksi/tipe — Gate C (summary otomatis di pesan ke-10-12) hanya
   // berlaku bila ketiganya tetap sama sepanjang hitungan itu.
-  const custMsgs = (Array.isArray(history) ? history : [])
-    .filter((h) => /^(customer|user|human)$/i.test(String(h.role || '')))
-    .map((h) => String(h.message || h.content || ''));
-  let sinceChange = custMsgs.length;
-  try {
-    const curCity = String(qualState?.city || '').toLowerCase();
-    const curTx = String(detectCanonicalTransaction(qualState?.transactionType || '') || qualState?.transactionType || '').toLowerCase();
-    const curType = String(qualState?.buildingType || '').toLowerCase();
-    // Titik perubahan = pesan yang menyebut kota/transaksi/tipe BERBEDA dari
-    // nilai yang terakhir disebut SEBELUMNYA (bukan dibanding state akhir —
-    // pesan "ganti ke Gresik" sama dengan state akhir, tapi itu justru resetnya).
-    let resetAt = -1;
-    let lastC = '', lastTx = '', lastTy = '';
-    for (let i = 0; i < custMsgs.length; i++) {
-      const m = custMsgs[i];
-      const c = String(detectLocation(m) || '').toLowerCase();
-      const tx = String(detectCanonicalTransaction(m) || '').toLowerCase();
-      const ty = String(detectCanonicalType(m) || '').toLowerCase();
-      if (c && isKnownLocationName(c)) { if (lastC && c !== lastC) resetAt = i; lastC = c; }
-      if (tx) { if (lastTx && tx !== lastTx) resetAt = i; lastTx = tx; }
-      if (ty) { if (lastTy && ty !== lastTy) resetAt = i; lastTy = ty; }
-    }
-    // Pesan saat ini sendiri bisa jadi titik perubahan (banner dari ekstraktor).
-    if (qualState?.cityChangedFromHistory || qualState?.txChangedFromHistory || qualState?.typeChangedFromHistory) resetAt = custMsgs.length;
-    // Pesan yang mengganti dihitung sebagai pesan ke-1 segmen baru.
-    sinceChange = resetAt < 0 ? custMsgs.length : custMsgs.length - resetAt;
-  } catch { /* fail-open: hitung seluruh sesi */ }
-  // Riwayat kadang SUDAH memuat pesan saat ini (disimpan sebelum diambil) — jangan dihitung dua kali.
-  const lastCust = custMsgs.length ? custMsgs[custMsgs.length - 1].trim() : '';
-  const currentIncluded = lastCust && lastCust === String(userMessage || '').trim();
-  const customerTurns = custMsgs.length + (currentIncluded ? 0 : 1);
-  const turnsSinceChange = Math.max(1, sinceChange + (currentIncluded ? 0 : 1));
+  const { customerTurns, turnsSinceChange } = countCustomerTurns(history, userMessage, qualState);
   const summaryAlreadySent = (Array.isArray(historyForDisplay) ? historyForDisplay : [])
     .some((h) => /^(ai|assistant)$/i.test(String(h.role || '')) && /ringkasan|summary/i.test(String(h.message || h.content || '')) && /(✓|•)\s*(Transaksi|Rencana|Tipe)/.test(String(h.message || h.content || '')));
   const turnFact = `\n🔢 Pesan customer ke-${customerTurns} di sesi ini; ke-${turnsSinceChange} sejak kota/transaksi/tipe terakhir tetap${summaryAlreadySent ? ' (summary sudah pernah dikirim - jangan diulang; tetap jawab pertanyaan properti berikutnya)' : ''}.`;
@@ -4328,6 +4379,7 @@ Message: ${message}`;
 }
 
 module.exports = {
+  countCustomerTurns,
   getProjectSkillInstruction,
   formatConversationHistory,
   buildContactReplyPrompt,

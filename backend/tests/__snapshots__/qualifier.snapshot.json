@@ -10,6 +10,7 @@
   },
   "location answered": {
     "profile": {
+      "aiAskedLocation": true,
       "aiCount": 1,
       "buildingType": "villa",
       "location": "Malang",
@@ -242,10 +243,11 @@
       "aiCount": 0,
       "buildingType": "hotel",
       "buildingTypeChanged": true,
+      "location": "Surabaya",
       "transactionType": "rent"
     },
-    "nextQuestion_summary": "Oke, mau *sewa Hotel*. 📍\n\nDi kota atau area mana yang Anda pertimbangkan?",
-    "nextQuestion_catalog": "Oke, mau *sewa Hotel*. 📍\n\nDi kota atau area mana yang Anda pertimbangkan?"
+    "nextQuestion_summary": "Sudah lihat berapa Hotel di *Surabaya*? Apa yang membuat belum cocok dari yang sudah dilihat?",
+    "nextQuestion_catalog": "Sudah lihat berapa Hotel di *Surabaya*? Apa yang membuat belum cocok dari yang sudah dilihat?"
   },
   "BOUNDARY C: greeting restart with same type": {
     "profile": {

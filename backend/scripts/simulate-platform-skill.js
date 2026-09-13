@@ -124,7 +124,11 @@ const HOUSE_SCENARIOS = [
   },
 ];
 
-const ALL_SCENARIOS = SET === 'house' ? HOUSE_SCENARIOS : require('./sim-scenarios-chat-gpt-responds');
+// 'private' = 10 sesi untuk jalur Private Agent (AI_PRIMARY_PROVIDER dipaksa 'private').
+if (SET === 'private') process.env.AI_PRIMARY_PROVIDER = 'private';
+const ALL_SCENARIOS = SET === 'house' ? HOUSE_SCENARIOS
+  : SET === 'private' ? require('./sim-scenarios-private')
+    : require('./sim-scenarios-chat-gpt-responds');
 // SIM_ONLY=S1,S3 → hanya sesi yang namanya diawali kode itu.
 const ONLY = String(process.env.SIM_ONLY || '').split(',').map((x) => x.trim()).filter(Boolean);
 const SCENARIOS = ONLY.length ? ALL_SCENARIOS.filter((sc) => ONLY.some((k) => sc.name.startsWith(k + ' '))) : ALL_SCENARIOS;
@@ -187,7 +191,9 @@ async function main() {
 
         const flags = [];
         const PLATFORM = /^(deepseek|chatgpt|claude|kimi|qwen|openrouter|huggingface)$/;
-        if (!PLATFORM.test(r.provider)) { flags.push(`provider=${r.provider}`); totals.backendReplies++; }
+        // Set 'private': semua balasan memang dari backend — yang diukur adalah gerbang mana yang menjawab.
+        if (SET === 'private') { flags.push(`gate=${r.provider}`); }
+        else if (!PLATFORM.test(r.provider)) { flags.push(`provider=${r.provider}`); totals.backendReplies++; }
         if (BACKEND_SCRIPT_PHRASES.some((re) => re.test(reply))) { flags.push('SKRIP-BACKEND'); totals.scriptLeaks++; }
         if (/\{\{|\[Nama|\$\{agent|\$\{app/.test(reply)) { flags.push('PLACEHOLDER'); totals.placeholderLeaks++; }
         const unknown = priceTokens(reply).filter((p) => p >= 50e6 && !priceKnown(p));
@@ -201,7 +207,7 @@ async function main() {
         if (declined && TARGET_PROBE.test(reply)) { flags.push('TANYA-TARGET-SETELAH-TOLAK'); totals.targetAfterDecline++; }
 
         // Skill chat_gpt_responds: giliran PENUTUP harus dibalas SUMMARY sekali (doc 04 §3d).
-        if (SET === 'chatgpt' && i === sc.turns.length - 1) {
+        if ((SET === 'chatgpt' || SET === 'private') && i === sc.turns.length - 1) {
           // Summary = daftar ✓/• ber-label (Transaksi/Rencana, Tipe, Kota); format tanda tangan boleh beragam.
           const isSummary = /(✓|•)\s*(Rencana|Transaksi|Tipe|Kota)/.test(reply) && /(✓|•)\s*Tipe/.test(reply);
           if (!isSummary) { flags.push('TANPA-SUMMARY-DI-PENUTUP'); totals.noSummaryAtClose++; }

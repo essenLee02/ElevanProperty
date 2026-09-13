@@ -425,6 +425,23 @@ function detectLandmark(message = '') {
 }
 
 /**
+ * M199 — hanya nama AREA (location_type='area') yang disebut customer; landmark/
+ * komersial (BANK BCA, INDOMARET, PAKUWON MALL) TIDAK ikut. Dipakai untuk
+ * mendeteksi pergantian area & mengisi slot area — "Bank BCA ya" bukan area.
+ * @returns {string} nama area kanonik (UPPERCASE) atau ''
+ */
+function detectAreaName(message = '') {
+  if (!message || !_areaCityCache || _areaCityCache.size === 0) return '';
+  const text = normalizeText(message);
+  const names = [..._areaCityCache.keys()].sort((a, b) => b.length - a.length);
+  for (const name of names) {
+    if (name.length < 3) continue;
+    if (new RegExp(`\\b${escapeRegExp(name.toLowerCase())}\\b`, 'i').test(text)) return name;
+  }
+  return '';
+}
+
+/**
  * Resolve property_id yang ter-tag ke sebuah landmark (via tabel join `property_locations`).
  * Return `null` bila landmark tidak dikenal ATAU query gagal — caller HARUS menganggap
  * `null` sebagai "tidak ada info landmark" (fallback ke filter kota-saja), BUKAN "nol hasil".
@@ -817,6 +834,8 @@ const NON_LOCATION_AFTER_DI = new RegExp(
   // → dianggap PINDAH KOTA → seluruh state sesi (transaksi/budget/tanggal/penghuni)
   // TERHAPUS karena location-flip me-reset sesi. Lihat M51.
   'gang|gangnya|jalan|jln|tusuk|sate|tusuk[\\s-]*sate|hook|tikungan|' +
+  // M198: media/aplikasi ("kirim lokasinya di maps", "share di wa") bukan kota.
+  'maps|map|gmaps|google|wa|whatsapp|chat|foto|video|web|website|link|' +
   'rumah|ruko|bangunan|hunian|properti|apartemen|apartment|villa|vila|hotel|kos|kost)\\b', 'i'
 );
 
@@ -1385,7 +1404,8 @@ function _detectBudgetInner(message = '') {
   // range regex (the inner "rp" isn't part of a number token) and only the max value
   // gets captured → the budget question loops. Removing the marker leaves clean
   // "1.4 - 3.5 juta" which parses as a proper range.
-  const text = normalizeText(message).replace(/\b(?:rp|idr)\s*(?=\d)/gi, '');
+  // M198: "tanah minimal 120 m2" bukan budget (simulasi: jadi Rp 102-138 MILIAR).
+  const text = normalizeText(stripLandSizePhrases(message)).replace(/\b(?:rp|idr)\s*(?=\d)/gi, '');
 
   // ── PERIODE HARGA: utamakan satuan yang MENEMPEL pada angkanya ────────────
   // Bug produksi (booking villa Malang, 18 Agu 2026): pesan
@@ -2933,6 +2953,7 @@ module.exports = {
   initLandmarkCache,
   getKnownLandmarks,
   detectLandmark,
+  detectAreaName,
   getPropertyIdsForLandmark,
   stripCommercialUsePhrases,
   // Exported so the Phase-0 type detectors in chatbotPrivateController.js and
