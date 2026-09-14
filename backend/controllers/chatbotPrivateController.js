@@ -70,7 +70,7 @@ const { HTTP } = require('../config/httpStatus');
 // TIDAK LAGI menginterview tanpa henti untuk area yang sudah jelas tidak ada
 // di katalog agent, dan TIDAK LAGI menyarankan area dari daftar statis
 // (locationLandmarks.js) yang bisa sama sekali tidak sesuai katalog nyata.
-const { tryCityAvailabilityAnswer, tryAreaAvailabilityAnswer, customerAsksAvailability, detectRequestedCount } = require('../utils/areaAvailabilityGate');
+const { tryCityAvailabilityAnswer, tryAreaAvailabilityAnswer, customerAsksAvailability, detectRequestedCount, humanPrice } = require('../utils/areaAvailabilityGate');
 const { tryListingSelectionAnswer, tryPendingViewingConfirmation, tryPendingViewingSchedule, tryPostPickFallback, readConfirmedPick, lastAiMessage, isCardMessage, tryRecallPreviousPick, listSentCards: listSentCardsAll, lastSentAreaLabel } = require('../utils/listingSelectionGate');
 const { customerSignalsClosing, customerRequestsViewing, customerDeclinesViewing, customerIsBrowsing, customerOnlyThanks } = require('../utils/customerQuestionGuard');
 const { resolveCityAndArea, resolveCityId, listAlternativeAreas } = require('../services/areaAvailabilityService');
@@ -2634,7 +2634,10 @@ class ConversationQualifier {
     const typeLabel = type ? PropertyFormatter.humanBuildingType(type, lang) : null;
 
     /* ── Priority 0: Summary already shown → restart Q1 for a new search ── */
-    if (profile.summaryAlreadyShown) {
+    // M194 — bila KOTA sudah disebut di pesan pembuka pencarian baru ("beli rumah
+    // di gresik"), jangan tanya kota lagi; lanjut ke alur normal (area / listing).
+    // Transkrip 14 Sep 2026: dijawab "di kota mana?" padahal Gresik baru disebut.
+    if (profile.summaryAlreadyShown && !(tx && type && loc)) {
       if (tx && type) {
         // Customer already specified type+tx in this message → ask location (Q2)
         return isId
@@ -3481,7 +3484,8 @@ class ConversationQualifier {
          * APARTMENT" — ringkasan tetap menulis "✓ Tipe: Rumah". Kartu yang
          * dikonfirmasi ("Tipe: Apartemen") adalah fakta katalog, kata pembuka
          * customer hanya niat awal. */
-        const picked = readConfirmedPick(history);
+        // M194 — pilihan hanya sah dari pencarian AKTIF (sesudah ganti kota/tx/tipe terakhir).
+        const picked = readConfirmedPick(history.slice(qualState.searchStartIdx || 0));
         if (picked && picked.typeKey) return { value: picked.typeKey, source: 'stated' };
         return {
           value : filters.buildingType || 'UNKNOWN',
@@ -3570,7 +3574,7 @@ class ConversationQualifier {
        * konfirmasi AI lewat readConfirmedPick() (utils/listingSelectionGate.js)
        * — sumber yang sama dengan gerbang pemilihan, bukan regex kedua. */
       selectedListing: (() => {
-        const picked = readConfirmedPick(history);
+        const picked = readConfirmedPick(history.slice(qualState.searchStartIdx || 0));
         return {
           value : picked ? picked.label : 'UNKNOWN',
           source: picked ? 'stated' : 'UNKNOWN',
@@ -5121,8 +5125,13 @@ class ChatbotPrivateService {
       // gerbang lanjutan di bawah (terima kasih singkat, tanpa summary kedua).
       const summarySentBefore = history.some((h) => /^(ai|assistant)$/i.test(String(h.role || '')) && /[✓✔]\s*(?:rencana|plan)\s*:/i.test(String(h.message || '')));
       const cardsSentBefore = history.some((h) => /^(ai|assistant)$/i.test(String(h.role || '')) && isCardMessage(String(h.message || '')));
+      /* M194 — penutup KERAS ("itu saja", "cukup", "tidak ada") menutup meski
+       * belum ada kartu terkirim (mis. sesi budget-kosong). Simulasi 14 Sep:
+       * "Itu saja Kak" tanpa kartu malah dibalas pertanyaan furnitur. Ucapan
+       * terima kasih saja tetap butuh konteks kartu seperti sebelumnya. */
+      const hardClose = customerSignalsClosing(userMessage) && !customerOnlyThanks(userMessage);
       if (!summarySentBefore && !changeTurn
-          && (/ada yang menarik, kak\?|anything catch your eye\?/i.test(lastAi) || cardsSentBefore)
+          && (hardClose || /ada yang menarik, kak\?|anything catch your eye\?/i.test(lastAi) || cardsSentBefore)
           && customerSignalsClosing(userMessage)) {
         const closingProfile = ConversationQualifier.buildProfile(history, userMessage, filters);
         /* M193 — "Ok, trma ksh infonya" BUKAN penutup bila masih ada pertanyaan
@@ -5184,14 +5193,80 @@ class ChatbotPrivateService {
         // patokan boleh jadi kandidat area pencarian; bila hanya menyebut patokan
         // ("patokannya dekat Pakuwon Mall"), jangan — itu bukan permintaan area baru.
         const isAnchorPhrase = /\b(patokan|dekat|deket|near|sekitar)\b/i.test(userMessage) && !customerAsksAvailability(userMessage);
-        const { city: availCity, area: availArea } = await resolveCityAndArea([
+        const resolved = await resolveCityAndArea([
           isAnchorPhrase ? '' : lmToken, isAnchorPhrase ? '' : filters?.landmark, qs.district, qs.city,
           isAnchorPhrase ? '' : qs.anchorPoint, filters?.location,
         ]);
+        const availCity = resolved.city;
+        let availArea = resolved.area;
+        /* ── M194 (14 Sep 2026) — PARITAS DENGAN JALUR LLM: sebutan pendek & TYPO
+         * area. whatsappAIService.js sudah lama memakai findAreaCandidatesInText()
+         * sebagai cadangan (M162); Private Agent tidak — sehingga "Kalau
+         * Mneganti?" tidak pernah menemukan Menganti dan alur malah bertanya
+         * budget. Ambigu (2+ area mirip) -> bertanya, tidak menebak. */
+        if (!availArea && availCity && !isAnchorPhrase) {
+          try {
+            const { findAreaCandidatesInText } = require('../services/areaAvailabilityService');
+            const am = await findAreaCandidatesInText({ userId: agentUserId, city: availCity, text: userMessage });
+            const echoOnly = am.candidates.length > 1 && am.candidates.every((a) => String(a).toLowerCase().includes(String(availCity).toLowerCase()));
+            if (am.area) {
+              availArea = am.area;
+              console.log(`[PrivateAgent] 📍 Area dari sebutan pendek/typo: "${userMessage}" -> ${am.area}${am.fuzzy ? ' (fuzzy)' : ''}`);
+            } else if (am.candidates.length > 1 && !echoOnly) {
+              const opts = am.candidates.slice(0, 4).map((a) => `*${a}*`).join(' atau ');
+              return this.#wrap(lang === 'id'
+                ? `Di ${availCity} saya ada ${Math.min(am.candidates.length, 4)} kawasan dengan nama mirip: ${opts}. Yang mana yang Kakak maksud? 📍`
+                : `I have ${Math.min(am.candidates.length, 4)} areas with similar names there: ${opts}. Which one did you mean? 📍`,
+              { skillInfo, filters, provider: 'area_disambiguation' });
+            }
+          } catch (fuzzErr) { console.warn('[PrivateAgent] area fuzzy match gagal (non-fatal):', fuzzErr.message); }
+        }
+        /* M194 — pesan tanpa area ("Saya minta 5 listing") MELANJUTKAN area yang
+         * kartunya sudah terkirim di pencarian ini. Tanpa ini permintaan tambahan
+         * jatuh ke skrip interview ("Ada target kapan proses belinya?"). */
+        const areaFromSentCards = (!availArea && availCity) ? lastSentAreaLabel(history.slice(qs.searchStartIdx || 0)) : '';
+        if (!availArea && areaFromSentCards && (customerAsksAvailability(userMessage) || detectRequestedCount(userMessage))) {
+          availArea = areaFromSentCards;
+        }
+        /* M194 — PERTANYAAN CAKUPAN ("area lain anda punya dimana?", "punya di mana
+         * saja?") tanpa area -> jawab dengan daftar area NYATA di kota itu. Sempat
+         * dibalas pertanyaan budget karena gerbang area butuh nama area. */
+        const COVERAGE_Q_RE = /\b(?:area|kawasan|daerah|listing\w*|kota)\s+(?:lain\w*\s+)?(?:anda|kamu|kakak|agent\w*)?\s*(?:punya|ada)\s+(?:di\s*)?(?:mana|dimana)|\bpunya\s+(?:di\s+)?(?:area|kawasan|daerah|kota)\s+(?:mana|apa)|\b(?:di\s*mana|dimana)\s+saja\b/i;
+        if (!availArea && availCity && COVERAGE_Q_RE.test(userMessage)) {
+          try {
+            const txRaw0 = qs.transactionType || filters?.transactionType || '';
+            const txDb0  = /rent|sewa/i.test(txRaw0) ? 'Rent' : (/sale|beli|jual/i.test(txRaw0) ? 'Sale' : undefined);
+            const typeRaw0 = qs.buildingType || filters?.buildingType || '';
+            const typeDb0  = typeRaw0 ? String(typeRaw0).charAt(0).toUpperCase() + String(typeRaw0).slice(1).toLowerCase() : undefined;
+            const cityId = await resolveCityId(availCity);
+            const areas = await listAlternativeAreas({ userId: agentUserId, cityId, buildingType: typeDb0, transactionType: txDb0 });
+            if (areas && areas.length) {
+              const lines = areas.slice(0, 6).map((a) => `• *${a.area}* — ${a.count} unit${humanPrice(a.minPrice) ? `, mulai ${humanPrice(a.minPrice)}` : ''}`);
+              const typeWord = typeRaw0 ? PropertyFormatter.humanBuildingType(typeRaw0, lang) : (lang === 'id' ? 'properti' : 'property');
+              console.log(`[PrivateAgent] 🗺️ Pertanyaan cakupan -> daftar area di ${availCity}`);
+              return this.#wrap(lang === 'id'
+                ? `Untuk *${typeWord}* di *${availCity}*, area yang saya pegang:\n${lines.join('\n')}\nMau saya carikan di salah satu area itu? 😊`
+                : `For *${typeWord}* in *${availCity}*, I cover these areas:\n${lines.join('\n')}\nShall I look in one of them? 😊`,
+              { skillInfo, filters, provider: 'coverage_answer' });
+            }
+          } catch (covErr) { console.warn('[PrivateAgent] coverage answer gagal (non-fatal):', covErr.message); }
+        }
         const txRaw = qs.transactionType || filters?.transactionType || '';
         const txDb  = /rent|sewa/i.test(txRaw) ? 'Rent' : (/sale|beli|jual/i.test(txRaw) ? 'Sale' : '');
         const typeRaw = qs.buildingType || filters?.buildingType || '';
         const typeDb  = typeRaw ? String(typeRaw).charAt(0).toUpperCase() + String(typeRaw).slice(1).toLowerCase() : '';
+        /* M194 — kartu TAMBAHAN mewarisi tipe kartu yang SUDAH terkirim di
+         * pencarian ini. Transkrip 14 Sep 2026: 2 apartemen sewa Jambangan
+         * terkirim, customer "minta 4 listing-nya", yang dikirim justru
+         * 1 RUMAH sewa — tipe melenceng (doc 03: type is strict). */
+        const sentTypeKey = (() => {
+          try {
+            const { parseShownListings: _psl } = require('../utils/listingSelectionGate');
+            const c = _psl(history.slice(qs.searchStartIdx || 0)).find((x) => x.typeKey);
+            return c ? c.typeKey : '';
+          } catch (_e) { return ''; }
+        })();
+        const typeDbEff = typeDb || (sentTypeKey ? sentTypeKey.charAt(0).toUpperCase() + sentTypeKey.slice(1) : '');
 
         /* ── M164: KOTA dicek SEBELUM area — mencegah Q2c bertanya area di
          * kota yang agent ini bahkan tidak punya. Transkrip nyata 29 Agu 2026:
@@ -5243,7 +5318,7 @@ class ChatbotPrivateService {
          * beli", "tanahnya kecil" — dan "semua N unit sudah dikirim" pada "Budget
          * 450 juta" / "Saya tinggal sama istri". */
         const { listSentCards } = require('../utils/listingSelectionGate');
-        const cardsShownBefore = listSentCards(history).count > 0;
+        const cardsShownBefore = listSentCards(history.slice(qs.searchStartIdx || 0)).count > 0;
         const areaChangedAvail = (() => {
           try {
             const prevArea = lastSentAreaLabel(history);
@@ -5257,17 +5332,45 @@ class ChatbotPrivateService {
         // M198b: "belum ada di *Sukolilo*" cukup sekali — jangan diulang tiap giliran
         // selama customer tidak minta lagi; dan tidak pernah pada kalimat penutup.
         const areaEmptyAlreadySaid = Boolean(availArea) && history.some((h) => /^(ai|assistant)$/i.test(String(h.role || ''))
-          && /belum ada di data saya|not in my data/i.test(String(h.message || '')) && String(h.message || '').toLowerCase().includes(String(availArea).toLowerCase()));
+          && /belum ada di data saya|not in my data|belum ada yang sesuai budget|within (?:that|your) budget/i.test(String(h.message || '')) && String(h.message || '').toLowerCase().includes(String(availArea).toLowerCase()));
         const gateMaySpeak = !customerSignalsClosing(userMessage) && (customerAsksAvailability(userMessage) || changeTurnAvail
           || (Boolean(txDb && typeDb && availArea) && !cardsShownBefore && !areaEmptyAlreadySaid));
+        /* ── M195 (14 Sep 2026) — EMPAT SLOT WAJIB SEBELUM LISTING (aturan pemilik
+         * proyek; doc 02 §1). Gerbang ini bisa menyala lewat customerAsksAvailability
+         * hanya dengan area + transaksi ("Sewa di Kenjeran, ada?") dan mengirim
+         * "2 *properti* sewa" campur tipe. Tanpa TIPE -> tanya dulu, sebut tipe
+         * yang benar-benar ada di kota itu. Kota/area/transaksi yang kosong sudah
+         * ditanya alur normal; tipe adalah satu-satunya yang lolos. */
+        if (availArea && txDb && gateMaySpeak && !typeDbEff) {
+          let typesLine = '';
+          try {
+            const { getAgentCoverage } = require('../services/agentCoverageService');
+            const cov = await getAgentCoverage(agentUserId);
+            const key = cov && cov.cities ? [...cov.cities.keys()].find((n) => n.toLowerCase().includes(String(availCity || '').toLowerCase())) : null;
+            const entry = key ? cov.cities.get(key) : null;
+            const TYPE_ID = { house: 'rumah', apartment: 'apartemen', villa: 'villa', hotel: 'hotel', boarding_house: 'kos', shophouse: 'ruko', office: 'kantor', warehouse: 'gudang', store: 'toko', mansion: 'mansion', kondotel: 'kondotel', land: 'tanah' };
+            const have = entry && entry.types
+              ? [...new Set([...entry.types.values()].filter((t) => !txDb || String(t.transactionType || '').toLowerCase() === txDb.toLowerCase()).map((t) => TYPE_ID[String(t.buildingType || '').toLowerCase()] || ''))].filter(Boolean)
+              : [];
+            if (have.length) typesLine = lang === 'id' ? ` Yang saya pegang di ${availCity}: *${have.join(', ')}*.` : ` Available there: *${have.join(', ')}*.`;
+          } catch (_e) { /* non-fatal */ }
+          const txWordId = txDb === 'Rent' ? 'sewa' : 'beli';
+          const areaNice = String(availArea).toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+          console.log('[PrivateAgent] 🧩 4 slot belum lengkap (tipe) -> tanya tipe dulu');
+          return this.#wrap(lang === 'id'
+            ? `Siap, ${txWordId} di *${areaNice}* ya, Kak 😊 Tipe propertinya apa — rumah, apartemen, atau lainnya?${typesLine}`
+            : `Sure, ${txDb === 'Rent' ? 'rent' : 'buy'} in *${areaNice}* 😊 Which property type — house, apartment, or other?${typesLine}`,
+          { skillInfo, filters, provider: 'ask_type_before_listing' });
+        }
         if (availArea && txDb && gateMaySpeak) {
           const hit = await tryAreaAvailabilityAnswer({
             userId: agentUserId, city: availCity, area: availArea,
-            buildingType: typeDb || undefined, transactionType: txDb,
-            typeLabel: typeRaw ? PropertyFormatter.humanBuildingType(typeRaw, lang) : 'properti',
+            buildingType: typeDbEff || undefined, transactionType: txDb,
+            typeLabel: (typeRaw || sentTypeKey) ? PropertyFormatter.humanBuildingType(typeRaw || sentTypeKey, lang) : 'properti',
             message: userMessage, isId: lang === 'id', persistedBudgetText: qs.budget || '',
             // M192: dedup listing lintas giliran; kirim ulang hanya saat area/kota/transaksi berganti.
-            history,
+            // M194: hanya kartu pencarian AKTIF yang dihitung "sudah terkirim".
+            history: history.slice(qs.searchStartIdx || 0),
             resetSent: Boolean(qs.cityChangedFromHistory || qs.txChangedFromHistory || qs.typeChangedFromHistory || areaChangedAvail),
           });
           if (hit) return this.#wrap(hit.reply, { skillInfo, filters, provider: 'area_availability_gate' });
@@ -5520,7 +5623,12 @@ class ChatbotPrivateService {
     const isId = lang === 'id';
     const text = String(message || '').trim();
     if (!text) return null;
-    const rows = Array.isArray(history) ? history : [];
+    /* M194 — sesudah customer memulai pencarian BARU (ganti kota/tx/tipe),
+     * pilihan & kartu pencarian LAMA tidak boleh jadi rujukan. Transkrip 14 Sep
+     * 2026: pencarian Gresik dijawab "Untuk Jambangan Apartment Rent Surabaya…"
+     * (unit pilihan dari pencarian Surabaya sebelum summary). */
+    const rowsAll = Array.isArray(history) ? history : [];
+    const rows = rowsAll.slice(Number(qs && qs.searchStartIdx) || 0);
     const SUMMARY_RE = /[✓✔]\s*(?:rencana|plan)\s*:/i;
     let sumIdx = -1;
     rows.forEach((h, i) => { if (/^(ai|assistant)$/i.test(String(h.role || '')) && SUMMARY_RE.test(String(h.message || ''))) sumIdx = i; });

@@ -305,6 +305,41 @@ async function main() {
     }
   }
 
+  /* 16 ── DUA PENCARIAN DALAM SATU SESI (transkrip 14 Sep 2026 10.01-13.10):
+   *       sewa apartemen Surabaya -> summary -> beli rumah Gresik. Tidak ada
+   *       data pencarian pertama yang boleh bocor ke pencarian kedua. */
+  {
+    const s = await runSim('16. Dua pencarian: Surabaya sewa apt -> summary -> Gresik beli rumah', [
+      'Mau sewa apartemen di Surabaya, Wiyung',
+      'Saya mau di Jambangan; Kak',
+      'Kak, saya minta 4 listing-nya',
+      'Itu saja Kak',
+      'Kak, saya mau beli rumah di gresik',
+      'Kalau area lain anda punya dimana?',
+      'Kalau Mneganti?',
+      'Saya minta 5 listing; Kak',
+    ], generate);
+    const r = s.replies;
+    ok('minta 4 listing saat hanya 2 apartemen: jujur, TIDAK mengirim rumah', !isCard(r[2].reply) && /2 unit|sudah/i.test(r[2].reply) && !/House Rent/i.test(r[2].reply), r[2].reply);
+    ok('"itu saja" -> summary pencarian 1', isSummary(r[3].reply));
+    ok('"beli rumah di gresik" -> TIDAK tanya kota lagi', !/di \*kota\* mana/i.test(r[4].reply), r[4].reply);
+    ok('"area lain anda punya dimana?" -> daftar area nyata Gresik, bukan "Jambangan"', /gresik/i.test(r[5].reply) && !/jambangan/i.test(r[5].reply) && /menganti|driyorejo|roomo/i.test(r[5].reply), r[5].reply);
+    ok('typo "Mneganti" -> kartu Menganti', isCard(r[6].reply) && /menganti/i.test(r[6].reply), r[6].reply);
+    ok('kartu Gresik dinomori dari 1 (bukan lanjut nomor kartu Surabaya)', /^\s*1\.\s+\*/m.test(r[6].reply), r[6].reply.slice(0, 80));
+    ok('"minta 5 listing" -> kartu tambahan Menganti (nomor lanjut), bukan pertanyaan interview', isCard(r[7].reply) && /^\s*3\.\s+\*/m.test(r[7].reply) && !/jambangan/i.test(r[7].reply), r[7].reply.slice(0, 120));
+  }
+
+  /* 17 ── EMPAT SLOT WAJIB: area + transaksi tanpa TIPE tidak boleh langsung listing */
+  {
+    const s = await runSim('17. Tanpa tipe -> tanya tipe dulu, baru listing', [
+      'Sewa di Kenjeran Surabaya, ada?',
+      'Rumah, Kak',
+    ], generate);
+    ok('area+transaksi tanpa tipe -> TANYA tipe (bukan kartu campur tipe)', !isCard(s.replies[0].reply) && /tipe|rumah|apartemen/i.test(s.replies[0].reply), s.replies[0].reply);
+    ok('menyebut tipe yang benar-benar dipegang agent di kota itu', /rumah, apartemen|apartemen, rumah/i.test(s.replies[0].reply), s.replies[0].reply);
+    ok('setelah tipe dijawab -> kartu tipe itu saja', isCard(s.replies[1].reply) && /House Rent/i.test(s.replies[1].reply) && !/Apartment/i.test(s.replies[1].reply), s.replies[1].reply.slice(0, 120));
+  }
+
   console.log(`\nRESULT: ${pass}/${pass + fail}`);
   process.exit(fail === 0 ? 0 : 1);
 }

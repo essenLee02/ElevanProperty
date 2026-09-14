@@ -1010,6 +1010,9 @@ function extractQualificationState(history = [], currentMessage = '') {
       type: runType, typeChangedNow: runTypeIdx === lastIdx,
       tx:   runTx,   txChangedNow:   runTxIdx   === lastIdx,
       loc:  runLoc,  locChangedNow:  runLocIdx  === lastIdx,
+      // M194: indeks pergantian TERAKHIR (dalam ACTIVE_ALL) + offset ke history asli —
+      // dipakai untuk membuang slot pencarian LAMA yang lolos lewat pergantian.
+      typeIdx: runTypeIdx, txIdx: runTxIdx, locIdx: runLocIdx, summaryStart,
     };
   }
 
@@ -1733,13 +1736,20 @@ function extractQualificationState(history = [], currentMessage = '') {
       const looksLikeMoneyOrDuration = /\b\d[\d.,]*\s*(juta|jt|ribu|rb|miliar|malam|hari|minggu|bulan|tahun)\b/i.test(candidateDistrict);
       const isRejection = /^(tidak|belum|ga|gak|ngga|tidak\s+ada|manapun|flexible|fleksibel)\b/i.test(candidateDistrict)
         || /^(mana\s*saja|di\s*mana\s*saja|terserah|bebas|apa\s*saja|semua\s*area|belum\s*tahu|blm\s*tau)\b/i.test(candidateDistrict);
+      /* M194 (14 Sep 2026) — PERTANYAAN CAKUPAN BUKAN NAMA AREA (dan bukan
+       * penolakan). "Kalau area lain anda punya dimana?" pernah tersimpan
+       * sebagai district "Kalau lain anda punya dimana" dan mengunci first-wins,
+       * sehingga "Kalau Menganti?" sesudahnya dibalas "Rumah dijual di *Lain
+       * Anda Punya* belum ada". Kalimat yang MENANYAKAN cakupan (lain/mana/
+       * punya/dimana/apa saja/tanda tanya) dilewati tanpa menandai Q2c selesai. */
+      const isCoverageQuestion = /\?|\b(lain|lainnya|mana|dimana|di\s*mana|punya|tersedia|apa\s+saja|selain)\b/i.test(candidateDistrict);
 
       // PENOLAKAN = JAWABAN (M84). Tandai Q2c sudah tuntas supaya tidak diulang.
       // District tetap null: tidak ada nilai sah untuk ditulis di baris "Area",
       // dan Q7 harus jatuh ke jangkar KOTA — bukan mengarang nama area.
       if (isRejection) state.q2cDeclined = true;
 
-      if (candidateDistrict && !isRejection && !looksLikeDate && !looksLikeMoneyOrDuration
+      if (candidateDistrict && !isRejection && !isCoverageQuestion && !looksLikeDate && !looksLikeMoneyOrDuration
           && candidateDistrict.length <= 60) {
         // Ambil NAMA AREA-nya saja, bukan kalimat mentah. Tanpa ini summary menulis
         // "Area: Saya mempertimbangkan area di Sidotopo" — terbaca seperti bot yang
@@ -2238,6 +2248,12 @@ function extractQualificationState(history = [], currentMessage = '') {
         // Tolak kata pengisi ("lain", "sekitar") dan nilai yang cuma nama kota.
         if (!cand || cand.length < 3) continue;
         if (/^(lain|lainnya|sekitar|sekitarnya|mana|manapun|tertentu|itu|ini)$/i.test(cand)) continue;
+        /* M194 — "area lain anda punya dimana?" -> hit "lain anda punya" lolos
+         * guard di atas karena bukan satu kata. Kandidat yang MENGANDUNG kata
+         * pengisi/tanya (lain, mana, punya, ada, apa, saja, dimana) atau berasal
+         * dari kalimat tanya bukan nama area — itu pertanyaan cakupan. */
+        if (/\b(lain|lainnya|mana|dimana|punya|ada|apa|saja|selain|tersedia|anda|kamu|kakak)\b/i.test(cand)) continue;
+        if (/\?/.test(txt) && !/\b(?:pilih|mau|ambil|tetap|ganti)\b/i.test(txt)) continue;
         if (_isJustTheCity(cand, state.city)) continue;
         if (_isAreaQualityWord(cand)) continue;   // M186: "kawasan asri" bukan area "Asri"
         state.district = cand;   // pesan terbaru menimpa yang lama
@@ -2575,6 +2591,52 @@ function extractQualificationState(history = [], currentMessage = '') {
       state.budget = recovered.preference
         || (recovered.text + budgetPeriodSuffix(recovered.period, recovered.periodCount));
     }
+  }
+
+  /* ⭐ M194 (14 Sep 2026) — SLOT PENCARIAN LAMA TIDAK BOLEH LOLOS LEWAT
+   * PERGANTIAN KOTA/TRANSAKSI/TIPE.
+   * Blok cityChanged/txChanged/typeChanged di atas me-reset district/budget
+   * HANYA pada giliran pergantiannya (…ChangedNow, sengaja — supaya jawaban
+   * baru sesudah re-ask tidak ikut terhapus). Tapi setiap giliran berikutnya
+   * state diturunkan ulang dari riwayat (first-wins), dan nilai pencarian
+   * LAMA masuk lagi. Transkrip produksi 14 Sep 2026: sesudah "beli rumah di
+   * Gresik", "Kalau area lain anda punya dimana?" dijawab "Rumah dijual di
+   * Jambangan belum ada" — Jambangan adalah area SURABAYA dari pencarian
+   * sebelumnya; summary Gresik lalu memuat Budget & Tipe pencarian lama.
+   * Aturan: slot lokasi hanya sah bila disebut customer SESUDAH pergantian
+   * kota; budget hanya sah bila disebut SESUDAH pergantian transaksi/tipe
+   * (doc 01: ganti transaksi/tipe -> budget ditanya ulang). */
+  if (typeof P0_RESOLVED !== 'undefined' && Array.isArray(ACTIVE_ALL)) {
+    const custAfter = (idx) => ACTIVE_ALL.slice(Math.max(0, idx))
+      .filter((m) => QS_CUST_ROLES.has(m.role)).map((m) => String(m.message || ''));
+    if (P0_RESOLVED.locIdx >= 0) {
+      const after = custAfter(P0_RESOLVED.locIdx).join('\n').toLowerCase();
+      for (const f of ['district', 'anchorPoint', 'alternativeAreas']) {
+        const v = state[f]; if (!v) continue;
+        const first = String(v).toLowerCase().split(/[,;(]/)[0].trim();
+        const key = (first.split(/\s+/)[0] || '').length >= 4 ? first.split(/\s+/)[0] : first;
+        if (key && !after.includes(key)) state[f] = null;
+      }
+    }
+    const budgetFlip = Math.max(P0_RESOLVED.txIdx, P0_RESOLVED.typeIdx);
+    if (budgetFlip >= 0 && state.budget) {
+      const stillStated = custAfter(budgetFlip).some((m) => { const b = detectBudget(m); return b && !b.ambiguous; });
+      if (!stillStated) { state.budget = null; state.budgetRangeAsked = false; }
+    }
+    // Batas pencarian aktif dalam indeks history ASLI (untuk pemanggil yang
+    // membaca pilihan/kartu terkirim dari riwayat, mis. Private Agent).
+    // Tiga kasus:
+    //  (a) pergantian di tengah sesi -> mulai dari giliran pergantian itu;
+    //  (b) sesudah summary customer memulai PENCARIAN BARU (menyebut tipe/
+    //      transaksi/kota lagi) -> mulai dari batas summary; kartu & pilihan
+    //      pencarian lama tidak ikut (transkrip 14 Sep: nomor kartu Gresik
+    //      lanjut dari kartu Surabaya, area Jambangan bocor);
+    //  (c) sesudah summary hanya bertanya soal unit yang sudah dikirim (tanpa
+    //      tipe/tx/kota baru) -> 0, seluruh riwayat tetap berlaku (M198).
+    const flipIdx = Math.max(P0_RESOLVED.locIdx, P0_RESOLVED.txIdx, P0_RESOLVED.typeIdx);
+    const sStart = P0_RESOLVED.summaryStart || 0;
+    const newSearchAfterSummary = sStart > 0 && Boolean(P0_RESOLVED.type || P0_RESOLVED.tx || P0_RESOLVED.loc);
+    state.searchStartIdx = flipIdx >= 0 ? sStart + flipIdx : (newSearchAfterSummary ? sStart : 0);
   }
 
   // Alias kompatibilitas — kode & tes lama masih membaca `location`.

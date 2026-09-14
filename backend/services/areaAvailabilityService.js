@@ -662,7 +662,26 @@ async function findAreaCandidatesInText({ userId, city, text }) {
         if (new RegExp(`\\b${tok}\\b`, 'i').test(t)) { scored.push({ a, tok }); break; }
       }
     }
-    if (!scored.length) return empty;
+    /* ── Lapis 3 — TYPO (M194, 14 Sep 2026): "Kalau Mneganti?" -> Menganti.
+     * Hanya bila lapis 1-2 kosong. Syarat ketat supaya tidak menebak: token
+     * pesan >= 5 huruf, bukan kata generik/umum, jarak Levenshtein <= 2 ke SATU
+     * token area (>= 5 huruf), dan hanya SATU area yang cocok. Ambigu -> tetap
+     * kosong; pemanggil bertanya. */
+    if (!scored.length) {
+      const STOP = new Set(['kalau', 'gimana', 'bagaimana', 'yang', 'saya', 'mau', 'minta', 'listing', 'rumah',
+        'apartemen', 'sewa', 'beli', 'area', 'daerah', 'kawasan', 'boleh', 'bisa', 'tolong', 'kakak', 'lain', 'saja']);
+      const msgToks = [...new Set(t.split(/[^a-z0-9]+/).filter((w) => w.length >= 5 && !STOP.has(w) && !GENERIC.has(w)))];
+      const fuzzy = new Set();
+      for (const a of areas) {
+        for (const tok of a.toLowerCase().split(/[^a-z0-9]+/)) {
+          if (tok.length < 5 || GENERIC.has(tok)) continue;
+          if (msgToks.some((w) => Math.abs(w.length - tok.length) <= 2 && levenshtein(w, tok) <= 2)) { fuzzy.add(a); break; }
+        }
+      }
+      if (fuzzy.size === 1) { const a = [...fuzzy][0]; return { area: a, candidates: [a], fuzzy: true }; }
+      if (fuzzy.size > 1) return { area: null, candidates: [...fuzzy].sort((a, b) => a.localeCompare(b)), fuzzy: true };
+      return empty;
+    }
 
     /* ⛔ JANGAN MENEBAK SAAT SEBUTAN PENDEK COCOK KE BEBERAPA AREA.
      * Versi pertama patch ini mengembalikan nama TERPENDEK ("Pakuwon" →

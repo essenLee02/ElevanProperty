@@ -37,6 +37,11 @@ const {
 
 /** Customer bertanya "ada / apakah ada / punya ga" — pertanyaan KETERSEDIAAN. */
 const AVAILABILITY_RE = new RegExp([
+  // M194: pertanyaan CAKUPAN — "area lain anda punya dimana?", "punya di area mana saja?",
+  // "listingnya di mana saja?" = minta daftar area/kota nyata, bukan nama area.
+  /\b(?:area|kawasan|daerah|listing\w*|kota)\s+(?:lain\w*\s+)?(?:anda|kamu|kakak|agent\w*)?\s*(?:punya|ada)\s+(?:di\s*)?(?:mana|dimana)/,
+  /\bpunya\s+(?:di\s+)?(?:area|kawasan|daerah|kota)\s+(?:mana|apa)(?:\s+saja)?\b/,
+  /\b(?:di\s*mana|dimana)\s+saja\b/,
   /\bapakah\s+ada\b/, /\bada\s+(?:nggak|ngga|ga|gak|tidak|gk)\b/, /\badakah\b/,
   /\bada\s+atau\s+(?:tidak|tdk|ga|nggak)\b/, /\bada\s+atau\s+tdk\b/,
   /\bpunya\s+(?:nggak|ga|gak|tidak)\b/, /\bmasih\s+ada\b/, /\btersedia\b/,

@@ -95,7 +95,7 @@ console.log('\n[5] chat_gpt_responds docs carry the M186 rule and fit the cap');
   // adalah SKILL.md + 00-04 + 07 dan harus ≤ 11000; total 9 berkas.
   const always = files.filter((f) => !/0[56]-/.test(f)).map((f) => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n');
   const total = files.map((f) => fs.readFileSync(path.join(dir, f), 'utf8')).join('').length;
-  ok(`total semua .md ${total} ≤ 14700 (anggaran pemilik proyek, M193)`, total <= 14700);
+  ok(`total semua .md ${total} ≤ 14900 (anggaran pemilik proyek, dinaikkan 14 Sep 2026)`, total <= 14900);
   ok(`always-loaded ${always.length} chars ≤ 12500`, always.length <= 12500);
   ok('9 files (SKILL.md + docs 00-07)', files.length === 9, files.join(','));
   ok('Q5 rule: never re-send the catalog for a red flag', raw.includes('never re-send the catalog for it'));

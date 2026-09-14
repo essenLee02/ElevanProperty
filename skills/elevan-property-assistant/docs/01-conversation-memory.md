@@ -1,5 +1,5 @@
 # 01 - Memory, language & customer conditions
-The conversation and facts block are your memory. Mid-flow change is GRANULAR, never a Q1 wipe (M124):
+The conversation and facts block are your memory. Mid-flow change is GRANULAR, never a Q1 wipe:
 
 | Axis | Re-ask | Survives |
 |---|---|---|

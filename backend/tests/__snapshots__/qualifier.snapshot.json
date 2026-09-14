@@ -268,8 +268,8 @@
       "summaryAlreadyShown": true,
       "transactionType": "rent"
     },
-    "nextQuestion_summary": "Baik! 😊 Untuk pencarian *sewa Rumah* yang baru — di *kota* mana yang Anda pertimbangkan? 📍 _(Contoh: Surabaya, Malang, Bali)_",
-    "nextQuestion_catalog": "Baik! 😊 Untuk pencarian *sewa Rumah* yang baru — di *kota* mana yang Anda pertimbangkan? 📍 _(Contoh: Surabaya, Malang, Bali)_"
+    "nextQuestion_summary": "Di area atau kawasan mana di *Malang* yang Anda pertimbangkan? 📍\nMisalnya Soekarno Hatta, Ijen, Dinoyo, Lowokwaru, atau area lainnya?",
+    "nextQuestion_catalog": "Di area atau kawasan mana di *Malang* yang Anda pertimbangkan? 📍\nMisalnya Soekarno Hatta, Ijen, Dinoyo, Lowokwaru, atau area lainnya?"
   },
   "lazy multi-slot single line": {
     "profile": {
