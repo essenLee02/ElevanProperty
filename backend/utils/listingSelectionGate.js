@@ -132,6 +132,21 @@ const PRICE_LINE_FALLBACK_RE = /(?:💰|💸)\s*\*{0,2}((?:Rp\s?)?[\d.,]+\s*(?:j
 const ADDRESS_LINE_FALLBACK_RE = /(?:🏡|📍)?\s*\*{0,2}((?:Jl|Jalan)\.?\s[^\n*]{3,80})/i;
 const AREA_LINE_RE = /(?:🗺️\s*)?\bArea\s*:\s*([^\n]+)/i;
 const ADDRESS_LINE_RE = /(?:🏡\s*)?(?:Alamat|Address)\s*:\s*([^\n]+)/i;
+/* M193 — TIPE unit dari baris kartu "🏠 Tipe: Apartemen — Disewakan". Ringkasan
+ * harus mengikuti tipe unit yang DIPILIH, bukan kata pertama customer di awal
+ * sesi (transkrip 14 Sep 2026: "✓ Tipe: Rumah" padahal yang dipilih apartemen). */
+const TYPE_LINE_RE = /(?:🏠\s*)?\b(?:Tipe|Type)\s*:\s*\*{0,2}([^\n*—-]+)/i;
+const TYPE_LABEL_TO_KEY = {
+  rumah: 'house', house: 'house', apartemen: 'apartment', apartment: 'apartment', villa: 'villa', vila: 'villa',
+  kos: 'boarding_house', kost: 'boarding_house', 'kos-kosan': 'boarding_house', 'boarding house': 'boarding_house',
+  ruko: 'shophouse', rukan: 'shophouse', shophouse: 'shophouse', kantor: 'office', office: 'office',
+  gudang: 'warehouse', warehouse: 'warehouse', toko: 'store', store: 'store', hotel: 'hotel',
+  kondotel: 'kondotel', condotel: 'kondotel', mansion: 'mansion', tanah: 'land', kavling: 'land', land: 'land',
+};
+function typeLabelToKey(label) {
+  const l = String(label || '').trim().toLowerCase();
+  return TYPE_LABEL_TO_KEY[l] || null;
+}
 
 /** Sebuah pesan AI adalah "pesan kartu" bila diawali `N. *Judul*`. */
 function isCardMessage(text) {
@@ -161,6 +176,8 @@ function parseCardsFromText(text) {
       priceValue: prices.length ? prices[0] : null,
       area: ((chunk.match(AREA_LINE_RE) || [])[1] || '').trim(),
       address: addressRaw,
+      typeLabel: ((chunk.match(TYPE_LINE_RE) || [])[1] || '').trim(),
+      typeKey: typeLabelToKey(((chunk.match(TYPE_LINE_RE) || [])[1] || '').trim()),
     };
   }).filter((c) => Number.isFinite(c.index) && c.title);
 }
@@ -456,11 +473,11 @@ const ATTR_RE = {
   land: /\b(luas\s*tanah|tanahnya|lt\b|luas\s*lahan)\b/i,
   building: /\b(luas\s*bangunan|bangunannya|lb\b)\b/i,
   area_any: /\b(luas(?:nya)?\s*(?:berapa|\?)|berapa\s+luas|luas\s+(?:tanah|bangunan|rumah|unit)|ukuran|berapa\s*meter|m2|m²)\b/i,
-  rooms: /\b(kamar|kt\b|km\b|kamar\s*mandi|bedroom|bathroom)\b/i,
+  rooms: /\b(kamar\w*|kt\b|km\b|bedroom\w*|bathroom\w*)\b/i,   // M193: kamarnya/kamarny/kamar-kamar
   address: /\b(alamat\w*|lokasinya\s+di\s+mana|di\s+mana\s+(?:persis|tepat)nya|share\s*lok\w*|maps)\b/i,
   price: /\b(harga\w*|berapa\s*duit|hrg\w*|berapa\s*(?:per|se)\s*(?:bulan|tahun|hari|malam)|per\s*bulan|sebulan|per\s*tahun|setahun|sewanya\s*berapa)\b/i,
   availability: /\b(masih\s+(?:ada|tersedia|available|kosong)|sudah\s+(?:laku|terjual|tersewa|dibooking|di-?booking)|belum\s+laku)\b/i,
-  facilities: /\b(fasilitas|ada\s+(?:ac|gym|kolam|lift|carport|garasi)|furnished|furnitur|perabot)\b/i,
+  facilities: /\b(fasilitas|ada\s+(?:ac|gym|kolam|lift|carport|garasi|taman|garden|cctv|security|satpam|parkir|parking|wifi|water\s*heater|kitchen|musholla|laundry|kids|playground|jogging|minimarket)|furnished|furnitur|perabot)\b/i,
   unknown: /\b(banjir|panas|bising|berisik|ipl|lantai\s*berapa|tower|jam\s*malam|pasangan|suami\s*istri|pemilik|owner|nego|diskon|dekat\s+sekolah|sekolah|tetangga|lingkungan|air|listrik\s*berapa|watt|hadap|renovasi|direnovasi|tahun\s+dibangun|usia\s+bangunan|umur\s+bangunan|pbb|lunas|tunggakan|patokan\w*|dekat\s+apa|imb|pbg|denah|floor\s*plan|legalitas|dokumen\w*|berkas|surat[-\s]surat)\b/i,
 };
 // M198b: "Yang tidak dekat jalan raya ya, berisik" adalah PERNYATAAN (red flag), bukan
@@ -534,7 +551,33 @@ async function answerCardAttribute({ message, card, userId = null, isId = true }
     const f = row && row.facilities ? (Array.isArray(row.facilities) ? row.facilities.join(', ') : String(row.facilities)) : '';
     const furn = row && row.furnishedStatus ? String(row.furnishedStatus) : '';
     const v = [f, furn].filter(Boolean).join(' · ');
-    parts.push(v ? (isId ? `fasilitasnya: *${v}*` : `facilities: *${v}*`) : (isId ? `fasilitasnya ${unknownLine}` : `facilities ${unknownLine}`));
+    /* M193 (14 Sep 2026) — BANDINGKAN KEBUTUHAN DENGAN DATA NYATA, jangan cuma
+     * menyalin daftar. Transkrip: "saya ingin fasilitas kids zone, gym dan
+     * kolam renang; apakah bisa dibantu?" dibalas daftar fasilitas mentah —
+     * pertanyaannya sendiri tidak terjawab. Sekarang tiap fasilitas yang
+     * diminta dicek satu per satu: ada / belum tercatat. */
+    const FAC = {
+      'kolam renang': /\b(kolam\s*renang|swimming|pool)\b/i, 'gym': /\b(gym|fitness)\b/i,
+      'kids zone': /\b(kids?\s*zone|playground|taman\s*bermain|area\s*(?:bermain\s*)?anak)\b/i,
+      'AC': /\bac\b/i, 'lift': /\b(lift|elevator)\b/i, 'carport/garasi': /\b(carport|garasi|garage)\b/i,
+      'CCTV': /\bcctv\b/i, 'security': /\b(security|satpam|keamanan\s*24)\b/i, 'parkir': /\b(parkir|parking)\b/i,
+      'wifi': /\b(wi-?fi|internet)\b/i, 'water heater': /\b(water\s*heater|pemanas\s*air)\b/i,
+      'kitchen set': /\bkitchen\s*set\b/i, 'taman': /\b(taman|garden)\b/i, 'musholla': /\b(musholla|mushola|masjid)\b/i,
+      'laundry': /\blaundry\b/i, 'jogging track': /\bjogging\b/i, 'minimarket': /\b(minimarket|indomaret|alfamart)\b/i,
+    };
+    const asked = Object.keys(FAC).filter((k) => FAC[k].test(t));
+    if (asked.length && f) {
+      const has = asked.filter((k) => FAC[k].test(f));
+      const missing = asked.filter((k) => !FAC[k].test(f));
+      const seg = [];
+      if (has.length) seg.push(isId ? `${has.join(', ')} *ada*` : `${has.join(', ')} *available*`);
+      if (missing.length) seg.push(isId
+        ? `${missing.join(', ')} *belum tercatat di unit ini* — saya catat sebagai kebutuhan Kakak, nanti dikonfirmasi agent kami`
+        : `${missing.join(', ')} *not recorded for this unit* — noted as your requirement, our agent will confirm`);
+      parts.push(`${seg.join('; ')}${isId ? '. Fasilitas tercatat' : '. Listed facilities'}: *${v}*`);
+    } else {
+      parts.push(v ? (isId ? `fasilitasnya: *${v}*` : `facilities: *${v}*`) : (isId ? `fasilitasnya ${unknownLine}` : `facilities ${unknownLine}`));
+    }
   }
   if (/nego|diskon/i.test(t)) {
     parts.push(isId ? 'soal nego saya tidak bisa menjanjikan angkanya — nanti dibantu langsung oleh agent kami; kalau Kakak punya angka yang diharapkan, saya catat' : 'I cannot promise a negotiated figure — our agent will handle that; tell me your target and I will note it');
@@ -553,10 +596,29 @@ async function answerCardAttribute({ message, card, userId = null, isId = true }
   return { reply: body, verdict: 'attribute-answer', card };
 }
 
+/* M193 (14 Sep 2026) — "Masih tersedia?", "Ada carport?", "Ada taman?" setelah
+ * kartu terkirim adalah pertanyaan tentang UNIT yang sudah ada, BUKAN permintaan
+ * listing baru. Simulasi 12 pesan: "Masih tersedia?" membuat gerbang area
+ * mengirim 2 kartu TAMBAHAN. Bare = tanpa lokasi/tipe/jumlah/"lagi". */
+function isBareAvailabilityQuestion(text) {
+  const t = String(text || '').trim();
+  if (!t || t.length > 60) return false;
+  if (/\b(di|daerah|area|kawasan|kota)\s+[A-Za-z]/i.test(t)) return false;
+  if (/\b(rumah|apartemen|apartment|villa|kos|kost|ruko|kantor|gudang|tanah|unit\s+lain)\b/i.test(t)) return false;
+  if (/\d/.test(t) && !/\b(no|nomor|nomer)\.?\s*\d/i.test(t)) return false;
+  if (/\b(lagi|lain|tambah\w*|opsi|pilihan\s+lain|lebih\s+banyak|more|listing)\b/i.test(t)) return false;
+  return /\b(masih\s+(?:ada|tersedia)|tersedia|available|ada)\b/i.test(t);
+}
+
 function tryListingSelectionAnswer({ message, history = [], isId = true }) {
   try {
     const shown = parseShownListings(history);
     if (!shown.length) return null;
+    /* M193 — "Yang no 2 kamarnya berapa?" pernah tercatat sebagai PILIHAN
+     * ("Dicatat pilihannya"). Akarnya bukan alur ini: ATTR_RE.rooms memakai
+     * \bkamar\b sehingga "kamarnya" tidak terbaca pertanyaan atribut, dan
+     * jalur `attributeQuestion` di bawah (M199) tidak pernah aktif. Regex-nya
+     * sudah diperbaiki (kamar\w*); alur M199 yang menangani sisanya. */
 
     /* M199 — "Yang tadi di MERR nomor 2" / "MERR nomor 2 saja yang saya ambil":
      * bila customer menyebut AREA dari blok lama, nomor dihitung di blok area itu —
@@ -664,7 +726,13 @@ function tryPendingViewingConfirmation({ message, history = [], isId = true }) {
     const direct = scheduleViewingFromText(text, isId);
     if (direct) return direct;
 
-    const { customerRequestsViewing } = require('./customerQuestionGuard');
+    const { customerRequestsViewing, customerOnlyThanks } = require('./customerQuestionGuard');
+    /* M193 — "Ok, Kak. Trma ksh infonya" sesudah "Mau saya jadwalkan survei?"
+     * adalah UCAPAN TERIMA KASIH, bukan "ya, jadwalkan". "ok" memang cocok
+     * VIEWING_AFFIRM_RE, tapi kalimatnya ditutup terima kasih tanpa kata
+     * survei -> bukan persetujuan. Biarkan gerbang penutup/Q8 yang menangani
+     * (transkrip 14 Sep 2026: yang benar AI lanjut bertanya tanggal masuk). */
+    if (customerOnlyThanks(text) && !customerRequestsViewing(text)) return null;
     if (VIEWING_AFFIRM_RE.test(text) || customerRequestsViewing(text)) {
       /* ⭐ M189e — SATU PERTANYAAN, PENDEK. Versi lama mengulang judul unit +
        * harga LALU menanyakan DUA hal sekaligus ("tanggal berapa dan jam
@@ -1130,7 +1198,20 @@ function readConfirmedPick(history = []) {
         const title = String(m[1] || '').trim();
         const priceText = (m[2] || m[3]) ? String(m[2] || m[3]).trim() : '';
         if (!title) continue;
-        return { title, priceText, label: priceText ? `${title} (${priceText})` : title };
+        // Cari kartunya di blok katalog terakhir supaya tipe/area unit ikut
+        // terbawa (judul + harga bila ada, karena judul bisa kembar).
+        let card = null;
+        try {
+          const shown = parseShownListings(rows.slice(0, i));
+          const nt = normTitle(title);
+          const cands = shown.filter((c) => normTitle(c.title) === nt);
+          card = (priceText && cands.find((c) => String(c.priceText).trim() === priceText)) || cands[0] || null;
+        } catch (_e) { card = null; }
+        return {
+          title, priceText, label: priceText ? `${title} (${priceText})` : title,
+          typeKey: card ? card.typeKey : null, typeLabel: card ? card.typeLabel : '',
+          area: card ? card.area : '', address: card ? card.address : '',
+        };
       }
     }
     return null;
@@ -1155,6 +1236,7 @@ module.exports = {
   tryRecallPreviousPick,
   answerCardAttribute,
   isAttributeQuestion,
+  isBareAvailabilityQuestion,
   listSentCards,
   isRowAlreadySent,
   lastAiMessage,

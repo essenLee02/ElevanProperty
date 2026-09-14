@@ -292,6 +292,21 @@ async function tryCityAvailabilityAnswer({
   try {
     const chk = await checkCityAvailability({ userId, city, buildingType, transactionType });
     if (!chk.ok || chk.available) return null;   // kota ADA, atau cek gagal → lanjut normal
+    /* M193 — kota ada, TIPE tidak ("kos di Surabaya" padahal agent nol kos):
+     * jujur + sebut tipe yang benar-benar dipegang di kota itu (doc 03). */
+    if (chk.typeMissing) {
+      // Label ringkas per tipe (tanpa me-require controller — hindari siklus require).
+      const TYPE_ID = { house: 'Rumah', apartment: 'Apartemen', villa: 'Villa', hotel: 'Hotel', boarding_house: 'Kos-Kosan', shophouse: 'Ruko', office: 'Kantor', warehouse: 'Gudang', store: 'Toko', mansion: 'Mansion', kondotel: 'Kondotel', land: 'Tanah' };
+      const TYPE_EN = { house: 'House', apartment: 'Apartment', villa: 'Villa', hotel: 'Hotel', boarding_house: 'Boarding House', shophouse: 'Shophouse', office: 'Office', warehouse: 'Warehouse', store: 'Store', mansion: 'Mansion', kondotel: 'Condotel', land: 'Land' };
+      const humanType = (k) => (isId ? TYPE_ID : TYPE_EN)[String(k || '').toLowerCase()] || String(k || '');
+      const have = (chk.availableTypes || []).slice(0, 3).map((t) => humanType(t.buildingType)).filter(Boolean);
+      return {
+        verdict: 'type-empty',
+        reply: isId
+          ? `Mohon maaf, Kak 🙏 Untuk *${typeLabel}* di *${chk.city || city}* belum ada di data saya.${have.length ? ` Yang saya pegang di ${chk.city || city}: *${have.join(', ')}*. Mau saya carikan dari itu?` : ''}`
+          : `Sorry 🙏 I have no *${typeLabel}* listings in *${chk.city || city}* yet.${have.length ? ` What I do have there: *${have.join(', ')}*. Shall I look at those?` : ''}`,
+      };
+    }
     return composeCityEmptyReply({
       city, typeLabel, transactionType, isId, alternativeCities: chk.alternativeCities,
     });
@@ -373,7 +388,20 @@ async function tryAreaAvailabilityAnswer({
         minPrice: hasBudget ? budget.min : null,
         maxPrice: hasBudget ? budget.max : null,
       });
-      const rows = rowsAll.filter((r) => !isRowAlreadySent(typeof r.toJSON === 'function' ? r.toJSON() : r, sent)).slice(0, limit);
+      /* M193 (14 Sep 2026) — UTAMAKAN ALAMAT YANG BERBEDA dalam satu kiriman.
+       * Data agent punya alamat kembar (Candramas No. 89 dipakai 4 listing
+       * berbeda): dua kartu berjudul & beralamat sama persis, beda harga saja,
+       * terbaca customer sebagai kiriman ganda. Baris beralamat sama hanya
+       * dipakai bila kartu beralamat unik sudah habis. */
+      const fresh = rowsAll.filter((r) => !isRowAlreadySent(typeof r.toJSON === 'function' ? r.toJSON() : r, sent));
+      const seenAddr = new Set([...(sent.addresses || [])].map((a) => String(a).toLowerCase()));
+      const distinct = []; const dupes = [];
+      for (const r of fresh) {
+        const j = typeof r.toJSON === 'function' ? r.toJSON() : r;
+        const key = String(j.address || '').toLowerCase().replace(/\s+/g, ' ').trim();
+        if (key && seenAddr.has(key)) dupes.push(r); else { if (key) seenAddr.add(key); distinct.push(r); }
+      }
+      const rows = [...distinct, ...dupes].slice(0, limit);
 
       if (!rows.length && rowsAll.length && sent.count && !asksListings) return null;   // M198
       if (!rows.length && rowsAll.length && sent.count) {

@@ -264,13 +264,28 @@ function buildAnswerFirstDirective(message, nextQuestion = null) {
  * survei/KPR). Penutup = terima kasih / cukup / itu saja / sekian / "tidak ada"
  * (setelah "ada yang menarik?"). Penolakan ("nggak cocok") juga bukan penutup —
  * doc 02 §7: probe sekali, rutekan. */
-const CLOSING_SIGNAL_RE = new RegExp(
+/* M193 (14 Sep 2026) — dua kelas penutup, jangan disamakan:
+ *   HARD  : "cukup", "itu saja", "tidak ada", "sekian"  -> customer menutup.
+ *   THANKS: "ok trma ksh infonya", "makasih"             -> rasa terima kasih.
+ * Transkrip produksi yang DIPUJI pemilik proyek: setelah "Ok, Kak. Trma ksh
+ * infonya" (sewa, Q8 belum ditanya, baru ~6 percakapan) AI lanjut bertanya
+ * "Rencananya masuk bulan apa?" — itu benar. Aturan: ucapan terima kasih saja
+ * tidak mengakhiri sesi bila masih ada pertanyaan WAJIB (Q8 untuk sewa) dan
+ * belum menyentuh 10 percakapan; penutup HARD selalu mengakhiri. */
+const THANKS_RE = /\b(?:terima\s*kasih|trma\s*(?:kasih|ksh)|makasi[h]?|mksh|mksih|thanks?|thx|tq|thank\s*you)\b/i;
+const HARD_STOP_RE = new RegExp(
   '\\b(?:tidak|nggak|ga+k?|blm|belum)\\s+(?:ada|tertarik|minat)\\b'
-  + '|\\b(?:terima\\s*kasih|trma\\s*kasih|makasih|mksh|thanks?|thank\\s*you)\\b'
   + '|\\bcukup\\b(?!\\s+(?:luas|besar|banyak|kamar|dekat))'
   + '|\\b(?:itu|segitu)\\s+(?:saja|aja|dulu|dlu)\\b|\\bsekian\\b',
   'i'
 );
+const CLOSING_SIGNAL_RE = new RegExp(`${HARD_STOP_RE.source}|${THANKS_RE.source}`, 'i');
+/** Hanya ucapan terima kasih, TANPA penutup keras — boleh dilanjutkan dengan pertanyaan wajib. */
+function customerOnlyThanks(message) {
+  const text = String(message || '').trim();
+  if (!text || text.length > 60 || /\d/.test(text)) return false;
+  return THANKS_RE.test(text) && !HARD_STOP_RE.test(text);
+}
 /** Customer masih menjelajah ("tanya-tanya dulu", "lihat-lihat dulu") — lanjutkan tanpa dorongan survei/KPR. */
 const BROWSING_RE = /\b(?:tanya[-\s]?tanya|liat[-\s]?liat|lihat[-\s]?lihat|pikir[-\s]?pikir|mikir[-\s]?mikir|mikir)\s*(?:dulu|dlu|aja|saja)?\b|\b(?:tanya|liat|lihat|pikir|mikir)["'\s-]{0,3}(?:dulu|dlu)\b|\bbelum\s+tentu\b|\bmasih\s+(?:mikir|pikir|bimbang|ragu)\b/i;
 function customerIsBrowsing(message) { return BROWSING_RE.test(String(message || '')); }
@@ -310,4 +325,5 @@ module.exports = {
   CLOSING_SIGNAL_RE,
   customerIsBrowsing,
   customerSignalsClosing,
+  customerOnlyThanks,
 };

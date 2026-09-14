@@ -72,8 +72,8 @@ const { HTTP } = require('../config/httpStatus');
 // (locationLandmarks.js) yang bisa sama sekali tidak sesuai katalog nyata.
 const { tryCityAvailabilityAnswer, tryAreaAvailabilityAnswer, customerAsksAvailability, detectRequestedCount } = require('../utils/areaAvailabilityGate');
 const { tryListingSelectionAnswer, tryPendingViewingConfirmation, tryPendingViewingSchedule, tryPostPickFallback, readConfirmedPick, lastAiMessage, isCardMessage, tryRecallPreviousPick, listSentCards: listSentCardsAll, lastSentAreaLabel } = require('../utils/listingSelectionGate');
-const { customerSignalsClosing, customerRequestsViewing, customerDeclinesViewing, customerIsBrowsing } = require('../utils/customerQuestionGuard');
-const { resolveCityAndArea } = require('../services/areaAvailabilityService');
+const { customerSignalsClosing, customerRequestsViewing, customerDeclinesViewing, customerIsBrowsing, customerOnlyThanks } = require('../utils/customerQuestionGuard');
+const { resolveCityAndArea, resolveCityId, listAlternativeAreas } = require('../services/areaAvailabilityService');
 const { getAgentCoverage, getAgentAreaNames } = require('../services/agentCoverageService');
 
 /**
@@ -1138,6 +1138,12 @@ class ResponseBuilderWhatsApp {
                                     : (isId ? 'Durasi sewa'    : 'Lease duration');
     const durL = fmt(durLabel, brief.leaseDuration);
     if (durL) lines.push(durL);
+    // M193 — Q4 (penghuni) DITANYA dan DIJAWAB tapi tidak pernah dirender di
+    // sini (jalur LLM sudah punya barisnya). Tanpa ini jawaban "bersama
+    // keluarga" hilang dari ringkasan — atau, lebih buruk, nyasar ke baris
+    // "Keputusan bersama" (lihat #extractDecisionMaker).
+    const hhL  = fmt(isId ? 'Penghuni' : 'Occupants', brief.household);
+    if (hhL) lines.push(hhL);
     const dmL  = fmt(isId ? 'Keputusan bersama' : 'Decision maker', brief.decisionMaker);
     if (dmL) lines.push(dmL);
     const furL = fmt(isId ? 'Furnitur' : 'Furnishing', brief.furnishing);
@@ -1614,20 +1620,24 @@ class ConversationQualifier {
          * masuk ke slot tanggal survei — persis kontaminasi antar-slot yang
          * mau dicegah di sini. */
         if (!scoped) {
+          /* M193 — PASANGKAN tiap pesan AI yang menyinggung survei/viewing dengan
+           * JAWABAN LANGSUNGNYA saja, bukan "semua pesan sesudah kata survei
+           * pertama". Simulasi: tawaran "Mau saya jadwalkan survei ke unit ini?"
+           * membuka jendela itu, lalu "Rencana bln 2 dpn" — jawaban atas
+           * pertanyaan MASUK dua giliran kemudian — ikut terparsing jadi tanggal
+           * SURVEI. Dengan pemasangan langsung: jawaban tawaran itu "Ok trma ksh"
+           * (tanpa tanggal) -> tidak ada; "besok bisa" tepat sesudah "jadwalkan
+           * viewing?" -> tanggal survei (tes karakterisasi). */
           const AI_VIEWING_Q_RE = /\b(survei|survey|viewing|kunjungan)\b/i;
-          let firstIdx = -1;
+          const answers = [];
           for (let i = 0; i < activeHistory.length; i++) {
             const r = activeHistory[i];
-            if (r && (r.role === 'ai' || r.role === 'assistant')
-                && AI_VIEWING_Q_RE.test(String(r.message || ''))) { firstIdx = i; break; }
+            if (!(r && (r.role === 'ai' || r.role === 'assistant') && AI_VIEWING_Q_RE.test(String(r.message || '')))) continue;
+            const next = activeHistory[i + 1];
+            if (next && (next.role === 'user' || next.role === 'customer')) answers.push(String(next.message || ''));
+            else if (i === activeHistory.length - 1) answers.push(String(userMessage || ''));
           }
-          if (firstIdx >= 0) {
-            const after = activeHistory.slice(firstIdx + 1)
-              .filter(r => r && (r.role === 'user' || r.role === 'customer'))
-              .map(r => String(r.message || ''));
-            after.push(String(userMessage || ''));
-            scoped = after.join('. ').trim();
-          }
+          if (answers.length) scoped = answers.join('. ').trim();
         }
 
         if (!scoped) return undefined;
@@ -1666,7 +1676,20 @@ class ConversationQualifier {
       // AI pernah menyinggung masuk/check-in → berarti pertanyaannya memang
       // pernah diajukan. "Enaknya survei tanggal berapa?" sengaja TIDAK cocok.
       const aiAskedMoveInLoose = /\b(check[\s-]?in|checkin|masuk|pindah|menempati|tempati|huni)\b/i.test(String(aiText || ''));
-      const hasDate = (t) => MONTH_ID_WB.test(t) || MONTH_EN_WB.test(t) || OTHER_DATE.test(t);
+      /* M193 — deteksi tanggal lewat PARSER RESMI, bukan daftar regex sendiri.
+       * Daftar lama tidak kenal "bln 2 dpn" / "2 bulan lagi" / "akhir tahun"
+       * dan tidak membuka singkatan, sehingga jawaban Q8 yang DITANYA dan
+       * DIJAWAB ("Rencana bln 2 dpn") hilang dari ringkasan (transkrip 14 Sep
+       * 2026). parseCustomerDate + expandAbbreviations sudah menangani semua
+       * bentuk itu; daftar keyword ringan tetap dipakai sebagai pelengkap untuk
+       * jawaban tanpa tanggal ("segera", "sudah mau"). */
+      const hasDate = (t) => {
+        if (MONTH_ID_WB.test(t) || MONTH_EN_WB.test(t) || OTHER_DATE.test(t)) return true;
+        try {
+          const parsed = parseCustomerDate(expandAbbreviations(t), new Date());
+          return Boolean(parsed && (parsed.status === 'ok' || parsed.status === 'ask_current_month' || parsed.status === 'ask_soon'));
+        } catch (_e) { return false; }
+      };
 
       const eligible = String(custText)
         .split(/[.!?\n;]+/).map((s) => s.trim()).filter(Boolean)
@@ -1703,7 +1726,13 @@ class ConversationQualifier {
       return '';
     })();
 
+    // M193 — pertanyaan AI TERAKHIR menentukan slot mana yang dijawab customer:
+    // "tinggal bersama siapa?" (Q4) vs "langsung bisa jadwalkan atau perlu
+    // koordinasi?" (Q9). Jawaban "bersama keluarga" milik yang terakhir ditanya.
+    const lastAiAskedDecision = /\b(koordinasi|keluarga lain|langsung bisa jadwalkan|coordinate|decide together|joint decision)\b/i.test(lastAiMsgForViewing);
+
     const profile = {
+      lastAiAskedDecision,
       /* ── Core filters (from propertyRecommendationService) ── */
       transactionType : recoveredTx,
       buildingType    : recoveredType,
@@ -3446,11 +3475,20 @@ class ConversationQualifier {
         value : filters.transactionType || 'UNKNOWN',
         source: wasStated(custText, ['sewa', 'beli', 'rent', 'buy', 'jual']) ? 'stated' : 'inferred',
       },
-      buildingType: {
-        value : filters.buildingType || 'UNKNOWN',
-        source: wasStated(custText, ['rumah', 'apartemen', 'apartment', 'villa', 'kos', 'ruko', 'gudang', 'kantor', 'hotel'])
-          ? 'stated' : 'inferred',
-      },
+      buildingType: (() => {
+        /* M193 — unit yang DIPILIH menentukan tipe. Transkrip 14 Sep 2026:
+         * customer membuka dengan "rumah", lalu memilih kartu "Jambangan
+         * APARTMENT" — ringkasan tetap menulis "✓ Tipe: Rumah". Kartu yang
+         * dikonfirmasi ("Tipe: Apartemen") adalah fakta katalog, kata pembuka
+         * customer hanya niat awal. */
+        const picked = readConfirmedPick(history);
+        if (picked && picked.typeKey) return { value: picked.typeKey, source: 'stated' };
+        return {
+          value : filters.buildingType || 'UNKNOWN',
+          source: wasStated(custText, ['rumah', 'apartemen', 'apartment', 'villa', 'kos', 'ruko', 'gudang', 'kantor', 'hotel'])
+            ? 'stated' : 'inferred',
+        };
+      })(),
       location: {
         value : filters.location || 'UNKNOWN',
         source: 'stated', // location always stated
@@ -3723,6 +3761,16 @@ class ConversationQualifier {
   /* ─── Private: brief field extractors ──────────────────────────────────── */
 
   static #extractMoveInDate(custText) {
+    /* M193 — PARSER RESMI DULU. Fungsi ini kembaran ketiga dari
+     * parseCustomerDate (setelah viewingDayRef M189f dan moveInScoped M193):
+     * tidak kenal "2 bulan lagi"/"bln 2 dpn"/"akhir tahun", dan mengembalikan
+     * nilai RELATIF ("Bulan depan") — melanggar aturan ringkasan "tanggal
+     * wajib absolut". Delegasikan dulu; regex lama tinggal cadangan. */
+    try {
+      const parsed = parseCustomerDate(expandAbbreviations(String(custText || '')), new Date());
+      if (parsed && parsed.status === 'ok' && parsed.formatted) return parsed.formatted;
+      if (parsed && parsed.status === 'ask_soon') return 'Secepatnya (urgent)';
+    } catch (_e) { /* jatuh ke regex lama */ }
     // Prefer full date expression: "7 Juli 2026", "Juli 2026", or just "Juli"
     // Uses regex to capture day+month+year instead of first-match month scan,
     // which could pick up stale month names from earlier messages.
@@ -3812,14 +3860,28 @@ class ConversationQualifier {
   }
 
   static #extractDecisionMaker(custText, profile) {
-    if (/sendiri|alone|solo/.test(custText))              return 'Sendirian';
-    if (/sama suami|bersama suami|with husband/.test(custText)) return 'Bersama suami';
-    if (/sama istri|bersama istri|with wife/.test(custText))    return 'Bersama istri';
-    if (/sama pasangan|with partner/.test(custText))      return 'Bersama pasangan';
-    if (/sama keluarga|with family/.test(custText))       return 'Bersama keluarga';
-    if (/sama teman(-teman)?|bersama teman|teman-teman|with friends?/.test(custText)) return 'Teman';
-    if (/langsung bisa|bisa langsung/.test(custText))     return 'Solo (bisa langsung jadwalkan)';
-    if (/koordinasikan?|koordinasi dulu|perlu diskusi/.test(custText)) return 'Perlu koordinasi (joint decision)';
+    /* M193 (14 Sep 2026) — "BERSAMA KELUARGA" ADALAH JAWABAN PENGHUNI (Q4),
+     * BUKAN PENGAMBIL KEPUTUSAN (Q9). Transkrip produksi: AI bertanya "Nanti
+     * akan tinggal bersama siapa saja?", customer menjawab "Bersama keluarga;
+     * Kak" — dan ringkasan menulis `✓ Keputusan bersama: Bersama keluarga`.
+     * Dua sebab: (1) /sama keluarga/ tanpa \b cocok di dalam "berSAMA KELUARGA";
+     * (2) frasa "sama suami/istri/keluarga/teman" dianggap sinyal keputusan
+     * padahal itu persis kata-kata orang menjawab "tinggal sama siapa".
+     * Aturan: frasa co-habitant hanya bernilai keputusan bila ada ISYARAT
+     * KEPUTUSAN (koordinasi/diskusi/izin/persetujuan/keputusan) atau AI memang
+     * baru menanyakan hal itu (lastAiAskedDecision). Selain itu -> UNKNOWN,
+     * dan Q4 (#extractHouseholdSummary) yang mencatatnya. */
+    const decisionCue = /\b(koordinasi\w*|diskusi\w*|izin|persetujuan|keputusan\w*|memutuskan|putuskan|decide|discuss|check with|tanya\s+(?:dulu\s+)?(?:ke|sama)\s)\b/i.test(custText);
+    const explicitOk  = decisionCue || Boolean(profile && profile.lastAiAskedDecision);
+
+    if (/\b(sendiri|alone|solo)\b/.test(custText) && explicitOk)                    return 'Sendirian';
+    if (/\b(sama|bersama|dengan)\s+suami\b|with husband/.test(custText) && explicitOk)   return 'Bersama suami';
+    if (/\b(sama|bersama|dengan)\s+istri\b|with wife/.test(custText) && explicitOk)      return 'Bersama istri';
+    if (/\b(sama|bersama|dengan)\s+pasangan\b|with partner/.test(custText) && explicitOk) return 'Bersama pasangan';
+    if (/\b(sama|bersama|dengan)\s+keluarga\b|with family/.test(custText) && explicitOk)  return 'Bersama keluarga';
+    if (/\b(sama|bersama|dengan)\s+teman(?:-teman)?\b|with friends?/.test(custText) && explicitOk) return 'Teman';
+    if (/\b(langsung bisa|bisa langsung)\b/.test(custText))     return 'Solo (bisa langsung jadwalkan)';
+    if (/\bkoordinasi\w*|perlu diskusi\b/.test(custText))         return 'Perlu koordinasi (joint decision)';
     // JANGAN kembalikan "Disebutkan di Q4" — itu referensi INTERNAL (nomor
     // pertanyaan) yang bocor ke layar customer. Summary hanya boleh berisi
     // nilai konkret; bila decision-maker tidak pernah dinyatakan eksplisit,
@@ -5062,12 +5124,26 @@ class ChatbotPrivateService {
       if (!summarySentBefore && !changeTurn
           && (/ada yang menarik, kak\?|anything catch your eye\?/i.test(lastAi) || cardsSentBefore)
           && customerSignalsClosing(userMessage)) {
-        console.log('[PrivateAgent] 🎯 Gerbang sinyal penutup setelah katalog');
         const closingProfile = ConversationQualifier.buildProfile(history, userMessage, filters);
-        const closingBrief = ConversationQualifier.buildAgentBrief(closingProfile, filters, history, userMessage);
-        return this.#wrap(builder.agentBrief(closingBrief), {
-          skillInfo, filters, provider: 'closing_signal_gate', responseMode: 'summary',
-        });
+        /* M193 — "Ok, trma ksh infonya" BUKAN penutup bila masih ada pertanyaan
+         * WAJIB. Transkrip 14 Sep 2026 yang dipuji pemilik proyek: sewa, Q8
+         * (tanggal masuk) belum ditanya, baru ~6 percakapan -> AI lanjut
+         * bertanya "Rencananya masuk bulan apa?" alih-alih menutup. Aturannya:
+         * terima kasih SAJA + sewa + Q8 belum ditanya + < 10 percakapan ->
+         * biarkan alur normal bertanya. Penutup keras ("cukup", "itu saja")
+         * tetap langsung ringkasan. */
+        const rentalQ8Pending = /rent|sewa/i.test(String(closingProfile.transactionType || ''))
+          && !closingProfile.aiAskedMoveIn && !closingProfile.hasMoveInDate;
+        const underCap = Number(closingProfile.aiCount || 0) < 10;
+        if (customerOnlyThanks(userMessage) && rentalQ8Pending && underCap) {
+          console.log('[PrivateAgent] 🙏 Terima kasih saja + Q8 sewa belum ditanya -> lanjut bertanya, bukan menutup');
+        } else {
+          console.log('[PrivateAgent] 🎯 Gerbang sinyal penutup setelah katalog');
+          const closingBrief = ConversationQualifier.buildAgentBrief(closingProfile, filters, history, userMessage);
+          return this.#wrap(builder.agentBrief(closingBrief), {
+            skillInfo, filters, provider: 'closing_signal_gate', responseMode: 'summary',
+          });
+        }
       }
 
       /* ── M198 (13 Sep 2026) — SETELAH SUMMARY, PERCAKAPAN TETAP HIDUP ──────
@@ -5136,6 +5212,28 @@ class ChatbotPrivateService {
             isId: lang === 'id',
           });
           if (cityHit) return this.#wrap(cityHit.reply, { skillInfo, filters, provider: 'city_availability_gate' });
+
+          /* ── M193 (14 Sep 2026) — KOTA BERUBAH & KOTA BARU PUNYA STOK: tanya AREA
+           * di kota baru, jangan lanjut skrip. Doc 02 §4 "KOTA BERUBAH -> Tanyakan
+           * patokan di kota BARU (Q6)" belum punya kode di jalur ini. Simulasi:
+           * "Ganti ke Sidoarjo aja" dibalas "Ada target kapan proses belinya?" —
+           * area lama (Wiyung) milik kota lama, area kota baru belum ada, dan
+           * gerbang kota diam karena Sidoarjo memang ada stoknya. */
+          if (qs.cityChangedFromHistory && !availArea) {
+            try {
+              const cityId = await resolveCityId(availCity);
+              const areas = await listAlternativeAreas({ userId: agentUserId, cityId, buildingType: typeDb || undefined, transactionType: txDb || undefined });
+              const names = (areas || []).slice(0, 4).map((a) => a.area).filter(Boolean);
+              const typeWord = typeRaw ? PropertyFormatter.humanBuildingType(typeRaw, lang) : (lang === 'id' ? 'properti' : 'property');
+              const reply = lang === 'id'
+                ? `Siap, ganti ke *${availCity}* ya, Kak 😊 Untuk *${typeWord}* di *${availCity}*, area atau patokan mana yang Kakak pertimbangkan?${names.length ? `\nMisalnya ${names.join(', ')}.` : ''}`
+                : `Sure, switching to *${availCity}* 😊 For *${typeWord}* in *${availCity}*, which area or landmark are you considering?${names.length ? `\nFor example ${names.join(', ')}.` : ''}`;
+              console.log(`[PrivateAgent] 🏙️ Kota berubah -> tanya area di kota baru (${availCity})`);
+              return this.#wrap(reply, { skillInfo, filters, provider: 'city_change_area_ask' });
+            } catch (cityChangeErr) {
+              console.warn('[PrivateAgent] city-change area ask gagal (non-fatal):', cityChangeErr.message);
+            }
+          }
         }
 
         /* M198 — GERBANG KETERSEDIAAN HANYA BILA DIMINTA (paritas whatsappAIService
@@ -5431,7 +5529,14 @@ class ChatbotPrivateService {
     // Niat pencarian BARU (sewa/beli/tipe/kota disebut lagi, atau sapaan+niat) → alur normal.
     const NEW_INTENT_RE = /\b(sewa|menyewa|ngontrak|beli|membeli|rumah|apartemen|apartment|villa|ruko|kos|kantor|gudang|tanah|cari|carikan|nyari)\b/i;
     const GREET_RE = /^[\s.…,!-]*(hi|hai|halo+|hello|hey|pagi|siang|sore|malam|selamat\s+\w+|permisi|assalamualaikum)\b/i;
-    const asksListings = customerAsksAvailability(text) || Boolean(detectRequestedCount(text));
+    const { isBareAvailabilityQuestion: _isBareAvail, parseAllShownCards: _allCards } = require('../utils/listingSelectionGate');
+    const anyCardsEver = _allCards(rows).length > 0;
+    /* M193 — "Masih tersedia?" / "Ada carport?" / "Ada taman?" SETELAH kartu
+     * terkirim = pertanyaan tentang unit itu, bukan minta listing baru.
+     * Simulasi 12 pesan: dijawab 2 kartu TAMBAHAN, lalu "Ada taman?" sesudah
+     * summary bahkan mereset ke "Halo! sewa atau beli?". */
+    const asksListings = (customerAsksAvailability(text) && !(anyCardsEver && _isBareAvail(text)))
+      || Boolean(detectRequestedCount(text));
     if (asksListings || GREET_RE.test(text)) return null;
     // "luas tanah", "bedanya", "yang tadi", "nomor 2" = pertanyaan tentang unit yang SUDAH dikirim, bukan pencarian baru.
     if (NEW_INTENT_RE.test(text) && !customerIsBrowsing(text) && !customerDeclinesViewing(text)
@@ -5468,15 +5573,48 @@ class ChatbotPrivateService {
       : null;
     // Unit yang BARU SAJA dibahas ("Untuk *Judul* (alamat): …") = rujukan pertanyaan
     // lanjutan tanpa nomor ("Dekat sekolah nggak?", "Nego bisa berapa?").
-    const lastDiscussed = (() => {
-      const lastAi = [...rows].reverse().find((h) => /^(ai|assistant)$/i.test(String(h.role || '')));
-      const m = String(lastAi?.message || '').match(/^(?:Untuk|For) \*([^*]+)\*(?:\s*\(([^)]+)\))?/);
-      if (!m) return null;
-      const title = m[1].trim().toLowerCase(); const addr = (m[2] || '').trim().toLowerCase();
-      return everShown.find((c) => String(c.title).toLowerCase() === title && (!addr || String(c.address || '').toLowerCase() === addr))
-        || everShown.find((c) => String(c.title).toLowerCase() === title) || null;
+    /* M193 — RUJUKAN UNIT YANG TAHAN GILIRAN. Versi lama hanya membaca pesan AI
+     * TERAKHIR ("Untuk *Judul*…"): begitu ada balasan lain di antaranya
+     * (kartu tambahan, klarifikasi), rujukan hilang dan bot mengulang "unit
+     * nomor berapa ya?" TIGA KALI berturut-turut (simulasi 12 pesan) padahal
+     * customer baru saja membahas "yang no 1". Urutan prioritas sekarang:
+     *   nomor di pesan INI > unit yang DIPILIH > nomor terakhir yang customer
+     *   sebut (≤6 pesan) > unit terakhir yang dibahas AI (≤10 pesan) > satu-satunya kartu. */
+    const byPrintedIndex = (n) => shown.find((c) => c.index === n) || everShown.find((c) => c.index === n) || null;
+    const numInCurrent = (() => {
+      const m = text.match(/\b(?:yang\s+)?(?:no|nomor|nomer|nomr)\.?\s*(\d{1,2})\b/i) || text.match(/\byang\s+(?:ke-?)?(\d{1,2})\b/i);
+      return m ? byPrintedIndex(parseInt(m[1], 10)) : null;
     })();
-    const card = pickedCard || lastDiscussed || (shown.length === 1 ? shown[0] : null);
+    const recentCustomerRef = (() => {
+      const cust = rows.filter((h) => /^(user|customer)$/i.test(String(h.role || ''))).slice(-6).reverse();
+      for (const h of cust) {
+        const m = String(h.message || '').match(/\b(?:yang\s+)?(?:no|nomor|nomer|nomr)\.?\s*(\d{1,2})\b/i);
+        if (m) { const c = byPrintedIndex(parseInt(m[1], 10)); if (c) return c; }
+      }
+      return null;
+    })();
+    const lastDiscussed = (() => {
+      const ais = rows.filter((h) => /^(ai|assistant)$/i.test(String(h.role || ''))).slice(-10).reverse();
+      for (const h of ais) {
+        const m = String(h.message || '').match(/^(?:Untuk|For) \*([^*]+)\*(?:\s*\(([^)]+)\))?/m);
+        if (!m) continue;
+        const title = m[1].trim().toLowerCase(); const addr = (m[2] || '').trim().toLowerCase();
+        const c = everShown.find((x) => String(x.title).toLowerCase() === title && (!addr || String(x.address || '').toLowerCase() === addr))
+          || everShown.find((x) => String(x.title).toLowerCase() === title) || null;
+        if (c) return c;
+      }
+      return null;
+    })();
+    // Anti-loop: klarifikasi "unit nomor berapa?" sudah ditanyakan dan customer
+    // TETAP tidak menyebut nomor -> asumsikan rujukan terakhir / unit no. 1, sebut asumsinya.
+    const lastAiMsgText = String(([...rows].reverse().find((h) => /^(ai|assistant)$/i.test(String(h.role || ''))) || {}).message || '');
+    const clarifierAskedLast = /unit nomor berapa ya|which unit number/i.test(lastAiMsgText);
+    let assumedNote = '';
+    let card = numInCurrent || pickedCard || recentCustomerRef || lastDiscussed || (shown.length === 1 ? shown[0] : null);
+    if (!card && clarifierAskedLast && shown.length) {
+      card = shown[0];
+      assumedNote = isId ? ` (saya asumsikan unit no. ${card.index} ya, Kak)` : ` (assuming unit no. ${card.index})`;
+    }
 
     // 1) Penutup sesudah summary — terima kasih singkat, summary TIDAK diulang.
     //    (Sebelum summary: gerbang sinyal penutup di pemanggil yang mengirim summary.)
@@ -5714,7 +5852,7 @@ class ChatbotPrivateService {
     if (isAttributeQuestion(text)) {
       if (card) {
         const ans = await answerCardAttribute({ message: text, card, userId: agentUserId, isId });
-        if (ans) return { verdict: 'post-summary-attribute', reply: ans.reply };
+        if (ans) return { verdict: 'post-summary-attribute', reply: ans.reply + assumedNote };
       } else if (shown.length > 1) {
         return {
           verdict: 'post-summary-which-card',
@@ -5735,6 +5873,24 @@ class ChatbotPrivateService {
       };
     }
 
+    /* M193 — SESUDAH SUMMARY, TIDAK PERNAH RESET KE "HALO! sewa atau beli?".
+     * Simulasi: "Ada taman?" sesudah summary jatuh ke Phase 0 (riwayat dipotong
+     * di summary) dan bot menyapa seperti customer baru — kehilangan konteks
+     * total. Niat pencarian BARU sudah dikembalikan null di atas (NEW_INTENT_RE),
+     * jadi yang sampai sini adalah obrolan lanjutan tentang unit yang ada. */
+    if (afterSummary) {
+      const unit = card ? `*${card.title}*${card.address ? ` (${card.address})` : ''}` : '';
+      return {
+        verdict: 'post-summary-generic',
+        reply: isId
+          ? (unit
+            ? `Untuk ${unit}: soal itu belum tercatat di data unit ini, Kak — saya catat dulu, nanti dikonfirmasi agent kami 🙏. Ada lagi yang mau ditanyakan?`
+            : `Saya catat ya, Kak 🙏 Nanti dikonfirmasi agent kami. Ada lagi yang mau ditanyakan soal unit yang sudah dikirim?`)
+          : (unit
+            ? `For ${unit}: that is not recorded for this unit — noted, our agent will confirm 🙏. Anything else?`
+            : `Noted 🙏 Our agent will confirm. Anything else about the units I sent?`),
+      };
+    }
     return null;
   }
 

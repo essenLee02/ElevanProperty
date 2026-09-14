@@ -1,5 +1,5 @@
 ---
-name: chat_gpt_responds
+name: claude_responds
 description: WhatsApp property skill - customer agenda first, real catalog only.
 ---
 # Property Response Skill

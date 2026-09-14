@@ -245,9 +245,31 @@ async function checkCityAvailability({ userId, city, buildingType, transactionTy
     if (!coverage || !coverage.cities || !coverage.cities.size) return { ...base, ok: true };
 
     const wantCity = String(city).trim().toLowerCase();
-    const hasCity = [...coverage.cities.keys()].some((name) =>
+    const cityKey = [...coverage.cities.keys()].find((name) =>
       name.toLowerCase() === wantCity || name.toLowerCase().includes(wantCity) || wantCity.includes(name.toLowerCase()));
-    if (hasCity) return { ...base, ok: true };
+    if (cityKey) {
+      /* M193 (14 Sep 2026) — KOTA ADA ≠ TIPE ADA. Simulasi "mau ngekos di
+       * Surabaya": kota Surabaya ada di stok, jadi gerbang bilang "tersedia"
+       * padahal agent punya NOL kos — lalu alur bertanya "sewa atau beli?"
+       * untuk barang yang tidak ada. Aturan doc 03 ("stocks only rumah &
+       * apartemen -> say so") tidak pernah punya kode di jalur ini. Kini tipe
+       * dicek DI DALAM kota: tidak ada -> jujur, sebut tipe yang benar-benar
+       * dipegang di kota itu. */
+      const wantTypeInCity = String(buildingType || '').toLowerCase();
+      if (wantTypeInCity) {
+        const entry = coverage.cities.get(cityKey);
+        const typesHere = new Map();
+        for (const t of (entry && entry.types ? entry.types.values() : [])) {
+          const k = String(t.buildingType || '').toLowerCase();
+          if (k) typesHere.set(k, (typesHere.get(k) || 0) + (t.count || 0));
+        }
+        if (typesHere.size && !typesHere.has(wantTypeInCity)) {
+          const availableTypes = [...typesHere.entries()].sort((a, b) => b[1] - a[1]).map(([k, c]) => ({ buildingType: k, count: c }));
+          return { ok: true, available: false, typeMissing: true, city: cityKey, availableTypes, alternativeCities: [] };
+        }
+      }
+      return { ...base, ok: true };
+    }
 
     // Kota tidak ada — susun alternatif NYATA. Diprioritaskan kota yang punya
     // stok untuk tipe+transaksi yang SAMA dengan permintaan customer (bila

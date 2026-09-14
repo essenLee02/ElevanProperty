@@ -161,7 +161,24 @@ function addRelativeUnit(now, n, unit) {
  */
 function parseCustomerDate(text, now = new Date()) {
   if (!text) return null;
-  const t = String(text).toLowerCase();
+  /* M193 (14 Sep 2026) — URUTAN TERBALIK & "AKHIR TAHUN".
+   * Transkrip produksi: AI bertanya "Rencananya masuk bulan apa?", customer
+   * menjawab "Rencana bln 2 dpn; Kak" (= 2 bulan depan). Setelah singkatan
+   * dibuka jadi "bulan 2 depan" — urutan terbalik yang lazim di ketikan cepat —
+   * dan parser ini null, sehingga jawaban yang DITANYA dan DIJAWAB itu hilang
+   * dari ringkasan. Dinormalkan ke "2 bulan depan" sebelum aturan lain jalan;
+   * berlaku juga "minggu 2 depan"/"hari 3 lagi". */
+  const t = String(text).toLowerCase()
+    .replace(/\b(hari|minggu|bulan|tahun)\s+(\d{1,3})\s+(depan|lagi|kedepan|ke\s+depan|mendatang)\b/g, '$2 $1 $3');
+  // "akhir tahun" / "awal tahun depan" — sering dipakai untuk rencana pindah.
+  // Konvensi parser ini: jawaban setingkat BULAN dipetakan ke tanggal 1 bulan
+  // itu (header: "bare month → tanggal 1"), jadi akhir tahun = 01 Desember.
+  {
+    const cy = now.getFullYear();
+    if (/\bakhir\s+tahun\s+depan\b/.test(t))    { const d = new Date(cy + 1, 11, 1); return { status: 'ok', date: d, formatted: fmt(d) }; }
+    if (/\bawal\s+tahun\s+depan\b/.test(t))     { const d = new Date(cy + 1, 0, 1);  return { status: 'ok', date: d, formatted: fmt(d) }; }
+    if (/\bakhir\s+tahun(?:\s+ini)?\b/.test(t)) { const d = new Date(cy, 11, 1);     return { status: 'ok', date: d, formatted: fmt(d) }; }
+  }
   const curY = now.getFullYear();
   const curM = now.getMonth() + 1;
   const curD = now.getDate();
