@@ -1043,10 +1043,17 @@ function extractQualificationState(history = [], currentMessage = '') {
   // inside a Q5 red-flags answer). Both are genuine patokan lokasi and must both
   // reach the summary, not just whichever happened to match first.
   const _anchorParts = [];
+  let _prevAiText = '';   // M200: pesan AI tepat sebelum pesan customer ini
   for (const msg of ACTIVE_ALL) {
-    if (!QS_CUST_ROLES.has(msg.role)) continue;
+    if (!QS_CUST_ROLES.has(msg.role)) { if (QS_AI_ROLES.has(msg.role)) _prevAiText = String(msg.message || ''); continue; }
     const raw  = msg.message || '';
     const text = raw.toLowerCase().trim();
+    /* M200 (15 Sep 2026) — JAWABAN ATAS PERTANYAAN TANGGAL SURVEI ("Enaknya survei
+     * tanggal berapa?" → "Minggu dpn, Kak. Jam 3 sore") adalah tanggal SURVEI,
+     * bukan tanggal masuk — walau pesannya sendiri tidak memuat kata survei.
+     * Transkrip produksi 15 Sep: summary "✓ Masuk: 22 September 2026". */
+    const answersViewingDateAsk = /(?:survei|survey|viewing)\b[^\n]{0,40}(?:tanggal|hari|jam)\s+(?:berapa|apa)|jam berapa yang paling pas|hari apa yang pas|what date works|what time works/i.test(_prevAiText)
+      && !/\b(check[\s-]?in|checkin|masuk|pindah|tempati|menempati|nginap|menginap|huni|mulai|durasi|kontrak)\b|\b\d+\s*(?:tahun|bulan|thn|bln)\b/i.test(raw);
     // Pesan ralat → slot first-wins (budget, tanggal masuk) boleh di-overwrite
     // dengan nilai baru di pesan ini. Loop berjalan kronologis, jadi ralat yang
     // datang belakangan otomatis menang atas nilai lama.
@@ -1247,9 +1254,30 @@ function extractQualificationState(history = [], currentMessage = '') {
     // Facilities (optional — accumulate amenities across the session)
     {
       const fac = detectFacilities(raw);
-      if (fac.length) {
+      /* M200 (15 Sep 2026) — item yang TIDAK ada di master fasilitas ("pet Playground")
+       * tetap dicatat sebagai kebutuhan bila customer menyebutnya dalam daftar
+       * fasilitas ("apakah ada gym, kidz zone dan pet playground?"). */
+      const extra = [];
+      const listM = raw.match(/\b(?:ada|punya|termasuk|tersedia|fasilitas\w*)\b\s*:?\s*([^?.!\n]{3,120})/i);
+      if (listM && (fac.length || /\bfasilitas/i.test(raw))) {
+        const STOP = new Set(['dan', 'atau', 'apa', 'saja', 'aja', 'sja', 'yang', 'nggak', 'gak', 'tidak', 'kak', 'ya', 'juga', 'nya', 'itu', 'ini', 'di', 'unit', 'rumah', 'apartemen', 'lengkap', 'semua', 'lainnya', 'lain', 'sih', 'dong', 'belum', 'sudah', 'sdh', 'blm', 'kah', 'kalau', 'klo', 'fasilitas', 'fasilitasnya', 'ada', 'punya', 'termasuk', 'tersedia', 'apakah', 'berapa', 'mana']);
+        const parts = listM[1].split(/\s*(?:,|\/|&|\bdan\b|\batau\b)\s*/i).filter(Boolean);
+        const norm = (x) => String(x).toLowerCase().replace(/z/g, 's').replace(/[^a-z]/g, '');
+        // Hanya DAFTAR (≥2 item) — "Ada fasilitas apa saja?" bukan daftar kebutuhan.
+        if (parts.length >= 2) {
+          for (const part of parts) {
+            const item = part.trim().replace(/[^\w\s-]/g, '').trim();
+            if (!item || item.length < 3 || item.split(/\s+/).length > 3) continue;
+            if (item.split(/\s+/).some((w) => STOP.has(w.toLowerCase()))) continue;
+            if (!/[a-z]/i.test(item)) continue;
+            const covered = fac.some((f) => norm(f) === norm(item) || norm(f).includes(norm(item)) || norm(item).includes(norm(f)));
+            if (!covered) extra.push(item.replace(/\b\w/g, (c) => c.toUpperCase()));
+          }
+        }
+      }
+      if (fac.length || extra.length) {
         const prev = Array.isArray(state.facilities) ? state.facilities : [];
-        state.facilities = [...new Set([...prev, ...fac])];
+        state.facilities = [...new Set([...prev, ...fac, ...extra])];
       }
     }
 
@@ -1380,7 +1408,7 @@ function extractQualificationState(history = [], currentMessage = '') {
     // tanggal masuk (bocor sejak nama hari bisa diparse).
     const VIEWING_CUE_RE = /\b(viewing|surv[ea][iy]?\w*|survie|ketemuan|ketemu\w*|mampir|nengok|tengok|site\s*visit|meet\s*up|lihat\s+(?:unit|propert\w*|rumah|apart\w*|langsung|lokasi|kos)|cek\s+(?:lokasi|unit\w*)|kunjungan|jadwal\w*)\b/i;
     const hasMoveInCue  = MOVE_IN_CUE_RE.test(text);
-    const isViewingOnly = VIEWING_CUE_RE.test(text) && !hasMoveInCue;
+    const isViewingOnly = (VIEWING_CUE_RE.test(text) && !hasMoveInCue) || answersViewingDateAsk;
 
     /* ⭐ M192 (9 Sep 2026) — SARING PER-KLAUSA, BUKAN PER-PESAN.
      * `isViewingOnly` menilai SELURUH pesan, jadi kalimat campuran lolos begitu
@@ -1564,6 +1592,9 @@ function extractQualificationState(history = [], currentMessage = '') {
     // simulasi: masuk ke slot Patokan lokasi karena AI barusan bertanya Q6.
     // ("Tidak ada" sengaja TIDAK termasuk — itu jawaban sah untuk Q5/Q6.)
     if (/^\s*(?:oke?|ok|baik|sip|ya|yaudah|ya\s+sudah)?[\s,.!]*(?:cukup|itu\s+saja|itu\s+aja|segitu\s+(?:dulu|saja|aja)|sekian)\b|\b(?:terima\s*kasih|trma\s*kasih|makasih|mksh|thanks?|thank\s*you)\b/i.test(custResp)) continue;
+    // M201: pengakuan murni ("Oke, saya paham", "Siap", "Baik kak", "Noted") bukan jawaban
+    // slot — simulasi: masuk ke Area "Saya Paham" dan Patokan "Oke, saya paham".
+    if (/^\s*(?:oke?|ok|okay|okey|baik|siap|sip|iya|ya|yup|noted)?[\s,.!]*(?:saya\s+|sy\s+)?(?:paham|mengerti|ngerti|noted)\b[\s,.!]*(?:kak|ya|deh|dong)?[\s,.!]*$/i.test(custResp)) continue;
 
     // Q3 — customer MENERIMA / MENOLAK harga yang ditawarkan AI (anchor).
     // Butuh pasangan AI↔jawaban: nilainya berasal dari nominal di PERTANYAAN AI,
@@ -1837,7 +1868,10 @@ function extractQualificationState(history = [], currentMessage = '') {
         const isFacilityOnly = facils.length >= 1 && !hasLocationCue && !detectLocation(custResp);
         // M198: "Yang tidak dekat jalan raya, berisik" = red flag; "Dekat sekolah nggak?" = pertanyaan.
         const negatedOrQuestion = /\b(?:tidak|tdk|nggak|ngga|gak|jangan|jauh\s+dari)\s+(?:dekat|deket|near)\b/i.test(custResp) || /\?|\b(?:nggak|ngga|gak|tidak|apakah)\s*\??\s*$/i.test(custResp);
-        if (!isFacilityOnly && !negatedOrQuestion) state.anchorPoint = custResp;
+        // M201: jawaban yang berupa NAMA AREA ("Wiyung saja") sudah masuk slot area — bukan patokan.
+        const isAreaAnswer = Boolean(state.district) && new RegExp(`\\b${String(state.district).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(custResp)
+          && custResp.replace(/[^a-z]/gi, '').length <= String(state.district).replace(/[^a-z]/gi, '').length + 8;
+        if (!isFacilityOnly && !negatedOrQuestion && !isAreaAnswer) state.anchorPoint = custResp;
       }
     }
     // Q7 — alternative areas

@@ -126,7 +126,9 @@ const HOUSE_SCENARIOS = [
 
 // 'private' = 10 sesi untuk jalur Private Agent (AI_PRIMARY_PROVIDER dipaksa 'private').
 if (SET === 'private') process.env.AI_PRIMARY_PROVIDER = 'private';
-const ALL_SCENARIOS = SET === 'house' ? HOUSE_SCENARIOS
+// SIM_FILE=./sim-scenarios-prod0915.js → pakai berkas skenario lain (replay transkrip produksi).
+const ALL_SCENARIOS = process.env.SIM_FILE ? require(process.env.SIM_FILE)
+  : SET === 'house' ? HOUSE_SCENARIOS
   : SET === 'private' ? require('./sim-scenarios-private')
     : require('./sim-scenarios-chat-gpt-responds');
 // SIM_ONLY=S1,S3 → hanya sesi yang namanya diawali kode itu.

@@ -3726,6 +3726,15 @@ class ConversationQualifier {
         stdItems.forEach(s => {
           if (!merged.some(x => x.toLowerCase() === s.toLowerCase())) merged.push(s);
         });
+        /* M200 (15 Sep 2026) — arahan pemilik: baris Fasilitas = kebutuhan customer
+         * + fasilitas UNIT YANG DIPILIH ("Kids zone, Gym, pet Playground, GARDEN,
+         * CCTV 24 JAM, …"). Fasilitas unit dibaca dari kartu yang dikirim. */
+        try {
+          const { pickedUnitFacilities } = require('../utils/listingSelectionGate');
+          pickedUnitFacilities(history).forEach((f) => {
+            if (!merged.some((x) => x.toLowerCase() === f.toLowerCase())) merged.push(f);
+          });
+        } catch (_e) { /* fail-open */ }
 
         // Premium/eksklusif signal (mewah/eksklusif/premium/luxury/fully furnished, or
         // an already-picked "eksklusif" Q3 budget tier). Deliberately just a FLAG, not
@@ -4826,8 +4835,8 @@ class ChatbotPrivateService {
     // pertanyaan data unit (dijawab gerbang atribut), bukan permintaan definisi istilah.
     const asksAboutPickedUnitDocs = Boolean(readConfirmedPick(history))
       && /\b(sertifikat\w*|imb|pbg|pbb|dokumen\w*|legalitas|shm|shgb|hgb)\b/i.test(userMessage)
-      && /(?:nya\b|\bunit|\brumah\s+(?:ini|itu|tersebut)|\bdokumen|\bada\b|\blengkap)/i.test(userMessage)
-      && !/\b(apa\s+itu|apa\s+bedanya|maksudnya|artinya|apa\s+sih)\b/i.test(userMessage);
+      // M200: sesudah unit dipilih, semua pertanyaan sertifikat = data unit ("rmh trsbut sdh SHM?")
+      && !/\b(apa\s+itu|apa\s+bedanya|maksudnya|artinya|apa\s+sih|apa\s+arti|jelaskan|penjelasan)\b/i.test(userMessage);
     const termReply = asksAboutPickedUnitDocs ? null : this.#tryTerminologyAnswer(userMessage);
     if (termReply) return this.#wrap(termReply, { skillInfo });
 
@@ -5663,12 +5672,20 @@ class ChatbotPrivateService {
       || Boolean(detectRequestedCount(text));
     if (asksListings || GREET_RE.test(text)) return null;
     // "luas tanah", "bedanya", "yang tadi", "nomor 2" = pertanyaan tentang unit yang SUDAH dikirim, bukan pencarian baru.
-    if (NEW_INTENT_RE.test(text) && !customerIsBrowsing(text) && !customerDeclinesViewing(text)
+    // M200: "apakah rumah tersebut sudah SHM?" memuat kata "rumah" tapi jelas pertanyaan
+    // atribut unit yang dipilih — bukan pencarian baru.
+    const { isAttributeQuestion: _isAttrQ } = require('../utils/listingSelectionGate');
+    if (NEW_INTENT_RE.test(text) && !customerIsBrowsing(text) && !customerDeclinesViewing(text) && !(anyCardsEver && _isAttrQ(text))
         && !/\b(nego|kpr|banjir|budget|dana|survei|survey|viewing|terima\s*kasih|makasih|luas\s+tanah|bedanya|masing[-\s]?masing|tadi|nomor\s*\d|no\.?\s*\d)\b/i.test(text)) return null;
 
     const { parseShownListings, parseAllShownCards, readConfirmedPick, answerCardAttribute, isAttributeQuestion, scheduleViewingFromText } = require('../utils/listingSelectionGate');
     const shown = parseShownListings(rows);
-    const everShown = parseAllShownCards(rows);   // M199: termasuk blok area lama
+    /* M200 — pilihan yang DIPANGGIL KEMBALI ("tetap beli Pakuwon nomor 1 tadi") menulis
+     * "Dicatat pilihannya" TANPA blok kartu, dan pencarian aktif (searchStartIdx) bisa
+     * dimulai di giliran itu → rows tak memuat kartu. Kartunya tetap ada di riwayat
+     * penuh — pakai itu supaya survei/atribut sesudahnya tidak jatuh ke skrip. */
+    const pickInRows = readConfirmedPick(rows);
+    const everShown = parseAllShownCards(rows).length ? parseAllShownCards(rows) : (pickInRows ? parseAllShownCards(rowsAll) : []);   // M199: termasuk blok area lama
     // "Nomor 1 itu lantai berapa?" padahal belum ada kartu terkirim → jujur, jangan diam.
     if (!shown.length && /\b(?:nomor|nomer|no\.?)\s*\d{1,2}\b/i.test(text) && isAttributeQuestion(text)) {
       return {
@@ -5678,8 +5695,8 @@ class ChatbotPrivateService {
           : `I haven't sent any units yet 🙏 As soon as there is a matching listing I'll send it with its number.`,
       };
     }
-    // Sebelum summary DAN sebelum ada kartu, tidak ada konteks untuk dijawab → alur Q normal.
-    if (!afterSummary && !shown.length) return null;
+    // Sebelum summary DAN sebelum ada kartu/pilihan, tidak ada konteks untuk dijawab → alur Q normal.
+    if (!afterSummary && !shown.length && !everShown.length) return null;
 
     // Keluhan lambat ("kok lama balasnya") → minta maaf, lalu buka pintu, jangan lanjut skrip.
     if (/\b(lama|lambat|lelet|lemot)\b[^.?!]{0,20}\b(bal[ae]s\w*|respon\w*|jawab\w*|tunggu)\b|\b(dari\s+tadi)\b[^.?!]{0,15}\btunggu/i.test(text)) {
@@ -5738,6 +5755,12 @@ class ChatbotPrivateService {
     if (!card && clarifierAskedLast && shown.length) {
       card = shown[0];
       assumedNote = isId ? ` (saya asumsikan unit no. ${card.index} ya, Kak)` : ` (assuming unit no. ${card.index})`;
+    }
+
+    // 0) "Iya, Kak" / "Ada" menjawab "Ada pertanyaan lain?" → persilakan, jangan lanjut skrip.
+    if (/ada pertanyaan lain|anything else i can help/i.test(lastAiMsgText)
+        && /^\s*(?:iya|ya|yes|ada|boleh|mau|iyaa?|yup)\b[^?]{0,15}$/i.test(text)) {
+      return { verdict: 'follow-up-invite', reply: isId ? `Silakan, Kak 😊 Mau tanya apa?` : `Go ahead 😊 What would you like to ask?` };
     }
 
     // 1) Penutup sesudah summary — terima kasih singkat, summary TIDAK diulang.
@@ -6003,6 +6026,15 @@ class ChatbotPrivateService {
      * total. Niat pencarian BARU sudah dikembalikan null di atas (NEW_INTENT_RE),
      * jadi yang sampai sini adalah obrolan lanjutan tentang unit yang ada. */
     if (afterSummary) {
+      // M201: "Oke." / "Ya." / "Siap" sesudah summary = pengakuan, bukan pertanyaan atribut.
+      if (/^\s*(?:oke?|ok|okay|okey|baik|siap|sip|iya|ya|yup|noted|paham|mengerti|ngerti|sama-sama)\b[\s,.!]*(?:saya\s+)?(?:paham|mengerti|ngerti)?[\s,.!]*(?:kak|ya|deh|dong)?[\s,.!]*$/i.test(text)) {
+        return {
+          verdict: 'post-summary-ack',
+          reply: isId
+            ? `Siap, Kak 😊 Kalau ada yang mau ditanyakan lagi soal unitnya, tinggal chat saja ya.`
+            : `Sure 😊 Just message me if there's anything else about the unit.`,
+        };
+      }
       const unit = card ? `*${card.title}*${card.address ? ` (${card.address})` : ''}` : '';
       return {
         verdict: 'post-summary-generic',
@@ -6531,7 +6563,44 @@ function applyGateCLengthCap(result, { history = [], userMessage = '', agentName
     // jawaban + summary.
     const questionOnly = Boolean(result.qualificationMode) || /^(?:city|area)_availability_gate$/.test(String(result.provider || ''));
     const withSummary = () => (questionOnly ? buildForcedSummary() : result.reply + '\n\n' + buildForcedSummary());
-    if (exchangeCount >= GATE_C_SOFT_CAP && sinceChange >= GATE_C_SOFT_CAP) {
+    /* M200 (15 Sep 2026) — balasan giliran ini masih MENUNGGU jawaban yang mengisi
+     * summary ("Enaknya survei tanggal berapa?", "jam berapa?") → tunda summary satu
+     * giliran (masih di jendela 10-12), supaya tanggal surveinya ikut tercatat.
+     * Transkrip produksi 15 Sep: summary terkirim bersamaan pertanyaan tanggal,
+     * lalu "Minggu dpn jam 3 sore" tidak masuk ringkasan. */
+    const awaitingSlotAnswer = !questionOnly && /(?:tanggal berapa|jam berapa|hari apa yang pas|what date|what time)\s*\??\s*$/i.test(String(result.reply || '').trim());
+    /* M201 (16 Sep 2026) — DATA MINIMAL DULU, BARU SUMMARY. Arahan pemilik: summary di
+     * percakapan ke-10-12 hanya bila data minimal (4 slot wajib doc 02 §1: transaksi,
+     * tipe, kota, area) sudah dijawab customer. Bila masih ada yang kosong di
+     * jendela 10-12, giliran ini dipakai untuk MENANYAKAN slot wajib itu (satu
+     * pertanyaan, ditempel ke jawaban bila balasan giliran ini bukan pertanyaan);
+     * di batas keras (13) summary tetap dikirim apa adanya ("Data Belum Lengkap"). */
+    let missingMandatoryQ = null;
+    if (exchangeCount >= GATE_C_SOFT_CAP && exchangeCount < GATE_C_HARD_CAP) {
+      try {
+        const qs = extractQualificationState(history, userMessage) || {};
+        const missing = !qs.transactionType || !qs.buildingType || !qs.city || !qs.district;
+        if (missing) {
+          const lang = LanguageDetector.detect(userMessage, history);
+          const filters = extractPropertyFilters(userMessage, history);
+          const profile = ConversationQualifier.buildProfile(history, userMessage, filters);
+          if (!qs.district && qs.city) profile.hasDistrict = false;
+          if (!qs.city) profile.location = '';
+          if (!qs.transactionType) profile.transactionType = '';
+          if (!qs.buildingType) profile.buildingType = '';
+          profile.aiAskedTxType = false; profile.aiAskedPropType = false; profile.aiAskedLocation = false; profile.aiAskedDistrict = false;
+          missingMandatoryQ = ConversationQualifier.getNextQuestion(profile, lang, null, 'summary', null) || null;
+        }
+      } catch (_) { missingMandatoryQ = null; }
+    }
+    if (missingMandatoryQ) {
+      const replyText = String(result.reply || '').trim();
+      // Balasan ini sudah bertanya (slot apa pun) → biarkan; giliran berikutnya dicek lagi.
+      if (/\?\s*$/.test(replyText) || result.qualificationMode) return result;
+      console.log('[GATE C] 📋 Slot wajib belum lengkap di jendela 10-12 → tanya dulu, summary menyusul');
+      return { ...result, reply: `${replyText}\n\n${missingMandatoryQ}`, provider: `${result.provider || 'private_agent'}+mandatory_slot_ask` };
+    }
+    if (exchangeCount >= GATE_C_SOFT_CAP && sinceChange >= GATE_C_SOFT_CAP && !(awaitingSlotAnswer && exchangeCount < GATE_C_HARD_CAP)) {
       return { ...result, reply: withSummary(), provider: 'gate_c_length_cap', responseMode: 'summary' };
     }
     if (exchangeCount >= GATE_C_HARD_CAP) {

@@ -46,8 +46,26 @@ function tryTerminologyAnswer(userMessage) {
   // urutan "apa itu X" dan `?`/`apakah` eksplisit — pesan pemicu bug ini
   // sendiri TIDAK akan tertangkap tanpa tambahan pola ini (dibuktikan lewat
   // node -e langsung, bukan asumsi).
-  const looksLikeQuestion = /\?|^apa\b|\bapa\s+itu\b|\bitu\s+apa\b|\bapakah\b|\bgimana\b|\bbagaimana\b|\bmaksudnya\b|\bartinya\b|\bbedanya\b|\bbeda\b.{0,15}\bsama\b|\bkenapa\b|what\s+is|how\s+does/i.test(text);
+  const looksLikeQuestion = /\?|^apa\b|\bapa\s+itu\b|\bitu\s+apa\b|\bapakah\b|\bgimana\b|\bbagaimana\b|\bmaksudnya\b|\bartinya\b|\bbedanya\b|\bbeda\b.{0,15}\bsama\b|\bkenapa\b|\bberapa\b|\bsiapa\b|what\s+is|how\s+does|how\s+much|who\s+pays/i.test(text);
   if (!looksLikeQuestion) return null;
+
+  /* M201 (16 Sep 2026) — PERTANYAAN PROSES BELI yang lazim, bukan definisi istilah dan
+   * bukan data katalog: biaya notaris/PPAT, siapa bayar PBB/BPHTB, KPR DP minimal,
+   * harga rata-rata. Simulasi: dibalas pertanyaan area berulang (agenda customer
+   * diabaikan). Jawaban umum + serahkan angka pasti ke agent — tidak mengarang. */
+  const PROCESS_QA = [
+    { re: /\b(?:biaya|fee|tarif)\b[^.?!]{0,20}\b(?:notaris|ppat)\b|\bnotaris\b[^.?!]{0,20}\b(?:berapa|biaya)\b/,
+      answer: 'Biaya notaris/PPAT umumnya sekitar 0,5–1% dari nilai transaksi (mencakup AJB, balik nama, dan cek sertifikat), tergantung notaris dan daerah. Angka pastinya dikonfirmasi agent kami bersama notaris rekanan sebelum transaksi.' },
+    { re: /\bpbb\b[^.?!]{0,30}\b(?:siapa|bayar|tanggung)\b|\b(?:siapa|bayar|tanggung)\b[^.?!]{0,30}\bpbb\b/,
+      answer: 'PBB (Pajak Bumi dan Bangunan) tahun berjalan biasanya ditanggung penjual sampai tanggal serah terima, lalu pembeli untuk tahun berikutnya — tetapi ini bisa disepakati di AJB. Agent kami bantu cek status PBB unit yang Kakak pilih.' },
+    { re: /\bkpr\b[^.?!]{0,30}\b(?:dp|uang\s*muka)\b|\b(?:dp|uang\s*muka)\b[^.?!]{0,30}\b(?:minimal|berapa|persen)\b/,
+      answer: 'DP KPR umumnya minimal 10–20% dari harga (bank tertentu ada program DP lebih rendah untuk rumah pertama); cicilan idealnya ≤30–35% penghasilan bulanan. Simulasi angka pastinya dibantu agent kami dengan bank rekanan.' },
+    { re: /\b(?:rata[-\s]?rata|kisaran|range)\b[^.?!]{0,30}\bharga\b|\bharga\b[^.?!]{0,30}\b(?:rata[-\s]?rata|kisaran|pasaran)\b/,
+      answer: null },   // dijawab dari katalog (gerbang area/harga), bukan angka umum
+  ];
+  for (const { re, answer } of PROCESS_QA) {
+    if (re.test(text)) return answer;   // null = biarkan gerbang lain (katalog) menjawab
+  }
 
   // Pola per istilah, diurutkan agar frasa lebih spesifik (SHSRS/SHMSRS)
   // dicek sebelum yang lebih umum (SHM) supaya tidak salah cocok.

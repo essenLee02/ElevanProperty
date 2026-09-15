@@ -5550,6 +5550,58 @@ penuh untuk pertama kalinya sejak berbulan-bulan.
      Tes baru privateAgentPlinPlanM199 (30). SUITE **3069/3069**. Artifact
      (URL sama) bagian ketiga "13 sesi lanjutan". .md tidak berubah.
 
+ 28. ⭐ M200 (15 Sep 2026) — REPLAY TRANSKRIP PRODUKSI WIYUNG 21:46-21:52.
+     Pemilik: "Summary, survei dan pertanyaan sertifikat pada property yang
+     dipilih masih salah respon". Kode pemilik (M193/M194, 14-15 Sep — semua
+     berkas controller/service/util bertanggal 20:11) dibaca ulang dulu; replay
+     persis lewat SIM_FILE=./sim-scenarios-prod0915.js (opsi baru di
+     simulate-platform-skill.js) + scripts/dbg_turn.js <log> <sesi> <giliran>
+     untuk memutar SATU giliran lewat generatePrivateTerminalMassege.
+     Temuan & perbaikan (kode saja):
+       a) "Ok, terima kasih" → gerbang kota "belum punya listing di *Jakarta
+          Pusat*": kata "tim" pada balasan AI "Nanti TIM kami hubungi" cocok
+          landmark TIM (Jakarta Pusat) → fallback kota-dari-teks-AI mengganti
+          kota sesi. Fix: detectLandmark mengabaikan nama ≤4 huruf kecuali
+          ditulis HURUF BESAR atau didahului di/dekat/kalau/… (_shortLandmarkOk).
+       b) "Kalau dari Surabaya pusat berapa lama?" → ganti kota → searchStartIdx
+          (M194 pemilik) memulai pencarian baru → pilihan/kartu hilang. Fix:
+          detectLocation membuang "dari <kota>" pada pertanyaan jarak.
+       c) "Apakah ada gym, Kidz zone dan pet Playground?" → gerbang listing
+          whatsappAIService (bukan Private Agent) → 2 kartu TAMBAHAN. Fix:
+          paritas isBareAvailabilityQuestion (M193 pemilik) di gateShouldSpeak;
+          FAC +kidz/pet playground; ekstraktor mencatat item di luar master
+          fasilitas dari daftar yang disebut customer (≥2 item, stopword).
+       d) "Kak, apakah rmh trsbut sdh SHM?" → kamus istilah. Fix: sesudah unit
+          dipilih SEMUA pertanyaan sertifikat = data unit (kecuali "apa itu…"),
+          kedua jalur; gerbang lanjutan tidak menganggap "rumah tersebut"
+          sebagai niat pencarian baru bila kartu sudah ada & pertanyaan atribut.
+       e) "Saya msh tanya dlu saja" setelah "tanggal berapa?" → "Boleh
+          disebutkan tanggal". Fix: gerbang jadwal → menjelajah/menolak dihormati
+          (viewing-deferred); pesan >3 kata/bertanya → null; "Iya, Kak" → tanya
+          tanggal lagi (benar).
+       f) Summary: "✓ Masuk: 22 September 2026" (jawaban tanggal SURVEI bocor ke
+          tanggal masuk). Fix: ekstraktor menandai jawaban atas pertanyaan AI
+          "survei tanggal/jam berapa?" sebagai viewing-only (kecuali ada isyarat
+          masuk/mulai/durasi). "minggu depan" pada survei = +7 hari (arahan
+          pemilik: "Minggu dpn" → 22 Sep), hanya "minggu ini" = hari Minggu.
+       g) Gate C menunda summary satu giliran bila balasan masih menunggu
+          tanggal/jam survei (tetap di jendela 10-12).
+       h) Baris Fasilitas summary = kebutuhan customer + fasilitas unit terpilih
+          (pickedUnitFacilities dari kartu) — persis "Summary benar" pemilik.
+       i) Gerbang lanjutan: pilihan yang dipanggil kembali (tanpa blok kartu)
+          tetap punya kartu rujukan dari riwayat penuh (regresi P14).
+       j) .env: SKILL_MAX_RESPONSE/PROJECT_CHARACTERS 15000 → 16000 — .md pemilik
+          kini 15.082 char saat doc 05+06 ikut; di 15000 doc 07 terpotong diam-
+          diam (tes conditionalSkillDocsM189 merah). Total .md 14.947 > anggaran
+          14.900 (tes M186) = suntingan .md pemilik 15 Sep, DIBIARKAN (keputusan
+          pemilik).
+     Replay akhir = 12/12 giliran sesuai, summary identik dengan "Summary benar".
+     Regresi 23 sesi P1-P23: 26 giliran skrip interview (sama dengan M199 akhir).
+     Tes baru prodTranscriptWiyungM200 (17). SUITE 3136/3137 (1 = anggaran .md).
+     ⚠️ Produksi 21:52 masih memparse "Minggu dpn" gagal padahal kode di disk
+     sudah benar → kemungkinan server belum di-restart sesudah edit 20:11
+     (lihat memory "phantom restart") — restart & cek build stamp /health.
+
  17. ⭐ M189 (12 Sep 2026) — TIGA DOC BACKUP JULI KEMBALI KE chat_gpt_responds.
      Arahan: 15-date-money ≤300 char; 10-playbooks & 19-landmark "diolah".
        docs/07-date-money-parsing-reference.md — 248 char, SELALU dimuat.

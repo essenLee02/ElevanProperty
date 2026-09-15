@@ -667,9 +667,16 @@ async function findAreaCandidatesInText({ userId, city, text }) {
      * pesan >= 5 huruf, bukan kata generik/umum, jarak Levenshtein <= 2 ke SATU
      * token area (>= 5 huruf), dan hanya SATU area yang cocok. Ambigu -> tetap
      * kosong; pemanggil bertanya. */
-    if (!scored.length) {
+    /* M201 — "Oke, saya paham." pernah cocok fuzzy ke area "Pakal" (paham≈pakal) → gerbang
+     * menjawab "belum ada di Pakal". Typo-match hanya untuk pesan yang memang MENYEBUT
+     * tempat: ≤4 kata, atau ada kata pengantar lokasi (di/ke/area/daerah/kawasan/kalau). */
+    const looksLikePlaceMention = t.trim().split(/\s+/).length <= 4
+      || /\b(?:di|ke|area|daerah|kawasan|kalau|klo|kl|sekitar|dekat)\s+[a-z]/i.test(t);
+    if (!scored.length && looksLikePlaceMention) {
       const STOP = new Set(['kalau', 'gimana', 'bagaimana', 'yang', 'saya', 'mau', 'minta', 'listing', 'rumah',
-        'apartemen', 'sewa', 'beli', 'area', 'daerah', 'kawasan', 'boleh', 'bisa', 'tolong', 'kakak', 'lain', 'saja']);
+        'apartemen', 'sewa', 'beli', 'area', 'daerah', 'kawasan', 'boleh', 'bisa', 'tolong', 'kakak', 'lain', 'saja',
+        'paham', 'mengerti', 'terima', 'kasih', 'makasih', 'oke', 'siap', 'baik', 'tidak', 'belum', 'sudah', 'nanti',
+        'survei', 'survey', 'budget', 'harga', 'kamar', 'tanah', 'bangunan', 'lantai', 'sertifikat', 'nomor', 'pilih']);
       const msgToks = [...new Set(t.split(/[^a-z0-9]+/).filter((w) => w.length >= 5 && !STOP.has(w) && !GENERIC.has(w)))];
       const fuzzy = new Set();
       for (const a of areas) {
@@ -682,6 +689,7 @@ async function findAreaCandidatesInText({ userId, city, text }) {
       if (fuzzy.size > 1) return { area: null, candidates: [...fuzzy].sort((a, b) => a.localeCompare(b)), fuzzy: true };
       return empty;
     }
+    if (!scored.length) return empty;
 
     /* ⛔ JANGAN MENEBAK SAAT SEBUTAN PENDEK COCOK KE BEBERAPA AREA.
      * Versi pertama patch ini mengembalikan nama TERPENDEK ("Pakuwon" →

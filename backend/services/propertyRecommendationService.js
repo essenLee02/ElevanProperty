@@ -419,9 +419,26 @@ function detectLandmark(message = '') {
     const core = name.replace(/\s*\([^)]*\)\s*$/, '').trim();
     const candidates = core === name ? [name] : [name, core];
     const matched = candidates.some((c) => new RegExp(`\\b${escapeRegExp(c.toLowerCase())}\\b`, 'i').test(text));
+    /* M200 (15 Sep 2026) — NAMA PENDEK/KATA UMUM ("TIM", "UM", "UI", "MADE", "SUCI",
+     * "WAGE", "JATI") cocok dengan kata biasa: "Nanti TIM kami hubungi" → landmark TIM
+     * (Jakarta Pusat) → kota sesi berubah → gerbang kota "belum punya listing di
+     * Jakarta Pusat" pada pesan "Ok, terima kasih" (transkrip produksi 15 Sep).
+     * Nama ≤4 huruf hanya dihitung bila ditulis HURUF BESAR oleh customer atau
+     * didahului kata lokasi (di/dekat/daerah/area/kawasan/sekitar/patokan). */
+    if (matched && !_shortLandmarkOk(core, message)) continue;
     if (matched) return name;
   }
   return '';
+}
+
+function _shortLandmarkOk(core, rawMessage) {
+  const c = String(core || '');
+  if (c.replace(/[^A-Za-z]/g, '').length > 4) return true;   // nama panjang: perilaku lama
+  const raw = String(rawMessage || '');
+  const esc = escapeRegExp(c);
+  if (new RegExp(`(?:^|[^A-Za-z])${esc}(?![A-Za-z])`).test(raw)) return true;   // ditulis persis HURUF BESAR
+  if (new RegExp(`(?:^|\\b(?:di|ke|dekat|deket|daerah|area|kawasan|sekitar|patokan\\w*|near|kalau|klo)\\s+)${esc}\\b`, 'i').test(raw.trim())) return true;
+  return false;
 }
 
 /**
@@ -865,6 +882,12 @@ function detectLocation(message = '') {
   // BUKAN lokasi properti yang dicari. "Karena saya orang Surabaya" tidak boleh
   // menjadikan Surabaya lokasi pencarian (padahal dia cari rumah di Jakarta).
   textForLoc = textForLoc.replace(/\b(?:orang|asli|warga|penduduk)\s+[a-z]+(?:\s+(?:selatan|utara|barat|timur|pusat))?/gi, ' ');
+  // M200 (15 Sep 2026): pada PERTANYAAN JARAK ("Kalau dari Surabaya pusat berapa
+  // lama?") kota sesudah "dari" adalah titik BERANGKAT customer, bukan kota
+  // pencarian — dulu terbaca ganti kota → pencarian baru → pilihan/kartu hilang.
+  if (/\b(jarak|berapa\s+(?:jauh|lama|menit|jam|km|kilo)|waktu\s+tempuh|tempuh|ke\s+sana|ke\s+situ|ke\s+lokasi)\b/i.test(textForLoc)) {
+    textForLoc = textForLoc.replace(/\b(?:dari|from)\s+[a-z]+(?:\s+(?:selatan|utara|barat|timur|pusat|kota))?/gi, ' ');
+  }
 
   // ──── ALIAS MATCHING (prioritas tertinggi) ────
   // Cocokkan informal names / shorthand dulu. Misal "sby" → "Surabaya", "jogja" → "Yogyakarta".

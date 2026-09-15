@@ -477,7 +477,7 @@ const ATTR_RE = {
   address: /\b(alamat\w*|lokasinya\s+di\s+mana|di\s+mana\s+(?:persis|tepat)nya|share\s*lok\w*|maps)\b/i,
   price: /\b(harga\w*|berapa\s*duit|hrg\w*|berapa\s*(?:per|se)\s*(?:bulan|tahun|hari|malam)|per\s*bulan|sebulan|per\s*tahun|setahun|sewanya\s*berapa)\b/i,
   availability: /\b(masih\s+(?:ada|tersedia|available|kosong)|sudah\s+(?:laku|terjual|tersewa|dibooking|di-?booking)|belum\s+laku)\b/i,
-  facilities: /\b(fasilitas|ada\s+(?:ac|gym|kolam|lift|carport|garasi|taman|garden|cctv|security|satpam|parkir|parking|wifi|water\s*heater|kitchen|musholla|laundry|kids|playground|jogging|minimarket)|furnished|furnitur|perabot)\b/i,
+  facilities: /\b(fasilitas|ada\s+(?:ac|gym|kolam|lift|carport|garasi|taman|garden|cctv|security|satpam|parkir|parking|wifi|water\s*heater|kitchen|musholla|laundry|kid[sz]|playground|pet\s*\w+|jogging|minimarket)|furnished|furnitur|perabot)\b/i,
   unknown: /\b(banjir|panas|bising|berisik|ipl|lantai\s*berapa|tower|jam\s*malam|pasangan|suami\s*istri|pemilik|owner|nego|diskon|dekat\s+sekolah|sekolah|tetangga|lingkungan|air|listrik\s*berapa|watt|hadap|renovasi|direnovasi|tahun\s+dibangun|usia\s+bangunan|umur\s+bangunan|pbb|lunas|tunggakan|patokan\w*|dekat\s+apa|imb|pbg|denah|floor\s*plan|legalitas|dokumen\w*|berkas|surat[-\s]surat)\b/i,
 };
 // M198b: "Yang tidak dekat jalan raya ya, berisik" adalah PERNYATAAN (red flag), bukan
@@ -558,7 +558,8 @@ async function answerCardAttribute({ message, card, userId = null, isId = true }
      * diminta dicek satu per satu: ada / belum tercatat. */
     const FAC = {
       'kolam renang': /\b(kolam\s*renang|swimming|pool)\b/i, 'gym': /\b(gym|fitness)\b/i,
-      'kids zone': /\b(kids?\s*zone|playground|taman\s*bermain|area\s*(?:bermain\s*)?anak)\b/i,
+      'kids zone': /\b(kid[sz]?\s*zone|kids?\s*playground|children\s*playground|taman\s*bermain|area\s*(?:bermain\s*)?anak)\b/i,
+      'pet playground': /\b(pet\s*(?:playground|park|zone|area|friendly)|dog\s*park)\b/i,
       'AC': /\bac\b/i, 'lift': /\b(lift|elevator)\b/i, 'carport/garasi': /\b(carport|garasi|garage)\b/i,
       'CCTV': /\bcctv\b/i, 'security': /\b(security|satpam|keamanan\s*24)\b/i, 'parkir': /\b(parkir|parking)\b/i,
       'wifi': /\b(wi-?fi|internet)\b/i, 'water heater': /\b(water\s*heater|pemanas\s*air)\b/i,
@@ -892,11 +893,59 @@ function tryPendingViewingSchedule({ message, history = [], isId = true }) {
       timeFormatted = parseSurveyTime(normText, { requireClockWord: true });
     }
 
+    /* M200 (15 Sep 2026) — "Saya msh tanya dlu saja" / "Iya, Kak" sesudah "Enaknya
+     * survei tanggal berapa?" bukan jawaban tanggal. Dulu dibalas "Boleh disebutkan
+     * tanggal dan jam" (transkrip produksi 15 Sep). Menjelajah/menolak → hormati;
+     * pesan lain yang bukan tanggal → null supaya gerbang lanjutan menjawab. */
+    if (!dateFormatted && !timeFormatted) {
+      const { customerIsBrowsing, customerDeclinesViewing } = require('./customerQuestionGuard');
+      if (customerIsBrowsing(text) || customerDeclinesViewing(text)) {
+        return {
+          reply: isId
+            ? `Santai saja, Kak 😊 Surveinya kapan pun Kakak siap — tinggal sebut tanggalnya. Silakan tanya apa pun soal unitnya.`
+            : `No rush 😊 The viewing can wait until you're ready — just send me a date. Ask me anything about the unit.`,
+          verdict: 'viewing-deferred',
+        };
+      }
+      if (String(text).trim().split(/\s+/).length > 3 || /\?/.test(text)) return null;
+    }
     return composeViewingScheduleReply({ dateFormatted, timeFormatted, isDateOnlyFollow, isId });
   } catch (err) {
     console.error('[PENDING VIEWING SCHEDULE GATE ERROR]', err.message);
     return null;
   }
+}
+
+/**
+ * M200 — fasilitas yang tercetak di kartu unit yang DIPILIH customer
+ * ("🏷️ Fasilitas: GARDEN, CCTV 24 JAM, …"). Untuk baris Fasilitas di summary:
+ * kebutuhan customer + fasilitas unit terpilih (arahan pemilik 15 Sep 2026).
+ * @returns {string[]} kosong bila belum ada pilihan / kartu tanpa baris fasilitas
+ */
+function pickedUnitFacilities(history = []) {
+  try {
+    const pick = readConfirmedPick(history);
+    if (!pick) return [];
+    const rows = Array.isArray(history) ? history : [];
+    const isAi = (h) => /^(ai|assistant|bot)$/i.test(String(h.role || ''));
+    const wantTitle = normTitle(pick.title); const wantPrice = normTitle(pick.priceText || '');
+    for (let i = rows.length - 1; i >= 0; i--) {
+      if (!isAi(rows[i])) continue;
+      const text = String(rows[i].message || rows[i].content || '');
+      if (!isCardMessage(text)) continue;
+      const chunks = text.split(/\n(?=\s*\d{1,2}\.\s+\*{1,2})/);
+      for (const chunk of chunks) {
+        const head = chunk.match(CARD_HEAD_RE); if (!head) continue;
+        if (normTitle(head[2]) !== wantTitle) continue;
+        const priceRaw = (chunk.match(PRICE_LINE_RE) || chunk.match(PRICE_LINE_FALLBACK_RE) || [])[1] || '';
+        if (wantPrice && normTitle(priceRaw) !== wantPrice) continue;
+        const fm = chunk.match(/Fasilitas\s*:\s*([^\n]+)/i) || chunk.match(/Facilities\s*:\s*([^\n]+)/i);
+        if (!fm) return [];
+        return fm[1].split(/\s*,\s*/).map((x) => x.trim()).filter(Boolean);
+      }
+    }
+    return [];
+  } catch (_) { return []; }
 }
 
 /**
@@ -906,7 +955,9 @@ function tryPendingViewingSchedule({ message, history = [], isId = true }) {
  */
 /** Dalam konteks SURVEI, "Minggu ini/depan" = hari Minggu (bukan pekan). */
 function sundayInViewingContext(text) {
-  return String(text || '').replace(/\b(?:hari\s+)?minggu\s+(ini|depan|besok)\b/gi, 'hari minggu $1');
+  // M200: "minggu depan" = pekan depan (+7 hari) — sama dengan gerbang jadwal susulan;
+  // hanya "minggu ini" (yang tanpa ini = null) dibaca sebagai hari Minggu.
+  return String(text || '').replace(/\b(?:hari\s+)?minggu\s+(ini)\b/gi, 'hari minggu $1');
 }
 
 function scheduleViewingFromText(text, isId = true) {
@@ -1228,6 +1279,7 @@ module.exports = {
   tryPendingViewingSchedule,
   tryPostPickFallback,
   readConfirmedPick,
+  pickedUnitFacilities,
   listConfirmedPicks,
   parseAllShownCards,
   mentionedCardArea,

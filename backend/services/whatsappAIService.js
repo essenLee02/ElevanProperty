@@ -636,8 +636,43 @@ ${params.distanceFact}`);
   const asksPickedUnitDocs = Array.isArray(history)
     && history.some((h) => /^(ai|assistant)$/i.test(String(h.role || '')) && /dicatat pilihannya|your pick/i.test(String(h.message || h.content || '')))
     && /\b(sertifikat\w*|imb|pbg|pbb|dokumen\w*|legalitas|shm|shgb|hgb)\b/i.test(message)
-    && /(?:nya\b|\bunit|\brumah\s+(?:ini|itu|tersebut)|\bdokumen|\bada\b|\blengkap)/i.test(message)
-    && !/\b(apa\s+itu|apa\s+bedanya|maksudnya|artinya|apa\s+sih)\b/i.test(message);
+    // M200: sesudah unit dipilih, SEMUA pertanyaan sertifikat ("rmh trsbut sdh SHM?") = data unit,
+    // kecuali yang jelas minta definisi ("apa itu SHM").
+    && !/\b(apa\s+itu|apa\s+bedanya|maksudnya|artinya|apa\s+sih|apa\s+arti|jelaskan|penjelasan)\b/i.test(message);
+  /* M201 (16 Sep 2026) — "Rumah di Surabaya rata-rata berapa harganya?" = pertanyaan
+   * HARGA PASARAN. Dijawab dari katalog agent (min–median–maks di kota/tipe/transaksi
+   * yang diketahui), bukan angka umum, lalu SATU pertanyaan slot wajib (area). Dulu
+   * jatuh ke gerbang kualifikasi yang mengulang pertanyaan area (agenda customer
+   * diabaikan). */
+  if (backendMayCompose && agentUserId
+      && /\b(?:rata[-\s]?rata|kisaran|range|pasaran)\b[^.?!]{0,30}\bharga|\bharga\w*\b[^.?!]{0,30}\b(?:rata[-\s]?rata|kisaran|pasaran|umumnya|biasanya)\b/i.test(message)) {
+    try {
+      const { getDbPropertiesForAgent, detectCanonicalType: _ct, detectCanonicalTransaction: _ctx } = require('./propertyRecommendationService');
+      const { extractQualificationState: _eqs } = require('./aiPromptBuilderService');
+      const qsP = _eqs(history, message) || {};
+      const cityP = String(qsP.city || filters.location || '').toLowerCase();
+      const txP = String(_ctx(qsP.transactionType || filters.transactionType || '') || qsP.transactionType || filters.transactionType || '').toLowerCase();
+      const typeP = String(_ct(qsP.buildingType || filters.buildingType || '') || qsP.buildingType || filters.buildingType || '').toLowerCase();
+      let rows = (await getDbPropertiesForAgent(agentUserId)).filter((r) => Number.isFinite(Number(r.priceValue)) && Number(r.priceValue) > 0);
+      if (cityP) rows = rows.filter((r) => String(r.city || '').toLowerCase() === cityP);
+      if (txP) rows = rows.filter((r) => String(r.transactionType || '').toLowerCase() === txP);
+      if (typeP) rows = rows.filter((r) => String(r.buildingType || '').toLowerCase() === typeP);
+      if (rows.length >= 2) {
+        const vals = rows.map((r) => Number(r.priceValue)).sort((a, b) => a - b);
+        const { humanPrice: _hp } = require('../utils/areaAvailabilityGate');
+        const med = vals[Math.floor(vals.length / 2)];
+        const isIdP = isIndonesian(message, history);
+        const cityLabel = cityP ? cityP.replace(/\b\w/g, (c) => c.toUpperCase()) : '';
+        const typeLabel = typeP ? humanBuildingType(typeP) : (isIdP ? 'properti' : 'property');
+        const txLabel = txP === 'rent' ? (isIdP ? 'sewa' : 'for rent') : (isIdP ? 'dijual' : 'for sale');
+        const askArea = qsP.district ? '' : (isIdP ? ` Di area mana di ${cityLabel || 'kota itu'} yang Kakak incar? 📍` : ` Which area in ${cityLabel || 'that city'} are you looking at? 📍`);
+        const reply = isIdP
+          ? `Untuk *${typeLabel} ${txLabel}*${cityLabel ? ` di *${cityLabel}*` : ''} yang saya pegang (${rows.length} unit): mulai *${_hp(vals[0])}* sampai *${_hp(vals[vals.length - 1])}*, kebanyakan di kisaran *${_hp(med)}* — tergantung area dan luasnya.${askArea}`
+          : `For *${typeLabel} ${txLabel}*${cityLabel ? ` in *${cityLabel}*` : ''} I cover (${rows.length} units): from *${_hp(vals[0])}* to *${_hp(vals[vals.length - 1])}*, mostly around *${_hp(med)}* — depending on area and size.${askArea}`;
+        return { reply, replyParts: [reply], provider: 'price_range_gate', contextSource };
+      }
+    } catch (prErr) { console.warn('[WhatsAppAI] price range gate gagal (non-fatal):', prErr.message); }
+  }
   const termAnswer = asksPickedUnitDocs ? null : tryTerminologyAnswer(message);
   if (termAnswer && backendMayCompose) {
     console.log('[WhatsAppAI] 📖 Pertanyaan istilah legal/sertifikat terdeteksi — dijawab sebelum melanjutkan qualification flow.');
@@ -1130,7 +1165,13 @@ ${cityHit.reply}`);
     // selama customer tidak minta lagi (simulasi P7: 9 giliran berturut-turut).
     const areaEmptyAlreadySaid = Boolean(realArea) && (Array.isArray(history) ? history : []).some((h) => /^(ai|assistant)$/i.test(String(h.role || ''))
       && /belum ada di data saya|not in my data/i.test(String(h.message || h.content || '')) && String(h.message || h.content || '').toLowerCase().includes(String(realArea).toLowerCase()));
-    const gateShouldSpeak = customerAsksAvailability(message)
+    /* M200 (15 Sep 2026) — "Apakah ada gym, Kidz zone dan pet Playground?" SESUDAH
+     * kartu/pilihan = pertanyaan fasilitas unit, bukan minta listing (transkrip
+     * produksi 15 Sep: gerbang mengirim 2 kartu TAMBAHAN). Paritas dengan
+     * isBareAvailabilityQuestion di jalur Private Agent (M193). */
+    const { isBareAvailabilityQuestion: _bareAvail } = require('../utils/listingSelectionGate');
+    const bareAfterCards = listingsAlreadyShown && _bareAvail(message);
+    const gateShouldSpeak = (customerAsksAvailability(message) && !bareAfterCards)
       || ((fourSlotsKnown || areaKnownWithoutCity) && !listingsAlreadyShown && !areaEmptyAlreadySaid);
 
     if (agentUserId && realArea && txDb && gateShouldSpeak && !pickAlreadyHandledThisTurn && !customerSignalsClosing(message)) {
