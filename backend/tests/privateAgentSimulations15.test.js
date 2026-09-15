@@ -340,6 +340,137 @@ async function main() {
     ok('setelah tipe dijawab -> kartu tipe itu saja', isCard(s.replies[1].reply) && /House Rent/i.test(s.replies[1].reply) && !/Apartment/i.test(s.replies[1].reply), s.replies[1].reply.slice(0, 120));
   }
 
+  /* ═══ 18-27 — ATURAN SESI (15 Sep 2026): AI bertanya bila customer tidak bertanya
+   *     dan jatah < 10; summary pada 10-12 (tidak lebih awal kecuali customer
+   *     menutup); sesudah summary AI tetap menanggapi perubahan/pilihan/
+   *     penolakan/permintaan/kebutuhan/pertanyaan. ═══ */
+  const isQuestion = (t) => /\?/.test(String(t || ''));
+
+  /* 18 ── Customer pasif (hanya menjawab): AI yang bertanya; summary TIDAK sebelum ke-10 */
+  {
+    const s = await runSim('18. Customer pasif -> AI bertanya, summary baru di pesan ke-10', [
+      'Mau beli rumah di Surabaya, Wiyung',
+      'Budget 500 juta',
+      'Bulan depan',
+      'Sama istri, 2 anak',
+      'Semi furnished',
+      'Cash',
+      'Nggak ada yang dihindari',
+      'Iya',
+      'Oke',
+      'Baik',
+      'Siap',
+    ], generate);
+    const firstSum = s.replies.findIndex((r) => isSummary(r.reply));
+    ok('AI terus BERTANYA saat customer tidak bertanya (pesan 2-8 berisi pertanyaan)', s.replies.slice(1, 8).filter((r) => isQuestion(r.reply) || isCard(r.reply)).length >= 5, s.replies.slice(1, 8).map((r) => r.reply.slice(0, 40)).join(' | '));
+    ok('summary TIDAK muncul sebelum pesan ke-9', firstSum === -1 || firstSum >= 8, `firstSum idx=${firstSum}`);
+    ok('summary muncul pada pesan ke-9..12', firstSum >= 8 && firstSum <= 11, `firstSum idx=${firstSum}`);
+  }
+
+  /* 19 ── Semua Q terjawab cepat: AI menawarkan penutup dulu, bukan langsung ringkas */
+  {
+    const s = await runSim('19. Semua Q terjawab sebelum ke-10 -> tawaran penutup, bukan ringkasan dini', [
+      'Beli rumah di Sidoarjo Candramas, budget 500 juta, cash, masuk bulan depan, sama istri 2 anak, semi furnished',
+      'Kolam renang sama carport',
+      'Yang baru',
+      'Nggak ada yang dihindari',
+      'Dekat sekolah anak',
+      'Sudah pernah lihat 2, kurang cocok',
+      'Iya',
+    ], generate);
+    const firstSum = s.replies.findIndex((r) => isSummary(r.reply));
+    const wrapIdx = s.replies.findIndex((r) => /ada lagi yang mau ditanyakan atau diubah/i.test(r.reply));
+    ok('ringkasan TIDAK mendahului tawaran penutup (Q habis < 10 -> tawarkan dulu)', wrapIdx >= 0 && (firstSum === -1 || firstSum > wrapIdx), `wrap idx=${wrapIdx}, firstSum idx=${firstSum}`);
+    ok('AI menawarkan penutup ("ada lagi yang mau ditanyakan atau diubah") sebelum meringkas', s.replies.some((r) => /ada lagi yang mau ditanyakan atau diubah/i.test(r.reply)), s.replies.map((r) => r.reply.slice(0, 50)).join(' | '));
+  }
+
+  /* 20 ── Tawaran penutup dijawab "ringkas saja" -> summary */
+  {
+    const s = await runSim('20. "Rangkum saja" -> summary', [
+      'Beli rumah di Sidoarjo Candramas, budget 500 juta, cash, masuk bulan depan, sama istri 2 anak, semi furnished',
+      'Iya',
+      'Oke',
+      'Rangkum saja Kak',
+    ], generate);
+    ok('"rangkum saja" -> summary', s.replies.some((r) => isSummary(r.reply)), s.last.reply.slice(0, 80));
+  }
+
+  /* 21 ── Sesudah summary: customer GANTI AREA -> listing area baru */
+  {
+    const s = await runSim('21. Sesudah summary: ganti area', [
+      'Beli rumah di Surabaya, Wiyung',
+      'Cukup, itu saja',
+      'Eh, kalau di Dukuh Pakis ada?',
+    ], generate);
+    ok('summary terkirim', isSummary(s.replies[1].reply));
+    ok('sesudah summary, ganti area -> kartu Dukuh Pakis (bukan Halo/reset)', isCard(s.replies[2].reply) && /dukuh pakis/i.test(s.replies[2].reply) && !/sewa atau beli/i.test(s.replies[2].reply), s.replies[2].reply.slice(0, 120));
+  }
+
+  /* 22 ── Sesudah summary: customer MEMILIH unit */
+  {
+    const s = await runSim('22. Sesudah summary: pilih unit', [
+      'Beli rumah di Surabaya, Wiyung',
+      'Cukup, itu saja',
+      'Saya pilih no 2',
+    ], generate);
+    ok('pilihan sesudah summary dikonfirmasi (Dicatat pilihannya)', /dicatat pilihannya/i.test(s.replies[2].reply) && !isCard(s.replies[2].reply), s.replies[2].reply.slice(0, 120));
+  }
+
+  /* 23 ── Sesudah summary: MENOLAK survei -> diterima, tidak ditanya ulang */
+  {
+    const s = await runSim('23. Sesudah summary: tolak survei', [
+      'Beli rumah di Surabaya, Wiyung',
+      'Cukup, itu saja',
+      'Saya pilih no 1',
+      'Belum mau survei dulu',
+      'Sertifikatnya apa?',
+    ], generate);
+    ok('penolakan survei tidak dibalas tanya jadwal', !/tanggal berapa|jam berapa/i.test(s.replies[3].reply), s.replies[3].reply.slice(0, 120));
+    ok('pertanyaan berikutnya tetap dijawab, tanpa menawarkan survei lagi', /sertifikat|shm|shgb|agent/i.test(s.replies[4].reply) && !/jadwalkan survei/i.test(s.replies[4].reply), s.replies[4].reply.slice(0, 120));
+  }
+
+  /* 24 ── Sesudah summary: KEBUTUHAN baru ("ada yang 3 kamar?") -> kartu tambahan tersaring */
+  {
+    const s = await runSim('24. Sesudah summary: kebutuhan baru (3 kamar)', [
+      'Beli rumah di Sidoarjo, Candramas',
+      'Cukup, itu saja',
+      'Ada yang 3 kamar?',
+    ], generate);
+    ok('kebutuhan baru sesudah summary -> kartu tambahan (nomor lanjut), bukan reset', isCard(s.replies[2].reply) && !/^\s*1\.\s+\*/m.test(s.replies[2].reply), s.replies[2].reply.slice(0, 120));
+  }
+
+  /* 25 ── Sesudah summary: PERTANYAAN unit -> dijawab dari kartu */
+  {
+    const s = await runSim('25. Sesudah summary: pertanyaan unit', [
+      'Beli rumah di Sidoarjo, Candramas',
+      'Cukup, itu saja',
+      'Yang no 1 luas tanahnya berapa?',
+    ], generate);
+    ok('pertanyaan unit sesudah summary dijawab dari kartu (luas tanah)', /luas tanah/i.test(s.replies[2].reply) && !isSummary(s.replies[2].reply) && !isCard(s.replies[2].reply), s.replies[2].reply.slice(0, 120));
+  }
+
+  /* 26 ── Customer bertanya TERUS 12 kali: AI tidak pernah menyela dengan interview; summary tetap 10-12 */
+  {
+    const turns = ['Beli rumah di Sidoarjo, Candramas', 'Yang no 1 harganya berapa?', 'Luas tanahnya?', 'Sertifikatnya?', 'Alamatnya?', 'Ada carport?', 'Masih tersedia?', 'Bisa nego?', 'Ada taman?', 'Yang no 2 kamarnya berapa?', 'Dekat sekolah?', 'Ada AC?'];
+    const s = await runSim('26. Customer bertanya terus', turns, generate);
+    const interviews = s.replies.slice(1, 9).filter((r) => /budget|penghuni|tinggal bersama|furnitur|masuk atau pindah|rencananya masuk/i.test(r.reply)).length;
+    ok('AI tidak menyela pertanyaan customer dengan interview (pesan 2-9)', interviews === 0, `interviews=${interviews}`);
+    const firstSum = s.replies.findIndex((r) => isSummary(r.reply));
+    ok('summary tetap datang pada pesan ke-10..12', firstSum >= 9 && firstSum <= 11, `firstSum idx=${firstSum}`);
+  }
+
+  /* 27 ── Perubahan di tengah alur: ganti transaksi (sewa -> beli) -> budget ditanya ulang, area tetap */
+  {
+    const s = await runSim('27. Ganti transaksi di tengah alur', [
+      'Sewa rumah di Surabaya, Kenjeran, budget 2 juta/bulan',
+      'Eh, saya mau beli saja',
+    ], generate);
+    const r = s.replies[1].reply;
+    ok('ganti sewa->beli tidak mereset kota/area (tidak tanya "kota mana")', !/di \*kota\* mana|kota atau area mana/i.test(r), r.slice(0, 120));
+    ok('menunjukkan listing dijual Kenjeran ATAU menanyakan budget beli (budget sewa tidak dipakai)', (isCard(r) && /Sale/i.test(r)) || /budget|kisaran/i.test(r), r.slice(0, 160));
+    ok('budget sewa "2 juta/bulan" TIDAK dipakai untuk pencarian beli', !/2\.000\.000\/bulan|2 juta\/bulan/i.test(r), r.slice(0, 160));
+  }
+
   console.log(`\nRESULT: ${pass}/${pass + fail}`);
   process.exit(fail === 0 ? 0 : 1);
 }

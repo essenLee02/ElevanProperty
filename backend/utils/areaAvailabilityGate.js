@@ -92,6 +92,9 @@ function customerAsksAvailability(message) {
   // M198b: "jangan kirim listing yang sama" / "tidak usah kasih data" = permintaan
   // BERHENTI, bukan minta listing.
   if (/\b(?:jangan|jgn|tidak\s+usah|tdk\s+usah|nggak\s+usah|gak\s+usah|ga\s+usah)\b[^.?!]{0,12}\b(?:kirim|kasih|tampilkan|minta|lihat|liat)\b/i.test(t)) return false;
+  // M196: "Nggak ada yang dihindari" / "Tidak ada yang khusus" = JAWABAN (Q5/Q4)
+  // bernegasi, bukan permintaan listing — /\bada\s+yang\b/ di bawah salah tangkap.
+  if (/^\s*(?:tidak|tdk|nggak|ngga|gak|ga|belum|blm)\s+ada\s+(?:yang|yg)\b/i.test(t)) return false;
   // M199: "Denah rumahnya ada?", "ada videonya?", "IMB-nya ada?" = dokumentasi unit, bukan minta listing.
   if (/\b(denah|foto\w*|video\w*|dokumen\w*|sertifikat\w*|imb|pbg|pbb|brosur|maps|patokan\w*|garasi|carport|kolam|ac)\b/i.test(t) && !/\b(listing|unit\s+lain|pilihan\s+lain|yang\s+lain|lainnya)\b/i.test(t)) return false;
   return AVAILABILITY_RE.test(t);

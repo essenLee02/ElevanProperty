@@ -5208,8 +5208,16 @@ class ChatbotPrivateService {
           try {
             const { findAreaCandidatesInText } = require('../services/areaAvailabilityService');
             const am = await findAreaCandidatesInText({ userId: agentUserId, city: availCity, text: userMessage });
-            const echoOnly = am.candidates.length > 1 && am.candidates.every((a) => String(a).toLowerCase().includes(String(availCity).toLowerCase()));
-            if (am.area) {
+            const cityLc = String(availCity).toLowerCase();
+            const echoOnly = am.candidates.length > 1 && am.candidates.every((a) => String(a).toLowerCase().includes(cityLc));
+            /* Gema nama kota pada KANDIDAT TUNGGAL: "beli rumah di gresik" cocok ke
+             * "Green Garden Gresik" hanya lewat token "gresik". Area itu sah hanya
+             * bila pesan juga memuat token area LAIN selain nama kotanya (atau
+             * hasil fuzzy yang memang menyasar nama area). */
+            const singleEcho = Boolean(am.area) && !am.fuzzy && String(am.area).toLowerCase().includes(cityLc)
+              && !String(am.area).toLowerCase().split(/[^a-z0-9]+/).filter((tok) => tok.length >= 4 && !cityLc.includes(tok))
+                .some((tok) => new RegExp('\\b' + tok + '\\b', 'i').test(userMessage));
+            if (am.area && !singleEcho) {
               availArea = am.area;
               console.log(`[PrivateAgent] 📍 Area dari sebutan pendek/typo: "${userMessage}" -> ${am.area}${am.fuzzy ? ' (fuzzy)' : ''}`);
             } else if (am.candidates.length > 1 && !echoOnly) {
@@ -5520,6 +5528,10 @@ class ChatbotPrivateService {
         });
       }
 
+      // M196 — sebelum 10 percakapan, jangan langsung ringkas: tanya penutup sekali.
+      const wrapA = this.#wrapUpBeforeSummary({ profile, history, lang, skillInfo, filters });
+      if (wrapA) return wrapA;
+
       // All Q1–Q12 answered → generate structured brief
       console.log('[PrivateAgent/SummaryMode] ✅ All Q answered → generating agent brief');
       const brief = ConversationQualifier.buildAgentBrief(profile, filters, history, userMessage);
@@ -5560,6 +5572,10 @@ class ChatbotPrivateService {
         skillInfo, filters, qualificationMode: true,
       });
     }
+
+    // M196 — sebelum 10 percakapan, jangan langsung ringkas: tanya penutup sekali.
+    const wrapB = this.#wrapUpBeforeSummary({ profile, history, lang, skillInfo, filters });
+    if (wrapB) return wrapB;
 
     // All Q answered → build summary brief + fetch listings in parallel
     const brief = ConversationQualifier.buildAgentBrief(profile, filters, history, userMessage);
@@ -6020,6 +6036,34 @@ class ChatbotPrivateService {
    * @param {object} meta  - Additional metadata fields
    * @returns {object}
    */
+  /* ── M196 (15 Sep 2026) — SUMMARY TIDAK BOLEH DATANG SEBELUM ~10 PERCAKAPAN
+   * Aturan pemilik proyek: dalam satu sesi minimal 10-12 percakapan; AI boleh
+   * bertanya selama customer tidak bertanya dan jatahnya masih ada; ringkasan
+   * diberikan pada pesan ke-10-12 atau saat customer menutup. MODE A/B dulu
+   * mengirim ringkasan begitu "semua Q terjawab" — di transkrip Gresik itu
+   * jatuh di pesan ke-6 dengan data yang masih setengah matang. Sekarang bila
+   * semua Q sudah habis tapi percakapan masih < 10, AI menawarkan SEKALI:
+   * ada yang mau ditanya/diubah, atau ringkas? Pertanyaan/perubahan customer
+   * dijawab gerbang biasa; "tidak/ringkas/cukup" -> penutup keras -> ringkasan;
+   * bila sudah ditanya dan customer tetap tidak bertanya -> ringkasan. */
+  static #WRAP_UP_RE = /ada lagi yang mau ditanyakan atau diubah|anything else you want to ask or change/i;
+  static #wrapUpBeforeSummary({ profile, history = [], lang = 'id', skillInfo, filters }) {
+    try {
+      const exchanges = Number(profile && profile.aiCount) || 0;
+      if (exchanges >= 9) return null;                       // sudah ~10 percakapan -> ringkas
+      const rows = Array.isArray(history) ? history : [];
+      const lastAi = [...rows].reverse().find((h) => /^(ai|assistant)$/i.test(String(h.role || '')));
+      if (lastAi && ChatbotPrivateService.#WRAP_UP_RE.test(String(lastAi.message || ''))) return null; // sudah ditanya
+      const askedBefore = rows.some((h) => /^(ai|assistant)$/i.test(String(h.role || '')) && ChatbotPrivateService.#WRAP_UP_RE.test(String(h.message || '')));
+      if (askedBefore) return null;
+      console.log(`[PrivateAgent] 🧭 Semua Q terjawab pada percakapan ke-${exchanges + 1} (<10) -> tanya penutup dulu, bukan ringkasan`);
+      return this.#wrap(lang === 'id'
+        ? 'Sejauh ini catatannya sudah lengkap, Kak 😊 Ada lagi yang mau ditanyakan atau diubah — area, budget, atau unitnya? Kalau tidak, saya rangkum sekarang.'
+        : 'I have everything so far 😊 Anything else you want to ask or change — area, budget, or the unit? If not, I will summarise now.',
+      { skillInfo, filters, provider: 'wrap_up_before_summary', qualificationMode: true });
+    } catch (_e) { return null; }
+  }
+
   static #wrap(reply, meta = {}) {
     return {
       reply,

@@ -274,9 +274,13 @@ function buildAnswerFirstDirective(message, nextQuestion = null) {
  * belum menyentuh 10 percakapan; penutup HARD selalu mengakhiri. */
 const THANKS_RE = /\b(?:terima\s*kasih|trma\s*(?:kasih|ksh)|makasi[h]?|mksh|mksih|thanks?|thx|tq|thank\s*you)\b/i;
 const HARD_STOP_RE = new RegExp(
-  '\\b(?:tidak|nggak|ga+k?|blm|belum)\\s+(?:ada|tertarik|minat)\\b'
+  // M196: "nggak ada yang dihindari" / "tidak ada yang khusus" adalah JAWABAN
+  // (Q5/Q4), bukan penutup — "tidak ada" hanya penutup bila TIDAK diikuti "yang/…nya".
+  '\\b(?:tidak|nggak|ga+k?|blm|belum)\\s+(?:ada|tertarik|minat)\\b(?!\\s+(?:yang|yg|khusus|masalah|preferensi|permintaan|pantangan))'
   + '|\\bcukup\\b(?!\\s+(?:luas|besar|banyak|kamar|dekat))'
-  + '|\\b(?:itu|segitu)\\s+(?:saja|aja|dulu|dlu)\\b|\\bsekian\\b',
+  + '|\\b(?:itu|segitu)\\s+(?:saja|aja|dulu|dlu)\\b|\\bsekian\\b'
+  // M196: jawaban atas tawaran penutup "…atau saya rangkum sekarang?"
+  + '|\\b(?:ringkas|rangkum|summary|rekap)\\b',
   'i'
 );
 const CLOSING_SIGNAL_RE = new RegExp(`${HARD_STOP_RE.source}|${THANKS_RE.source}`, 'i');

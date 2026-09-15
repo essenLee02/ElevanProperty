@@ -1005,11 +1005,28 @@ function extractQualificationState(history = [], currentMessage = '') {
     // was already handled on that turn; re-nulling on every later turn would
     // wipe the customer's fresh answer to the re-ask.
     const lastIdx = ACTIVE_ALL.length - 1;
+    /* M196 (15 Sep 2026) — SESUDAH SUMMARY, TIPE & TRANSAKSI DIWARISI bila
+     * customer tidak menyebutnya lagi. ACTIVE_ALL sengaja dipotong di summary
+     * (anti-polusi), tapi akibatnya "Eh, kalau di Dukuh Pakis ada?" sesudah
+     * summary kehilangan beli/rumah -> alur mereset ke "sewa atau beli?".
+     * Doc 01: transaksi & tipe BERTAHAN saat area/kota berganti; hanya
+     * pencarian baru yang MENYEBUTNYA ulang yang menimpanya. Yang dinyatakan
+     * sesudah summary dicatat terpisah (…Stated) supaya batas pencarian aktif
+     * (searchStartIdx) tidak salah mengira warisan sebagai pencarian baru. */
+    const typeStated = Boolean(runType), txStated = Boolean(runTx), locStated = Boolean(runLoc);
+    if (summaryStart > 0) {
+      for (let i = summaryStart - 1; i >= 0 && (!runType || !runTx); i--) {
+        if (!QS_CUST_ROLES.has(ALL[i].role)) continue;
+        if (!runType) { const t = isConditionalFallbackMessage(ALL[i].message) ? null : typeOfP0(ALL[i].message); if (t) runType = t; }
+        if (!runTx)   { const tx = txOfP0(ALL[i].message); if (tx) runTx = tx; }
+      }
+    }
     // eslint-disable-next-line no-var
     var P0_RESOLVED = {
       type: runType, typeChangedNow: runTypeIdx === lastIdx,
       tx:   runTx,   txChangedNow:   runTxIdx   === lastIdx,
       loc:  runLoc,  locChangedNow:  runLocIdx  === lastIdx,
+      typeStated, txStated, locStated,
       // M194: indeks pergantian TERAKHIR (dalam ACTIVE_ALL) + offset ke history asli —
       // dipakai untuk membuang slot pencarian LAMA yang lolos lewat pergantian.
       typeIdx: runTypeIdx, txIdx: runTxIdx, locIdx: runLocIdx, summaryStart,
@@ -2348,6 +2365,31 @@ function extractQualificationState(history = [], currentMessage = '') {
       // apa?") BERULANG-ULANG walau customer sudah menyebut tipe & lokasi (M52).
       _assignLocation(state, detectLocation(currentMessage || ''));   // M186
 
+      /* ⭐ M196 (15 Sep 2026) — SESUDAH SUMMARY, TIPE & TRANSAKSI DIWARISI bila
+       * pesan ini tidak menyebutnya. "Eh, kalau di Dukuh Pakis ada?" atau "Ada
+       * yang 3 kamar?" sesudah summary adalah PERUBAHAN/KEBUTUHAN pada pencarian
+       * yang sama (aturan pemilik proyek: sesudah summary AI tetap menanggapi
+       * perubahan, pilihan, penolakan, permintaan, kebutuhan, pertanyaan; doc 01:
+       * transaksi & tipe bertahan saat area berganti). Reset total di atas
+       * membuat keduanya null -> alur bertanya "sewa atau beli?" dari nol.
+       * Pencarian BARU tetap dikenali: bila pesan ini menyebut tipe/transaksi/
+       * kota sendiri, nilai itu yang dipakai (sudah diisi di atas). */
+      const statedType = Boolean(state.buildingType), statedTx = Boolean(state.transactionType);
+      const statedCity = Boolean(detectLocation(currentMessage || ''));
+      if (!statedType || !statedTx) {
+        for (let i = ALL.length - 2; i >= 0 && (!state.buildingType || !state.transactionType); i--) {
+          const m = ALL[i]; if (!QS_CUST_ROLES.has(m.role)) continue;
+          if (!state.buildingType) { const t = isConditionalFallbackMessage(m.message) ? null : detectCanonicalType(m.message); if (t) state.buildingType = t; }
+          if (!state.transactionType) { const tx = detectCanonicalTransaction(m.message); if (tx) state.transactionType = tx; }
+        }
+      }
+      // Kota pun diwarisi bila tidak disebut (ganti area di kota yang sama).
+      if (!state.city) { for (let i = ALL.length - 2; i >= 0; i--) { const m = ALL[i]; if (!QS_CUST_ROLES.has(m.role)) continue; const loc = detectLocation(m.message || ''); if (loc) { _assignLocation(state, loc); break; } } }
+      // Batas pencarian aktif: pencarian BARU (tipe/tx/kota disebut) -> mulai
+      // dari pesan ini; lanjutan -> seluruh riwayat tetap berlaku (M198).
+      state.searchStartIdx = (statedType || statedTx || statedCity) ? (ALL.length - 1) : 0;
+      state.summaryContinuation = !(statedType || statedTx || statedCity);
+
       state.location = state.city;   // alias kompatibilitas (lihat return utama)
       return state;  // summary reset takes full priority — skip 3B
     }
@@ -2635,7 +2677,7 @@ function extractQualificationState(history = [], currentMessage = '') {
     //      tipe/tx/kota baru) -> 0, seluruh riwayat tetap berlaku (M198).
     const flipIdx = Math.max(P0_RESOLVED.locIdx, P0_RESOLVED.txIdx, P0_RESOLVED.typeIdx);
     const sStart = P0_RESOLVED.summaryStart || 0;
-    const newSearchAfterSummary = sStart > 0 && Boolean(P0_RESOLVED.type || P0_RESOLVED.tx || P0_RESOLVED.loc);
+    const newSearchAfterSummary = sStart > 0 && Boolean(P0_RESOLVED.typeStated || P0_RESOLVED.txStated || P0_RESOLVED.locStated);
     state.searchStartIdx = flipIdx >= 0 ? sStart + flipIdx : (newSearchAfterSummary ? sStart : 0);
   }
 
