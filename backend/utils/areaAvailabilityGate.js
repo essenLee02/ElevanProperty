@@ -64,6 +64,8 @@ const AVAILABILITY_RE = new RegExp([
   // M199: "Pakuwon juga bagus ya, ada?", "Pakuwon Indah ada juga?", "Kalau Wiyung?"
   /\bada\s*(?:juga|jg|kah|nggak|ga|gak)?\s*\?\s*$/,
   /^\s*(?:kalau|klo|kl)\s+(?:di\s+|yang\s+di\s+)?(?!(?:nego|harga|budget|kpr|cash|sewa|beli|survei|survey|besok|nanti|foto|dp|jam|tanggal|itu|ini|saya|ada|yang)\b)[A-Za-z][\w'-]*(?:\s+[A-Za-z][\w'-]*)?\s*\?\s*$/,
+  // M202: "Ada 2 unit lagi yang mirip?", "ada yang serupa?", "unit lain yang sejenis"
+  /\bada\s+\d+\s*(?:unit|listing|pilihan|opsi)\b|\b\d+\s*(?:unit|listing)\s+lagi\b|\byang\s+(?:mirip|serupa|sejenis|seperti\s+itu)\b/,
   // "Yang 3 kamar?" / "yang 2 lantai ada?" — saringan atribut = minta listing yang cocok.
   /\byang\s+\d{1,2}\s*(?:kamar|kt|km|lantai)\b[^.?!]{0,15}(?:\?|\bada\b)/,
 ].map((r) => r.source).join('|'), 'i');

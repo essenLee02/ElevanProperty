@@ -477,8 +477,8 @@ const ATTR_RE = {
   address: /\b(alamat\w*|lokasinya\s+di\s+mana|di\s+mana\s+(?:persis|tepat)nya|share\s*lok\w*|maps)\b/i,
   price: /\b(harga\w*|berapa\s*duit|hrg\w*|berapa\s*(?:per|se)\s*(?:bulan|tahun|hari|malam)|per\s*bulan|sebulan|per\s*tahun|setahun|sewanya\s*berapa)\b/i,
   availability: /\b(masih\s+(?:ada|tersedia|available|kosong)|sudah\s+(?:laku|terjual|tersewa|dibooking|di-?booking)|belum\s+laku)\b/i,
-  facilities: /\b(fasilitas|ada\s+(?:ac|gym|kolam|lift|carport|garasi|taman|garden|cctv|security|satpam|parkir|parking|wifi|water\s*heater|kitchen|musholla|laundry|kid[sz]|playground|pet\s*\w+|jogging|minimarket)|furnished|furnitur|perabot)\b/i,
-  unknown: /\b(banjir|panas|bising|berisik|ipl|lantai\s*berapa|tower|jam\s*malam|pasangan|suami\s*istri|pemilik|owner|nego|diskon|dekat\s+sekolah|sekolah|tetangga|lingkungan|air|listrik\s*berapa|watt|hadap|renovasi|direnovasi|tahun\s+dibangun|usia\s+bangunan|umur\s+bangunan|pbb|lunas|tunggakan|patokan\w*|dekat\s+apa|imb|pbg|denah|floor\s*plan|legalitas|dokumen\w*|berkas|surat[-\s]surat)\b/i,
+  facilities: /\b(fasilitas|ada\s+(?:ac|gym|kolam|lift|carport|garasi|taman|garden|cctv|security|satpam|parkir|parking|wifi|water\s*heater|kitchen|dapur|kompor|musholla|laundry|kid[sz]|playground|pet\s*\w+|jogging|minimarket|balkon|balcony)\w*|furnished|furnitur|perabot)\b/i,
+  unknown: /\b(banjir|panas|bising|berisik|ipl|lantai\s*berapa|tower|jam\s*malam|pasangan|suami\s*istri|pemilik|owner|nego|diskon|promo|potongan|bisa\s+kurang|turun\s+harga|dekat\s+sekolah|sekolah|tetangga|lingkungan|air|listrik\s*berapa|watt|hadap|renovasi|direnovasi|tahun\s+dibangun|usia\s+bangunan|umur\s+bangunan|pbb|lunas|tunggakan|patokan\w*|dekat\s+apa|imb|pbg|denah|floor\s*plan|legalitas|dokumen\w*|berkas|surat[-\s]surat|deposit\w*|uang\s+jaminan|termin|cicil\w*|bulanan|tahunan|bayar\s+(?:per|tiap|setiap|di\s+tempat|di\s+muka|setahun|sebulan)|per\s+\d+\s+bulan|dekat\s+tol|tol\b|angkot|bus\b|transport\w*|akses\w*|stasiun|halte|kursi\s+roda|difabel|lansia|tangga|check[-\s]?in|check[-\s]?out|jam\s+masuk|parkir\w*|parking|muat\s+\d+\s+mobil|zonasi|izin\s+usaha|hewan|peliharaan|pet\b|kucing|anjing|dapur|kitchen|kompor|penyewa\w*|tenant\w*|yield|roi|balik\s+modal|cash\s+bertahap|bertahap|cash\s+keras)\b/i,
 };
 // M198b: "Yang tidak dekat jalan raya ya, berisik" adalah PERNYATAAN (red flag), bukan
 // pertanyaan — negasi hanya dihitung bila di UJUNG kalimat ("banjir nggak?", "dekat sekolah nggak").
@@ -565,6 +565,7 @@ async function answerCardAttribute({ message, card, userId = null, isId = true }
       'wifi': /\b(wi-?fi|internet)\b/i, 'water heater': /\b(water\s*heater|pemanas\s*air)\b/i,
       'kitchen set': /\bkitchen\s*set\b/i, 'taman': /\b(taman|garden)\b/i, 'musholla': /\b(musholla|mushola|masjid)\b/i,
       'laundry': /\blaundry\b/i, 'jogging track': /\bjogging\b/i, 'minimarket': /\b(minimarket|indomaret|alfamart)\b/i,
+      'dapur': /\b(dapur|kitchen(?!\s*set)|kompor)\b/i, 'balkon': /\b(balkon|balcony)\b/i,
     };
     const asked = Object.keys(FAC).filter((k) => FAC[k].test(t));
     if (asked.length && f) {
@@ -724,6 +725,10 @@ function tryPendingViewingConfirmation({ message, history = [], isId = true }) {
      * menyebut jadwal atas tawaran survei = setuju. Jangan balas "Enaknya
      * survei tanggal berapa?" (customer baru saja menyebutnya). Pakai
      * penjadwal yang sama dengan giliran susulan. */
+    // M202: "Boleh bayar per 3 bulan?" bukan jawaban tawaran survei ("per 3 bulan" pernah
+    // terbaca tanggal +3 bulan). Pertanyaan pembayaran/deposit/harga → gerbang lain.
+    if (/\b(?:bayar|cicil|termin|deposit|dp|harga|nego|diskon|promo|ipl|listrik|watt)\b/i.test(text)
+        && !/\b(?:survei|survey|viewing|ketemu\w*|lihat\s+langsung)\b/i.test(text)) return null;
     const direct = scheduleViewingFromText(text, isId);
     if (direct) return direct;
 
@@ -845,6 +850,13 @@ function tryPendingViewingSchedule({ message, history = [], isId = true }) {
     }
 
     if (!isCombinedAsk && !isDateOnlyFollow && !isTimeOnlyFollow) return null;
+    // M202: penutup ("Makasih", "Terima kasih") atau pesan panjang tanpa tanggal/jam saat
+    // menunggu jawaban jadwal → biarkan gerbang penutup/lanjutan menjawab, jangan mengulang
+    // "hari apa yang pas?" (simulasi Z9: diulang 3 giliran).
+    {
+      const { customerSignalsClosing: _cls } = require('./customerQuestionGuard');
+      if (_cls(text)) return null;
+    }
     // M198b: "Masuknya rencana awal Desember" = tanggal MASUK, bukan jawaban jadwal survei.
     if (/\b(masuk\w*|pindah\w*|huni\w*|nempat\w*|check[- ]?in)\b/i.test(text) && !/\b(survei|survey|viewing|lihat|liat|ketemu\w*)\b/i.test(text)) return null;
 
@@ -957,7 +969,10 @@ function pickedUnitFacilities(history = []) {
 function sundayInViewingContext(text) {
   // M200: "minggu depan" = pekan depan (+7 hari) — sama dengan gerbang jadwal susulan;
   // hanya "minggu ini" (yang tanpa ini = null) dibaca sebagai hari Minggu.
-  return String(text || '').replace(/\b(?:hari\s+)?minggu\s+(ini)\b/gi, 'hari minggu $1');
+  // M202: "survei Minggu jam 10" / "Minggu jam 2" (tanpa ini/depan) = hari Minggu.
+  return String(text || '')
+    .replace(/\b(?:hari\s+)?minggu\s+(ini)\b/gi, 'hari minggu $1')
+    .replace(/\bminggu(?=\s*(?:,|\.|jam|pukul|pagi|siang|sore|malam|$))/gi, 'hari minggu');
 }
 
 function scheduleViewingFromText(text, isId = true) {

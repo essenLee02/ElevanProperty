@@ -62,6 +62,19 @@ function tryTerminologyAnswer(userMessage) {
       answer: 'DP KPR umumnya minimal 10–20% dari harga (bank tertentu ada program DP lebih rendah untuk rumah pertama); cicilan idealnya ≤30–35% penghasilan bulanan. Simulasi angka pastinya dibantu agent kami dengan bank rekanan.' },
     { re: /\b(?:rata[-\s]?rata|kisaran|range)\b[^.?!]{0,30}\bharga\b|\bharga\b[^.?!]{0,30}\b(?:rata[-\s]?rata|kisaran|pasaran)\b/,
       answer: null },   // dijawab dari katalog (gerbang area/harga), bukan angka umum
+    // M202 — kepercayaan customer: legalitas agent, komisi, biaya tersembunyi, pajak rumah second, "bisa KPR?"
+    { re: /\b(?:agent|agen)\w*\b[^.?!]{0,25}\b(?:resmi|legal|terdaftar|kantor\w*|terpercaya|bisa\s+dipercaya)\b|\b(?:resmi|legal|terdaftar)\b[^.?!]{0,15}\b(?:agent|agen)\b/,
+      answer: 'Agent kami adalah agen properti terdaftar dengan kantor resmi — detail identitas, alamat kantor, dan nomor telepon kantornya akan dikirimkan agent kami langsung ke Kakak (saya asisten yang membantu mencatat kebutuhan). Semua transaksi dilakukan lewat notaris/PPAT, jadi pembayaran tidak pernah ke perorangan.' },
+    { re: /\bkomisi\w*\b|\bfee\s+agen\w*\b/,
+      answer: 'Komisi agen umumnya ditanggung PENJUAL (lazimnya 2-3% dari harga transaksi, sesuai kesepakatan penjual-agent); pembeli tidak dikenakan komisi. Untuk sewa, umumnya satu bulan sewa dari pemilik. Agent kami bisa jelaskan detailnya.' },
+    { re: /\bbiaya\s+(?:tersembunyi|lain|tambahan|siluman)\b|\bhidden\s+(?:cost|fee)\b/,
+      answer: 'Tidak ada biaya tersembunyi, Kak. Biaya resmi di luar harga rumah: BPHTB (pajak pembeli), biaya notaris/PPAT & balik nama, dan bila KPR: provisi/administrasi bank, appraisal, asuransi. Semua dirinci oleh notaris/bank sebelum tanda tangan.' },
+    { re: /\b(?:rumah|properti)\s+second\b[^.?!]{0,20}\bpajak|\bpajak\w*\b[^.?!]{0,25}\b(?:rumah|properti)\s+second\b|\bkena\s+pajak\s+apa\b/,
+      answer: 'Untuk rumah second: PEMBELI membayar BPHTB (umumnya 5% dari nilai transaksi/NJOP dikurangi NPOPTKP daerah), PENJUAL membayar PPh final (umumnya 2,5%). Ditambah biaya notaris/PPAT dan balik nama sertifikat. Angka pastinya dihitung notaris.' },
+    { re: /\bzonasi\b|\bizin\s+usaha\b|\b(?:boleh|bisa)\s+(?:untuk|buat)\s+usaha\b/,
+      answer: 'Untuk usaha (kafe/toko/kantor), rumah tinggal umumnya perlu cek zonasi tata ruang & izin (PBG/OSS) — beda tiap kelurahan. Ruko/rukan sudah berzona komersial. Agent kami bisa bantu cek zonasi unit yang Kakak minati sebelum transaksi.' },
+    { re: /\bbisa\s+(?:pakai\s+|pake\s+)?kpr\b|\bkpr\s+bisa\b/,
+      answer: 'Bisa, Kak 😊 Unit ini bisa diproses dengan KPR lewat bank rekanan (DP umumnya 10-20%, tenor sampai 15-20 tahun). Kalau Kakak sudah punya bank pilihan atau perkiraan DP, saya catat untuk agent kami.' },
   ];
   for (const { re, answer } of PROCESS_QA) {
     if (re.test(text)) return answer;   // null = biarkan gerbang lain (katalog) menjawab

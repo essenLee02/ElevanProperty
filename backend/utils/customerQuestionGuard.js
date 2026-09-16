@@ -121,7 +121,10 @@ const VIEWING_REQUEST_RE = new RegExp(
   + '|'
   + '\\b(?:lihat|liat|cek|tengok|nengok)\\s+(?:langsung|unit\\w*|rumah\\w*|lokasi\\w*|propert\\w*|apart\\w*)'
   + '|'
-  + '\\b(?:meet\\s*up|site\\s*visit|jadwalkan\\s+(?:survei|viewing|kunjungan)|mampir\\s+(?:ke|dulu|lihat)|ketemuan)\\b',
+  + '\\b(?:meet\\s*up|site\\s*visit|jadwalkan\\s+(?:survei|viewing|kunjungan)|mampir\\s+(?:ke|dulu|lihat)|ketemuan)\\b'
+  + '|'
+  // M202: Inggris — "can I view this sat 10am?", "schedule a visit", "see the unit"
+  + '\\b(?:can|could|may|want\\s+to|would\\s+like\\s+to|let\\s+me)\\s+(?:i\\s+|we\\s+)?(?:view|visit|see|check\\s+out|come\\s+see)\\b|\\bschedule\\s+a\\s+(?:visit|viewing|tour)\\b',
   'i'
 );
 
@@ -155,6 +158,13 @@ function customerRequestsViewing(message) {
   const text = String(message || '').trim();
   if (!text) return false;
   if (customerDeclinesViewing(text) && !/\b(?:tapi|tetapi|namun|cuma|hanya)\b/i.test(text)) return false;
+  // M202: "mau lihat harga/listing/foto/info dulu" & "lihat-lihat dulu" = menjelajah, bukan survei;
+  // "survei nanti saja setelah ditelepon" = ditunda; "boleh bayar/cicil …" = pembayaran.
+  if (/\b(?:lihat|liat|cek)\s+(?:harga|listing|foto|data|info|katalog|pilihan|opsi|dulu|dl|dlu)\b/i.test(text)
+      && !/\b(?:langsung|unit\w*|rumah\w*|lokasi\w*|propert\w*|apart\w*)\b/i.test(text)) return false;
+  if (/\b(?:survei|survey|viewing)\b[^.?!]{0,20}\b(?:nanti|ntar)\s+(?:saja|aja|dulu|dlu)\b/i.test(text)) return false;
+  if (/\b(?:bayar|cicil|termin|deposit|dp)\b/i.test(text) && !/\b(?:survei|survey|viewing|ketemu\w*)\b/i.test(text)) return false;
+  if (/\b(?:cek|ngecek|periksa)\s+(?:sertifikat|legalitas|dokumen|bpn|imb|pbb|riwayat)\b/i.test(text)) return false;
   if (VIEWING_REQUEST_RE.test(text)) return true;
 
   // BERTANYA TENTANG survei (bukan meminta) tetap wajib dijawab.
@@ -291,7 +301,7 @@ function customerOnlyThanks(message) {
   return THANKS_RE.test(text) && !HARD_STOP_RE.test(text);
 }
 /** Customer masih menjelajah ("tanya-tanya dulu", "lihat-lihat dulu") — lanjutkan tanpa dorongan survei/KPR. */
-const BROWSING_RE = /\b(?:tanya[-\s]?tanya|liat[-\s]?liat|lihat[-\s]?lihat|pikir[-\s]?pikir|mikir[-\s]?mikir|mikir)\s*(?:dulu|dlu|aja|saja)?\b|\b(?:tanya|liat|lihat|pikir|mikir)["'\s-]{0,3}(?:dulu|dlu)\b|\bbelum\s+tentu\b|\bmasih\s+(?:mikir|pikir|bimbang|ragu)\b/i;
+const BROWSING_RE = /\b(?:tanya[-\s]?tanya|liat[-\s]?liat|lihat[-\s]?lihat|pikir[-\s]?pikir|mikir[-\s]?mikir|mikir)\s*(?:dulu|dlu|aja|saja)?\b|\b(?:tanya|liat|lihat|pikir|mikir)["'\s-]{0,3}(?:dulu|dlu)\b|\bbelum\s+tentu\b|\bmasih\s+(?:mikir|pikir|bimbang|ragu)\b|\b(?:cuma|hanya|cuman)\s+(?:mau\s+)?(?:lihat|liat|cek|tanya|nanya)\b[^.?!]{0,20}\b(?:harga|info|dulu|dlu|listing|data)\b/i;
 function customerIsBrowsing(message) { return BROWSING_RE.test(String(message || '')); }
 
 /**

@@ -27,7 +27,7 @@ const A = (m) => ({ role: 'ai', message: m }); const C = (m) => ({ role: 'custom
   console.log('\n[2] Pengakuan bukan jawaban slot; typo-area hanya untuk sebutan tempat');
   const st = pb.extractQualificationState([C('Mau beli rumah di Surabaya.'), A('Di area/kawasan mana, atau ada patokan lokasi tertentu?')], 'Oke, saya paham.');
   ok('"Oke, saya paham" → area & patokan tetap kosong', !st.district && !st.anchorPoint, `${st.district}/${st.anchorPoint}`);
-  const stB = pb.extractQualificationState([C('Beli rumah di Surabaya'), A('Harganya sekitar 500 juta, sesuai?')], 'iya');
+  const stB = pb.extractQualificationState([C('Beli rumah di Surabaya'), A('Di Surabaya ada rumah kisaran Rp 400.000.000 dan Rp 600.000.000. Kira-kira yang mana lebih sesuai, Kak? 💰')], 'iya');
   ok('"iya" atas pertanyaan ya/tidak tetap jawaban', Boolean(stB.budget), JSON.stringify(stB.budget));
   const fz = await findAreaCandidatesInText({ userId: AGENT, city: 'Surabaya', text: 'Oke, saya paham.' });
   ok('"Oke, saya paham." tidak fuzzy ke area Pakal', !fz.area && !(fz.candidates || []).length, JSON.stringify(fz));

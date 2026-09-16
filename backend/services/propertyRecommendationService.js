@@ -617,12 +617,13 @@ function stripCommercialUsePhrases(text) {
  * genuine renter saying "cari rumah yang disewakan" ("yang" is not a lead) is
  * untouched and still detected as rent.
  */
-const _INVEST_LEAD = '(?:mau|ingin|untuk|buat|rencana(?:nya)?|akan|bakal|nanti|sekalian|terus|lalu|kemudian)';
+const _INVEST_LEAD = '(?:mau|ingin|untuk|buat|rencana(?:nya)?|akan|bakal|nanti|sekalian|terus|lalu|kemudian|investasi|invest)';
 function stripInvestmentIntentPhrases(text) {
-  return text.replace(
-    new RegExp(`\\b${_INVEST_LEAD}\\s+(?:\\w+\\s+){0,2}?(?:di)?sewa(?:kan)\\w*\\b`, 'gi'),
-    ''
-  );
+  return String(text || '')
+    .replace(new RegExp(`\\b${_INVEST_LEAD}\\s+(?:\\w+\\s+){0,2}?(?:di)?sewa(?:kan)\\w*\\b`, 'gi'), '')
+    // M202: "…, disewakan lagi" / "untuk disewakan" sesudah koma — investor = PEMBELI.
+    // Hanya bila konteks beli/investasi ada; "cari rumah yang disewakan" tetap penyewa.
+    .replace(/(?<=\b(?:beli|membeli|invest\w*)\b[^.?!]{0,60})[,;]?\s*(?:untuk\s+|buat\s+)?disewakan(?:\s+(?:lagi|kembali|ulang))?\b/gi, '');
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
@@ -657,9 +658,23 @@ function stripInvestmentIntentPhrases(text) {
  * @returns {string|null} 'house'|'apartment'|'villa'|'hotel'|'kondotel'|
  *   'boarding_house'|'shophouse'|'store'|'office'|'warehouse'|'mansion'|'others'|null
  */
+/* M202 (16 Sep 2026) — TIPE YANG DINEGASIKAN bukan tipe yang diminta:
+ * "Kok yang dikirim apartemen? Saya minta rumah" → rumah; "Kalau nggak ada ruko,
+ * rumah yang bisa buat usaha" → rumah; "bukan apartemen" → abaikan apartemen.
+ * "apt" (singkatan Inggris) = apartment. */
+function stripNegatedTypePhrases(text = '') {
+  const T = '(?:rumah|apartemen|apartment|apt|villa|vila|ruko|rukan|kos|kost|kosan|kantor|office|gudang|warehouse|hotel|toko|kios|tanah|kavling|mansion|kondotel)';
+  return String(text || '')
+    .replace(new RegExp(`\\b(?:kalau|kalo|klo|jika|bila)\\s+(?:nggak|ngga|gak|ga|tidak|tdk)\\s+ada\\s+${T}\\b`, 'gi'), ' ')
+    .replace(new RegExp(`\\bbukan\\s+${T}\\b`, 'gi'), ' ')
+    .replace(new RegExp(`\\b(?:kok|kenapa|koq)\\b[^.?!]{0,25}\\b(?:dikirim|dikasih|kasih|kirim|muncul|keluar)\\b[^.?!]{0,10}\\b${T}\\b`, 'gi'), ' ')
+    .replace(new RegExp(`\\b${T}\\s+(?:lagi|dong)\\s*\\?`, 'gi'), ' ')
+    .replace(/\bapt\b/gi, 'apartemen');
+}
+
 function detectCanonicalType(txt = '') {
   const w = stripLandSizePhrases(stripCommercialUsePhrases(   // M188: "tanah minimal 120 m2" bukan tipe
-    stripMovingFromPhrases(stripAmbiguousRumah(stripNearPhrases(String(txt || '').toLowerCase())))
+    stripMovingFromPhrases(stripAmbiguousRumah(stripNearPhrases(stripNegatedTypePhrases(String(txt || '').toLowerCase()))))
   ));
   if (/\bkondotel\b|\bcondotel\b/.test(w))                                    return 'kondotel';
   if (/\bmansion\b|\brumah\s+mewah\b/.test(w))                                return 'mansion';
@@ -804,7 +819,7 @@ function stripLandSizePhrases(text = '') {
 }
 
 function detectBuildingType(message = '') {
-  const text = normalizeText(message);
+  const text = normalizeText(stripNegatedTypePhrases(message));   // M202
   // Strip "dekat X" anchors, ambiguous "rumah makan/…", commercial use-phrases
   // ("dipakai kantor", "buat usaha"), AND "pindah dari X" origin phrases so none
   // pollutes building-type detection (a restaurant anchor must not become house;
@@ -853,6 +868,7 @@ const NON_LOCATION_AFTER_DI = new RegExp(
   'gang|gangnya|jalan|jln|tusuk|sate|tusuk[\\s-]*sate|hook|tikungan|' +
   // M198: media/aplikasi ("kirim lokasinya di maps", "share di wa") bukan kota.
   'maps|map|gmaps|google|wa|whatsapp|chat|foto|video|web|website|link|' +
+  'bpn|bank|notaris|ppat|kantor|tempat|kasir|loket|' +   // M202: instansi/tempat bayar, bukan kota
   'rumah|ruko|bangunan|hunian|properti|apartemen|apartment|villa|vila|hotel|kos|kost)\\b', 'i'
 );
 
@@ -893,6 +909,8 @@ function detectLocation(message = '') {
   // Cocokkan informal names / shorthand dulu. Misal "sby" → "Surabaya", "jogja" → "Yogyakarta".
   const lowerText = textForLoc.toLowerCase();
   for (const [alias, canonical] of Object.entries(LOCATION_ALIAS)) {
+    // M202: "cek sertifikat di BPN" = Badan Pertanahan Nasional, bukan Balikpapan.
+    if (alias === 'bpn' && /\b(sertifikat|cek|urus|balik\s*nama|pertanahan|kantor\s+bpn|ke\s+bpn|di\s+bpn)\b/i.test(lowerText)) continue;
     if (new RegExp(`\\b${escapeRegExp(alias)}\\b`, 'i').test(lowerText)) {
       return canonical;
     }

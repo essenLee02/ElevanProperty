@@ -144,10 +144,17 @@ class LanguageDetector {
     // 2. Clear US/British English signals — regex patterns
     if (this.#US_ENGLISH_PATTERNS.some(re => re.test(text))) return 'en';
 
-    // 3. Ambiguous — fall back to history (last 4 customer messages)
+    // 3. Ambiguous — fall back to history. M202 (16 Sep 2026): jendela 4 pesan
+    //    customer terlalu pendek — "Nomor 2", "Sertifikatnya?", "Survei Selasa jam 10",
+    //    "Cash." (tanpa kata kunci) membuat sesi Indonesia mendadak dijawab Inggris.
+    //    Kini 8 pesan customer + 4 balasan AI terakhir (AI menjawab dalam bahasa sesi).
     if (Array.isArray(history) && history.length > 0) {
       const recent = history
         .filter(h => h.role === 'user' || h.role === 'customer')
+        .slice(-8)
+        .map(h => this.#normalize(h.message || ''));
+      const recentAi = history
+        .filter(h => h.role === 'ai' || h.role === 'assistant')
         .slice(-4)
         .map(h => this.#normalize(h.message || ''));
 
@@ -155,6 +162,7 @@ class LanguageDetector {
       if (recent.some(msg => this.#INDONESIAN_WORDS.some(w => msg.includes(w)))) return 'id';
       // English pattern found in history → stay English
       if (recent.some(msg => this.#US_ENGLISH_PATTERNS.some(re => re.test(msg)))) return 'en';
+      if (recentAi.some(msg => /\b(kak|kakak|silakan|terima kasih|dicatat|survei|ya\b)/i.test(msg))) return 'id';
     }
 
     // 4. Default to English (LLM will still handle other languages via system prompt)
@@ -4833,7 +4841,8 @@ class ChatbotPrivateService {
     // pertanyaan sertifikat yang sedang berjalan tidak akan salah tertangkap.
     // M199: "Sertifikatnya apa? Ada IMB/PBG-nya?" tentang UNIT yang sudah dipilih =
     // pertanyaan data unit (dijawab gerbang atribut), bukan permintaan definisi istilah.
-    const asksAboutPickedUnitDocs = Boolean(readConfirmedPick(history))
+    const asksAboutPickedUnitDocs = (Boolean(readConfirmedPick(history))
+        || (/\b(?:nomor|nomer|no\.?)\s*\d{1,2}\b/i.test(userMessage) && history.some((h) => /^(ai|assistant)$/i.test(String(h.role || '')) && isCardMessage(String(h.message || '')))))
       && /\b(sertifikat\w*|imb|pbg|pbb|dokumen\w*|legalitas|shm|shgb|hgb)\b/i.test(userMessage)
       // M200: sesudah unit dipilih, semua pertanyaan sertifikat = data unit ("rmh trsbut sdh SHM?")
       && !/\b(apa\s+itu|apa\s+bedanya|maksudnya|artinya|apa\s+sih|apa\s+arti|jelaskan|penjelasan)\b/i.test(userMessage);
@@ -5072,7 +5081,8 @@ class ChatbotPrivateService {
       })();
       const changeTurn = Boolean(qsChange.cityChangedFromHistory || qsChange.txChangedFromHistory || qsChange.typeChangedFromHistory || areaChangedFromHistory);
       const pick = changeTurn ? null : tryListingSelectionAnswer({ message: userMessage, history, isId: lang === 'id' });
-      if (pick && pick.attributeQuestion) {
+      const compareCueEarly = /\b(bedanya|perbedaan|banding\w*|masing[-\s]?masing|lebih\s+(?:murah|mahal|luas|besar|kecil)|termurah|termahal|paling\s+(?:murah|mahal|luas))\b/i.test(userMessage);
+      if (pick && pick.attributeQuestion && !compareCueEarly) {
         // M198: "nomor 2 luas tanahnya?" → jawab atribut kartu itu, bukan mencatat pilihan.
         const { answerCardAttribute } = require('../utils/listingSelectionGate');
         const ans = await answerCardAttribute({ message: userMessage, card: pick.card, userId: agentUserId, isId: lang === 'id' });
@@ -5178,6 +5188,12 @@ class ChatbotPrivateService {
         const follow = await this.#tryFollowUpAnswer({
           message: userMessage, history, lang, agentUserId, qs: qsChange,
         });
+        if (follow && follow.stop) {
+          console.log('[PrivateAgent] 🎯 Customer berhenti ("nggak dulu") → summary');
+          const stopProfile = ConversationQualifier.buildProfile(history, userMessage, filters);
+          const stopBrief = ConversationQualifier.buildAgentBrief(stopProfile, filters, history, userMessage);
+          return this.#wrap(builder.agentBrief(stopBrief), { skillInfo, filters, provider: 'closing_signal_gate', responseMode: 'summary' });
+        }
         if (follow) {
           console.log(`[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: ${follow.verdict}`);
           return this.#wrap(follow.reply, { skillInfo, filters, provider: 'follow_up_gate' });
@@ -5303,7 +5319,15 @@ class ChatbotPrivateService {
             typeLabel: typeRaw ? PropertyFormatter.humanBuildingType(typeRaw, lang) : 'properti',
             isId: lang === 'id',
           });
-          if (cityHit) return this.#wrap(cityHit.reply, { skillInfo, filters, provider: 'city_availability_gate' });
+          /* M202 — "belum ada ruko/villa/kos di Surabaya" cukup sekali per tipe; giliran
+           * berikutnya (pertanyaan lain, "nomor 1 saja", jadwal) tidak boleh mengulang
+           * kalimat yang sama (simulasi Z4/Z15: 9-10 giliran berturut-turut). */
+          const cityEmptyAlreadySaid = Boolean(cityHit) && history.some((h) => /^(ai|assistant)$/i.test(String(h.role || ''))
+            && /belum ada di data saya|belum punya listing|memang belum ada|not in my data|no \*?\w+\*? listings/i.test(String(h.message || ''))
+            && new RegExp(String(availCity).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(String(h.message || '')));
+          if (cityHit && !(cityEmptyAlreadySaid && !customerAsksAvailability(userMessage) && !qs.cityChangedFromHistory && !qs.typeChangedFromHistory && !qs.txChangedFromHistory)) {
+            return this.#wrap(cityHit.reply, { skillInfo, filters, provider: 'city_availability_gate' });
+          }
 
           /* ── M193 (14 Sep 2026) — KOTA BERUBAH & KOTA BARU PUNYA STOK: tanya AREA
            * di kota baru, jangan lanjut skrip. Doc 02 §4 "KOTA BERUBAH -> Tanyakan
@@ -5348,8 +5372,10 @@ class ChatbotPrivateService {
         const changeTurnAvail = Boolean(qs.cityChangedFromHistory || qs.txChangedFromHistory || qs.typeChangedFromHistory || areaChangedAvail);
         // M198b: "belum ada di *Sukolilo*" cukup sekali — jangan diulang tiap giliran
         // selama customer tidak minta lagi; dan tidak pernah pada kalimat penutup.
+        // M202: "belum ada" harus menyebut AREA INI di baris yang sama — nama area yang muncul
+        // sebagai ALTERNATIF ("• *Jambangan* — 2 unit") pada balasan area lain bukan bukti.
         const areaEmptyAlreadySaid = Boolean(availArea) && history.some((h) => /^(ai|assistant)$/i.test(String(h.role || ''))
-          && /belum ada di data saya|not in my data|belum ada yang sesuai budget|within (?:that|your) budget/i.test(String(h.message || '')) && String(h.message || '').toLowerCase().includes(String(availArea).toLowerCase()));
+          && new RegExp(`^[^\\n]*(?:belum ada|memang belum ada|hanya ada \\d+ saja|not in my data|within (?:that|your) budget)[^\\n]*\\*${String(availArea).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\*|^[^\\n]*\\*${String(availArea).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\*[^\\n]*(?:belum ada|memang belum ada|hanya ada \\d+ saja|not in my data)`, 'im').test(String(h.message || '')));
         const gateMaySpeak = !customerSignalsClosing(userMessage) && (customerAsksAvailability(userMessage) || changeTurnAvail
           || (Boolean(txDb && typeDb && availArea) && !cardsShownBefore && !areaEmptyAlreadySaid));
         /* ── M195 (14 Sep 2026) — EMPAT SLOT WAJIB SEBELUM LISTING (aturan pemilik
@@ -5675,7 +5701,8 @@ class ChatbotPrivateService {
     // M200: "apakah rumah tersebut sudah SHM?" memuat kata "rumah" tapi jelas pertanyaan
     // atribut unit yang dipilih — bukan pencarian baru.
     const { isAttributeQuestion: _isAttrQ } = require('../utils/listingSelectionGate');
-    if (NEW_INTENT_RE.test(text) && !customerIsBrowsing(text) && !customerDeclinesViewing(text) && !(anyCardsEver && _isAttrQ(text))
+    const complainsWrongSend = /\bkok\b[^.?!]{0,20}\b(?:dikirim|kirim|dikasih|muncul)\b|\bsalah\s+kirim\b|\bbukan\s+(?:rumah|apartemen|apartment|villa|ruko|kos)\b/i.test(text);
+    if (NEW_INTENT_RE.test(text) && !customerIsBrowsing(text) && !customerDeclinesViewing(text) && !(anyCardsEver && _isAttrQ(text)) && !(anyCardsEver && complainsWrongSend)
         && !/\b(nego|kpr|banjir|budget|dana|survei|survey|viewing|terima\s*kasih|makasih|luas\s+tanah|bedanya|masing[-\s]?masing|tadi|nomor\s*\d|no\.?\s*\d)\b/i.test(text)) return null;
 
     const { parseShownListings, parseAllShownCards, readConfirmedPick, answerCardAttribute, isAttributeQuestion, scheduleViewingFromText } = require('../utils/listingSelectionGate');
@@ -5699,7 +5726,7 @@ class ChatbotPrivateService {
     if (!afterSummary && !shown.length && !everShown.length) return null;
 
     // Keluhan lambat ("kok lama balasnya") → minta maaf, lalu buka pintu, jangan lanjut skrip.
-    if (/\b(lama|lambat|lelet|lemot)\b[^.?!]{0,20}\b(bal[ae]s\w*|respon\w*|jawab\w*|tunggu)\b|\b(dari\s+tadi)\b[^.?!]{0,15}\btunggu/i.test(text)) {
+    if (/\b(lama|lambat|lelet|lemot)\b[^.?!]{0,20}\b(bal[ae]s\w*|respon\w*|jawab\w*|tunggu)\b|\b(dari\s+tadi)\b[^.?!]{0,15}\btunggu|\btunggu\b[^.?!]{0,15}\b(dari\s+tadi|lama)\b/i.test(text)) {
       return {
         verdict: 'follow-up-apology',
         reply: isId
@@ -5845,7 +5872,21 @@ class ChatbotPrivateService {
           : `Just bring your ID for the viewing 😊 If you move to an offer, have proof of funds or payslips ready (for a mortgage). Our agent will accompany you on site.`,
       };
     }
-    if (/\b(jemput|ketemu\s+di|meeting\s*point|titik\s+temu|di\s+gerbang|di\s+lobby|di\s+depan)\b/i.test(text)) {
+    // M202 — TERMIN PEMBAYARAN ("bayar per 3 bulan", "per 6 bulan", "setahun di depan dapat diskon?")
+    if (/\b(?:bayar|pembayaran|cicil\w*|termin)\b[^.?!]{0,30}\b(?:per|tiap|setiap|di\s+muka|di\s+depan|di\s+tempat|bulanan|tahunan|setahun|sebulan|\d+\s*(?:bulan|tahun))\b|\bper\s+\d+\s+bulan\b/i.test(text)) {
+      const asksDiscount = /\b(diskon|promo|potongan|kurang|lebih\s+murah)\b/i.test(text);
+      return {
+        verdict: 'follow-up-payment-terms',
+        reply: isId
+          ? (asksDiscount
+            ? `Untuk skema pembayaran & diskonnya saya tidak bisa memutuskan, Kak 🙏 — itu wewenang pemilik/agent. Saya catat permintaannya, nanti agent kami konfirmasi.`
+            : `Skema pembayaran saya catat, Kak 😊 Termin/pembayaran bertahap tergantung persetujuan pemilik — agent kami yang akan konfirmasi.`)
+          : (asksDiscount
+            ? `Payment schemes and discounts are the owner/agent's call 🙏 I've noted your request; our agent will confirm.`
+            : `Noted 😊 Instalment/payment terms depend on the owner's approval — our agent will confirm.`),
+      };
+    }
+    if (/\b(jemput|ketemu\s+di|meeting\s*point|titik\s+temu|di\s+gerbang|di\s+lobby)\b/i.test(text)) {
       return {
         verdict: 'follow-up-viewing-logistics',
         reply: isId
@@ -5869,8 +5910,28 @@ class ChatbotPrivateService {
       };
     }
 
+    // M202 — "Ya sudah, kalau begitu nggak dulu" / "tidak jadi dulu" = customer berhenti → summary sekali.
+    if (/\b(?:nggak|ngga|gak|ga|tidak|tdk|belum)\s+(?:dulu|dlu|jadi(?:\s+dulu)?)\b|\bbatal\s+(?:dulu|saja|aja)\b(?![^.?!]{0,20}\bsurvei)/i.test(text) && !afterSummary) {
+      return { verdict: 'follow-up-stop', reply: null, stop: true };
+    }
+    // M202 — komplain "salah kirim tipe" → klarifikasi dari kartu yang benar-benar terkirim.
+    if ((/\b(?:kok|salah)\b[^.?!]{0,20}\b(?:dikirim|kirim|dikasih|muncul)\b|\bsalah\s+kirim\b|\bbukan\s+(?:rumah|apartemen|apartment|villa|ruko|kos)\b/i.test(text)) && everShown.length) {
+      const last = everShown[everShown.length - 1];
+      const typeLine = String(([...rows].reverse().find((h) => /^(ai|assistant)$/i.test(String(h.role || '')) && isCardMessage(String(h.message || ''))) || {}).message || '').match(/Tipe\s*:\s*([^\n]+)/i);
+      return {
+        verdict: 'follow-up-clarify-sent',
+        reply: isId
+          ? `Maaf kalau membingungkan, Kak 🙏 Yang saya kirim tadi ${everShown.length} unit di *${last.area || ''}*${typeLine ? ` — tipe *${typeLine[1].trim()}*` : ''}. Kalau tipe/transaksinya perlu diganti, sebutkan saja ya, langsung saya carikan.`
+          : `Sorry for the confusion 🙏 I sent ${everShown.length} unit(s) in *${last.area || ''}*${typeLine ? ` — type *${typeLine[1].trim()}*` : ''}. If the type/transaction should change, just say so and I'll search again.`,
+      };
+    }
+    // M202 — "Saya sama suami." / "Berdua istri." saat survei sedang diatur = peserta.
+    if (/^\s*(?:saya|aku|kami)\s+(?:sama|dan|dengan|bersama|berdua|bertiga)\s+\w+/i.test(text)
+        && rows.some((h) => /^(ai|assistant)$/i.test(String(h.role || '')) && /survei|viewing/i.test(String(h.message || '')))) {
+      return { verdict: 'follow-up-participants', reply: isId ? `Boleh sekali, Kak 😊 Silakan ajak siapa pun yang perlu ikut melihat — saya catat untuk agent kami.` : `Of course 😊 Bring anyone who should see it — noted for our agent.` };
+    }
     // 2-+) Survei DITUNDA ("nanti saya kabari untuk surveinya", "belum bisa, masih di luar kota").
-    if (/\b(?:nanti|ntar)\b[^.?!]{0,45}\b(?:kabar\w*|hubungi|konfirmasi|infokan)\b|\bbelum\s+(?:bisa|tahu|tau)\s+kapan\b|\bmasih\s+di\s+luar\s+kota\b/i.test(text)) {
+    if (/\b(?:nanti|ntar)\b[^.?!]{0,45}\b(?:kabar\w*|hubungi|konfirmasi|infokan)\b|\bbelum\s+(?:bisa|tahu|tau)\s+kapan\b|\bmasih\s+di\s+luar\s+kota\b|\b(?:survei|survey|viewing)\b[^.?!]{0,20}\b(?:nanti|ntar)\s+(?:saja|aja|dulu|dlu)\b/i.test(text)) {
       return {
         verdict: 'follow-up-viewing-deferred',
         reply: isId
@@ -5880,7 +5941,7 @@ class ChatbotPrivateService {
     }
 
     // 2-) Permintaan tentang PERCAKAPAN: "jangan kirim listing yang sama", "tidak usah tanya survei".
-    if (/\b(?:jangan|jgn|tidak\s+usah|tdk\s+usah|nggak\s+usah|gak\s+usah|ga\s+usah|stop)\b[^.?!]{0,20}\b(?:kirim|kasih|tampilkan|tanya|nanya|tanyain|ulang|bahas|survei|survey|listing|katalog)\b/i.test(text)) {
+    if (/\b(?:jangan|jgn|tidak\s+usah|tdk\s+usah|nggak\s+usah|gak\s+usah|ga\s+usah|nggak\s+perlu|gak\s+perlu|tidak\s+perlu|stop)\b[^.?!]{0,20}\b(?:kirim|kasih|tampilkan|tanya|nanya|tanyain|ulang|bahas|survei|survey|listing|katalog|data\s+saya|data)\b/i.test(text)) {
       const aboutViewing = /\b(survei|survey|viewing|ketemu\w*)\b/i.test(text);
       return {
         verdict: 'follow-up-conversation-request',
@@ -6561,6 +6622,9 @@ function applyGateCLengthCap(result, { history = [], userMessage = '', agentName
     // Balasan giliran ini berupa PERTANYAAN interview (Q-flow) atau tawaran area
     // → cukup summary-nya; balasan berupa JAWABAN (atribut unit, jadwal survei) →
     // jawaban + summary.
+    // M202: balasan berupa KARTU listing (customer baru memberi area/kota di giliran 10-12)
+    // → kirim kartunya, summary menyusul giliran berikutnya (masih di jendela / batas keras).
+    if (isCardMessage(String(result.reply || '')) && exchangeCount < GATE_C_HARD_CAP) return result;
     const questionOnly = Boolean(result.qualificationMode) || /^(?:city|area)_availability_gate$/.test(String(result.provider || ''));
     const withSummary = () => (questionOnly ? buildForcedSummary() : result.reply + '\n\n' + buildForcedSummary());
     /* M200 (15 Sep 2026) — balasan giliran ini masih MENUNGGU jawaban yang mengisi

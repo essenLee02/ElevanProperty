@@ -43,7 +43,10 @@ const card = (n, t, area, addr, price, fac) => `${n}. *${t}*\n   📍 Lokasi: SU
   console.log('\n[3] Jawaban tanggal survei bukan tanggal masuk');
   const h2 = [...h, C('Ini ya saya mau survei'), A('Siap, Kak 😊 Enaknya survei tanggal berapa?'), C('Minggu dpn, Kak. Jam 3 sore'), A('Baik, Kak 😊 Survei dijadwalkan tanggal *22 September 2026*, *Jam 3 sore* ya.')];
   const st2 = pb.extractQualificationState(h2, 'Ok, terima kasih');
-  ok('viewingDate terisi', /22 September 2026/.test(st2.viewingDate || ''), st2.viewingDate);
+  const plus7 = new Date(); plus7.setDate(plus7.getDate() + 7);
+  const MON = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+  const expect7 = `${String(plus7.getDate()).padStart(2, '0')} ${MON[plus7.getMonth()]} ${plus7.getFullYear()}`;
+  ok('viewingDate terisi (+7 hari)', (st2.viewingDate || '') === expect7, `${st2.viewingDate} vs ${expect7}`);
   ok('moveInDate KOSONG', !st2.moveInDate, st2.moveInDate);
   ok('kota tetap Surabaya (bukan Jakarta Pusat dari "tim kami")', st2.city === 'Surabaya', st2.city);
   const st3 = pb.extractQualificationState([C('sewa apartemen kalijudan'), A('Mau saya jadwalkan survei? Tanggal berapa?')], 'Untuk 1 tahun, mulai November.');

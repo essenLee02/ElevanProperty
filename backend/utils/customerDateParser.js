@@ -306,13 +306,14 @@ function parseCustomerDate(text, now = new Date()) {
    * berikutnya + 7 hari bila hari itu jatuh di minggu berjalan (≤ 6 hari lagi). */
   {
     const DAYS = { minggu: 0, ahad: 0, senin: 1, selasa: 2, rabu: 3, kamis: 4, jumat: 5, "jum'at": 5, sabtu: 6,
-      sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 };
+      sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6,
+      sun: 0, mon: 1, tue: 2, tues: 2, wed: 3, thu: 4, thur: 4, thurs: 4, fri: 5, sat: 6 };   // M202: singkatan Inggris
     // "minggu depan" (= pekan depan) sudah ditangani di bawah; hanya "minggu ini/hari minggu" yang berarti hari Minggu.
     // "minggu" = PEKAN kecuali ditulis "hari minggu": "2 minggu", "minggu ini",
     // "minggu depan" semuanya pekan, bukan hari Minggu.
     // M198: "minggu depan Rabu" — ambil nama hari PERTAMA yang benar-benar hari
     // (bukan "minggu" = pekan); "minggu/pekan depan" di kalimat yang sama = +7 hari.
-    const dayRe = /\b(?:hari\s+)?(minggu|ahad|senin|selasa|rabu|kamis|jum'?at|sabtu|sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b(?:\s+(ini|depan|besok|next|this))?/g;
+    const dayRe = /\b(?:hari\s+|this\s+|next\s+)?(minggu|ahad|senin|selasa|rabu|kamis|jum'?at|sabtu|sunday|monday|tuesday|wednesday|thursday|friday|saturday|sun|mon|tues?|wed|thu(?:rs?)?|fri|sat)\b(?:\s+(ini|depan|besok|next|this))?/g;
     let dm = null;
     for (const cand of t.matchAll(dayRe)) {
       if (cand[1] !== 'minggu' || /(?<![a-z])hari\s+minggu(?![a-z])/.test(t)) { dm = cand; break; }
@@ -321,7 +322,8 @@ function parseCustomerDate(text, now = new Date()) {
       const target = DAYS[dm[1].replace('’', "'")];
       const todayDow = now.getDay();
       let delta = (target - todayDow + 7) % 7;
-      const nextWeek = dm[2] === 'depan' || dm[2] === 'next' || /\b(?:minggu|pekan)\s+depan|next\s+week\b/.test(t);
+      const nextWeek = dm[2] === 'depan' || dm[2] === 'next' || /\b(?:minggu|pekan)\s+depan|next\s+week\b/.test(t)
+        || new RegExp(`\\bnext\\s+${dm[1]}\\b`).test(t);   // M202: "next sat\"
       if (nextWeek) delta = delta === 0 ? 7 : delta + 7;
       // M199: nama hari yang SAMA dengan hari ini tanpa "ini/hari ini" = pekan depan
       // ("Minggu saja jam 10" diucapkan hari Minggu → Minggu berikutnya).

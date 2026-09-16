@@ -5602,6 +5602,58 @@ penuh untuk pertama kalinya sejak berbulan-bulan.
      sudah benar → kemungkinan server belum di-restart sesudah edit 20:11
      (lihat memory "phantom restart") — restart & cek build stamp /health.
 
+ 29. ⭐ M201/M202 (16 Sep 2026) — AGENDA CUSTOMER DIUTAMAKAN; SUMMARY 10-12 SETELAH
+     DATA MINIMAL; 20 SESI HIT BACKEND. Arahan pemilik: pertanyaan/keluhan/
+     pilihan/permintaan/penolakan customer didahulukan; AI bertanya hanya bila
+     customer tidak bertanya; summary di percakapan ke-10-12 setelah data
+     minimal (4 slot wajib doc 02: transaksi, tipe, kota, area) dijawab.
+     M201: Gate C (applyGateCLengthCap) — di jendela 10-12 bila slot wajib kosong
+     → tanya slot itu (ditempel ke jawaban; provider "+mandatory_slot_ask"),
+     summary menyusul; balasan berupa KARTU tidak pernah diganti summary; batas
+     keras 13 tetap summary. Pengakuan ("Oke, saya paham") bukan jawaban slot;
+     typo-area hanya untuk sebutan tempat ("paham" ≠ Pakal); PROCESS_QA di
+     terminologyAnswerGate (biaya notaris, PBB siapa bayar, DP KPR minimal);
+     price_range_gate (whatsappAIService): harga rata-rata dari katalog agent
+     (min–median–maks) + tanya area. Tes customerAgendaFirstM201 (11).
+     M202: 20 sesi Z1-Z20 (scripts/sim-scenarios-z20.js; SIM_FILE=…), log
+     logs/sim-z20-r1.md → logs/sim-z20-final.md. Giliran skrip/kualifikasi
+     63 → 39 dari 214 (sisanya jawaban slot wajar). Perbaikan (kode saja):
+       a) stripNegatedTypePhrases (propertyRecommendationService): "kok
+          dikirim apartemen? saya minta rumah", "kalau nggak ada ruko, rumah…",
+          "bukan apartemen" tidak mengganti tipe; "apt" = apartemen.
+       b) Investor "beli … untuk investasi, disewakan lagi" = sale (hanya bila
+          konteks beli/invest; "cari rumah yang disewakan" tetap rent).
+       c) LOCATION_ALIAS 'bpn' dilewati pada konteks sertifikat/cek/BPN;
+          NON_LOCATION_AFTER_DI +bpn|bank|notaris|ppat|kantor|tempat|kasir|loket.
+       d) Deteksi bahasa melekat: 8 pesan customer + 4 balasan AI (LanguageDetector
+          & isIndonesian) — "Cash."/"Survei Sabtu jam 10" tidak lagi Inggris.
+       e) Gerbang kota/area tidak mengulang "belum ada" per tipe/kota/area;
+          bukti "sudah dijawab" harus menyebut area itu di baris "belum ada"
+          (nama area sebagai ALTERNATIF pada balasan area lain bukan bukti —
+          regresi privateAgentSimulations15 #16 sempat merah).
+       f) Survei vs pembayaran: "boleh bayar per 3 bulan?" bukan jawaban tawaran
+          survei (dulu +3 bulan); "cuma mau lihat harga dulu" = menjelajah;
+          "cek sertifikat di BPN" bukan survei; "survei nanti saja" = ditunda;
+          "Minggu jam 10" = hari Minggu; Inggris "can I view… sat 10am", "next
+          sat"; gerbang jadwal → null pada penutup/pesan panjang tanpa tanggal.
+       g) Atribut unit: deposit/termin/per N bulan/tol/angkot/akses/kursi roda/
+          check-in/parkir/zonasi/hewan/dapur/balkon/penyewa\w*/yield/promo/bisa
+          kurang/cash bertahap; facilities `\w*` ("garasinya").
+       h) terminologyAnswerGate: agent resmi/kantor, komisi, biaya tersembunyi,
+          pajak rumah second, "bisa KPR?", zonasi/izin usaha.
+       i) Follow-up gate: komplain salah kirim → klarifikasi dari kartu yang
+          terkirim; "nggak dulu/tidak jadi" → summary (stop); "Saya sama suami"
+          saat survei diatur = peserta; termin/diskon dicatat (wewenang pemilik);
+          "tunggu dari tadi" = keluhan lambat; `di depan` dilepas dari pola titik
+          temu; "Ada 2 unit lagi yang mirip?" = minta listing; "Oke." sesudah
+          summary = pengakuan; sertifikat "nomor N" sebelum pilihan = atribut.
+     Tes customerAgenda20SessionsM202 (28). SUITE 3175/3176 (1 = anggaran .md
+     pemilik 14.947 > 14.900). Regresi P1-P23: 29 giliran skrip (wajar); replay
+     produksi Wiyung tetap benar. .md ketiga skill tidak berubah (SKILL.md beda
+     hanya frontmatter `name:` per folder; docs byte-identik). Artifact bagian
+     "20 sesi hit backend". Tooling: scripts/dbg_seq.js "m1" "m2" … (rangkaian
+     giliran lewat generatePrivateTerminalMassege).
+
  17. ⭐ M189 (12 Sep 2026) — TIGA DOC BACKUP JULI KEMBALI KE chat_gpt_responds.
      Arahan: 15-date-money ≤300 char; 10-playbooks & 19-landmark "diolah".
        docs/07-date-money-parsing-reference.md — 248 char, SELALU dimuat.
