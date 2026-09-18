@@ -447,6 +447,15 @@ function _shortLandmarkOk(core, rawMessage) {
  * mendeteksi pergantian area & mengisi slot area — "Bank BCA ya" bukan area.
  * @returns {string} nama area kanonik (UPPERCASE) atau ''
  */
+/** M204 — kota pemilik sebuah nama area (dari tabel locations, type='area'); '' bila tak dikenal. */
+function getCityOfArea(areaName = '') {
+  return _areaCityCache.get(String(areaName || '').trim().toUpperCase()) || '';
+}
+/** M204 — semua pasangan [AREA, kota] untuk resolver jarak (salinan, aman diubah). */
+function getAreaCityEntries() {
+  return [..._areaCityCache.entries()];
+}
+
 function detectAreaName(message = '') {
   if (!message || !_areaCityCache || _areaCityCache.size === 0) return '';
   const text = normalizeText(message);
@@ -697,8 +706,25 @@ function detectCanonicalType(txt = '') {
  * @param {string} txt
  * @returns {'rent'|'sale'|null}
  */
+
+/* M204 (18 Sep 2026) — TRANSAKSI YANG DITOLAK/DIBANDINGKAN BUKAN TRANSAKSI YANG DIMINTA.
+ * Sim K5: "mending beli aja sih daripada sewa" → kata "sewa" ikut cocok dan tx tetap
+ * rent (kartu sewa terus dikirim, budget beli 900 jt hilang saat switch akhirnya
+ * terbaca dua giliran kemudian). Frasa "daripada/ketimbang/dibanding/bukan/gak jadi/
+ * bukannya/instead of/rather than <tx>" dibuang dulu; sisa kalimat memuat niat asli. */
+const _TX_WORD = '(?:sewa|menyewa|ngontrak|kontrak|rent(?:al|ing)?|lease|beli|membeli|buy|purchase|jual|dijual)';
+function stripRejectedTransactionPhrases(text) {
+  return String(text || '')
+    // "pajak/akta/biaya/proses/surat jual beli(nya)" = istilah proses, bukan niat transaksi
+    // (sim K4: "pajak jual belinya siapa yg tanggung?" sesudah summary dibaca sebagai
+    // pencarian BARU → penutup dibalas "Tipe apa yang Anda cari?").
+    .replace(/\b(?:pajak|akta|biaya|proses|surat|perjanjian(?:\s+pengikatan)?|ppjb|ajb|bea)\s+jual\s*beli\w*/gi, ' ')
+    .replace(new RegExp(`\\b(?:daripada|dari pada|ketimbang|dibanding(?:kan)?|bukan(?:nya)?|instead of|rather than|not|gak jadi|nggak jadi|tidak jadi|batal)\\s+(?:\\w+\\s+){0,2}?${_TX_WORD}\\w*`, 'gi'), ' ')
+    .replace(new RegExp(`\\b${_TX_WORD}\\w*\\s+(?:aja|saja)?\\s*(?:sudah|udah|dah)?\\s*(?:tidak|gak|nggak|ga|ngga|no|not)\\s+(?:jadi|usah|perlu|dulu)\\b`, 'gi'), ' ');
+}
+
 function detectCanonicalTransaction(txt = '') {
-  const w = stripInvestmentIntentPhrases(String(txt || '').toLowerCase());
+  const w = stripRejectedTransactionPhrases(stripInvestmentIntentPhrases(String(txt || '').toLowerCase()));
   if (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|kos|kost|kosan|kostan|ngekos|ngekost|ngekosan|indekos|indekost|rent|rental|lease|booking|book|pesan|reservasi)\b/.test(w)) return 'rent';
   if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase|invest|investasi)\b/.test(w)) return 'sale';
   return null;
@@ -819,7 +845,10 @@ function stripLandSizePhrases(text = '') {
   return String(text || '')
     .replace(/\bluas\s+tanah(?:nya)?\b[^,.;]*/gi, ' ')
     .replace(/\btanah(?:nya)?\s*(?:yang\s+)?(?:minimal|maksimal|min\.?|max\.?|sekitar|kurang\s+lebih|seluas|lebar|kecil|besar|luas|sempit|lega|\d)[^,.;]*/gi, ' ')
-    .replace(/\btanah(?:nya)?\s*(?:m2|m²|meter)\b/gi, ' ');
+    .replace(/\btanah(?:nya)?\s*(?:m2|m²|meter)\b/gi, ' ')
+    // M204 (sim N5/N6): angka + satuan LUAS/JUMLAH bukan budget — "100 m2" dibaca "100 M" =
+    // 100 MILIAR; "min 500 m2", "5 mobil", "40 feet", "15 orang" ikut dibuang.
+    .replace(/\b\d[\d.,]*\s*(?:m2|m²|m\s*persegi|meter\s*persegi|sqm|hektar|feet|ft\b|kaki|mobil|motor|orang|org\b|pax|people|kva|watt|lantai|kamar|kt\b|km\b|unit)\w*/gi, ' ');
 }
 
 function detectBuildingType(message = '') {
@@ -840,9 +869,20 @@ function detectTransactionType(message = '') {
   // BELI (simulasi 11 Sep). Frasa rencana-menyewakan dibuang dulu (helper yang
   // sama dengan detektor kanonik); sisa niat investasi tanpa kata transaksi
   // lain = pembeli.
-  const text = stripInvestmentIntentPhrases(raw);
+  let text = stripRejectedTransactionPhrases(stripInvestmentIntentPhrases(raw));
+  /* M204 (18 Sep 2026) — "Cicilan 15 tahun kira2 berapa per bulan?" (sim N2): kata
+   * periode "per bulan/per tahun" adalah alias SEWA di TRANSACTION_TYPES, jadi
+   * pertanyaan KPR pembeli membalik transaksi ke rent (summary "Rencana: Sewa",
+   * "Durasi sewa: 15 tahun"). Dalam konteks pembiayaan, kata periode diabaikan. */
+  if (/\b(cicil\w*|angsur\w*|kpr|tenor|bunga|dp|yield|imbal\w*|return|roi|pajak|pbb|ipl|iuran|retribusi)\b/i.test(text)) {
+    text = text.replace(/\b(?:per\s+(?:tahun|bulan|minggu|malam)|harian|bulanan|tahunan)\b/gi, ' ');
+    // "Yield SEWAnya berapa?" (investor pembeli, sim N8) — kata sewa di konteks imbal hasil bukan niat menyewa.
+    if (/\b(yield|imbal\w*|return|roi)\b/i.test(text)) text = text.replace(/\b(?:sewa\w*|rental?)\b/gi, ' ');
+  }
   const hit  = Object.entries(TRANSACTION_TYPES).find(([, keywords]) => includesAny(text, keywords))?.[0] || '';
   if (!hit && /(?<![a-z])invest(?:asi|ment)?(?![a-z])/.test(raw)) return 'sale';
+  // M204 (sim N4): "cari kos buat anak" = SEWA (kos/ngekos/indekos tidak pernah dibeli oleh penghuninya).
+  if (!hit && /(?<![a-z])(?:kos|kost|kosan|kostan|ngekos|ngekost|indekos|indekost)(?![a-z])/.test(raw) && !/(?<![a-z])(?:beli|membeli|jual|dijual|buy|invest\w*)(?![a-z])/.test(raw)) return 'rent';
   return hit;
 }
 
@@ -1477,7 +1517,7 @@ function _detectBudgetInner(message = '') {
    * melipatgandakan budget yang dilihat agent (transkrip "kerja dinas").
    */
   const attachedPeriod = text.match(
-    /\d[\d.,]*\s*(?:juta|jutaan|jt|ribu|rb|miliar|milyar)?\s*(?:\/|per\s+)\s*(\d{1,2})?\s*(tahun|year|bulan|month|minggu|week|malam|night|hari|harian|day)\b/i
+    /\d[\d.,]*\s*(?:juta|jutaan|jt|ribu|rb|miliar|milyar)?(?:\s*-?an)?\s*(?:\/|per\s+)\s*(\d{1,2})?\s*(tahun|year|bulan|month|minggu|week|malam|night|hari|harian|day)\b/i
   );
 
   const mapPeriodWord = (word) => {
@@ -1495,8 +1535,17 @@ function _detectBudgetInner(message = '') {
     ? Math.max(1, parseInt(attachedPeriod[1], 10) || 1)
     : 1;
 
+  /* M204 (18 Sep 2026) — "3 jt an per bulan, sewa 1 tahun" → periode TAHUN (kata
+   * "tahun" dari DURASI menang atas "per bulan" yang eksplisit; sim N1: budget
+   * 2,55–3,45 juta/TAHUN). Bentuk eksplisit "per X" / "/X" / "X-an" yang muncul
+   * PERTAMA di kalimat menang atas kata telanjang. */
+  const explicitPeriod = (() => {
+    const m = text.match(/(?:\/|per\s+)\s*(?:\d{1,2}\s*)?(tahun|year|bulan|month|minggu|week|malam|night|hari|day)\b|\b(tahunan|bulanan|mingguan|harian|yearly|monthly|weekly|nightly|daily)\b/i);
+    return m ? mapPeriodWord(String(m[1] || m[2]).replace(/an$/i, '').replace(/ly$/i, '')) : '';
+  })();
   const period = attachedPeriod
     ? mapPeriodWord(attachedPeriod[2])
+    : explicitPeriod ? explicitPeriod
     : (/tahun|year|annual|per tahun|\/tahun/.test(text) ? 'year'
       : /bulan|month|monthly|per bulan|\/bulan/.test(text) ? 'month'
       // "seminggu"/"per minggu" diperiksa SEBELUM cabang malam/hari: kata "hari"
@@ -2999,6 +3048,8 @@ module.exports = {
   getKnownLandmarks,
   detectLandmark,
   detectAreaName,
+  getCityOfArea,
+  getAreaCityEntries,
   getPropertyIdsForLandmark,
   stripCommercialUsePhrases,
   // Exported so the Phase-0 type detectors in chatbotPrivateController.js and
@@ -3013,6 +3064,7 @@ module.exports = {
   // di atas definisinya sebelum tergoda menulis regex serupa di modul lain).
   detectCanonicalType,
   detectCanonicalTransaction,
+  stripRejectedTransactionPhrases,
   stripMovingFromPhrases,
   detectCommercialUse,
   detectUseCase,

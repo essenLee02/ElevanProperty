@@ -678,7 +678,11 @@ async function findAreaCandidatesInText({ userId, city, text }) {
         'paham', 'mengerti', 'terima', 'kasih', 'makasih', 'oke', 'siap', 'baik', 'tidak', 'belum', 'sudah', 'nanti',
         'survei', 'survey', 'budget', 'harga', 'kamar', 'tanah', 'bangunan', 'lantai', 'sertifikat', 'nomor', 'pilih',
         // M203: sapaan — "Selamat siang" pernah cocok fuzzy ke "Karang Pilang" (siang≈pilang)
-        'selamat', 'siang', 'pagi', 'malam', 'halo', 'hallo', 'hai', 'assalamualaikum', 'kuliah', 'sekolah', 'kerja']);
+        'selamat', 'siang', 'pagi', 'malam', 'halo', 'hallo', 'hai', 'assalamualaikum', 'kuliah', 'sekolah', 'kerja',
+        // M204 (sim N8): "Kamis jam 4" cocok fuzzy ke "Dukuh Pakis" (kamis≈pakis). Nama hari/bulan/waktu bukan area.
+        'senin', 'selasa', 'kamis', 'jumat', 'sabtu', 'minggu', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
+        'depan', 'besok', 'lusa', 'januari', 'februari', 'maret', 'april', 'agustus', 'september', 'oktober', 'november', 'desember',
+        'batal', 'ganti', 'jadwal', 'orang', 'suami', 'istri', 'anaknya', 'makasih', 'thanks', 'furnished', 'kosongan', 'budget']);
       /* M203: pada pesan panjang (>4 kata) hanya token SESUDAH kata pengantar lokasi yang
        * boleh dicocokkan typo ("area Gubeng", "di Mneganti") — bukan semua kata kalimat. */
       const shortMsg = t.trim().split(/\s+/).length <= 4;

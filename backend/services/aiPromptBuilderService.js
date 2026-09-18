@@ -1,5 +1,5 @@
 const { loadProjectSkillPrompt } = require('./skillPromptService');
-const { detectBudget, detectFacilities, stripCommercialUsePhrases, stripNearPhrases, stripAmbiguousRumah, stripInvestmentIntentPhrases, stripMovingFromPhrases, detectUseCase, isNonResidentialUse, detectLocation, isKnownLocationName, detectCanonicalType, detectCanonicalTransaction, stripLandSizePhrases, detectAreaName } = require('./propertyRecommendationService');
+const { detectBudget, detectFacilities, stripCommercialUsePhrases, stripNearPhrases, stripAmbiguousRumah, stripInvestmentIntentPhrases, stripRejectedTransactionPhrases, stripMovingFromPhrases, detectUseCase, isNonResidentialUse, detectLocation, isKnownLocationName, detectCanonicalType, detectCanonicalTransaction, stripLandSizePhrases, detectAreaName } = require('./propertyRecommendationService');
 // M188: ukuran tanah ("tanah minimal 120 m2") bukan tipe properti — lihat stripLandSizePhrases.
 const _stripLandSize = (t) => { try { return stripLandSizePhrases(t); } catch { return t; } };
 const { parseCustomerDate, isDontKnowDateAnswer, WAITING_THE_UPDATE, parseSurveyTime } = require('../utils/customerDateParser');
@@ -721,13 +721,18 @@ function _cleanDistrictAnswer(raw = '') {
   // Buang pembuka kalimat yang tidak membawa informasi lokasi.
   s = s
     .replace(/^(saya|aku|kami)\s+/i, '')
-    .replace(/^(sih|ya|yaa|oke|ok|hmm|mmm)\s*,?\s*/i, '')
+    .replace(/^(sih|ya|yaa|oke|ok|hmm|mmm)\b\s*,?\s*/i, '')   // M204: \b — "yang rame" pernah jadi "Ng Rame"
     .replace(/\b(mempertimbangkan|pertimbangkan|mikirin|memikirkan|pengen|pingin|ingin|mau|cari|carikan|prefer|lebih\s+suka|tertarik|minat)\b\s*/gi, '')
     .replace(/\b(di|daerah|area|kawasan|wilayah|sekitar|sekitaran|bagian|deket|dekat)\b\s*/gi, ' ')
     .replace(/\b(aja|saja|dulu|dong|kak|ya|yaa|sih|nih|deh)\b/gi, ' ')
     // M198: "Alana Cemandi boleh, lihat 2 pilihan" → hanya klausa pertama; buang
     // ekor permintaan/persetujuan ("boleh", "lihat 2 pilihan", "minta 3 listing").
     .replace(/\s*[,;].*$/, '')
+    /* M204 (18 Sep 2026) — "Gubeng atau sekitarnya" / "Gedangan atau Waru" / "Waru dan
+     * sekitarnya": district = area PERTAMA saja. Alternatifnya sudah ditangkap slot area
+     * alternatif; kalau ikut tersimpan di district, gerbang area menganggapnya nama area
+     * baru ("*Gubeng Atau Sekitarnya* belum ada") setiap giliran (sim K1/K2). */
+    .replace(/\s+(?:atau|dan|\/|or|and)\s+(?:sekitar\w*|lainnya|sekitaran|nearby|surrounding\w*|[A-Za-z][\w'-]*(?:\s+[A-Za-z][\w'-]*){0,2})\s*$/i, '')
     .replace(/\b(boleh|bisa|oke|ok|tolong|minta|lihat|liat|kirim|tampilkan)\b.*$/i, '')
     .replace(/[.,;!?]+\s*$/g, '')
     .replace(/\s{2,}/g, ' ')
@@ -738,6 +743,9 @@ function _cleanDistrictAnswer(raw = '') {
     s = s.replace(/\b[a-z]/g, (c) => c.toUpperCase());
   }
 
+  // M204 (sim N8): "Kirim 3 ya." → semua kata terbuang → fail-safe mengembalikan "Kirim 3 ya."
+  // sebagai AREA. Permintaan/angka bukan nama area → kosong (pemanggil melewati).
+  if (s.length < 3 && /^\s*(?:boleh|bisa|oke|ok|tolong|minta|lihat|liat|kirim|tampilkan|kasih|mau)\b|\d/i.test(String(raw))) return '';
   // Fail-safe: hasil kosong / terlalu pendek → pakai teks asli.
   return s.length >= 3 ? s : raw;
 }
@@ -1065,11 +1073,12 @@ function extractQualificationState(history = [], currentMessage = '') {
     // sewa dikirim ke investor yang mau beli. Kata pasif "disewakan/sewakan/
     // dikontrakkan" bersama investasi/beli tidak dibaca sebagai sewa.
     if (!state.transactionType) {
-      const rentsOutAsBuyer = /\b(disewakan|sewakan|disewain|dikontrakkan|dikontrakan)\b/.test(text)
-        && /\b(invest(?:asi)?|beli|membeli|dibeli)\b/.test(text);
-      if (!rentsOutAsBuyer && /\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|kos|kost|kosan|kostan|ngekos|ngekost|ngekosan|indekos|indekost|rent|rental|lease|booking|book|pesan|reservasi)\b/.test(text))
+      const txText = stripRejectedTransactionPhrases(text);   // M204
+      const rentsOutAsBuyer = /\b(disewakan|sewakan|disewain|dikontrakkan|dikontrakan)\b/.test(txText)
+        && /\b(invest(?:asi)?|beli|membeli|dibeli)\b/.test(txText);
+      if (!rentsOutAsBuyer && /\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|kos|kost|kosan|kostan|ngekos|ngekost|ngekosan|indekos|indekost|rent|rental|lease|booking|book|pesan|reservasi)\b/.test(txText))
         state.transactionType = 'rent';
-      else if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase|invest|investasi)\b/.test(text))
+      else if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase|invest|investasi)\b/.test(txText))
         state.transactionType = 'sale';
     }
 
@@ -1436,8 +1445,20 @@ function extractQualificationState(history = [], currentMessage = '') {
     const hasExplicitDay = /(?:^|\D)(3[01]|[12]\d|0?[1-9])\s*(?:jan|feb|mar|apr|mei|jun|jul|agu|sep|okt|nov|des|\/|-)/i.test(raw);
     const canOverwriteVague = state.moveInDateVague === true && hasExplicitDay;
 
-    if ((!state.moveInDate && !isViewingOnly) || (isCorrectionMsg && !isViewingOnly)
-        || (canOverwriteVague && !isViewingOnly)) {
+    /* M204 (18 Sep 2026) — KATA WAKTU SAMBIL LALU BUKAN TANGGAL MASUK.
+     * Sim K5: "Btw hari ini Surabaya hujan nggak ya haha" → parser menangkap
+     * "hari ini" → ✓ Masuk: 18 September 2026 (hari itu juga), dan karena Q8
+     * first-match-wins, "Rencana pindah awal tahun depan" yang datang kemudian
+     * dibuang. Kata relatif pendek (hari ini/besok/lusa/minggu depan/nanti) hanya
+     * boleh mengisi Q8 bila pesan memang soal masuk/pindah, menjawab pertanyaan
+     * Q8 dari AI, atau menyebut bulan/tanggal eksplisit. */
+    const answersMoveInAsk = /masuk bulan apa|rencananya masuk|kapan\b[^\n]{0,30}\b(masuk|pindah)|planning to move|move[- ]in date|when do you plan/i.test(_prevAiText);
+    const mentionsMonthOrDate = /\b(jan(?:uari)?|feb(?:ruari)?|mar(?:et)?|apr(?:il)?|mei|jun[ie]?|jul[iy]?|agu(?:stus)?|aug(?:ust)?|sep(?:tember)?|okt(?:ober)?|oct(?:ober)?|nov(?:ember)?|des(?:ember)?|dec(?:ember)?|tahun\s+(?:depan|ini)|next\s+year|20\d\d)\b/i.test(raw) || hasExplicitDay;
+    const looseMoveInCue = hasMoveInCue || /\b(?:masuk|pindah|check[\s-]?in|checkin|tempat|huni|menghuni|mulai|move|moving|relocat)\w*/i.test(text);
+    const casualTimeOnly = !looseMoveInCue && !answersMoveInAsk && !mentionsMonthOrDate;
+
+    if (!casualTimeOnly && ((!state.moveInDate && !isViewingOnly) || (isCorrectionMsg && !isViewingOnly)
+        || (canOverwriteVague && !isViewingOnly))) {
       const parsed = parseCustomerDate(moveInRaw, now);
       if (parsed) {
         if (parsed.status === 'ok') {
@@ -1790,7 +1811,9 @@ function extractQualificationState(history = [], currentMessage = '') {
        * sehingga "Kalau Menganti?" sesudahnya dibalas "Rumah dijual di *Lain
        * Anda Punya* belum ada". Kalimat yang MENANYAKAN cakupan (lain/mana/
        * punya/dimana/apa saja/tanda tanya) dilewati tanpa menandai Q2c selesai. */
-      const isCoverageQuestion = /\?|\b(lain|lainnya|mana|dimana|di\s*mana|punya|tersedia|apa\s+saja|selain)\b/i.test(candidateDistrict);
+      const isCoverageQuestion = /\?|\b(lain|lainnya|mana|dimana|di\s*mana|punya|tersedia|apa\s+saja|selain)\b/i.test(candidateDistrict)
+        // M204: "Area yang rame" / "yang strategis" = PREFERENSI, bukan nama area (sim N8: district "Ng Rame").
+        || /\b(?:yang|yg)\s+(?:rame|ramai|strategis|sepi|tenang|aman|nyaman|bagus|dekat|deket|murah|elit|elite|premium|bebas\s+banjir)\b|^\s*(?:rame|ramai|strategis|sepi|tenang|aman|nyaman|bagus|murah|elit|elite|premium)\b/i.test(candidateDistrict);
 
       // PENOLAKAN = JAWABAN (M84). Tandai Q2c sudah tuntas supaya tidak diulang.
       // District tetap null: tidak ada nilai sah untuk ditulis di baris "Area",
@@ -1798,6 +1821,7 @@ function extractQualificationState(history = [], currentMessage = '') {
       if (isRejection) state.q2cDeclined = true;
 
       if (candidateDistrict && !isRejection && !isCoverageQuestion && !looksLikeDate && !looksLikeMoneyOrDuration
+          && !/^\s*(?:kirim|minta|tampilkan|kasih|lihat|liat)\b/i.test(candidateDistrict)   // M204: "Kirim 3 ya" bukan area
           && candidateDistrict.length <= 60) {
         // Ambil NAMA AREA-nya saja, bukan kalimat mentah. Tanpa ini summary menulis
         // "Area: Saya mempertimbangkan area di Sidotopo" — terbaca seperti bot yang
@@ -1871,7 +1895,10 @@ function extractQualificationState(history = [], currentMessage = '') {
         // M201: jawaban yang berupa NAMA AREA ("Wiyung saja") sudah masuk slot area — bukan patokan.
         const isAreaAnswer = Boolean(state.district) && new RegExp(`\\b${String(state.district).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(custResp)
           && custResp.replace(/[^a-z]/gi, '').length <= String(state.district).replace(/[^a-z]/gi, '').length + 8;
-        if (!isFacilityOnly && !negatedOrQuestion && !isAreaAnswer) state.anchorPoint = custResp;
+        // M204 (sim N8): "Kirim 3 ya." / "Budget 2-3 M" / "Sabtu jam 10" atas pertanyaan patokan bukan patokan.
+        const isRequestOrNumber = /^\s*(?:boleh|bisa|oke|ok|tolong|minta|lihat|liat|kirim|tampilkan|kasih|mau)\b/i.test(custResp)
+          || /\d/.test(custResp) && !/\b(?:jalan|jl\.?|gang|blok|km|no\.?)\b/i.test(custResp);
+        if (!isFacilityOnly && !negatedOrQuestion && !isAreaAnswer && !isRequestOrNumber) state.anchorPoint = custResp;
       }
     }
     // Q7 — alternative areas
@@ -2099,8 +2126,14 @@ function extractQualificationState(history = [], currentMessage = '') {
     //         summary menggabungkan fasilitas standar + item spesifik.
     //   (2) TANPA preferensi ("tidak ada", "terserah", "bebas") DAN belum ada item
     //       spesifik → set ['standar'] saja.
-    if (custResp.trim() &&
-        /fasilitas|amenity|amenities|facility|kolam|gym|parking|parkir|furnish|perabot|kelengkapan/i.test(aiText + ' ' + custResp)) {
+    /* M204 (18 Sep 2026) — kartu listing memuat baris "🏷️ Fasilitas: …", jadi SETIAP
+     * jawaban sesudah kartu lolos tes kata "fasilitas" di aiText; "Syaratnya apa aja?"
+     * (soal KPR, sim K5) → "apa aja" = tanpa preferensi → marker 'standar' → summary
+     * memuat 16 fasilitas standar yang tak pernah diminta. AI harus benar-benar
+     * BERTANYA soal fasilitas (kalimat tanya), atau customer sendiri menyebutnya. */
+    const aiAskedFacilities = /(?:fasilitas|amenit\w*|facilit\w*|kelengkapan|perabot|furnish\w*)[^\n?]{0,80}\?/i.test(aiText);
+    if (custResp.trim() && (aiAskedFacilities ||
+        /fasilitas|amenity|amenities|facility|kolam|gym|parking|parkir|furnish|perabot|kelengkapan/i.test(custResp))) {
       const custLo = custResp.toLowerCase();
       const wantsStandardExplicit = /\b(standar|standard)\b|fasilitas\s+(?:yang\s+)?(?:standar|biasa|umum)|(?:yang\s+)?biasa\s+(?:aja|saja)/i.test(custLo);
       // Flexible/no-preference answers — incl. "tidak apa-apa dengan semua fasilitas".
@@ -2368,7 +2401,7 @@ function extractQualificationState(history = [], currentMessage = '') {
       // Skip entirely if the opener is a hedge ("kalau gak ada X, Y juga boleh") — an
       // ambiguous first message shouldn't commit to whichever type the priority chain
       // happens to match first.
-      const cur = stripCommercialUsePhrases(stripMovingFromPhrases(stripAmbiguousRumah(stripNearPhrases((currentMessage || '').toLowerCase().trim()))));
+      const cur = stripRejectedTransactionPhrases(stripCommercialUsePhrases(stripMovingFromPhrases(stripAmbiguousRumah(stripNearPhrases((currentMessage || '').toLowerCase().trim())))));   // M204
       if (isConditionalFallbackMessage(currentMessage)) {
         // leave buildingType/transactionType null — nothing confirmed yet
       }

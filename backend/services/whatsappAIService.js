@@ -615,7 +615,42 @@ ${params.distanceFact}`);
     console.warn('[WhatsAppAI] agent scope guard failed (non-fatal):', scopeErr.message);
   }
 
+  /* ── ★ M204: PERBAIKAN PERCAKAPAN (basa-basi / frustrasi / keluhan foto) ★ ──
+   * Satu tempat untuk kedua profil, SEBELUM gerbang kualifikasi/istilah/area — karena
+   * ketiganya dulu ditangkap gerbang-gerbang itu lebih dulu (sim K3/K5). Detail di
+   * utils/conversationRepairGate.js. Fail-open. */
+  try {
+    const { detectSmallTalk, detectPhotoMismatch, detectHumanRequest, detectAgentNumberRequest, buildRepairReply } = require('../utils/conversationRepairGate');
+    const { hasPropertyKeyword: _hpk, isPropertyContextContinuation: _ipc, detectCustomerFrustration: _dcf } = require('../utils/propertyKeywordFilter');
+    const { isCardMessage: _icm } = require('../utils/listingSelectionGate');
+    const langR = isIndonesian(message, history) ? 'id' : 'en';
+    const aiMsgs = (Array.isArray(history) ? history : []).filter((h) => /^(ai|assistant)$/i.test(String(h.role || '')));
+    const cardsSent = aiMsgs.some((h) => _icm(String(h.message || h.content || '')));
+    const photoMismatch = cardsSent && detectPhotoMismatch(message);
+    const frustration = _dcf(message);
+    // Nama kota sesi ("Surabaya hujan nggak?") bukan kata kunci properti untuk keperluan ini.
+    const cityNames = [filters?.location, qualState?.city].filter(Boolean).map((c) => String(c).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const sansCity = cityNames.length ? message.replace(new RegExp(`\\b(?:${cityNames.join('|')})\\b`, 'gi'), ' ') : message;
+    const smallTalk = !frustration.frustrated && !photoMismatch
+      && detectSmallTalk(sansCity, { hasPropertyKeyword: _hpk, isContinuation: (m) => _ipc(m, history) });
+    const humanRequest = detectHumanRequest(message);
+    const agentNumberRequest = !humanRequest && detectAgentNumberRequest(message);
+    const repair = buildRepairReply({ message, lang: langR, cardsSent, frustration, smallTalk, photoMismatch, humanRequest, agentNumberRequest });
+    if (repair && backendMayCompose) {
+      console.log(`[WhatsAppAI] 🩹 Gerbang perbaikan percakapan: ${repair.verdict}`);
+      return { reply: repair.reply, replyParts: [repair.reply], provider: 'conversation_repair_gate', contextSource };
+    }
+    if (repair && !backendMayCompose) {
+      gateFacts.push(`SITUASI PERCAKAPAN (${repair.verdict}) — jangan ajukan pertanyaan kualifikasi baru di giliran ini; tanggapi dulu secara manusiawi lalu kembali ke agenda customer. Rujukan kalimat:\n${repair.reply}`);
+    }
+  } catch (repairErr) {
+    console.warn('[WhatsAppAI] conversation repair gate gagal (non-fatal):', repairErr.message);
+  }
+
   const qualResponse = buildQualifyReply(filters, message, agentName, contextSource, history, catalogMode, qualState?.agentAreas || []);
+  // M204 (sim N8): tipe memang tidak ada di kota itu (sudah dijawab) → gerbang kualifikasi
+  // jangan menanyakan area untuk tipe yang tidak ada; Private Agent yang menawarkan ulang.
+  let cityStillEmpty = false;
 
   // ── ★ M132: GERBANG ISTILAH LEGAL/SERTIFIKAT (SHM/SHGB/KPR/dst.) ★ ────────
   // Dicek DI SINI, TIDAK BERSYARAT, bukan hanya di dalam chatbotPrivateController.js
@@ -641,12 +676,21 @@ ${params.distanceFact}`);
   // Agent seperti biasa.
   // M199: "Sertifikatnya apa? Ada IMB/PBG-nya?" tentang UNIT yang sudah dipilih = data unit
   // (gerbang atribut Private Agent), bukan permintaan definisi istilah.
-  const asksPickedUnitDocs = Array.isArray(history)
+  /* M204 (18 Sep 2026) — "Yg nomor 1 sudah SHM atau masih HGB?" adalah pertanyaan
+   * STATUS UNIT (nomor kartu disebut), bukan permintaan definisi — walau belum ada unit
+   * yang dipilih, bahkan walau belum ada kartu sama sekali (sim K2: dijawab glosarium
+   * SHM). Serahkan ke Private Agent: gerbang atribut kartu bila kartunya ada,
+   * no_cards_yet_gate bila belum. */
+  const asksNumberedUnitDocs = /\b(?:nomor|nomer|no\.?|number|unit)\s*\d{1,2}\b/i.test(message)
+    && /\b(sertifikat\w*|imb|pbg|pbb|dokumen\w*|legalitas|shm|shgb|hgb|shmsrs|shsrs|shp|ajb|ppjb|surat\s+hijau)\b/i.test(message)
+    && !/\b(apa\s+itu|apa\s+bedanya|maksudnya|artinya|apa\s+sih|apa\s+arti|jelaskan|penjelasan|what\s+is|difference)\b/i.test(message);
+  const asksOwnershipRuleW = /\b(wna|warga\s+negara\s+asing|orang\s+asing|foreigner\w*|expat\w*|pt\s+pma)\b/i.test(message);   // M204
+  const asksPickedUnitDocs = !asksOwnershipRuleW && (asksNumberedUnitDocs || (Array.isArray(history)
     && history.some((h) => /^(ai|assistant)$/i.test(String(h.role || '')) && /dicatat pilihannya|your pick/i.test(String(h.message || h.content || '')))
     && /\b(sertifikat\w*|imb|pbg|pbb|dokumen\w*|legalitas|shm|shgb|hgb)\b/i.test(message)
     // M200: sesudah unit dipilih, SEMUA pertanyaan sertifikat ("rmh trsbut sdh SHM?") = data unit,
     // kecuali yang jelas minta definisi ("apa itu SHM").
-    && !/\b(apa\s+itu|apa\s+bedanya|maksudnya|artinya|apa\s+sih|apa\s+arti|jelaskan|penjelasan)\b/i.test(message);
+    && !/\b(apa\s+itu|apa\s+bedanya|maksudnya|artinya|apa\s+sih|apa\s+arti|jelaskan|penjelasan)\b/i.test(message)));
   /* M201 (16 Sep 2026) — "Rumah di Surabaya rata-rata berapa harganya?" = pertanyaan
    * HARGA PASARAN. Dijawab dari katalog agent (min–median–maks di kota/tipe/transaksi
    * yang diketahui), bukan angka umum, lalu SATU pertanyaan slot wajib (area). Dulu
@@ -684,7 +728,10 @@ ${params.distanceFact}`);
   const termAnswer = asksPickedUnitDocs ? null : tryTerminologyAnswer(message, { lang: isIndonesian(message, history) ? 'id' : 'en' });
   if (termAnswer && backendMayCompose) {
     console.log('[WhatsAppAI] 📖 Pertanyaan istilah legal/sertifikat terdeteksi — dijawab sebelum melanjutkan qualification flow.');
-    const combinedReply = qualResponse
+    // M204 (sim N8): jangan sambung pertanyaan slot bila tipe memang belum ada di kota itu
+    // (sudah dijawab) — Private Agent yang menawarkan ulang di giliran berikutnya.
+    const cityEmptySaidT = Array.isArray(history) && history.some((h) => /^(ai|assistant)$/i.test(String(h.role || '')) && /belum ada di data saya|belum punya listing|tetap belum ada|not in my data/i.test(String(h.message || h.content || '')));
+    const combinedReply = (qualResponse && !cityEmptySaidT)
       ? `${termAnswer}\n\n${qualResponse.reply}`
       : `${termAnswer}\n\n${isIndonesian(message, history) ? 'Ada pertanyaan lain seputar properti yang bisa saya bantu? 😊' : 'Anything else about the property I can help with? 😊'}${agentSignature(agentName, isIndonesian(message, history))}`;
     return {
@@ -1113,7 +1160,17 @@ ${ans.reply}`);
         && new RegExp(String(realCity).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(String(h.message || h.content || '')));
       const qsCity = (() => { try { const { extractQualificationState: _e } = require('./aiPromptBuilderService'); return _e(history, message) || {}; } catch (_) { return {}; } })();
       const cityRepeatSuppressed = cityEmptyAlreadySaid && !customerAsksAvailability(message) && !qsCity.cityChangedFromHistory && !qsCity.typeChangedFromHistory && !qsCity.txChangedFromHistory;
-      if (cityRepeatSuppressed) cityHit = null;
+      if (cityRepeatSuppressed) { cityHit = null; cityStillEmpty = true; }
+      /* M204 (18 Sep 2026) — tipe TETAP tidak ada di kota itu dan customer menanyakan AREA
+       * ("Kalau Mneganti?", "Kalau di Driyorejo ada yg lebih murah?", sim K4): jangan
+       * mengulang paragraf kota yang sama; serahkan ke Private Agent yang menyebut area
+       * (hasil fuzzy typo) dan menjawab singkat (city_availability_gate/area). */
+      if (cityHit && cityEmptyAlreadySaid && !qsCity.cityChangedFromHistory && !qsCity.typeChangedFromHistory && !qsCity.txChangedFromHistory && backendMayCompose) {
+        try {
+          const am = await findAreaCandidatesInText({ userId: agentUserId, city: realCity, text: message });
+          if (am && am.area) cityHit = null;
+        } catch (_) { /* fail-open */ }
+      }
       if (cityHit && backendMayCompose) {
         console.log(`[WhatsAppAI] 🏙️ Gerbang kota: "${realCity}" tidak ada di katalog agent — dijawab dengan kota alternatif nyata.`);
         return {
@@ -1212,6 +1269,14 @@ ${cityHit.reply}`);
       });
       if (hit && backendMayCompose) {
         console.log(`[WhatsAppAI] 📊 Gerbang ketersediaan: ${hit.verdict} untuk "${realArea}" (${txDb}) — dijawab dengan data katalog, alur interview dilewati.`);
+        /* M204 — paritas dengan Private Agent (M203): "Ada 3 unit nggak?" saat "belum ada
+         * di *Gubeng*" sudah pernah dijawab → kalimat pendek "masih belum ada", daftar
+         * alternatif tetap ikut (sim K1: paragraf identik diulang utuh). */
+        if (areaEmptyAlreadySaid && /belum ada di data saya|don'?t have any/i.test(String(hit.reply || ''))) {
+          hit.reply = String(hit.reply)
+            .replace(/^Mohon maaf, Kak 🙏 Untuk \*[^*]+\* di \*([^*]+)\* belum ada di data saya\.?/i, (m0, ar) => `Di *${ar}* masih belum ada, Kak 🙏`)
+            .replace(/^I'm sorry — I don't have any [^.]+ in ([^.]+?) (?:right now|at the moment)\.?/i, (m0, ar) => `Still nothing in ${ar} 🙏`);
+        }
         return {
           reply      : hit.reply,
           // ⚠️ M165: WAJIB dipecah. Gerbang ini merender KARTU LISTING, dan
@@ -1271,7 +1336,33 @@ ${cityHit.reply}`);
   if (qualResponse && guardProfile === 'local' && isDistanceAsk) {
     console.log('[WhatsAppAI] 📏 Pertanyaan jarak — gerbang kualifikasi dilewati, diserahkan ke Private Agent (M187).');
   }
-  if (qualResponse && guardProfile === 'local' && !isDistanceAsk) {
+  /* M204 (18 Sep 2026) — "Yg nomor 1 itu luasnya brp?" / "Budget 500 jt, cash bertahap 3x
+   * boleh?" saat slot area masih kosong (sim K4): gerbang ini mengulang "Di area mana?"
+   * tiga giliran berturut-turut. Rujukan ke nomor unit (padahal belum ada kartu) dan
+   * pertanyaan/pernyataan customer yang JELAS punya agenda (tanda tanya + kata tanya, atau
+   * angka budget/pembayaran) diserahkan ke Private Agent yang punya gerbang no_cards_yet,
+   * istilah, dan follow-up — agenda customer dulu, pertanyaan slot menyusul. */
+  const refersToUnitNumber = /\b(?:nomor|nomer|no\.?|number|unit)\s*\d{1,2}\b/i.test(message);
+  const customerHasAgenda = refersToUnitNumber
+    || (/\?/.test(message) && /\b(?:boleh|bisa|apakah|apa|berapa|brp|gimana|bagaimana|kapan|siapa|kenapa|can|could|is|are|do|does|how|what|when|who)\b/i.test(message)
+        && !/\b(?:area|daerah|kawasan|kota|lokasi|di mana|dimana|where)\b/i.test(message));
+  /* M204 — PENUTUP saat slot belum lengkap ("Ok makasih bu", "Ya sudah kalau nggak bisa,
+   * makasih", sim N3/N4): dulu gerbang ini membalas "sewa atau beli?" / pertanyaan Q8.
+   * Tutup dengan sopan tanpa summary (slot wajib belum ada), pintu tetap terbuka. */
+  if (qualResponse && guardProfile === 'local' && customerSignalsClosing(message)) {
+    const isIdC = isIndonesian(message, history);
+    const reply = isIdC
+      ? `Sama-sama, Kak 🙏 Kalau nanti sudah ada area atau kriteria yang pas, tinggal chat saja — langsung saya carikan pilihannya 😊`
+      : `You're welcome 🙏 Whenever you have an area or criteria in mind, just message me — I'll find options right away 😊`;
+    return { reply, replyParts: [reply], provider: 'closing_without_slots', contextSource };
+  }
+  if (qualResponse && guardProfile === 'local' && cityStillEmpty) {
+    console.log('[WhatsAppAI] 🏙️ Tipe belum ada di kota ini — gerbang kualifikasi dilewati, Private Agent menawarkan ulang (M204).');
+  }
+  if (qualResponse && guardProfile === 'local' && !isDistanceAsk && customerHasAgenda) {
+    console.log('[WhatsAppAI] 🗣️ Customer punya agenda (unit/pertanyaan) — gerbang kualifikasi dilewati, diserahkan ke Private Agent (M204).');
+  }
+  if (qualResponse && guardProfile === 'local' && !isDistanceAsk && !customerHasAgenda && !cityStillEmpty) {
     console.log('[WhatsAppAI] 🛑 Qualification gate triggered — asking for missing info:', {
       hasType    : !!filters.buildingType,
       hasTx      : !!filters.transactionType,
@@ -1612,7 +1703,10 @@ async function generateWhatsAppAIReply(params) {
   // itu, `null` dan alur normal (LLM/Private Agent) berjalan seperti biasa.
   try {
     const { tryAnswerDistanceQuery } = require('./distanceEstimationService');
-    const distanceReply = tryAnswerDistanceQuery(params.message);
+    // M204: bahasa balasan mengikuti customer (sim K3: pertanyaan Inggris dijawab Indonesia).
+    let distHist = [];
+    try { distHist = await getConversationHistory(params.session?.id, 8); } catch (_) { distHist = []; }
+    const distanceReply = tryAnswerDistanceQuery(params.message, { lang: isIndonesian(params.message, distHist) ? 'id' : 'en' });
     /* M190 (12 Sep 2026) — profil 'platform': estimasi jarak menjadi FAKTA, bukan
      * balasan. Arahan pemilik proyek: backend yang menyentuh platform AI hanya
      * guardrails + vektor + RAG. Angkanya tetap deterministik (tabel koordinat

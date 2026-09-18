@@ -522,6 +522,17 @@ function parseSurveyTime(text, { requireClockWord = true } = {}) {
     : /\b(?:jam|pukul)?\s*(\d{1,2})(?:[.:](\d{2}))?\s*(pagi|siang|sore|malam|am|pm)?\b/i;
   const m = t.match(re);
   if (!m) return null;
+  /* M204 (18 Sep 2026) — mode longgar: angka yang diikuti kata benda hitungan
+   * BUKAN jam. Sim K5: AI tanya "jam berapa?", customer menjawab pertanyaan lain
+   * "Sama suami sy, 2 orang." → "Jam 2". Sama kelasnya dengan M195 "Yang 3 kamar"
+   * → "Jam 3". Tanpa kata jam/pukul/pagi/siang/sore/malam/am/pm, angka + satuan
+   * (orang/kamar/unit/bulan/tahun/juta/m2/mobil/kali/hari/minggu/lantai/kt/km)
+   * bukan jawaban jam; juga tolak bila jam > 24. */
+  if (!requireClockWord && !m[3] && !/\b(?:jam|pukul)\s*\d/i.test(t)) {
+    const after = t.slice(m.index + m[0].length).trimStart();
+    if (/^(?:orang|org|kamar|kmr|kt|km|unit|bulan|bln|tahun|thn|juta|jt|m2|m²|meter|mobil|motor|kali|x\b|hari|minggu|mgg|lantai|lt|persen|%|dewasa|anak)/i.test(after)) return null;
+  }
+  if (Number(m[1]) > 24) return null;
   const label = (m[3] || '').toLowerCase();
   return `Jam ${m[1]}${m[2] ? '.' + m[2] : ''}${label ? ' ' + label : ''}`.trim();
 }

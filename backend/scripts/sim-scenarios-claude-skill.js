@@ -72,4 +72,45 @@ module.exports = [
       'Great, that is all for now. Thank you.',
     ],
   },
+  {
+    // (18 Sep 2026) Investor tanah Gresik: SHM vs AJB (istilah), typo area (Mneganti), ganti
+    // area dalam kota, KPR ditolak → cash bertahap, plin-plan luas, dedup pesan ganda, jarak dari Surabaya.
+    name: 'K4 — Beli tanah Gresik untuk investasi; typo Mneganti; AJB saja aman?; cash bertahap; kirim 2x pesan sama',
+    phone: '6280000061004', customer: 'Pak Hendra',
+    turns: [
+      'Pagi, sy cari tanah di Gresik buat investasi, minimal 200 m2.',
+      'Kalau Mneganti?',
+      'Kalau tanah cuma AJB aja aman nggak? Wajib SHM?',
+      'Budget sekitar 500 jt, cash tp bertahap 3x boleh?',
+      'Yg nomor 1 itu luasnya brp? Bentuknya kotak?',
+      'Yg nomor 1 itu luasnya brp? Bentuknya kotak?',
+      'Kalau di Driyorejo ada yg lebih murah?',
+      'Dari Surabaya barat ke sana brp menit?',
+      'Sy mau lihat lokasi minggu depan, hari kerja aja.',
+      'Selasa sore jam 4.',
+      'Nanti klo cocok pajak jual belinya siapa yg tanggung?',
+      'Oke cukup dulu, nanti sy hubungi lagi.',
+    ],
+  },
+  {
+    // (18 Sep 2026) Pasangan muda sewa rumah Surabaya: agenda customer dulu (langsung minta kartu),
+    // off-topic (cuaca) 1x lalu balik, area kosong → tawaran ulang, ganti sewa→beli di tengah (reset
+    // bersyarat), frustrasi "kok ditanya terus", KPR syarat, tanggal pindah vague "awal tahun".
+    name: 'K5 — Sewa rumah Surabaya lalu berubah jadi beli; off-topic; area kosong; frustrasi; KPR; awal tahun',
+    phone: '6280000061005', customer: 'Bu Sinta',
+    turns: [
+      'Halo kak, langsung aja ada rumah sewa di Surabaya area Rungkut? Kirim 2 ya.',
+      'Yg nomor 2 ada garasinya? Kamar mandinya brp?',
+      'Btw hari ini Surabaya hujan nggak ya haha',
+      'Kalau area Mulyosari ada?',
+      'Hmm sebenarnya kami mikir2 mending beli aja sih daripada sewa. Ada rumah dijual di Rungkut?',
+      'Budget 900 jt, KPR. Syaratnya apa aja?',
+      'Kok ditanya terus sih, sy cuma mau lihat pilihan dulu',
+      'Yg nomor 1 tadi (yg dijual) bisa nego nggak?',
+      'Rencana pindah awal tahun depan.',
+      'Survei sabtu ini bisa? Pagi.',
+      'Sama suami sy, 2 orang.',
+      'Oke makasih ya kak.',
+    ],
+  },
 ];

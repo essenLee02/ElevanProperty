@@ -16,8 +16,8 @@
       "location": "Malang",
       "transactionType": "rent"
     },
-    "nextQuestion_summary": "Sudah lihat berapa Villa di *Malang*, dan apa yang membuat belum cocok?",
-    "nextQuestion_catalog": "Sudah lihat berapa Villa di *Malang*, dan apa yang membuat belum cocok?"
+    "nextQuestion_summary": "Untuk *Villa* sewa di *Malang*, Kak lebih prefer yang *terjangkau*, *menengah*, atau *eksklusif*? 💰",
+    "nextQuestion_catalog": "Untuk *Villa* sewa di *Malang*, Kak lebih prefer yang *terjangkau*, *menengah*, atau *eksklusif*? 💰"
   },
   "Q2b: belum pernah lihat (must not loop)": {
     "profile": {
@@ -25,6 +25,7 @@
       "aiAskedSearchHist": true,
       "aiCount": 1,
       "buildingType": "villa",
+      "customerHintsPriorSearch": true,
       "customerStatedSearchHistory": true,
       "hasKprDetails": true,
       "hasSearchHistory": true,
@@ -63,8 +64,8 @@
       "location": "Malang",
       "transactionType": "rent"
     },
-    "nextQuestion_summary": "Sudah lihat berapa Villa di *Malang*, dan apa yang membuat belum cocok?",
-    "nextQuestion_catalog": "Sudah lihat berapa Villa di *Malang*, dan apa yang membuat belum cocok?"
+    "nextQuestion_summary": "Rencananya masuk atau pindah bulan apa? 📅",
+    "nextQuestion_catalog": "Rencananya masuk atau pindah bulan apa? 📅"
   },
   "budget: numeric range (must not re-ask tier)": {
     "profile": {
@@ -147,8 +148,8 @@
       "location": "Surabaya",
       "transactionType": "rent"
     },
-    "nextQuestion_summary": "Sudah lihat berapa Rumah di *Surabaya*, dan apa yang membuat belum cocok?",
-    "nextQuestion_catalog": "Sudah lihat berapa Rumah di *Surabaya*, dan apa yang membuat belum cocok?"
+    "nextQuestion_summary": "Untuk *Rumah* sewa di *Surabaya*, Kak lebih prefer yang *terjangkau*, *menengah*, atau *eksklusif*? 💰",
+    "nextQuestion_catalog": "Untuk *Rumah* sewa di *Surabaya*, Kak lebih prefer yang *terjangkau*, *menengah*, atau *eksklusif*? 💰"
   },
   "anchor: comma list must be captured whole": {
     "profile": {
@@ -160,8 +161,8 @@
       "location": "Surabaya",
       "transactionType": "rent"
     },
-    "nextQuestion_summary": "Sudah lihat berapa Rumah di *Surabaya*, dan apa yang membuat belum cocok?",
-    "nextQuestion_catalog": "Sudah lihat berapa Rumah di *Surabaya*, dan apa yang membuat belum cocok?"
+    "nextQuestion_summary": "Untuk *Rumah* sewa di *Surabaya*, Kak lebih prefer yang *terjangkau*, *menengah*, atau *eksklusif*? 💰",
+    "nextQuestion_catalog": "Untuk *Rumah* sewa di *Surabaya*, Kak lebih prefer yang *terjangkau*, *menengah*, atau *eksklusif*? 💰"
   },
   "furnishing: \"kosongan\" must NOT flip type to kos": {
     "profile": {
@@ -246,8 +247,8 @@
       "location": "Surabaya",
       "transactionType": "rent"
     },
-    "nextQuestion_summary": "Sudah lihat berapa Hotel di *Surabaya*, dan apa yang membuat belum cocok?",
-    "nextQuestion_catalog": "Sudah lihat berapa Hotel di *Surabaya*, dan apa yang membuat belum cocok?"
+    "nextQuestion_summary": "Untuk *Hotel* sewa di *Surabaya*, Kak lebih prefer yang *terjangkau*, *menengah*, atau *eksklusif*? 💰",
+    "nextQuestion_catalog": "Untuk *Hotel* sewa di *Surabaya*, Kak lebih prefer yang *terjangkau*, *menengah*, atau *eksklusif*? 💰"
   },
   "BOUNDARY C: greeting restart with same type": {
     "profile": {
@@ -280,8 +281,8 @@
       "location": "Kediri",
       "transactionType": "rent"
     },
-    "nextQuestion_summary": "Sudah lihat berapa Villa di *Kediri*, dan apa yang membuat belum cocok?",
-    "nextQuestion_catalog": "Sudah lihat berapa Villa di *Kediri*, dan apa yang membuat belum cocok?"
+    "nextQuestion_summary": "Untuk *Villa* sewa di *Kediri*, Kak lebih prefer yang *terjangkau*, *menengah*, atau *eksklusif*? 💰",
+    "nextQuestion_catalog": "Untuk *Villa* sewa di *Kediri*, Kak lebih prefer yang *terjangkau*, *menengah*, atau *eksklusif*? 💰"
   },
   "hotel booking frame": {
     "profile": {
@@ -299,8 +300,8 @@
       "viewingIsNight": true,
       "viewingTimeOfDay": "malam"
     },
-    "nextQuestion_summary": "Sudah lihat berapa Hotel di *Surabaya*, dan apa yang membuat belum cocok?",
-    "nextQuestion_catalog": "Sudah lihat berapa Hotel di *Surabaya*, dan apa yang membuat belum cocok?"
+    "nextQuestion_summary": "Untuk *Hotel* sewa di *Surabaya*, Kak lebih prefer yang *terjangkau*, *menengah*, atau *eksklusif*? 💰",
+    "nextQuestion_catalog": "Untuk *Hotel* sewa di *Surabaya*, Kak lebih prefer yang *terjangkau*, *menengah*, atau *eksklusif*? 💰"
   },
   "viewing schedule: day + hour": {
     "profile": {
@@ -344,7 +345,7 @@
       "location": "Surabaya",
       "transactionType": "rent"
     },
-    "nextQuestion_summary": "Sudah lihat berapa Villa di *Surabaya*, dan apa yang membuat belum cocok?",
-    "nextQuestion_catalog": "Sudah lihat berapa Villa di *Surabaya*, dan apa yang membuat belum cocok?"
+    "nextQuestion_summary": "Untuk *Villa* sewa di *Surabaya*, Kak lebih prefer yang *terjangkau*, *menengah*, atau *eksklusif*? 💰",
+    "nextQuestion_catalog": "Untuk *Villa* sewa di *Surabaya*, Kak lebih prefer yang *terjangkau*, *menengah*, atau *eksklusif*? 💰"
   }
 }

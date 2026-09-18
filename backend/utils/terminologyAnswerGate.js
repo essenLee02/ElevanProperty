@@ -75,13 +75,27 @@ function tryTerminologyAnswer(userMessage, options = {}) {
       answer: 'Tidak ada biaya tersembunyi, Kak. Biaya resmi di luar harga rumah: BPHTB (pajak pembeli), biaya notaris/PPAT & balik nama, dan bila KPR: provisi/administrasi bank, appraisal, asuransi. Semua dirinci oleh notaris/bank sebelum tanda tangan.' },
     { re: /\b(?:rumah|properti)\s+second\b[^.?!]{0,20}\bpajak|\bpajak\w*\b[^.?!]{0,25}\b(?:rumah|properti)\s+second\b|\bkena\s+pajak\s+apa\b/,
       answer: 'Untuk rumah second: PEMBELI membayar BPHTB (umumnya 5% dari nilai transaksi/NJOP dikurangi NPOPTKP daerah), PENJUAL membayar PPh final (umumnya 2,5%). Ditambah biaya notaris/PPAT dan balik nama sertifikat. Angka pastinya dihitung notaris.' },
-    { re: /\bzonasi\b|\bizin\s+usaha\b|\b(?:boleh|bisa)\s+(?:untuk|buat)\s+usaha\b/,
+    { re: /\bzonasi\b|\bizin\s+usaha\b|\b(?:boleh|bisa)\s+(?:untuk|buat)\s+(?:usaha|kantor|cabang|toko|kafe|cafe|klinik|resto\w*)\b|\bsecara\s+(?:izin|perizinan|zonasi|peruntukan)\b|\b(?:izin|perizinan|peruntukan)(?:nya)?\s+(?:apa|gimana|bagaimana|boleh|bisa)\b/,
       answer: 'Untuk usaha (kafe/toko/kantor), rumah tinggal umumnya perlu cek zonasi tata ruang & izin (PBG/OSS) — beda tiap kelurahan. Ruko/rukan sudah berzona komersial. Agent kami bisa bantu cek zonasi unit yang Kakak minati sebelum transaksi.' },
     { re: /\bbisa\s+(?:pakai\s+|pake\s+)?kpr\b|\bkpr\s+bisa\b/,
       answer: 'Bisa, Kak 😊 Unit ini bisa diproses dengan KPR lewat bank rekanan (DP umumnya 10-20%, tenor sampai 15-20 tahun). Kalau Kakak sudah punya bank pilihan atau perkiraan DP, saya catat untuk agent kami.' },
+    // M204 (18 Sep 2026) — sim K4/K3: "pajak jual belinya siapa yg tanggung?", "AJB aja aman
+    // nggak? wajib SHM?", "Is there a deposit? How many months?" dibalas skrip/loop area.
+    { re: /\bpajak\w*\b[^.?!]{0,40}\b(?:siapa|tanggung|bayar|ditanggung|persen|berapa)\b|\b(?:siapa|tanggung|bayar)\w*\b[^.?!]{0,30}\bpajak\b|\bwho\s+pays\b[^.?!]{0,30}\btax|\btax\w*\b[^.?!]{0,30}\b(?:who|how\s+much)\b/,
+      answer: 'Pajak jual beli dibagi dua, Kak: PEMBELI menanggung BPHTB (umumnya 5% dari nilai transaksi/NJOP setelah dikurangi NPOPTKP daerah), PENJUAL menanggung PPh final (umumnya 2,5%). Biaya notaris/PPAT & balik nama biasanya pembeli, kecuali disepakati lain. Angka pastinya dihitung notaris — agent kami bantu rincikan untuk unit yang Kakak pilih.',
+      answerEn: 'Sale taxes are split: the BUYER pays BPHTB (usually 5% of the transaction/NJOP value after the regional tax-free threshold), the SELLER pays final income tax (usually 2.5%). Notary/PPAT and title-transfer fees are normally the buyer\'s unless agreed otherwise. The notary computes the exact figures — our agent can itemise them for the unit you choose.' },
+    { re: /\b(?:cuma|hanya|cukup|masih)\s+ajb\b[^.?!]{0,30}\b(?:aman|resiko|risiko|bahaya|boleh|bisa)\b|\bajb\b[^.?!]{0,20}\b(?:aman|resiko|risiko)\b|\b(?:aman|resiko|risiko)\b[^.?!]{0,20}\bajb\b/,
+      answer: 'Tanah/rumah yang baru AJB (belum bersertifikat atas nama penjual) berisiko lebih tinggi, Kak: AJB hanya bukti transaksi, bukan bukti kepemilikan. Amannya: minta sertifikat (SHM/SHGB) atas nama penjual, cek keaslian & riwayatnya di BPN lewat notaris/PPAT, dan pastikan tidak ada sengketa/hak tanggungan. Kalau memang hanya AJB, sertifikat bisa diurus ke BPN tapi butuh waktu & biaya — agent kami bantu cek status unitnya dulu.',
+      answerEn: 'A property that only has an AJB (no certificate in the seller\'s name) carries higher risk: the AJB proves the transaction, not ownership. Safer: ask for the SHM/SHGB in the seller\'s name, have a notary/PPAT verify it at the land office (BPN), and check for disputes or bank liens. If it really is AJB-only, a certificate can be applied for, but it takes time and cost — our agent can check the unit\'s status first.' },
+    { re: /\b(?:wna|warga\s+negara\s+asing|orang\s+asing|foreigner\w*|expat\w*)\b[^.?!]{0,40}\b(?:shm|hak\s+milik|punya|memiliki|beli|membeli|own|buy|purchase)\b|\b(?:shm|hak\s+milik)\b[^.?!]{0,30}\b(?:wna|asing|foreigner\w*)\b/,
+      answer: 'WNA tidak bisa memegang SHM, Kak — SHM hanya untuk WNI perorangan. Opsi yang lazim untuk WNA: Hak Pakai (SHP) untuk rumah tapak, atau SHMSRS/Hak Pakai atas satuan rumah susun untuk apartemen, dengan syarat izin tinggal (KITAS/KITAP) dan batas harga minimum tertentu; atau lewat PT PMA (SHGB). Agent kami bantu cek skema yang cocok untuk unit yang Kakak pilih.',
+      answerEn: 'Foreigners cannot hold SHM (freehold) — it is reserved for Indonesian citizens. Common options: Hak Pakai (right-of-use, SHP) for landed houses, or strata title/Hak Pakai for apartments, subject to a residence permit (KITAS/KITAP) and minimum price thresholds; or via a PT PMA company (HGB). Our agent can check the right scheme for the unit you picked.' },
+    { re: /\b(?:deposit\w*|jaminan\w*|uang\s+jaminan|security\s+deposit)\b[^.?!]{0,40}\b(?:berapa|ada|how\s+many|how\s+much|is\s+there|bulan|month)\b|\b(?:ada|berapa|is\s+there)\b[^.?!]{0,20}\bdeposit\w*\b/,
+      answer: 'Deposit sewa umumnya 1 bulan sewa (kadang 2 bulan untuk unit furnished), dikembalikan di akhir masa sewa setelah dikurangi kerusakan/tunggakan. Sewa rumah/apartemen tahunan biasanya dibayar di muka per tahun. Nominal pastinya tergantung pemilik unit — agent kami konfirmasikan untuk unit yang Kakak pilih.',
+      answerEn: 'A rental deposit is usually 1 month\'s rent (sometimes 2 for furnished units), refunded at the end of the lease minus damages or arrears. Yearly house/apartment leases are normally paid upfront per year. The exact amount depends on the owner — our agent will confirm it for the unit you pick.' },
   ];
-  for (const { re, answer } of PROCESS_QA) {
-    if (re.test(text)) return answer;   // null = biarkan gerbang lain (katalog) menjawab
+  for (const { re, answer, answerEn } of PROCESS_QA) {
+    if (re.test(text)) return (lang === 'en' && answerEn) ? answerEn : answer;   // null = biarkan gerbang lain (katalog) menjawab
   }
 
   // Pola per istilah, diurutkan agar frasa lebih spesifik (SHSRS/SHMSRS)

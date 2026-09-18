@@ -3,7 +3,7 @@
   Dibuat  : 15 Juni 2026
   Update  : 17 September 2026 (M188–M203) — ⭐ V19: 14 section (Overview …
             Summary) masing-masing dibuka blok `RINGKAS V19` berisi status
-            TERKINI; teks lama di bawahnya = riwayat. Suite 3246/3246.
+            TERKINI; teks lama di bawahnya = riwayat. Suite 3314/3314.
             PRIMARY=claude (Haiku 4.5) + SKILL PLATFORM `CLAUDE_SKILL_ID`
             (M203, poin 30 paling bawah): .md lokal TIDAK dikirim ke Claude;
             provider lain tetap memakai `AI_SKILL_CALL`. File ini dibuat
@@ -4354,7 +4354,7 @@ PRINSIP DEBUG
   CATATAN AKHIR UNTUK CLAUDE CODE
 ================================================================================
 
-  ⭐ V19: nomor M terakhir = M203. Blok `RINGKAS V19` di awal tiap section
+  ⭐ V19: nomor M terakhir = M205 (poin 32). Blok `RINGKAS V19` di awal tiap section
     adalah kebenaran terkini; bila bertentangan dengan teks di bawahnya, blok
     RINGKAS yang menang. Claude memakai skill PLATFORM (CLAUDE_SKILL_ID), bukan
     .md lokal; jangan "memperbaiki" ini dengan mengirim .md ke Claude.
@@ -6127,6 +6127,112 @@ penuh untuk pertama kalinya sejak berbulan-bulan.
      logs/sim-claude-skill-r1.md → -final.md; skenario scripts/sim-scenarios-
      claude-skill.js; dbg_seq.js FULL=1 cetak balasan utuh. Artifact Version 8
      bagian "Claude × skill platform + 3 sesi baru".
+
+ 31. ⭐ M204 (18 Sep 2026) — 5 SESI K1-K5 KE PRIVATE AGENT MURNI: JALUR PRIVATE ≠ JALUR FALLBACK.
+     Arahan: uji ulang simulasi Claude (K1-K3) ke provider 'private' + 2 sesi baru
+     (K4 investor tanah Gresik; K5 sewa→beli Rungkut), perbaiki semua, 7 poin tetap.
+     TEMUAN STRUKTURAL: AI_PRIMARY_PROVIDER=private menempuh gerbang whatsappAIService
+     (pra-kualifikasi, area/kota, istilah) SEBELUM chatbotPrivateController — berbeda
+     dari "Claude gagal → fallback" yang langsung memanggil generatePrivateTerminalMassege.
+     Tes M203 lolos karena memanggil controller langsung; sim jalur penuh membongkar 14 bug:
+       • "Btw hari ini … hujan" → ✓ Masuk: hari itu (kata waktu sambil lalu mengisi Q8,
+         first-wins membuang "awal tahun depan") → casualTimeOnly di ekstraktor Q8.
+       • "Sama suami sy, 2 orang." saat AI tanya jam → "Jam 2" → parseSurveyTime mode
+         longgar menolak angka + kata benda hitungan (orang/kamar/unit/bulan/juta…), jam>24.
+       • "mending beli aja daripada sewa" → tetap rent (kartu sewa, budget beli hilang saat
+         switch terlambat) → stripRejectedTransactionPhrases (daripada/ketimbang/bukan/gak
+         jadi/instead of + tx; juga "pajak/akta/biaya/proses jual beli" = istilah, bukan
+         niat) dipakai detectCanonicalTransaction, detectTransactionType, ekstraktor.
+       • "Yg nomor 1 sudah SHM atau HGB?" tanpa kartu → glosarium SHM (gerbang istilah
+         whatsappAIService lebih dulu) → asksNumberedUnitDocs → Private Agent (no_cards_yet).
+       • Basa-basi / frustrasi "kok ditanya terus" / keluhan foto beda → skrip wawancara,
+         gerbang budget, off-topic keras → utils/conversationRepairGate.js (satu tempat,
+         sebelum kualifikasi; profil platform hanya dapat fakta). Nama kota sesi dibuang
+         sebelum cek kata kunci; lanjutan hanya dihormati bila ≤3 kata.
+       • "How far is Citraland from JIIPE?" → "let me check" → utils/placeCityResolver.js
+         (area tabel locations, landmark kurasi, kawasan industri/bandara JIIPE/SIER/Juanda…)
+         → antar kota + catatan "Citraland (Surabaya) and JIIPE (Gresik)"; jarak jalur WA
+         kini ikut bahasa customer (dulu selalu Indonesia).
+       • Pajak jual beli siapa tanggung / "AJB aja aman?" / deposit sewa (ID+EN) → PROCESS_QA
+         baru di terminologyAnswerGate (answerEn didukung).
+       • district "Gubeng atau sekitarnya" / "Gedangan atau Waru" → gerbang area mengulang
+         "*Gubeng Atau Sekitarnya* belum ada" tiap giliran → _cleanDistrictAnswer memotong
+         "atau/dan X" (alternatif sudah punya slot sendiri).
+       • "Syaratnya apa aja?" sesudah kartu (kartu memuat "Fasilitas:") → 'standar' → summary
+         16 fasilitas tak diminta → marker hanya bila AI BERTANYA fasilitas (kalimat tanya).
+       • "sy cuma mau lihat pilihan dulu" lalu "Survei sabtu ini" → Viewing: Minta listing →
+         tanggal konkret menang atas penolakan lama.
+       • "pajak jual belinya" sesudah summary dibaca pencarian BARU (kata beli) → penutup
+         dibalas "Tipe apa yang Anda cari?" → lihat stripper di atas.
+       • Kartu pencarian LAMA (Gresik) dihitung "sudah ada unit" setelah pindah ke Citraland
+         (kosong) → "Can we view it?" jatuh ke skrip area 3x → no_cards_yet dihitung sejak
+         searchStartIdx, unit lama disebut sebagai opsi; jam/tanggal sesudahnya dicatat
+         (no_cards_yet_gate/time_noted).
+       • Info tambahan saat area tetap kosong ("Yg furnished ya") → "Sudah lihat berapa…" →
+         area_availability_gate/reoffer (paritas reoffer kota); "Kalau Mneganti?" saat tipe
+         tak ada di kota → city_availability_gate/area menyebut area hasil fuzzy.
+       • Gerbang kualifikasi WA mengulang "Di area mana?" pada pertanyaan/nomor unit →
+         customerHasAgenda melewatkan ke Private Agent (agenda customer dulu).
+     Alat: scripts/dbg_replay_log.js <log.md> <K5> <n> — replay satu giliran dari transkrip
+     log sim dengan riwayat penuh (dbg_seq.js tidak melewati whatsappAIService).
+     Tes: tests/privateAgentSimsM204.test.js (40, termasuk jalur generateWhatsAppAIReply
+     nyata). SUITE 3286/3286, lint 0 error (REPLY_OPEN dipindah ke atas pemakainya).
+     Regresi P1-P23 & Z1-Z20 tidak memburuk (scriptLeaks 15→14, multiQ 6→4 / 11→10).
+     Log: logs/sim-private-k5-m204.md. Sisa yang disengaja: tipe "tanah" berlabel
+     "Properti Lainnya" (katalog agent tidak punya tanah); "Sama suami, 2 orang" sesudah
+     "jam berapa?" dijawab slot berikutnya (jam tidak ditanya ulang).
+
+ 32. ⭐ M205 (18 Sep 2026) — 10 SESI BARU N1-N10 (PRIVATE MURNI) + ARTIFACT CHAT.
+     Arahan: "Buatkan 10 simulasi berbagai kemungkinan chat AI dan private yang terbaru;
+     kemudian buatkan artifact-nya … AI_PRIMARY_PROVIDER=private". Skenario:
+     scripts/sim-scenarios-private10.js (N1 apartemen tower/IPL, N2 KPR/DP/HGB, N3 villa
+     kota kosong→pindah→tutup, N4 kos anak kuliah typo, N5 kantor grade/izin, N6 gudang
+     kontainer/surat hijau, N7 campur EN/ID rent→buy WNA, N8 investor ruko yield/pajak,
+     N9 customer marah/minta manusia, N10 jadwal diubah 2x/batal). 87 giliran, 0 LLM.
+     Artifact: https://claude.ai/artifact/Q3C9gokvMoRpLhNktrLsDB (builder scratchpad
+     build_private10.py; log logs/sim-private-n10-m205.md). Bug yang diperbaiki (17):
+       • detectBudget: "3 jt an per bulan, sewa 1 tahun" → /tahun (kata durasi menang) →
+         explicitPeriod (per X / /X / X-an) menang atas kata telanjang; "jt-an" boleh menempel.
+       • detectBudget: "Luas minimal 100 m2" → 100 MILIAR (m2 dibaca "M") → angka+satuan
+         luas/jumlah (m2, mobil, orang, kVA, feet, kamar, unit) dibuang sebelum parse.
+       • detectTransactionType: "Cicilan 15 tahun … per bulan" / "Yield sewanya per tahun"
+         → rent (alias periode = sewa) → dalam konteks pembiayaan/imbal hasil (cicil, kpr,
+         tenor, dp, yield, roi, pajak, ipl) kata periode & "sewa" diabaikan; kos/ngekos → rent.
+       • #extractLeaseDuration: "Cicilan 15 tahun" → Durasi sewa 15 tahun → konteks
+         cicilan/tenor/kpr dibuang.
+       • Follow-up: "Rencana pindah Maret tahun depan" sesudah survei dijadwalkan → "Jadwal
+         diubah 01 Maret" → masuk/pindah+bulan = rencana MASUK (follow-up-move-in-noted).
+       • _cleanDistrictAnswer: "yang rame" → "Ng Rame" (regex ^(ya) tanpa \b) → \b; "yang
+         rame/strategis/sepi" = preferensi (isCoverageQuestion); "Kirim 3 ya" bukan area /
+         patokan (isRequestOrNumber); "Alana Cemandi boleh, lihat 2 pilihan" tetap area.
+       • Q2b "Sudah lihat berapa…" hanya bila customer mengisyaratkan pernah mencari
+         (customerHintsPriorSearch) — pembuka yang jelas tidak diinterogasi (sim N7).
+         House pilot Q4 tidak diubah; snapshot qualifierCharacterization direkam ulang.
+       • terminologyAnswerGate: WNA & SHM (aturan, bukan data unit — asksOwnershipRule di
+         kedua jalur), "secara izin/perizinan" → zonasi.
+       • conversationRepairGate: minta manusia ("ngomong sama orang, bukan bot") & nomor
+         agent → serah-terima; "Sama orang tua saya, 3 orang" bukan serah-terima.
+       • Penutup tanpa kartu: whatsappAIService closing_without_slots (gerbang kualifikasi
+         dulu membalas "sewa atau beli?"), Private closing_without_cards bila slot belum
+         lengkap / sesi ≤4 pesan; slot lengkap + stok kosong + sesi panjang → summary
+         (lead tetap berharga). Gate C tidak menempel summary/pertanyaan ke balasan penutup.
+       • "Oke ditunggu ya" / "nanti kami kabari" = penutup (customerSignalsClosing).
+       • Pertanyaan tentang unit yang tidak ada ("Aman nggak buat anak cewek? Ada penjaga?")
+         saat stok kosong → no_cards_yet (asksAboutNonexistentUnit), bukan skrip Q8.
+       • Jadwal tanpa unit diubah/batal/ulang ("Eh ganti Sabtu", "batal dulu", "Minggu depan
+         jam 10?") → time_noted/time_cancelled selama belum ada kartu.
+       • areaAvailabilityService STOP: nama hari/bulan/waktu ("Kamis jam 4" ≈ "Dukuh Pakis").
+       • LanguageDetector: pesan ≤3 kata Inggris ("Ok thanks.") di sesi Indonesia tetap id.
+       • Gerbang kualifikasi WA dilewati bila tipe memang tidak ada di kota (cityStillEmpty);
+         gerbang istilah tidak menyambung pertanyaan slot bila kota sudah dinyatakan kosong.
+     ⚠️ Jebakan alat: heredoc Bash mengubah "\b" menjadi byte 0x08 di skrip Python →
+     scratchpad/fix_bs.py membersihkan; patch regex WAJIB lewat Write tool, bukan heredoc.
+     Tes: tests/privateAgentSims10M205.test.js (28) + M204 (40) + M203 (29) hijau;
+     terminologyQualGateWiring diperbarui (ngekos = sewa → pertanyaan lanjut area, bukan
+     "sewa atau beli"). SUITE 3314/3314, lint 0 error. Metrik N1-N10: scriptLeaks 7→5,
+     cardRepeats 5→4, noSummaryAtClose 7→3; K1-K5 tidak memburuk.
+     Sisa yang disengaja: N7 pembuka campur bahasa dijawab pertanyaan tier budget (sah);
+     "Oke." sesudah survei dijadwalkan dilanjutkan pertanyaan Q8 (bukan penutup).
 
  17. ⭐ M189 (12 Sep 2026) — TIGA DOC BACKUP JULI KEMBALI KE chat_gpt_responds.
      Arahan: 15-date-money ≤300 char; 10-playbooks & 19-landmark "diolah".

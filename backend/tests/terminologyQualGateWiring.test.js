@@ -61,8 +61,10 @@ async function main() {
       result.provider === 'terminology_gate', result.provider);
     ok('balasan MENJAWAB SHM (bukan hanya mengulang pertanyaan qualifikasi)',
       /kepemilikan/i.test(result.reply) && /selamanya/i.test(result.reply), result.reply.slice(0, 200));
+    // M204: "ngekos" = SEWA (kos tidak dibeli penghuninya), jadi pertanyaan lanjutannya kini
+    // slot berikutnya (area di Madiun), bukan lagi "sewa atau beli?". Yang dikunci: tidak macet.
     ok('balasan TETAP menyambung ke pertanyaan qualifikasi berikutnya (tidak macet)',
-      /sewa/i.test(result.reply) && /beli/i.test(result.reply), result.reply.slice(0, 300));
+      /Madiun/i.test(result.reply) && /\?/.test(String(result.reply).split(/selamanya/i).pop() || ''), result.reply.slice(0, 300));
   }
 
   console.log('\n== Group 1b: transkrip nyata PERSIS — "Blh tau SHM itu apa" (urutan "X itu apa", tanpa "?") ==');

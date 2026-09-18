@@ -239,8 +239,29 @@ function findCitiesInText(text) {
 function tryAnswerDistanceQuery(userMessage, context = {}) {
   if (!looksLikeDistanceQuestion(userMessage)) return null;
 
-  const cities = findCitiesInText(userMessage);
+  let cities = findCitiesInText(userMessage);
   let originName, destName;
+
+  /* M204 (18 Sep 2026) — nama area/kawasan/landmark ("Citraland", "JIIPE") dipetakan
+   * ke kotanya (utils/placeCityResolver.js) bila pesan tidak memuat dua nama kota.
+   * Nama tempatnya disebutkan kembali di balasan supaya customer tahu estimasinya
+   * dihitung antar-KOTA, bukan antar-titik persis. */
+  let placeNote = [];
+  if (cities.length < 2) {
+    try {
+      const { resolvePlacesToCities } = require('../utils/placeCityResolver');
+      const lower = String(userMessage || '').toLowerCase();
+      const places = resolvePlacesToCities(userMessage).filter((p) => !cities.includes(p.key));
+      const merged = [
+        ...cities.map((c) => ({ key: c, idx: lower.indexOf(c) })),
+        ...places.map((p) => ({ key: p.key, idx: lower.indexOf(p.place.toLowerCase()), note: `${p.place} (${p.label})` })),
+      ].sort((a, b) => a.idx - b.idx);
+      if (merged.length >= 2) {
+        cities = merged.map((m) => m.key);
+        placeNote = merged.filter((m) => m.note).map((m) => m.note);
+      }
+    } catch (_) { /* fail-open */ }
+  }
 
   if (cities.length >= 2) {
     originName = cities[0];
@@ -278,7 +299,14 @@ function tryAnswerDistanceQuery(userMessage, context = {}) {
   if (originName === destName) return null;
 
   const result = estimateDistanceAndTime(originName, destName, context.lang || 'id');
-  return result ? result.text : null;
+  if (!result) return null;
+  if (placeNote.length) {
+    const lead = (context.lang || 'id') === 'en'
+      ? `${placeNote.join(' and ')} — so between the two cities:`
+      : `${placeNote.join(' dan ')} — jadi antar kotanya:`;
+    return `${lead}\n${result.text}`;
+  }
+  return result.text;
 }
 
 module.exports = {

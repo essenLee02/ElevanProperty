@@ -292,7 +292,9 @@ const HARD_STOP_RE = new RegExp(
   // M196: jawaban atas tawaran penutup "…atau saya rangkum sekarang?"
   + '|\\b(?:ringkas|rangkum|summary|rekap)\\b'
   // M203: penutup berbahasa Inggris (sim K3: "Great, that is all for now. Thank you." → dibalas off-topic)
-  + "|\\b(?:that(?:'s| is| will be) all|nothing else|no more questions|that'?s it for now|i'?m (?:good|done|all set)|we'?re (?:good|done|all set))\\b",
+  + "|\\b(?:that(?:'s| is| will be) all|nothing else|no more questions|that'?s it for now|i'?m (?:good|done|all set)|we'?re (?:good|done|all set))\\b"
+  // M204 (sim N6/N5): "Oke ditunggu ya." / "nanti kami kabari" = menutup sambil menunggu kabar.
+  + "|\\bditunggu\\b(?:\\s+(?:ya|kabarnya|infonya))?|\\bnanti\\s+(?:saya|sy|kami|aku)\\s+(?:kabari|hubungi|infokan|konfirmasi)\\b",
   'i'
 );
 const CLOSING_SIGNAL_RE = new RegExp(`${HARD_STOP_RE.source}|${THANKS_RE.source}`, 'i');

@@ -71,6 +71,11 @@ function claudeUsesPlatformSkill() {
   return Boolean(getClaudeConfig().skillId);
 }
 
+// Penanda balasan akhir — Haiku menyisipkan narasi kerja ("Sempurna! Sekarang saya punya…")
+// sebelum jawaban walau diminta tidak; teks di luar penanda dibuang (probe hidup 16 Sep 2026).
+const REPLY_OPEN = '===REPLY===';
+const REPLY_CLOSE = '===END===';
+
 /* System prompt mode skill platform: TIDAK memuat .md lokal. Instruksi memuat
  * skill dibuat eksplisit karena setiap request adalah container baru — tanpa
  * perintah ini model kecil kadang menjawab tanpa membaca SKILL.md dulu. */
@@ -84,10 +89,6 @@ function buildPlatformSkillSystemPrompt() {
     `Write the final reply between a line ${REPLY_OPEN} and a line ${REPLY_CLOSE}; anything outside those markers is discarded and never reaches the customer.`
   ].join(' ');
 }
-// Penanda balasan akhir — Haiku menyisipkan narasi kerja ("Sempurna! Sekarang saya punya…")
-// sebelum jawaban walau diminta tidak; teks di luar penanda dibuang (probe hidup 16 Sep 2026).
-const REPLY_OPEN = '===REPLY===';
-const REPLY_CLOSE = '===END===';
 
 /* Blok konten Claude: ambil teks SETELAH blok hasil code execution terakhir (teks
  * sebelum itu biasanya "let me read the skill..." — bukan balasan). Tanpa tool
