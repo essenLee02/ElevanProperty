@@ -1,7 +1,16 @@
 ================================================================================
-  ELEVAN PROPERTY — COMPREHENSIVE PROJECT CONTEXT (V18)
+  ELEVAN PROPERTY — COMPREHENSIVE PROJECT CONTEXT (V19)
   Dibuat  : 15 Juni 2026
-  Update  : 11 September 2026 (M183–M187) — ⭐ SUITE HIJAU PENUH:
+  Update  : 17 September 2026 (M188–M203) — ⭐ V19: 14 section (Overview …
+            Summary) masing-masing dibuka blok `RINGKAS V19` berisi status
+            TERKINI; teks lama di bawahnya = riwayat. Suite 3246/3246.
+            PRIMARY=claude (Haiku 4.5) + SKILL PLATFORM `CLAUDE_SKILL_ID`
+            (M203, poin 30 paling bawah): .md lokal TIDAK dikirim ke Claude;
+            provider lain tetap memakai `AI_SKILL_CALL`. File ini dibuat
+            untuk diunggah sebagai konteks/skill Claude Code — tidak memuat
+            nilai rahasia apa pun.
+
+  (riwayat) 11 September 2026 (M183–M187) — ⭐ SUITE HIJAU PENUH:
             **2957/2957, nol gagal, nol crash** (M186–M189 di poin 13–17, paling bawah). Rinciannya di §PERUBAHAN
             BESAR V17 → V18 (paling bawah). Tiga hal yang paling mengubah
             cara kerja sesi berikutnya:
@@ -1352,6 +1361,28 @@ tercapai di jalur produksi sesungguhnya".
   1. OVERVIEW
 ================================================================================
 
+⭐ RINGKAS V19 (17 Sep 2026, M188–M203) — baca 60 detik ini dulu:
+  • Produk: platform properti web + chatbot WhatsApp multi-agent (Node.js +
+    MySQL, Vue 3). AI mengkualifikasi customer, mengirim kartu listing dari
+    katalog agent, lalu menyusun summary/brief untuk agent.
+  • Prinsip perilaku yang BERLAKU SEKARANG (M202): AGENDA CUSTOMER DULU —
+    AI menjawab apa yang ditanya customer; AI bertanya hanya bila customer
+    tidak punya agenda; 4 slot wajib (transaksi, tipe, kota, lokasi
+    spesifik) → kartu dikirim segera; summary otomatis di pesan customer
+    ke-10–12 (M195) — bukan wawancara Q1–Q14 berurutan (kontrak lama).
+  • Dua profil guardrail (utils/guardrailPolicy.js): 'platform' (LLM
+    memutuskan; backend hanya kirim FAKTA/materi — M187) dan 'local'
+    (Private Agent deterministik memutuskan, nol panggilan API).
+  • Provider PRIMARY sekarang: `AI_PRIMARY_PROVIDER=claude` dengan
+    `CLAUDE_MODEL=claude-haiku-4-5-20251001` + SKILL PLATFORM
+    (`CLAUDE_SKILL_ID`, M203). Untuk Claude, .md lokal TIDAK dikirim; provider
+    lain & Private Agent tetap membaca `AI_SKILL_CALL`.
+  • Suite tes: 3246/3246 hijau (16 Sep 2026). Lint bersih.
+  • Setiap klaim di section 1–13 yang berlabel V18 atau lebih lama harus
+    disilangkan dengan blok RINGKAS V19 di awal section itu + poin 13–30 log
+    kronologis di bagian paling bawah file (poin 30 = M203).
+
+
 Elevan Property = platform manajemen properti berbasis web + AI chatbot WhatsApp
 multi-agent untuk pasar Indonesia. Menghubungkan agen properti dengan calon
 pembeli/penyewa lewat WhatsApp, memakai AI untuk mengkualifikasi kebutuhan
@@ -1413,6 +1444,36 @@ Developer:
 ================================================================================
   2. INSTRUMENT / TEKNOLOGI
 ================================================================================
+
+⭐ RINGKAS V19 (17 Sep 2026) — instrumen yang benar-benar dipakai sekarang:
+  • Runtime: Node.js CommonJS, Express, Sequelize v6 (MySQL), axios; frontend
+    Vue 3 + Vite; Python FastAPI (:5056) hanya mirror paralel, bukan pengganti.
+  • Kanal WhatsApp: Kirimi (aktif), Fonnte & TimelinesAI (pipeline identik).
+  • AI: 7 opsi provider (chatgpt · claude · qwen · deepseek · kimi ·
+    openrouter · private). Rantai = PRIMARY → Private Agent (fallback
+    deterministik, selalu ada).
+  • ⭐ Claude × Skill Platform (M203): Messages API dengan
+    `container.skills=[{type:'custom', skill_id, version:'latest'}]` +
+    `tools=[{type:'code_execution_20250825'}]`. Model WAJIB kompatibel
+    code-execution (Haiku 4.5 OK; "claude-3-haiku"/"3.5-haiku" ditolak).
+    Konsekuensi: ~18K token input & 15–40 detik per giliran (skill dibaca via
+    ±4 panggilan bash di container) — lihat §10 ROADMAP.
+  • Skill lokal (.md) untuk provider lain: `backend/asset/skills/
+    chat_gpt_responds/` = SKILL.md + docs 00–07 (05/06/07 kondisional).
+    Ukuran total ≤14.700 char raw per folder (arahan pemilik, M193/M203).
+    Cap env: SKILL_MAX_RESPONSE_CHARACTERS=16000, SKILL_MAX_PROJECT_CHARACTERS
+    =16000 (jangan < 16000 atau doc 07 terpotong diam-diam).
+  • Bahasa: utils/languageKeywords.js (`indonesianHits`, `looksEnglish`,
+    `SHARED_EN_ID_WORDS`) — dipakai LanguageDetector (Private Agent),
+    isIndonesian (WhatsApp) dan detectLanguage (FORCED REPLY LANGUAGE prompt).
+    Deteksi substring lama membuat sesi Inggris dibalas Indonesia (M203).
+  • RAG: lexical BM25 master data + indeks vektor JSON (backend/data/
+    rag-index.json), opt-in via includeSkillReference; fail-open.
+  • Tooling simulasi: `SIM_FILE=./sim-scenarios-*.js node scripts/
+    simulate-platform-skill.js <provider>` (SIM_ONLY=K3), `FULL=1 node
+    scripts/dbg_seq.js`, `scripts/dbg_turn.js`, `scripts/publish-claude-
+    skill.js --check` (lihat §12 WORKFLOW).
+
 
 ⭐ RINGKAS V18 (6 Sep 2026) — yang paling sering salah diasumsikan:
   • Skill .md dibaca dari SATU folder untuk SEMUA provider:
@@ -1528,6 +1589,38 @@ WHATSAPP TERMINALS (MVP 3, pipeline identik)
      silang-cek §PERUBAHAN BESAR versi terbaru [V15 di paling bawah file],
      bukan hanya section ini. Beberapa koreksi paling penting ditandai ⭐)
 ================================================================================
+
+⭐ RINGKAS V19 (17 Sep 2026) — status fitur TERKINI (menimpa bullet lama):
+  SUDAH JALAN & TERVERIFIKASI LIVE
+    ✅ Claude Haiku 4.5 + skill platform: 3 sesi K1–K3 (16 Sep malam) 35/36
+       giliran dibalas Claude (1 fallback Private saat timeout); K3 (expat
+       Inggris) diulang 17 Sep: 12/12 Claude, 10/12 berbahasa Inggris.
+    ✅ Slot properti: transaksi/tipe/kota/area/budget/pembayaran/penghuni/
+       tanggal masuk/red-flag/furnishing/kamar tidur/kamar mandi/pet-friendly
+       (bedrooms/bathrooms & pet masuk summary sejak M203).
+    ✅ Legal: definisi SHM/SHGB/SHMSRS/SHP/Surat Hijau/AJB/PPJB (ID & EN,
+       "beda X sama Y" → dua paragraf) via terminologyAnswerGate — tanpa syarat,
+       sebelum guard. Sertifikat UNIT dibaca dari data (certificate_type),
+       bukan dikarang; bila belum ada kartu → "Belum ada unit yang saya kirim".
+    ✅ Survei/viewing: tanggal relatif (customerDateParser), jam, "ditunda
+       sampai X" (viewing_deferred_gate), baris `✓ Viewing:` di summary,
+       tambahan jam setelah summary (SCHED_RE). Jarak antar kota: static
+       coordinates (distanceEstimationService, ID & EN), Google tetap OFF.
+    ✅ Guardrail: propertyKeywordFilter (gate masuk), off-topic 3-tahap,
+       sentinel `[[OFFTOPIC_SILENT]]` (profil platform), dedup 2-layer +
+       message-id, typo-area fuzzy (areaAvailabilityService, STOP words
+       sapaan/kuliah/kerja), no_cards_yet_gate, city_availability_gate/reoffer.
+    ✅ Katalog: listing inkremental (jangan kirim ulang kartu, "minta N" = N
+       total, M192), nomor kartu berlanjut lintas pesan (M197), alternatif
+       area/budget ±15%→±30% dalam kota yang sama, foto = judul+alamat+
+       property_id, stok kurang dari permintaan dijelaskan (M193).
+    ✅ Pilot/identity/eskalasi: nama agent & app dari DB/.env, ask_name
+       workflow, takeover ai_response=OFF, follow-up nomor agent, Gate C
+       bersyarat (M196).
+  BELUM / PARSIAL — lihat §10 ROADMAP (latensi Claude skill, HuggingFace
+    tidak di-wire, foto placeholder seragam, LOCATION_ALIAS campur, dua
+    salinan skill).
+
 
 SUDAH JALAN ✅
 
@@ -1656,6 +1749,32 @@ BELUM / SEDANG DIKEMBANGKAN ⏳
   4. PENGEMBANGAN — DEVELOPMENT GUIDE
 ================================================================================
 
+⭐ RINGKAS V19 (17 Sep 2026) — perintah yang paling sering dipakai:
+  Jalankan     : cd backend && npm run dev            (port 5055, ngrok auto)
+  Suite penuh  : cd backend && bash <runner> / node tests/<file>.test.js
+                 (122 berkas tes, tiap tes = skrip node mandiri yang mencetak
+                 RESULT; target 3246/3246). Lint: npx eslint . (wajib sebelum
+                 selesai — no-undef pernah lolos node --check dan crash prod).
+  Cek Claude   : node -e "require('dotenv').config();
+                 require('./services/claudeService').checkClaudeConfig()
+                 .then(console.log)"  → tampilkan model, skillId, skillVersion,
+                 skillSource ('claude_platform_skill' | 'local_md').
+  Skill platform: node scripts/publish-claude-skill.js --check   (baca versi)
+                  node scripts/publish-claude-skill.js --dir skills/
+                  elevan-property-assistant  (unggah versi baru; SEMUA berkas
+                  ikut tiap versi; `name:` di SKILL.md harus sama persis)
+  Simulasi     : SIM_FILE=./sim-scenarios-claude-skill.js node scripts/
+                 simulate-platform-skill.js claude   (SIM_ONLY=K3 untuk satu
+                 sesi; hasil ke logs/sim-*.md); provider 'private' = tanpa API.
+  Replay 1 giliran: node scripts/dbg_turn.js · urutan penuh: FULL=1 node
+                 scripts/dbg_seq.js
+  Aturan kode  : ⛔ jangan hardcode nama model/agent/app/nomor/kredensial;
+                 ⛔ jangan auto-topup kredit provider; normalisasi slot DI
+                 DALAM extractQualificationState; tes memanggil modul asli.
+  Jebakan shell: heredoc Git Bash merusak `\b`, `\s`, `$&` — tulis patch
+                 sebagai berkas .py/.js di scratchpad; berkas proyek CRLF.
+
+
 SETUP LOKAL
   Backend  : cd backend && npm install && npm run dev      (port 5055)
   Frontend : cd frontend && npm install && npm run dev     (port 5173)
@@ -1755,6 +1874,40 @@ KONVENSI KODE
 ================================================================================
   5. SOLUSI — MASALAH YANG SUDAH DISELESAIKAN (jangan ulangi solusi lama)
 ================================================================================
+
+⭐ RINGKAS V19 (17 Sep 2026) — solusi M188–M203 (detail → poin 16–30 di
+   bagian paling bawah file; JANGAN mengulang investigasi ini):
+  M188 8 sesi live: backend hanya bisa merusak chat lewat FAKTA yang salah
+       (negasi KPR, "tanah 120 m2" jadi tipe, tanggal survei hari kerja,
+       landmark vs area, gateFacts tidak terkirim) — semua diperbaiki.
+  M189 Jalur ChatGPT Responses API tidak pernah mengirim skill; doc 05/06/07
+       kembali; SKILL_MAX_PROJECT_CHARACTERS membatasi system prompt WA.
+  M190 Audit 7 kapabilitas → peta doc; jarak jadi fakta backend; anggaran .md.
+  M191 "DeepSeek hilang konteks" = 3 fakta backend berbasis format Private
+       Agent (nomor kartu blok terakhir, detektor "Estimasi Harga").
+  M192 Kontrak listing inkremental: satu parser listSentCards untuk kedua
+       jalur + dedup katalog di sumber.
+  M193 Stok < permintaan dijelaskan; anggaran .md 14.700 per folder.
+  M195 Summary otomatis di pesan ke-10–12 (hitung dari riwayat PENUH).
+  M196 Gate C bersyarat, sinonim survei, .env 420→176 baris (dotenv memakai
+       definisi TERAKHIR — jaga saat menulis ulang).
+  M197 Nomor kartu berlanjut lintas pesan; stok terbatas.
+  M198 Private Agent 10 sesi: follow-up setelah summary (#tryFollowUpAnswer),
+       "Boleh diulang?", slot tidak diisi dari non-jawaban.
+  M199 Plin-plan area/kota: detectAreaName, parseAllShownCards,
+       tryRecallPreviousPick; fingerprint balasan harus sinkron dengan regex
+       pembacanya.
+  M200 Landmark pendek ("tim"→TIM), "dari Surabaya berapa lama" bukan ganti
+       kota; SIM_FILE + dbg_turn.js; cap skill 16000.
+  M201/M202 Agenda customer dulu; 20 sesi: negasi tipe, investor→sewa,
+       BPN→Balikpapan, flip bahasa, "belum ada" berulang.
+  M203 Claude skill platform (container.skills + code_execution, marker
+       ===REPLY===/===END=== agar narasi kerja Haiku tidak bocor, pause_turn
+       ≤3, timeout ≥120 s); key Claude lama 401 → diganti; deteksi bahasa
+       substring diganti whole-word; no_cards_yet_gate, viewing_deferred_gate,
+       city reoffer; istilah legal & jarak berbahasa Inggris; "buka kafe" =
+       usaha; Q2b satu tanda tanya; sapaan tidak fuzzy ke area.
+
 
 [⭐ M172–M176 — 3 September 2026 (detail penuh → §PERUBAHAN BESAR V16 → V17)]
   M172 ⭐⭐⭐ Blok `## QUALIFICATION MODE` hardcoded di
@@ -2447,6 +2600,35 @@ KONVENSI KODE
   6. ENVIRONMENTS — KONFIGURASI .env
 ================================================================================
 
+⭐ RINGKAS V19 (17 Sep 2026) — nilai yang berlaku (NILAI RAHASIA TIDAK DITULIS):
+  AI_PRIMARY_PROVIDER=claude          # SELALU grep .env dulu; berubah antar sesi
+  AI_SKILL_CALL=asset\skills\chat_gpt_responds   # .md untuk provider non-Claude
+                                      # + Private Agent (path relatif backend/)
+  CLAUDE_API_KEY=<rahasia>            # key baru 16 Sep 2026; key lama 401 —
+                                      # REVOKE di console Anthropic
+  CLAUDE_MODEL=claude-haiku-4-5-20251001   # wajib kompatibel code-execution
+  CLAUDE_SKILL_ID=skill_01Vx8XTPV3fnujCuLZPfHVRa  # skill platform; kosongkan
+                                      # → Claude kembali memakai .md lokal
+  CLAUDE_SKILL_VERSION=latest (default bila tidak diisi) · CLAUDE_WORKSPACE_ID
+  CLAUDE_API_VERSION · CLAUDE_MAX_TOKENS · CLAUDE_TIMEOUT_MS (efektif
+                                      # max(nilai,120000) saat skill aktif)
+  ENABLE_CLAUDE_FALLBACK · ENABLE_AI_WHATSAPP · AI_COOKIE_RESPONSE_TIMER
+  *_TIMEOUT_MS per provider (CHAT_GPT/QWEN/DEEPSEEK/KIMI/OPENROUTER/KIRIMI/
+    FONNTE/PYTHON_MIRROR/RAG_EMBEDDING) — >2 menit tanpa balasan = timeout
+    default axios, bukan debounce.
+  SKILL_MAX_WEBSITE_CHARACTERS=12000 · SKILL_MAX_RESPONSE_CHARACTERS=16000 ·
+  SKILL_MAX_PROJECT_CHARACTERS=16000  # cap 3000 dulu memotong 71% skill
+  RAG_ENABLED · RAG_EMBEDDING_MODE · RAG_EMBEDDING_CONFIDANCE_SCORE (ejaan
+    asli, dibaca kode)
+  PROPERTY_IMAGE_SEND_ENABLED · PROPERTY_IMAGE_MAX_PER_REPLY · PROPERTY_IMAGE_
+    DIR · PROPERTY_IMAGE_URL_BASE · PROPERTY_IMAGE_PUBLIC_BASE_URL
+  GOOGLE_ENABLED=false (kill switch Places+Geocoding) · GOOGLE_* lain dorman
+  NGROK_ENABLE (true=dev, false=hosting; URL dari publicUrlService.js)
+  ⛔ Aturan di .env sendiri: DILARANG KERAS auto-recharge/auto-topup saat
+     token/kredit habis; JANGAN hardcode model/agent/app/nomor/kredensial.
+  ⚠️ 10 key pernah terdefinisi dua kali; dotenv memakai yang TERAKHIR.
+
+
 FILE: backend/.env (copy dari .env.example; JANGAN commit .env asli)
 
 CORE      APP_PORT=5055 · APP_FRONTEND_PORT=5173 · APP_NAME=Elevan Property
@@ -2664,6 +2846,29 @@ CATATAN PENTING
   7. INFORMASI — ARSITEKTUR, AGENT & DATA
 ================================================================================
 
+⭐ RINGKAS V19 (17 Sep 2026) — alur satu pesan WhatsApp saat ini:
+  webhook → dedup (message-id + isi) → guard fromMe/grup → ai_response? →
+  batas layanan agent (users.trans_type/payment_type/rental_*) →
+  propertyKeywordFilter (gate masuk) → istilah legal / jarak (deterministik,
+  tanpa syarat) → profil guardrail:
+    'platform' (PRIMARY ≠ private): backend menyusun BAHAN saja — riwayat,
+       state slot ✅/❓, KATALOG NYATA (stok kota/area/harga + negatif
+       eksplisit), gateFacts (kartu sudah terkirim, jumlah pesan customer,
+       jarak, ketersediaan), FORCED REPLY LANGUAGE — lalu LLM memutuskan
+       balas/diam/kartu. Claude+skill: system prompt 5 kalimat + marker
+       REPLY; provider lain: skill .md via AI_SKILL_CALL.
+    'local' (private / fallback): chatbotPrivateController memutuskan
+       (gates: no_cards_yet, city_availability, viewing_deferred, follow-up,
+       recall pick, summary 10–12).
+  → sendViaKirimi (teks, lalu foto opsional) → simpan chat_messages.
+  Data: katalog per agent (Property.user_id) — JSON 9.120 baris hanya jalur
+  publik; properties.certificate_type (SHM/SHGB/SHSRS, jual saja) &
+  location_type (area/landmark/commercial); agent uji Natasha NA40D8N007
+  (521 listing Surabaya/Sidoarjo/Gresik) untuk semua simulasi.
+  Log simulasi: backend/logs/sim-*.md (sim-claude-live-r1.md = 16 Sep malam,
+  sim-claude-live-k3.md = 17 Sep).
+
+
 AGENT
   1 agent = 1 record `users` (privilege='agent'): user_id, name, phone,
   email, catalog_summary, fonnte_token, kirimi_device_id, trans_type,
@@ -2731,6 +2936,39 @@ QUALIFICATION FLOW — URUTAN AKTUAL findNextQuestion() (tidak berubah dari V7)
 ================================================================================
   8. SKILLS — AI SKILL SYSTEM
 ================================================================================
+
+⭐ RINGKAS V19 (17 Sep 2026) — DUA JALUR SKILL, jangan tertukar:
+  A. SKILL PLATFORM (Claude saja, M203)
+     • Sumber: zip dari `skills/elevan-property-assistant` yang diunggah ke
+       platform.claude.com → `CLAUDE_SKILL_ID=skill_01Vx8…` (versi skver_…).
+     • claudeService.js: `claudeUsesPlatformSkill()` benar bila model
+       kompatibel + skillId terisi → request memakai container.skills +
+       code_execution; wrapper mengirim `system: undefined` (bukan
+       getProjectSkillInstruction) dan whatsappAIService mematikan
+       includeSkillReference. Log: `[CLAUDE REQUEST] skill: '<id>@latest
+       (platform skill, .md lokal TIDAK dikirim)'` + `[CLAUDE SKILL]
+       {stop_reason, code_execution_calls, container, usage}`.
+     • Perbarui isi: edit folder → `node scripts/publish-claude-skill.js`
+       (versi baru; `latest` otomatis dipakai). API: GET /v1/skills/{id},
+       /versions, POST /v1/skills/{id}/versions (multipart files[]).
+     • Biaya: per container (min 5 menit, 1.550 jam gratis/bulan, lalu
+       $0,05/jam) + token (~18K input/giliran).
+  B. SKILL LOKAL .md (chatgpt/qwen/deepseek/kimi/openrouter + Private Agent)
+     • `AI_SKILL_CALL=asset\skills\chat_gpt_responds` → semua provider grup
+       ini membaca `backend/asset/skills/chat_gpt_responds/` (SKILL.md +
+       docs 00–07; 05 playbook tipe, 06 landmark, 07 tanggal/uang bersifat
+       kondisional via CONDITIONAL_FILE_TRIGGERS).
+     • ENAM folder harus byte-identik: `skills/{chat_gpt_responds,
+       claude_responds,elevan-property-assistant}` dan `backend/asset/skills/
+       {…}` — tes doc-sync membacanya. Ukuran per folder ≤14.700 char raw
+       (sekarang 14.660/14.658/14.683; tes redFlagPreferenceAndUnitAttributeM186
+       mengunci cap 14.700).
+     • Frasa terkunci tes harus tetap satu baris fisik dengan karakter persis
+       (`→`, bukan `->`); mis. "Anti-pattern: Keep interviewing…" dikunci
+       showListingsEarlyM139.
+  C. Yang menang bila bertentangan: kode/prompt builder > .md (sudah 3x
+     terbukti — grep aiPromptBuilderService dulu sebelum menyalahkan doc).
+
 
 LOKASI FISIK — ⛔⛔⛔ BACA INI DULU SEBELUM MENGEDIT SATU BERKAS SKILL PUN ⛔⛔⛔
 
@@ -2981,6 +3219,22 @@ GAYA AI (wajib)
   9. TUJUAN
 ================================================================================
 
+⭐ RINGKAS V19 (17 Sep 2026) — tujuan yang ditegaskan pemilik terakhir:
+  1. Customer diprioritaskan: agenda customer dulu, AI bertanya hanya bila
+     perlu; tidak ada pengulangan pertanyaan; jawaban dalam bahasa customer.
+  2. Tujuh kapabilitas wajib dibuktikan lewat simulasi nyata (bukan unit tes
+     saja): slot properti lengkap · legalitas (definisi vs sertifikat unit
+     dari data) · survei/masuk/jarak · guardrail/vektor/lexical/dedup/typo ·
+     pilot/identitas/kualifikasi/diagnosis/eskalasi/intent · rekomendasi &
+     alternatif katalog · agenda customer di atas wawancara.
+  3. Claude harus memakai skill platform (bukan .md lokal) bila
+     CLAUDE_SKILL_ID terisi; .md tiap direktori ≤14.700 char.
+  4. Nol pengeluaran tak sengaja: tidak ada auto-topup; key bocor segera
+     direvoke; Google tetap OFF.
+  5. Sebelum fitur baru: suite tetap hijau penuh, lint bersih, regresi P1–P23 /
+     Z1–Z20 tidak memburuk.
+
+
 TUJUAN BISNIS
   1. Otomasi kualifikasi lead WhatsApp — agent menerima brief siap-tindak
      (target ≤ 12 pesan AI per lead).
@@ -3021,6 +3275,29 @@ TUJUAN TEKNIS
 ================================================================================
   10. ROADMAP
 ================================================================================
+
+⭐ UTANG TERBUKA PER 17 SEP 2026 (V19, M203) — PALING BARU
+  [ ] LATENSI & BIAYA Claude skill platform: 15–40 s/giliran dan ~18K token
+      karena skill dibaca ulang di container tiap request. Opsi: (a) pin
+      versi + prompt caching, (b) uji `claude-sonnet-5` untuk kualitas vs
+      biaya, (c) turunkan debounce 12 s hanya bila latensi total tetap <45 s,
+      (d) evaluasi kembali .md lokal untuk Claude bila biaya membengkak.
+  [ ] Key Claude lama (401) masih harus DIREVOKE di console Anthropic;
+      kedua key pernah ditempel di chat.
+  [ ] Restart produksi setelah M203 & pastikan proses LAMA tidak masih
+      melayani (cek build stamp di /health — kasus phantom restart).
+  [ ] 2 dari 12 giliran K3 dibalas Indonesia oleh Haiku sendiri meski
+      FORCED REPLY LANGUAGE=en — pertimbangkan penegasan di skill platform.
+  [ ] Skill platform hanya diperbarui manual (publish-claude-skill.js);
+      belum ada tes yang memastikan versi platform = isi folder lokal.
+  [ ] Artefak laporan (diagnosis V8, chat 3 sesi) perlu diperbarui tiap
+      putaran simulasi besar.
+  Masih terbuka dari V18: dua salinan skill (6 folder) disinkron manual ·
+  LOCATION_ALIAS campur alias asli & singkatan · foto placeholder seragam ·
+  HuggingFace tidak di-wire · label Q8 "WAJIB" vs kontrak opsional ·
+  chatbotPrivateController (≈6.900 baris) diarahkan pemilik untuk dipangkas
+  tapi masih jalur fallback aktif.
+
 
 ⭐ UTANG TERBUKA PER 6 SEP 2026 (V18, M183–M185) — PALING BARU
 
@@ -3174,6 +3451,35 @@ tanpa alasan baru yang kuat)
 ================================================================================
   11. STRUKTUR PROJECT
 ================================================================================
+
+⭐ RINGKAS V19 (17 Sep 2026) — berkas yang paling sering disentuh M188–M203:
+  backend/services/claudeService.js        Claude Messages API, skill platform
+                                            (CODE_EXEC_MODEL_RE, extractClaudeText,
+                                            pause_turn loop, checkClaudeConfig)
+  backend/services/whatsappAIService.js    orkestrasi WA: bahasa, gate istilah,
+                                            includeSkillReference, area/city said
+  backend/services/aiPromptBuilderService.js  prompt profil platform (bahan +
+                                            gateFacts, detectLanguage, state slot)
+  backend/services/skillPromptService.js   loader .md (AI_SKILL_CALL, cap, trigger)
+  backend/services/aiProviderService.js    PROVIDER_ORDER & fallback chain
+  backend/services/propertyRecommendationService.js  katalog, detectUseCase,
+                                            initCityCache/Landmark/Facility
+  backend/services/areaAvailabilityService.js  ketersediaan area + typo fuzzy
+  backend/services/distanceEstimationService.js  jarak antar kota (ID/EN)
+  backend/controllers/chatbotPrivateController.js  Private Agent (LanguageDetector,
+                                            semua gate, summary, follow-up)
+  backend/utils/{languageKeywords,terminologyAnswerGate,customerQuestionGuard,
+                 guardrailPolicy,customerDateParser}.js
+  backend/scripts/{simulate-platform-skill,sim-scenarios-*,dbg_seq,dbg_turn,
+                   publish-claude-skill}.js
+  backend/tests/*.test.js (122 berkas; terbaru claudePlatformSkillM203,
+                           claudeSkillSimsM203)
+  backend/logs/sim-*.md                    transkrip simulasi (live & private)
+  backend/asset/skills/chat_gpt_responds/  .md AKTIF untuk provider non-Claude
+  skills/elevan-property-assistant/        sumber zip skill platform Claude
+  skills/website_env_concept/docs/00–19    detail teknis per topik (terpisah)
+  ELEVAN_PROPERTY_CONTEXT_V8.txt           file ini (nama tetap, isi V19)
+
 
 Elevan_Property/
 ├── backend/
@@ -3396,6 +3702,31 @@ backend/tests` untuk angka aktual). Daftar berkas BARU sesi ini saja:
   12. WORKFLOW
 ================================================================================
 
+⭐ WORKFLOW V19 (17 Sep 2026)
+  A. Perbaiki perilaku chat (urutan wajib):
+     1. Buktikan kode mana yang LIVE (/health build stamp, grep .env PRIMARY).
+     2. Reproduksi dengan SIM_FILE + simulate-platform-skill.js (provider
+        'private' dulu = gratis & deterministik; lalu provider asli).
+     3. Baca dump prompt/gateFacts — bila profil platform, salahkan FAKTA
+        backend dulu, bukan model.
+     4. Perbaiki di ekstraktor/gate (kode) bila deterministik; di .md bila
+        gaya/keputusan; JANGAN di dua tempat sekaligus.
+     5. Tambah tes regresi transkrip nyata + kontrol negatif; suite penuh
+        hijau; lint; regresi P1–P23/Z1–Z20 tidak memburuk.
+     6. Catat sebagai poin M berikutnya (lanjut dari M203) di log bawah file
+        + perbarui RINGKAS section terkait.
+  B. Edit skill .md: edit folder aktif → grep frasa terkunci di tests/ →
+     salin ke 6 folder → ukur ≤14.700 raw & panjang termuat → suite →
+     `publish-claude-skill.js` (agar skill platform ikut) → restart backend.
+  C. Ganti provider/model: ubah .env → `checkClaudeConfig()`/cek provider
+     live (nama model & param sampling diuji ke API asli) → satu sesi
+     simulasi live → restart.
+  D. Simulasi live Claude: SIM_FILE=./sim-scenarios-claude-skill.js node
+     scripts/simulate-platform-skill.js claude → periksa log `[CLAUDE
+     SKILL]` (code_execution_calls > 0 = skill terbaca) → hasil di
+     backend/logs → perbarui artefak bila diminta pemilik.
+
+
 ⭐ WORKFLOW EDIT SKILL .md (V18 — WAJIB, urutannya penting):
   1. Edit di folder AKTIF: `backend/asset/skills/chat_gpt_responds/`.
   2. grep nama berkas itu di `backend/tests/` — banyak frasa DIKUNCI tes dan
@@ -3467,6 +3798,37 @@ D. WORKFLOW DEVELOPER (menambah/ubah fitur chat)
 ================================================================================
   13. TROUBLESHOOT SUMMARY
 ================================================================================
+
+⭐ GEJALA BARU V19 (17 Sep 2026) — cek ini dulu:
+  Claude 401 "API key is invalid" di semua endpoint
+    → key salah/dicabut (bukan model/skill). Minta key baru, JANGAN tempel
+      di chat; verifikasi `checkClaudeConfig()`.
+  Claude membalas dengan narasi kerja ("Sekarang saya punya data…")
+    → balasan tidak diapit ===REPLY===/===END===; pastikan
+      buildPlatformSkillSystemPrompt terkirim & extractClaudeText memakai teks
+      setelah blok *_tool_result terakhir.
+  Log `[CLAUDE SKILL] code_execution_calls: 0` / skillSource 'local_md'
+    → model tidak kompatibel code-execution atau CLAUDE_SKILL_ID kosong;
+      lihat CODE_EXEC_MODEL_RE.
+  Balasan Claude >120 s / fallback ke Private Agent
+    → normal 15–40 s; timeout efektif max(CLAUDE_TIMEOUT_MS,120000); cek
+      pause_turn loop (≤3) dan status API Anthropic.
+  Customer berbahasa Inggris dibalas Indonesia
+    → cek detectLanguage/isIndonesian memakai indonesianHits+looksEnglish;
+      kata bersama (place names, "ok", "budget") ada di SHARED_EN_ID_WORDS.
+  "Nomor 1 sudah SHM?" dibalas kartu/definisi padahal belum ada kartu
+    → no_cards_yet_gate (Private) / gateFacts "kartu terkirim: 0" (platform).
+  "Belum bisa survei sampai Oktober" jadi tanggal survei 1 Oktober
+    → viewing_deferred_gate; summary harus "Ditunda sampai Oktober".
+  "Selamat siang, cari rumah di Surabaya" dianggap area tertentu
+    → STOP words fuzzy area; pesan >4 kata hanya token setelah di/ke/area…
+  Tes tanggal gagal setelah pergantian hari
+    → assert lewat parseCustomerDate, bukan literal tanggal.
+  Patch regex rusak (`\s` jadi `s`, `$&` hilang)
+    → jangan heredoc; tulis .py/.js di scratchpad, pakai Edit tool.
+  Suite merah karena frasa .md
+    → frasa terkunci tes dipecah baris / karakter `→` diganti; kembalikan.
+
 
 ⭐ GEJALA BARU DARI V18 — CEK INI DULU SEBELUM MENDIAGNOSIS APA PUN LAIN:
 
@@ -3957,8 +4319,46 @@ PRINSIP DEBUG
 
 
 ================================================================================
+  14. SUMMARY — RINGKASAN EKSEKUTIF V19 (17 September 2026)
+================================================================================
+
+  Apa ini      : Chatbot WhatsApp properti multi-agent (Node.js + MySQL) yang
+                 menjawab agenda customer, mengirim kartu listing dari katalog
+                 agent, menjelaskan legalitas/survei/jarak, dan menyusun
+                 summary untuk agent — dengan fallback deterministik tanpa API.
+  Status       : Suite 3246/3246 hijau, lint bersih, Claude Haiku 4.5 + skill
+                 platform terverifikasi live (3 sesi K1–K3; 35/36 + 12/12
+                 giliran oleh Claude). PRIMARY = claude.
+  Jalur AI     : profil 'platform' (LLM memutuskan, backend kirim fakta) →
+                 fallback Private Agent profil 'local' (backend memutuskan).
+                 Claude memakai CLAUDE_SKILL_ID (skill platform); provider lain
+                 memakai AI_SKILL_CALL (.md lokal ≤14.700 char per folder).
+  Kontrak chat : agenda customer dulu; 4 slot wajib → kartu segera; summary
+                 otomatis pesan ke-10–12; jangan kirim ulang kartu; nomor
+                 kartu berlanjut; alternatif hanya dalam kota yang sama;
+                 bahasa mengikuti customer; penolakan = jawaban final.
+  Risiko utama : latensi/biaya skill platform (15–40 s, ~18K token/giliran);
+                 key lama belum direvoke; restart produksi + phantom process;
+                 6 salinan skill disinkron manual.
+  Cara kerja   : buktikan kode live → simulasi (private dulu) → baca fakta
+                 backend → perbaiki satu tempat → tes regresi + kontrol
+                 negatif → catat M berikutnya di log bawah + RINGKAS section.
+  Larangan     : hardcode model/agent/app/nomor/kredensial; auto-topup;
+                 memotong input extractQualificationState; menaruh key di
+                 chat/log/dokumen; mengubah .md tanpa menyalin ke 6 folder.
+  Baca berikut : §1 (prinsip), §6 (env), §8 (dua jalur skill), §12 (workflow),
+                 §13 (gejala), lalu poin 30 (M203) di bagian paling bawah.
+
+
+================================================================================
   CATATAN AKHIR UNTUK CLAUDE CODE
 ================================================================================
+
+  ⭐ V19: nomor M terakhir = M203. Blok `RINGKAS V19` di awal tiap section
+    adalah kebenaran terkini; bila bertentangan dengan teks di bawahnya, blok
+    RINGKAS yang menang. Claude memakai skill PLATFORM (CLAUDE_SKILL_ID), bukan
+    .md lokal; jangan "memperbaiki" ini dengan mengirim .md ke Claude.
+  ⛔ Jangan pernah menulis API key ke file ini, log, tes, atau artefak.
 
   - File ini SATU-SATUNYA konteks yang perlu di-upload. Detail teknis
     per-topik ada di skills/website_env_concept/docs/ (00–19).
@@ -5653,6 +6053,80 @@ penuh untuk pertama kalinya sejak berbulan-bulan.
      hanya frontmatter `name:` per folder; docs byte-identik). Artifact bagian
      "20 sesi hit backend". Tooling: scripts/dbg_seq.js "m1" "m2" … (rangkaian
      giliran lewat generatePrivateTerminalMassege).
+
+ 30. ⭐ M203 (16 Sep 2026) — CLAUDE × SKILL PLATFORM (CLAUDE_SKILL_ID) + 3 SESI BARU K1-K3.
+     Pertanyaan pemilik: bisakah provider Claude memakai skill yang di-upload ke
+     platform.claude.com → Skills (bukan .md lokal)? BISA: Messages API dengan
+     container.skills[{type:'custom', skill_id, version}] + tool code_execution
+     (code_execution_20250825; Skills GA, tanpa beta header). Model WAJIB dari
+     daftar kompatibel code execution — "claude-3-haiku"/"claude-3.5-haiku" BUKAN
+     ID sah → .env CLAUDE_MODEL=claude-haiku-4-5-20251001. Biaya: code execution
+     per container (min 5 menit), 1.550 jam/bulan gratis, lalu $0,05/jam.
+     Implementasi (services/claudeService.js): bila CLAUDE_SKILL_ID diisi →
+     system = 5 kalimat dasar (baca SKILL.md+docs dulu, hanya katalog/fakta dari
+     request, keluaran = teks balasan) — .md lokal (AI_SKILL_CALL) TIDAK dikirim;
+     pause_turn dilanjutkan; teks diambil sesudah tool result terakhir; timeout
+     ≥120 dtk; guard model; RAG cuplikan .md lokal dimatikan bila provider efektif
+     Claude (whatsappAIService includeSkillReference). CLAUDE_SKILL_VERSION
+     opsional (default latest). Kosong → perilaku lama. checkClaudeConfig
+     melaporkan skillSource claude_platform_skill|local_md.
+     scripts/publish-claude-skill.js [--check | --dir … --name …] = periksa /
+     unggah versi baru (multipart files[]; nama platform "propmatches-property-
+     assistant" ≠ nama lokal → --name menulis-ulang frontmatter di payload saja).
+     ⛔ UJI HIDUP GAGAL: CLAUDE_API_KEY di .env ditolak API (401 "API key is
+     invalid" pada /v1/models, /v1/skills, /v1/messages) — kunci itu juga sempat
+     tertulis di chat → buat kunci baru (rotasi). Semua 36 giliran K1-K3 jatuh ke
+     Private Agent (fallback) dan menampakkan bug baru (diperbaiki, kode saja):
+       a) Deteksi bahasa buta Inggris (utils/languageKeywords.js): substring
+          "budget"/"furnished"/"ya" (di "year") → sesi Inggris berbalik ke
+          Indonesia. Kini idWordHits (kata ≤3 huruf utuh, lainnya awalan),
+          SHARED_EN_ID_WORDS + nama tempat diabaikan pada kalimat Inggris
+          (looksEnglish), EXTRA_EN_PATTERNS; +kata pendek/singkatan Indonesia
+          (ya, jam, pagi, yg, sy, tdk, apa, itu …). Dipakai LanguageDetector.detect
+          (controller) & isIndonesian (whatsappAIService).
+       b) no_cards_yet_gate: "nomor 1 sudah SHM?", "parkirnya muat brp mobil?",
+          "Is number 1 furnished?", komplain foto, "can we view it?" TANPA kartu
+          → "belum ada unit yang saya kirim" + sebab (tipe/area kosong atau slot
+          wajib yang belum ada). Pertanyaan proses/istilah tetap ke gerbang istilah.
+       c) city_availability_gate/reoffer: tipe tak ada di kota + customer terus
+          memberi slot → dicatat + tawaran ulang singkat sekali (bukan skrip
+          "Sudah lihat berapa Ruko di Sidoarjo?").
+       d) viewing_deferred_gate + viewingDeferred di summary: "belum bisa survei
+          sampai Oktober" = "Ditunda sampai Oktober" (dulu Viewing: 01 Oktober);
+          "belum mau survei" di summary = "Ditunda (belum mau survei dulu)".
+       e) Sapaan "Selamat siang" bukan jam survei (viewingTimeOfDay) dan bukan
+          typo area (siang≈Karang Pilang): fuzzy area pada pesan >4 kata hanya
+          kata sesudah di/ke/area/…; STOP +selamat/siang/pagi/halo/kuliah/kerja.
+       f) detectUseCase: buka kafe/warung/jualan = 'usaha'; dijadikan kos-kosan/
+          kontrakan = 'investasi' (tes extractFilters diperbarui).
+       g) Q2b satu tanda tanya ("…, dan apa yang membuat belum cocok?"); versi
+          Inggris dikenali aiAskedSearchHist ('options have you seen'). Snapshot
+          qualifierCharacterization direkam ulang (26/26).
+       h) Inggris: HARD_STOP_RE +"that is all/nothing else/no more questions";
+          terminologyAnswerGate(msg,{lang}) answerEn untuk SHM/SHGB/SHMSRS/SHP/
+          Surat Hijau/AJB/PPJB + asksDifference → dua istilah; DISTANCE_QUESTION_RE
+          +how far/how long…by car/distance/travel time + teks estimasi Inggris
+          (buildEstimate lang); VIEWING_CLAUSE_RE +view it/visit; hasViewingHour
+          +"2 pm"; areaEmptyAlreadySaid/cityEmptyAlreadySaid + template Inggris
+          "don't have any … in <Area> right now" (dulu diulang 5×).
+       i) Summary: Kamar tidur/Kamar mandi (dari pernyataan, bukan pertanyaan),
+          Prefer "Boleh hewan peliharaan (pet-friendly)", "atau sekitarnya" →
+          "Sekitar area utama (fleksibel)" bukan "Area alternatif: sekitarnya";
+          "Jam 10 pagi ya." sesudah summary melengkapi baris ✓ Viewing (SCHED_RE);
+          minta nomor agent → agent yang menghubungi; post-summary generic tanpa
+          "unit yang sudah dikirim" bila tidak ada kartu.
+     .md: total per folder ≤14.700 (raw, CRLF dihitung — sama dengan tes M186):
+     dipangkas 6 folder byte-identik → 14.660/14.658/14.683 (doc 01 "Infer, don't
+     ask", doc 03 header, doc 04 "Forwards/promotions", doc 05/06 judul, doc 06
+     daftar landmark & kalimat "City ≠ area ≠ landmark"). Baris "Anti-pattern:
+     Keep interviewing…" dipertahankan (dipin showListingsEarlyM139). Tes M186
+     batas 14900 → 14700.
+     Tes: claudePlatformSkillM203 (17, axios di-mock), claudeSkillSimsM203 (29).
+     SUITE 3246/3246. Regresi P1-P23 & Z1-Z20 tidak memburuk (multiQ/tooLong
+     turun; Z8 sesi campur Inggris kini dijawab Inggris). Log
+     logs/sim-claude-skill-r1.md → -final.md; skenario scripts/sim-scenarios-
+     claude-skill.js; dbg_seq.js FULL=1 cetak balasan utuh. Artifact Version 8
+     bagian "Claude × skill platform + 3 sesi baru".
 
  17. ⭐ M189 (12 Sep 2026) — TIGA DOC BACKUP JULI KEMBALI KE chat_gpt_responds.
      Arahan: 15-date-money ≤300 char; 10-playbooks & 19-landmark "diolah".

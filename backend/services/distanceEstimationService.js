@@ -70,7 +70,7 @@ function formatHours(hoursLow, hoursHigh) {
  * @param {string} destLabel   - nama kota/alamat tujuan untuk teks
  * @returns {{distanceKm:number, sameIsland:boolean, text:string}}
  */
-function buildEstimate(origin, destination, originLabelRaw, destLabelRaw) {
+function buildEstimate(origin, destination, originLabelRaw, destLabelRaw, lang = 'id') {
   // M199: nama kota dari kunci tabel (huruf kecil) → Title Case di kalimat balasan.
   const titleCase = (s) => String(s || '').replace(/\b\w/g, (c) => c.toUpperCase());
   const originLabel = titleCase(originLabelRaw);
@@ -85,6 +85,18 @@ function buildEstimate(origin, destination, originLabelRaw, destLabelRaw) {
     // jalan non-tol campuran): 40-55 km/jam.
     const carLow = distanceKm / 55;
     const carHigh = distanceKm / 40;
+
+    /* M203 (16 Sep 2026) — versi Inggris untuk customer berbahasa Inggris (sim K3
+     * "How far is X from Y by car?"). Hanya cabang darat satu pulau; cabang
+     * penyeberangan tetap Indonesia (jarang, dan agent yang mengonfirmasi). */
+    if (lang === 'en') {
+      const disc = '_(Straight-line distance and a rough travel-time estimate — not a precise route. Our agent can confirm the exact route/time.)_';
+      const hrs = (lo, hi) => formatHours(lo, hi).replace(/\bjam\b/g, 'h').replace(/\bmenit\b/g, 'min');
+      if (distanceKm < 200) {
+        return { distanceKm, sameIsland, text: `${originLabel} to ${destLabel} is about ${distanceKm} km.\n🚗 By car: roughly ${hrs(carLow, carHigh)} (depending on traffic).\n\n${disc}` };
+      }
+      return { distanceKm, sameIsland, text: `${originLabel} to ${destLabel} is about ${distanceKm} km.\n🚗 By car: roughly ${hrs(carLow, carHigh)} (depending on traffic); for this distance the train or a flight is often more practical — our agent can help check options.\n\n${disc}` };
+    }
 
     if (distanceKm < 200) {
       return {
@@ -161,16 +173,17 @@ function buildEstimate(origin, destination, originLabelRaw, destLabelRaw) {
  * @param {string} destCityName
  * @returns {{distanceKm:number, sameIsland:boolean, text:string}|null} null bila salah satu kota tidak dikenal
  */
-function estimateDistanceAndTime(originCityName, destCityName) {
+function estimateDistanceAndTime(originCityName, destCityName, lang = 'id') {
   const origin = getCityGeo(originCityName);
   const destination = getCityGeo(destCityName);
   if (!origin || !destination) return null;
-  return buildEstimate(origin, destination, originCityName, destCityName);
+  return buildEstimate(origin, destination, originCityName, destCityName, lang);
 }
 
 // ── Deteksi pertanyaan jarak/waktu tempuh dari teks bebas customer ─────────
 
-const DISTANCE_QUESTION_RE = /\bjarak\b|\bberapa\s+jauh\b|\bberapa\s+lama\b|\bwaktu\s+tempuh\b|\btempuh\b|\bmenuju\b|\bdari\b.{0,60}\bke\b/i;
+// M203: + pola Inggris ("how far is X from Y", "how long to drive from A to B", "distance", "travel time").
+const DISTANCE_QUESTION_RE = /\bjarak\b|\bberapa\s+jauh\b|\bberapa\s+lama\b|\bwaktu\s+tempuh\b|\btempuh\b|\bmenuju\b|\bdari\b.{0,60}\bke\b|\bhow\s+far\b|\bhow\s+long\b[^.?!]{0,40}\b(?:from|to|drive|driving|by\s+car|commute)\b|\bdistance\b|\btravel\s+time\b|\bcommute\b|\bfrom\b[^.?!]{0,60}\bto\b[^.?!]{0,30}\b(?:by\s+car|drive|minutes|hours|km)\b/i;
 
 /** True bila pesan customer terlihat seperti pertanyaan jarak/waktu tempuh. */
 function looksLikeDistanceQuestion(message) {
@@ -264,7 +277,7 @@ function tryAnswerDistanceQuery(userMessage, context = {}) {
   // BUKAN mengarang angka.
   if (originName === destName) return null;
 
-  const result = estimateDistanceAndTime(originName, destName);
+  const result = estimateDistanceAndTime(originName, destName, context.lang || 'id');
   return result ? result.text : null;
 }
 

@@ -138,11 +138,12 @@ class LanguageDetector {
   static detect(message = '', history = []) {
     const text = this.#normalize(message);
 
-    // 1. Indonesian signals — check substring keywords
-    if (this.#INDONESIAN_WORDS.some(word => text.includes(word))) return 'id';
+    // 1. Indonesian signals — M203: batas kata (bukan substring) dan kosakata
+    //    bersama (budget/furnished/area) tidak dihitung bila kalimat jelas Inggris.
+    if (_languageKeywords.indonesianHits(text, this.#INDONESIAN_WORDS).length) return 'id';
 
     // 2. Clear US/British English signals — regex patterns
-    if (this.#US_ENGLISH_PATTERNS.some(re => re.test(text))) return 'en';
+    if (_languageKeywords.looksEnglish(text)) return 'en';
 
     // 3. Ambiguous — fall back to history. M202 (16 Sep 2026): jendela 4 pesan
     //    customer terlalu pendek — "Nomor 2", "Sertifikatnya?", "Survei Selasa jam 10",
@@ -159,9 +160,9 @@ class LanguageDetector {
         .map(h => this.#normalize(h.message || ''));
 
       // Indonesian found in history → stay Indonesian
-      if (recent.some(msg => this.#INDONESIAN_WORDS.some(w => msg.includes(w)))) return 'id';
+      if (recent.some(msg => _languageKeywords.indonesianHits(msg, this.#INDONESIAN_WORDS).length)) return 'id';
       // English pattern found in history → stay English
-      if (recent.some(msg => this.#US_ENGLISH_PATTERNS.some(re => re.test(msg)))) return 'en';
+      if (recent.some(msg => _languageKeywords.looksEnglish(msg))) return 'en';
       if (recentAi.some(msg => /\b(kak|kakak|silakan|terima kasih|dicatat|survei|ya\b)/i.test(msg))) return 'id';
     }
 
@@ -1152,6 +1153,10 @@ class ResponseBuilderWhatsApp {
     // "Keputusan bersama" (lihat #extractDecisionMaker).
     const hhL  = fmt(isId ? 'Penghuni' : 'Occupants', brief.household);
     if (hhL) lines.push(hhL);
+    const bedL = fmt(isId ? 'Kamar tidur' : 'Bedrooms', brief.bedrooms);   // M203
+    if (bedL) lines.push(bedL);
+    const bathL = fmt(isId ? 'Kamar mandi' : 'Bathrooms', brief.bathrooms); // M203
+    if (bathL) lines.push(bathL);
     const dmL  = fmt(isId ? 'Keputusan bersama' : 'Decision maker', brief.decisionMaker);
     if (dmL) lines.push(dmL);
     const furL = fmt(isId ? 'Furnitur' : 'Furnishing', brief.furnishing);
@@ -1608,9 +1613,29 @@ class ConversationQualifier {
       }
       return '';
     })();
+    /* M203 (16 Sep 2026) — PENUNDAAN SURVEI ("Sy belum bisa survei, masih di luar kota
+     * sampai Oktober") bukan tanggal survei. Dulu klausa itu lolos ke parseCustomerDate
+     * → "Viewing: 01 Oktober 2026" (sim K2). Klausa survei TERAKHIR yang berupa
+     * penolakan/penundaan → catatan "Ditunda …", tanggalnya TIDAK dipakai. */
+    const viewingDeferredNote = (() => {
+      try {
+        const VIEWING_CLAUSE_RE = /\b(survei|survey|surver|srvei|viewing|kunjungan|lihat\s+unit|liat\s+unit|lihat\s+lokasi|view\s+(?:it|the|this|that|them|number)|visit|inspect\w*)\b/i;
+        const clauses = String(custText).split(/[.!?\n;]+/).map((c) => c.trim()).filter(Boolean);
+        let last = null;
+        for (let i = clauses.length - 1; i >= 0; i--) if (VIEWING_CLAUSE_RE.test(clauses[i])) { last = clauses[i]; break; }
+        if (!last) return '';
+        const idx = String(custText).lastIndexOf(last);
+        const tail = String(custText).slice(idx, idx + last.length + 80);
+        const deferred = customerDeclinesViewing(last) || /\b(?:belum|tidak|tdk|ga|gak|nggak|blm)\s+(?:bisa|sempat|bs)\b[^.?!]{0,30}\b(?:survei|survey|viewing)\b|\b(?:survei|survey|viewing)\b[^.?!]{0,20}\b(?:nanti|ditunda|tunda)\b/i.test(last);
+        if (!deferred) return '';
+        const whenM = tail.match(/\b(?:sampai|setelah|sesudah|habis|after|until)\s+([A-Za-z]+(?:\s+(?:depan|ini|tahun\s+depan))?)/i);
+        return whenM ? `Ditunda sampai ${whenM[1].trim()}` : 'Ditunda (belum mau survei dulu)';
+      } catch (_e) { return ''; }
+    })();
     const viewingDayRefResolved = (() => {
       try {
-        const VIEWING_CLAUSE_RE = /\b(survei|survey|surver|srvei|viewing|kunjungan|lihat\s+unit|liat\s+unit|lihat\s+lokasi)\b/i;
+        if (viewingDeferredNote) return undefined;
+        const VIEWING_CLAUSE_RE = /\b(survei|survey|surver|srvei|viewing|kunjungan|lihat\s+unit|liat\s+unit|lihat\s+lokasi|view\s+(?:it|the|this|that|them|number)|visit|inspect\w*)\b/i;
 
         // (a) Klausa TERAKHIR yang benar-benar menyebut survei — sinyal terkuat.
         const clauses = String(custText).split(/[.!?\n;]+/).map(s => s.trim()).filter(Boolean);
@@ -1636,7 +1661,7 @@ class ConversationQualifier {
            * SURVEI. Dengan pemasangan langsung: jawaban tawaran itu "Ok trma ksh"
            * (tanpa tanggal) -> tidak ada; "besok bisa" tepat sesudah "jadwalkan
            * viewing?" -> tanggal survei (tes karakterisasi). */
-          const AI_VIEWING_Q_RE = /\b(survei|survey|viewing|kunjungan)\b/i;
+          const AI_VIEWING_Q_RE = /\b(survei|survey|viewing|kunjungan|view\w*|visit)\b/i;
           const answers = [];
           for (let i = 0; i < activeHistory.length; i++) {
             const r = activeHistory[i];
@@ -1680,7 +1705,7 @@ class ConversationQualifier {
       const OTHER_DATE  = /\b(bulan ini|bulan depan|next month|this month|segera|soon|asap|secepatnya|besok|minggu ini|this week|next week|langsung masuk|immediate|sudah mau|ingin segera|ready to move)\b/i;
       // Sama persis dengan hasMoveInCue/isViewingOnly milik M63 di jalur LLM.
       const MOVE_IN_CUE = /\b(check[\s-]?in|checkin|masuk|mulai\s+(sewa|tinggal|huni|nginap|menginap)|tempati|menempati|pindah|nginap|menginap|booking\s+dari)\b/i;
-      const VIEWING_CUE = /\b(survei|survey|surver|srvei|viewing|kunjungan|lihat\s+unit|liat\s+unit|lihat\s+lokasi)\b/i;
+      const VIEWING_CUE = /\b(survei|survey|surver|srvei|viewing|kunjungan|lihat\s+unit|liat\s+unit|lihat\s+lokasi|view\s+(?:it|the|this|that|them|number)|visit|inspect\w*)\b/i;
       // AI pernah menyinggung masuk/check-in → berarti pertanyaannya memang
       // pernah diajukan. "Enaknya survei tanggal berapa?" sengaja TIDAK cocok.
       const aiAskedMoveInLoose = /\b(check[\s-]?in|checkin|masuk|pindah|menempati|tempati|huni)\b/i.test(String(aiText || ''));
@@ -2069,15 +2094,18 @@ class ConversationQualifier {
        *  - "malam" → di luar jam survey (pagi–sore), AI tolak halus + minta jam pagi–sore
        */
       viewingTimeOfDay: (() => {
-        if (/\bmalam\b/i.test(custText))  return 'malam';
-        if (/\bpagi\b/i.test(custText))   return 'pagi';
-        if (/\bsiang\b/i.test(custText))  return 'siang';
-        if (/\bsore\b/i.test(custText))   return 'sore';
+        // M203: sapaan "Selamat siang/pagi" bukan jam survei (sim K1: "Viewing: …, Siang").
+        const t = String(custText).replace(/\b(?:selamat|met|slmt)\s+(?:pagi|siang|sore|malam)\b/gi, ' ');
+        if (/\bmalam\b/i.test(t))  return 'malam';
+        if (/\bpagi\b/i.test(t))   return 'pagi';
+        if (/\bsiang\b/i.test(t))  return 'siang';
+        if (/\bsore\b/i.test(t))   return 'sore';
         return null;
       })(),
-      viewingIsNight: /\bmalam\b/i.test(custText),
+      viewingIsNight: /\bmalam\b/i.test(String(custText).replace(/\b(?:selamat|met|slmt)\s+malam\b/gi, ' ')),
       viewingDayRef: viewingDayRefResolved,
-      hasViewingHour: /\b(jam|pukul)\s*\d{1,2}(?:[.:]\d{2})?\b/i.test(custText)
+      viewingDeferred: viewingDeferredNote,
+      hasViewingHour: /\b(jam|pukul)\s*\d{1,2}(?:[.:]\d{2})?\b/i.test(custText) || /\b\d{1,2}(?:[.:]\d{2})?\s*(?:am|pm)\b/i.test(custText)
                    || /\b(jam|pukul)\s*(satu|dua|tiga|empat|lima|enam|tujuh|delapan|sembilan|sepuluh|sebelas|dua\s*belas)\b/i.test(custText),
       aiAskedViewingHour: this.#has(aiText, [
         'mau viewing jam berapa', 'survey jam berapa', 'survei jam berapa',
@@ -2228,7 +2256,7 @@ class ConversationQualifier {
       aiAskedTxType     : this.#has(aiText, ['sewa atau beli', 'rent or buy', 'beli atau sewa', 'buy or rent']),
       aiAskedPropType   : this.#has(aiText, ['tipe properti', 'property type', 'jenis properti', 'rumah, apartemen']),
       aiAskedLocation   : this.#has(aiText, ['daerah', 'kota mana', 'kota atau area mana', 'which area', 'which city', 'lokasi mana']),
-      aiAskedSearchHist : cardsShownBefore || this.#has(aiText, ['sudah lihat berapa', 'how many properties', 'belum cocok', 'sudah survey']),
+      aiAskedSearchHist : cardsShownBefore || this.#has(aiText, ['sudah lihat berapa', 'how many properties', 'options have you seen', "hasn't quite worked", 'belum cocok', 'sudah survey']),
       cardsShownBefore,
       aiAskedBudget     : this.#has(aiText, ['kisaran', 'anggaran', 'budget', 'harga yang', 'price range', 'ribu, juta', 'thousand, million', 'maksudnya dalam', 'kira-kira yang mana', 'yang mana lebih sesuai', 'terjangkau', 'menengah', 'eksklusif', 'budget-friendly', 'mid-range', 'exclusive']),
       // True when customer text contains any number+unit that looks like a budget.
@@ -2280,7 +2308,7 @@ class ConversationQualifier {
         'aiAskedDecisionMaker', 'aiAskedLeaseDuration', 'aiAskedPaymentTerms',
         'aiAskedApartmentPrefs',
         'wantsViewingScheduled', 'hasViewingDate', 'aiAskedViewingDate',
-        'viewingTimeOfDay', 'viewingIsNight', 'viewingDayRef', 'hasViewingHour', 'aiAskedViewingHour',
+        'viewingTimeOfDay', 'viewingIsNight', 'viewingDayRef', 'viewingDeferred', 'hasViewingHour', 'aiAskedViewingHour',
         // Q14 type-specific slots
         'hasCheckInDate', 'hasCheckOutDate', 'hasRoomType', 'hasBreakfastPref',
         'hasPrivatePool', 'hasRentalPeriod', 'hasKosType', 'hasBathroomType',
@@ -2730,8 +2758,9 @@ class ConversationQualifier {
         ? (isId ? typeLabel : PropertyFormatter.humanBuildingType(type, 'en'))
         : (isId ? 'properti' : 'property');
       return isId
-        ? `Sudah lihat berapa ${typeWord} di *${loc}*? Apa yang membuat belum cocok dari yang sudah dilihat?`
-        : `How many ${typeWord} options have you seen in *${loc}*? What hasn't quite worked about the ones you've viewed?`;
+        // M203: SATU tanda tanya per pesan (doc 02 §3) — dulu dua pertanyaan sekaligus.
+        ? `Sudah lihat berapa ${typeWord} di *${loc}*, dan apa yang membuat belum cocok?`
+        : `How many ${typeWord} options have you seen in *${loc}*, and what hasn't quite worked about them?`;
     }
 
     /* ── Q3-pre: ambiguous budget — no unit given, ask to clarify ── */
@@ -3605,6 +3634,21 @@ class ConversationQualifier {
           : 'UNKNOWN',
         source: profile.hasHouseholdInfo ? 'stated' : 'UNKNOWN',
       },
+      /* M203 (16 Sep 2026) — jumlah KAMAR TIDUR / KAMAR MANDI yang disebut customer
+       * ("3 bedrooms", "yg 2 kamar", "2 KT 1 KM") — poin 1 pemilik proyek. Hanya dari
+       * KALIMAT PERNYATAAN (klausa bertanda tanya "kamarnya berapa?" diabaikan). */
+      ...(() => {
+        const stmts = String(custText).replace(/[^.!?\n]*\?/g, ' ');
+        const bedM = stmts.match(/\b(\d{1,2})\s*(?:kamar\s+tidur|kamar(?!\s+mandi)|kt|bedrooms?|br|bilik)\b/i)
+          || stmts.match(/\b(?:kamar\s+tidur|kamar|bedrooms?)\s*(?:nya)?\s*(\d{1,2})\b/i);
+        const bathM = stmts.match(/\b(\d{1,2})\s*(?:kamar\s+mandi|km|bathrooms?|toilet)\b/i);
+        const bed = bedM && Number(bedM[1]) > 0 && Number(bedM[1]) <= 12 ? String(Number(bedM[1])) : null;
+        const bath = bathM && Number(bathM[1]) > 0 && Number(bathM[1]) <= 12 ? String(Number(bathM[1])) : null;
+        return {
+          bedrooms:  { value: bed  || 'UNKNOWN', source: bed  ? 'stated' : 'UNKNOWN' },
+          bathrooms: { value: bath || 'UNKNOWN', source: bath ? 'stated' : 'UNKNOWN' },
+        };
+      })(),
       furnishing: {
         value : profile.hasFurnishing
           ? this.#extractFurnishing(custText)
@@ -3647,6 +3691,14 @@ class ConversationQualifier {
         const redFlagsSource   = qualState.redFlags || (profile.hasRedFlags ? ConversationQualifier.#redFlagStatements(history, userMessage) : '');
         const apartmentPrefRaw = qualState.apartmentPref || '';
         const { avoid, prefer } = ConversationQualifier.#buildAvoidPreferPairs(redFlagsSource, apartmentPrefRaw);
+        /* M203 — HEWAN PELIHARAAN ("Must be pet friendly, I have a dog", "boleh bawa
+         * kucing?"): kebutuhan nyata yang dulu hilang dari summary (sim K3). Prefer,
+         * tanpa baris Hindari (tidak ada lawan alaminya). Hanya dari pernyataan. */
+        const stmtsPet = String(custText).replace(/[^.!?\n]*\?/g, ' ');
+        if (/\bpet[\s-]?friendly\b|\b(?:have|with|bring|own)\s+(?:a\s+|my\s+)?(?:dog|cat|pet)s?\b|\b(?:bawa|punya|ada)\s+(?:anjing|kucing|hewan)\b|\bboleh\s+(?:bawa\s+)?(?:hewan|anjing|kucing|pelihara\w*)\b|\bramah\s+hewan\b/i.test(stmtsPet)
+            && !prefer.some((p) => /hewan|pet/i.test(p.label))) {
+          prefer.push({ label: 'Boleh hewan peliharaan (pet-friendly)' });
+        }
         return {
           avoidItems : avoid,
           preferItems: prefer,
@@ -4050,13 +4102,16 @@ class ConversationQualifier {
      * yang sama sudah lama berlaku di jalur LLM (aiPromptBuilderService.js);
      * jalur Private Agent ini yang belum mengikutinya sampai sekarang.
      */
+    if (profile.viewingDeferred) return profile.viewingDeferred; // M203
     const dayAbs = profile.viewingDayRef || '';
     if (dayAbs) {
       const tod     = profile.viewingTimeOfDay || '';
       const hourM   = custText.match(/\bjam\s*(\d{1,2}(?:[.:]\d{2})?)\b/i);
+      const hourEn  = !hourM && custText.match(/\b(\d{1,2}(?:[.:]\d{2})?\s*(?:am|pm))\b/i); // M203: "around 2 pm"
       const hourLbl = hourM
         ? `Jam ${hourM[1]}${tod ? ` ${tod}` : ''}`
-        : (tod ? tod.charAt(0).toUpperCase() + tod.slice(1) : '');
+        : hourEn ? hourEn[1].replace(/\s+/g, ' ')
+          : (tod ? tod.charAt(0).toUpperCase() + tod.slice(1) : '');
       return [dayAbs, hourLbl].filter(Boolean).join(', ');
     }
 
@@ -4101,10 +4156,15 @@ class ConversationQualifier {
   static #extractAlternativeAreas(custText) {
     // Return the raw text fragment around "atau", "juga oke", etc.
     const patterns = [/selain .+?, (.+?) juga/i, /atau(?:\s+di)?\s+(\w+)/i, /(\w+) juga oke/i, /(\w+) juga boleh/i];
+    // M203: kata umum ("atau sekitarnya", "atau lainnya", "atau yang", "juga oke") bukan
+    // nama area — sim K1 menulis "Area alternatif: sekitarnya". Nama area harus kata benda
+    // bertitik/berhuruf besar atau minimal bukan kata fungsi.
+    const GENERIC = /^(?:sekitar\w*|lain\w*|yang|yg|apa\w*|mana\w*|bisa|boleh|tidak|nggak|gak|ada|di|ke|dari|saja|aja|dulu|itu|ini|dekat|deket|kota|area|daerah|wilayah|terserah|bebas|fleksibel|flexible)$/i;
     for (const p of patterns) {
       const m = custText.match(p);
-      if (m) return m[1];
+      if (m && m[1] && !GENERIC.test(String(m[1]).trim())) return m[1];
     }
+    if (/\b(?:atau\s+)?sekitarnya\b|\bfleksibel\b|\bflexible\b|\bmanapun\b/i.test(custText)) return 'Sekitar area utama (fleksibel)';
     return 'UNKNOWN';
   }
 
@@ -4841,12 +4901,75 @@ class ChatbotPrivateService {
     // pertanyaan sertifikat yang sedang berjalan tidak akan salah tertangkap.
     // M199: "Sertifikatnya apa? Ada IMB/PBG-nya?" tentang UNIT yang sudah dipilih =
     // pertanyaan data unit (dijawab gerbang atribut), bukan permintaan definisi istilah.
+    /* ⭐ M203 (16 Sep 2026) — PERTANYAAN TENTANG UNIT PADAHAL BELUM ADA KARTU TERKIRIM.
+     * Sim K2/K3: "Yg nomor 1 sudah SHM?" → glosarium SHM; "Parkirnya muat brp mobil?"
+     * → skrip "target kapan beli"; "Is number 1 fully furnished?" / "The photo you sent
+     * looks like a different house" → pertanyaan Q8/Q5. Semua salah karena tidak ada
+     * unit yang pernah dikirim. Jawab jujur: belum ada unit, sebutkan sebabnya
+     * (tipe belum ada di kota itu / slot wajib belum lengkap), lalu satu ajakan. */
+    {
+      const anyCardSent = history.some((h) => /^(ai|assistant)$/i.test(String(h.role || '')) && isCardMessage(String(h.message || '')));
+      const refersToUnit = /\b(?:nomor|nomer|no\.?|number|unit)\s*\d{1,2}\b|\b(?:unit|rumah|ruko|apartemen)(?:nya)?\s+(?:tersebut|trsbut|itu|tadi)\b|\b(?:photo|foto|picture|gambar)\w*\b[^.?!]{0,40}\b(?:sent|kirim|dikirim|dikasih|tadi)\b|\bthe\s+(?:unit|house|listing)\s+you\s+(?:sent|showed)\b/i.test(userMessage);
+      const definitionQ = /\b(?:apa\s+itu|itu\s+apa|apa\s+sih|apaan|artinya|maksudnya|bedanya|beda\s+\w+\s+(?:sama|dan|dgn|dengan)|what\s+is|what'?s|difference|explain|jelaskan)\b/i.test(userMessage)
+        || /^\s*(?:apa|what)\b/i.test(userMessage);
+      const { isAttributeQuestion } = require('../utils/listingSelectionGate');
+      const refersToUnitNum = /\b(?:nomor|nomer|no\.?|number|unit)\s*\d{1,2}\b/i.test(userMessage);
+      // Pertanyaan proses/istilah ("zonasi ruko boleh buat kafe?") tetap milik gerbang
+      // terminologi — kecuali customer menyebut "nomor N" yang memang tidak ada.
+      const termFirst = !refersToUnitNum && Boolean(this.#tryTerminologyAnswer(userMessage, lang));
+      // "Can we view it next Wednesday?" tanpa unit terkirim = minta survei unit yang belum ada.
+      const wantsViewNoUnit = customerRequestsViewing(userMessage) && !customerDeclinesViewing(userMessage);
+      if (!anyCardSent && !definitionQ && !termFirst && (refersToUnit || wantsViewNoUnit || (isAttributeQuestion(userMessage) && !/\b(?:yang|yg|ada)\s+(?:\d|dua|tiga|empat)\s*(?:kamar|kt|lantai)\b|\bada\s+(?:yang|yg)\b/i.test(userMessage)))) {
+        const { extractQualificationState } = require('../services/aiPromptBuilderService');
+        let qsNC = {}; try { qsNC = extractQualificationState(history, userMessage) || {}; } catch (_) { qsNC = {}; }
+        const emptySaid = [...history].reverse().find((h) => /^(ai|assistant)$/i.test(String(h.role || '')) && /belum ada di data saya|not (?:yet )?in my data|memang belum ada|don'?t have any|tetap belum ada/i.test(String(h.message || '')));
+        const missing = [];
+        if (!qsNC.transactionType) missing.push(lang === 'id' ? 'sewa/beli' : 'rent/buy');
+        if (!qsNC.buildingType) missing.push(lang === 'id' ? 'tipe properti' : 'property type');
+        if (!qsNC.city) missing.push(lang === 'id' ? 'kota' : 'city');
+        if (!qsNC.district && !qsNC.anchorPoint) missing.push(lang === 'id' ? 'area' : 'area');
+        const reason = emptySaid
+          ? (lang === 'id'
+            ? 'seperti tadi, tipe/area yang Kakak cari belum ada di data saya. Mau saya carikan tipe atau area lain yang tersedia?'
+            : 'as mentioned, the type/area you asked for is not in my data yet. Shall I look at another type or area that is available?')
+          : missing.length
+            ? (lang === 'id'
+              ? `sebutkan dulu ${missing.join(', ')} yang diinginkan ya, langsung saya kirim pilihannya.`
+              : `tell me the ${missing.join(', ')} you want and I will send the options right away.`)
+            : (lang === 'id' ? 'sebentar saya carikan pilihannya dulu ya.' : 'let me pull up the options first.');
+        const reply = wantsViewNoUnit
+          ? (lang === 'id'
+            ? `Boleh, Kak 😊 Tapi belum ada unit yang saya kirim untuk disurvei — ${reason} Begitu ada unit yang cocok, jadwal surveinya langsung saya atur.`
+            : `Sure 😊 But I haven't sent any unit to view yet — ${reason} As soon as there is a matching unit, I'll set the viewing right away.`)
+          : (lang === 'id'
+            ? `Belum ada unit yang saya kirim, Kak 🙏 jadi belum ada yang bisa dicek detailnya — ${reason}`
+            : `I haven't sent any unit yet 🙏 so there is nothing to check details on — ${reason}`);
+        return this.#wrap(reply, { skillInfo, provider: 'no_cards_yet_gate' });
+      }
+
+      /* M203 — PENUNDAAN SURVEI di giliran mana pun ("Sy belum bisa survei, masih di
+       * luar kota sampai Oktober"): dulu jatuh ke skrip/summary dengan "Viewing: 01
+       * Oktober" (tanggal dari kalimat penolakan). Penolakan + waktu = DITUNDA, bukan
+       * jadwal. Hanya bila tidak ada tawaran survei yang sedang menunggu jawaban
+       * (itu ditangani tryPendingViewingSchedule di blok pilihan). */
+      const lastAiNC = [...history].reverse().find((h) => /^(ai|assistant)$/i.test(String(h.role || '')));
+      const pendingOffer = lastAiNC && /mau saya jadwalkan survei|tanggal berapa|jam berapa|hari apa yang pas|what date|what time|schedule a viewing/i.test(String(lastAiNC.message || ''));
+      if (!anyCardSent && !pendingOffer && customerDeclinesViewing(userMessage) && !customerRequestsViewing(userMessage) && !customerSignalsClosing(userMessage)) {
+        const whenM = userMessage.match(/\b(?:sampai|setelah|sesudah|habis|after|until)\s+([A-Za-z]+(?:\s+(?:depan|ini|next|tahun\s+depan))?)/i);
+        const when = whenM ? whenM[1].trim() : '';
+        const reply = lang === 'id'
+          ? `Siap, Kak 😊 Survei ditunda dulu${when ? ` sampai ${when}` : ''} ya — kabari saja tanggalnya kalau sudah siap, nanti saya jadwalkan.`
+          : `Sure 😊 We'll hold off on the viewing${when ? ` until ${when}` : ''} — just tell me the date when you're ready and I'll schedule it.`;
+        return this.#wrap(reply, { skillInfo, provider: 'viewing_deferred_gate' });
+      }
+    }
+
     const asksAboutPickedUnitDocs = (Boolean(readConfirmedPick(history))
         || (/\b(?:nomor|nomer|no\.?)\s*\d{1,2}\b/i.test(userMessage) && history.some((h) => /^(ai|assistant)$/i.test(String(h.role || '')) && isCardMessage(String(h.message || '')))))
       && /\b(sertifikat\w*|imb|pbg|pbb|dokumen\w*|legalitas|shm|shgb|hgb)\b/i.test(userMessage)
       // M200: sesudah unit dipilih, semua pertanyaan sertifikat = data unit ("rmh trsbut sdh SHM?")
       && !/\b(apa\s+itu|apa\s+bedanya|maksudnya|artinya|apa\s+sih|apa\s+arti|jelaskan|penjelasan)\b/i.test(userMessage);
-    const termReply = asksAboutPickedUnitDocs ? null : this.#tryTerminologyAnswer(userMessage);
+    const termReply = asksAboutPickedUnitDocs ? null : this.#tryTerminologyAnswer(userMessage, lang);
     if (termReply) return this.#wrap(termReply, { skillInfo });
 
     // ── Resolve filters dari context atau extract baru — dihitung LEBIH AWAL
@@ -4882,7 +5005,7 @@ class ChatbotPrivateService {
         const cardD = allD.find((c) => String(c.title).toLowerCase() === String(pickForDist.title).toLowerCase() && (!pickForDist.priceText || String(c.priceText || '').toLowerCase() === String(pickForDist.priceText).toLowerCase()))
           || allD.find((c) => String(c.title).toLowerCase() === String(pickForDist.title).toLowerCase()) || null;
         const cityD = cardD && cardD.address ? String(cardD.address).split(',').pop().trim() : (filters?.location || '');
-        const est = tryAnswerDistanceQuery(userMessage, { propertyCity: cityD });
+        const est = tryAnswerDistanceQuery(userMessage, { propertyCity: cityD, lang });
         const unitLine = cardD ? `*${cardD.title}*${cardD.address ? ` — ${cardD.address}` : ''}` : `*${pickForDist.title}*`;
         const reply = est
           ? (lang === 'id' ? `${est}\n\nUnitnya: ${unitLine}.` : `${est}\n\nThe unit: ${unitLine}.`)
@@ -4892,7 +5015,7 @@ class ChatbotPrivateService {
         return this.#wrap(reply, { skillInfo, filters, provider: 'distance_gate' });
       }
     }
-    const distReply = this.#tryDistanceAnswer(userMessage, filters?.location);
+    const distReply = this.#tryDistanceAnswer(userMessage, filters?.location, lang);
     if (distReply) return this.#wrap(distReply, { skillInfo });
 
     /* ── M161: customer minta alamat/jarak untuk SURVEI properti yang BARU
@@ -5328,6 +5451,26 @@ class ChatbotPrivateService {
           if (cityHit && !(cityEmptyAlreadySaid && !customerAsksAvailability(userMessage) && !qs.cityChangedFromHistory && !qs.typeChangedFromHistory && !qs.txChangedFromHistory)) {
             return this.#wrap(cityHit.reply, { skillInfo, filters, provider: 'city_availability_gate' });
           }
+          /* M203 — tipe TETAP tidak ada di kota itu dan customer terus memberi slot
+           * ("Budget 2M, cash.") tanpa memilih alternatif: jangan lanjut skrip
+           * interview untuk tipe yang memang tidak ada (sim K2: "Sudah lihat berapa
+           * Ruko di Sidoarjo?"). Catat, lalu tawarkan ulang SINGKAT — hanya pada
+           * pernyataan (bukan pertanyaan; pertanyaan dijawab gerbang lain). */
+          if (cityHit && cityEmptyAlreadySaid && !/\?/.test(userMessage) && !customerSignalsClosing(userMessage)
+              && !/\b(?:ya|iya|oke?|boleh|mau|carikan|yang|yg)\b[^.?!]{0,30}\b(?:rumah|apartemen|villa|kos|ruko|kantor|gudang|tanah|toko|itu|saja|aja)\b/i.test(userMessage)) {
+            const haveM = String(cityHit.reply || '').match(/(?:Yang saya pegang di [^:]+:|Available (?:there|in [^:]+):)\s*\*([^*]+)\*/i);
+            const have = haveM ? haveM[1].trim() : '';
+            const typeWord = typeRaw ? PropertyFormatter.humanBuildingType(typeRaw, lang) : (lang === 'id' ? 'tipe itu' : 'that type');
+            const reofferSaid = history.some((h) => /^(ai|assistant)$/i.test(String(h.role || '')) && /tetap belum ada di data saya|is still not in my data/i.test(String(h.message || '')));
+            const reply = lang === 'id'
+              ? (reofferSaid
+                ? `Dicatat ya, Kak 📝 Tinggal bilang kalau mau saya carikan ${have ? `*${have}*` : 'tipe lain'} di ${availCity} atau *${typeWord}* di kota lain.`
+                : `Dicatat ya, Kak 📝 Tapi *${typeWord}* di *${availCity}* tetap belum ada di data saya — mau saya carikan ${have ? `*${have}*` : 'tipe lain'} di ${availCity}, atau *${typeWord}* di kota lain?`)
+              : (reofferSaid
+                ? `Noted 📝 Just say the word if you want ${have ? `*${have}*` : 'another type'} in ${availCity} or *${typeWord}* in another city.`
+                : `Noted 📝 But *${typeWord}* in *${availCity}* is still not in my data — shall I look at ${have ? `*${have}*` : 'another type'} in ${availCity}, or *${typeWord}* in another city?`);
+            return this.#wrap(reply, { skillInfo, filters, provider: 'city_availability_gate/reoffer' });
+          }
 
           /* ── M193 (14 Sep 2026) — KOTA BERUBAH & KOTA BARU PUNYA STOK: tanya AREA
            * di kota baru, jangan lanjut skrip. Doc 02 §4 "KOTA BERUBAH -> Tanyakan
@@ -5375,7 +5518,8 @@ class ChatbotPrivateService {
         // M202: "belum ada" harus menyebut AREA INI di baris yang sama — nama area yang muncul
         // sebagai ALTERNATIF ("• *Jambangan* — 2 unit") pada balasan area lain bukan bukti.
         const areaEmptyAlreadySaid = Boolean(availArea) && history.some((h) => /^(ai|assistant)$/i.test(String(h.role || ''))
-          && new RegExp(`^[^\\n]*(?:belum ada|memang belum ada|hanya ada \\d+ saja|not in my data|within (?:that|your) budget)[^\\n]*\\*${String(availArea).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\*|^[^\\n]*\\*${String(availArea).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\*[^\\n]*(?:belum ada|memang belum ada|hanya ada \\d+ saja|not in my data)`, 'im').test(String(h.message || '')));
+          && new RegExp(`^[^\\n]*(?:belum ada|memang belum ada|hanya ada \\d+ saja|not in my data|within (?:that|your) budget)[^\\n]*\\*${String(availArea).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\*|^[^\\n]*\\*${String(availArea).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\*[^\\n]*(?:belum ada|memang belum ada|hanya ada \\d+ saja|not in my data)|^[^\\n]*don'?t have any[^\\n]*\\b${String(availArea).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b[^\\n]*(?:right now|at the moment|yet|within)`, 'im').test(String(h.message || '')));
+        // (M203: template Inggris "I don't have any House rent in Citraland right now" ikut dihitung — sim K3 mengulang 5x.)
         const gateMaySpeak = !customerSignalsClosing(userMessage) && (customerAsksAvailability(userMessage) || changeTurnAvail
           || (Boolean(txDb && typeDb && availArea) && !cardsShownBefore && !areaEmptyAlreadySaid));
         /* ── M195 (14 Sep 2026) — EMPAT SLOT WAJIB SEBELUM LISTING (aturan pemilik
@@ -5416,7 +5560,18 @@ class ChatbotPrivateService {
             history: history.slice(qs.searchStartIdx || 0),
             resetSent: Boolean(qs.cityChangedFromHistory || qs.txChangedFromHistory || qs.typeChangedFromHistory || areaChangedAvail),
           });
-          if (hit) return this.#wrap(hit.reply, { skillInfo, filters, provider: 'area_availability_gate' });
+          if (hit) {
+            /* M203 — customer BERTANYA LAGI padahal "belum ada di *Area*" sudah dijawab
+             * (sim K1: "Ada 3 unit nggak?" → paragraf identik). Jawab singkat "masih belum
+             * ada", daftar alternatifnya tetap ikut. */
+            let replyA = String(hit.reply || '');
+            if (areaEmptyAlreadySaid && /belum ada di data saya|don'?t have any/i.test(replyA)) {
+              replyA = replyA
+                .replace(/^Mohon maaf, Kak 🙏 Untuk \*[^*]+\* di \*([^*]+)\* belum ada di data saya\.?/i, (m0, ar) => `Di *${ar}* masih belum ada, Kak 🙏`)
+                .replace(/^I'm sorry — I don't have any [^.]+ in ([^.]+?) (?:right now|at the moment)\.?/i, (m0, ar) => `Still nothing in ${ar} 🙏`);
+            }
+            return this.#wrap(replyA, { skillInfo, filters, provider: 'area_availability_gate' });
+          }
         }
       }
     } catch (availErr) {
@@ -5802,8 +5957,15 @@ class ChatbotPrivateService {
     }
 
     // 2---) Survei SUDAH terjadwal → ganti jadwal / batal.
-    const lastSched = [...rows].reverse().find((h) => /^(ai|assistant)$/i.test(String(h.role || '')) && /survei (?:dijadwalkan|dicatat) tanggal \*([^*]+)\*/i.test(String(h.message || '')));
-    const schedM = lastSched ? String(lastSched.message).match(/survei (?:dijadwalkan|dicatat) tanggal \*([^*]+)\*(?:,\s*\*([^*]+)\*)?/i) : null;
+    // M203: baris summary "✓ Viewing: *26 September 2026*" juga dihitung jadwal — sim K1:
+    // "Jam 10 pagi ya." sesudah summary dibalas "unit nomor berapa?" bukan konfirmasi jam.
+    const SCHED_RE = /survei (?:dijadwalkan|dicatat) tanggal \*([^*]+)\*(?:,\s*\*([^*]+)\*)?|✓ Viewing: \*(\d{1,2} [A-Za-z]+ \d{4})(?:,\s*([^*]+))?\*/i;
+    const lastSched = [...rows].reverse().find((h) => /^(ai|assistant)$/i.test(String(h.role || '')) && SCHED_RE.test(String(h.message || '')));
+    const schedM = (() => {
+      if (!lastSched) return null;
+      const m = String(lastSched.message).match(SCHED_RE);
+      return m ? [m[0], m[1] || m[3], m[2] || m[4] || undefined] : null;
+    })();
     const alreadyCancelled = lastSched && rows.slice(rows.indexOf(lastSched) + 1).some((h) => /^(ai|assistant)$/i.test(String(h.role || '')) && /survei\b[^\n]{0,60}\b(?:dibatalkan|ditunda)/i.test(String(h.message || '')));
     if (schedM && !alreadyCancelled) {
       if (/\b(batal\w*|cancel|tunda|undur\s+dulu|skip\s+dulu)\b/i.test(text) && !/\b(jangan|nggak|gak|tidak)\s+(?:batal|cancel)\b/i.test(text)) {
@@ -5823,11 +5985,16 @@ class ChatbotPrivateService {
         const newTime = parseSurveyTime(norm, { requireClockWord: !!newDate }) || (!newDate ? parseSurveyTime(norm, { requireClockWord: false }) : null);
         if (newDate || newTime) {
           const fd = newDate || schedM[1]; const ft = newTime || (newDate ? null : schedM[2]);
+          const addsTimeOnly = !newDate && newTime && !schedM[2]; // jam baru ditambahkan, tanggal tetap
           return {
-            verdict: 'follow-up-viewing-rescheduled',
+            verdict: addsTimeOnly ? 'follow-up-viewing-time-added' : 'follow-up-viewing-rescheduled',
             reply: isId
-              ? `Siap, Kak 😊 Jadwalnya diubah — survei dijadwalkan tanggal *${fd}*${ft ? `, *${ft}*` : ''} ya. Nanti tim kami konfirmasi ulang.`
-              : `Sure 😊 The viewing is moved to *${fd}*${ft ? `, *${ft}*` : ''}. Our team will reconfirm.`,
+              ? (addsTimeOnly
+                ? `Siap, Kak 😊 Survei dijadwalkan tanggal *${fd}*, *${ft}* ya. Nanti tim kami hubungi untuk konfirmasi.`
+                : `Siap, Kak 😊 Jadwalnya diubah — survei dijadwalkan tanggal *${fd}*${ft ? `, *${ft}*` : ''} ya. Nanti tim kami konfirmasi ulang.`)
+              : (addsTimeOnly
+                ? `Sure 😊 The viewing is set for *${fd}*, *${ft}*. Our team will confirm.`
+                : `Sure 😊 The viewing is moved to *${fd}*${ft ? `, *${ft}*` : ''}. Our team will reconfirm.`),
           };
         }
       }
@@ -5861,6 +6028,16 @@ class ChatbotPrivateService {
     }
     if (/\bnomor\s+(?:saya|aku)\b[^.?!]{0,20}\b(ini|yang\s+ini)\b/i.test(text)) {
       return { verdict: 'follow-up-callback-number', reply: isId ? `Baik, Kak 😊 Nomor WhatsApp ini yang akan dihubungi agent kami.` : `Got it 😊 Our agent will reach you on this WhatsApp number.` };
+    }
+    // M203 — minta NOMOR/KONTAK agent ("Boleh minta nomor agentnya langsung?"): nomor pribadi
+    // tidak dibagikan otomatis; agent yang menghubungi dari nomor ini (privasi, doc 00).
+    if (/\b(?:minta|boleh|bisa|share|kasih|bagi)\b[^.?!]{0,25}\b(?:nomor|no\.?|kontak|contact|number|hp|wa|whatsapp)\b[^.?!]{0,25}\b(?:agent\w*|agen\w*|marketing|pemilik|owner)\b|\b(?:agent|agen)\w*\b[^.?!]{0,10}\b(?:nomor|kontak)nya\b/i.test(text)) {
+      return {
+        verdict: 'follow-up-agent-number',
+        reply: isId
+          ? `Boleh, Kak 😊 Supaya tersambung langsung, agent kami yang akan menghubungi Kakak lewat nomor WhatsApp ini ya — sekalian saya teruskan catatan kebutuhannya.`
+          : `Of course 😊 To connect you directly, our agent will contact you on this WhatsApp number — I'll pass along your requirements as well.`,
+      };
     }
 
     // 2--+) Logistik survei: "perlu bawa apa?", "jemput di gerbang", "ketemu di mana".
@@ -6102,10 +6279,12 @@ class ChatbotPrivateService {
         reply: isId
           ? (unit
             ? `Untuk ${unit}: soal itu belum tercatat di data unit ini, Kak — saya catat dulu, nanti dikonfirmasi agent kami 🙏. Ada lagi yang mau ditanyakan?`
-            : `Saya catat ya, Kak 🙏 Nanti dikonfirmasi agent kami. Ada lagi yang mau ditanyakan soal unit yang sudah dikirim?`)
+            : (everShown.length
+              ? `Saya catat ya, Kak 🙏 Nanti dikonfirmasi agent kami. Ada lagi yang mau ditanyakan soal unit yang sudah dikirim?`
+              : `Saya catat ya, Kak 🙏 Nanti dikonfirmasi agent kami. Ada lagi yang mau ditanyakan?`)) // M203: tanpa kartu, jangan sebut "unit yang sudah dikirim"
           : (unit
             ? `For ${unit}: that is not recorded for this unit — noted, our agent will confirm 🙏. Anything else?`
-            : `Noted 🙏 Our agent will confirm. Anything else about the units I sent?`),
+            : (everShown.length ? `Noted 🙏 Our agent will confirm. Anything else about the units I sent?` : `Noted 🙏 Our agent will confirm. Anything else?`)),
       };
     }
     return null;
@@ -6216,7 +6395,7 @@ class ChatbotPrivateService {
    * @param {string} userMessage
    * @returns {string|null}
    */
-  static #tryTerminologyAnswer(userMessage) {
+  static #tryTerminologyAnswer(userMessage, lang = 'id') {
     // M132: logika dipindah ke utils/terminologyAnswerGate.js (SATU sumber
     // kebenaran) supaya whatsappAIService.js juga bisa memakainya SEBELUM
     // buildQualifyReply() — lihat komentar di modul itu untuk kenapa versi
@@ -6224,9 +6403,11 @@ class ChatbotPrivateService {
     // saat info kualifikasi belum lengkap. Baris tambahan "Ada pertanyaan
     // lain..." dipertahankan PERSIS di sini (bukan di modul bersama) supaya
     // pemanggil lain (qual gate) bebas menyambung dengan kalimat berbeda.
-    const core = matchTerminologyAnswer(userMessage);
+    const core = matchTerminologyAnswer(userMessage, { lang });
     if (!core) return null;
-    return `${core}\n\nAda pertanyaan lain seputar properti yang bisa saya bantu? 😊`;
+    return lang === 'en'
+      ? `${core}\n\nAnything else about the property I can help with? 😊`
+      : `${core}\n\nAda pertanyaan lain seputar properti yang bisa saya bantu? 😊`;
   }
 
   /**
@@ -6265,11 +6446,11 @@ class ChatbotPrivateService {
    *   null bila tidak (baik karena bukan pertanyaan jarak, maupun karena tidak
    *   ada dua nama kota yang bisa dipakai menghitung).
    */
-  static #tryDistanceAnswer(userMessage, propertyCity = null) {
+  static #tryDistanceAnswer(userMessage, propertyCity = null, lang = 'id') {
     try {
       const { looksLikeDistanceQuestion, tryAnswerDistanceQuery } = require('../services/distanceEstimationService');
       if (!looksLikeDistanceQuestion(userMessage)) return null;
-      return tryAnswerDistanceQuery(userMessage, { propertyCity }) || null;
+      return tryAnswerDistanceQuery(userMessage, { propertyCity, lang }) || null;
     } catch (_err) {
       return null; // fail-open — jangan pernah biarkan fitur ini memutus balasan
     }
@@ -6728,3 +6909,4 @@ module.exports.loadPrivateChatbotSkillInfo     = ()        => ChatbotPrivateServ
 module.exports.ConversationQualifier = ConversationQualifier;
 module.exports.ResponseBuilderWhatsApp = ResponseBuilderWhatsApp;
 module.exports.applyGateCLengthCap = applyGateCLengthCap; // M191 — exposed for direct unit testing
+module.exports.LanguageDetector = LanguageDetector; // M203 — exposed for language-detection tests

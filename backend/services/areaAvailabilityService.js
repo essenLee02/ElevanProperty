@@ -676,8 +676,19 @@ async function findAreaCandidatesInText({ userId, city, text }) {
       const STOP = new Set(['kalau', 'gimana', 'bagaimana', 'yang', 'saya', 'mau', 'minta', 'listing', 'rumah',
         'apartemen', 'sewa', 'beli', 'area', 'daerah', 'kawasan', 'boleh', 'bisa', 'tolong', 'kakak', 'lain', 'saja',
         'paham', 'mengerti', 'terima', 'kasih', 'makasih', 'oke', 'siap', 'baik', 'tidak', 'belum', 'sudah', 'nanti',
-        'survei', 'survey', 'budget', 'harga', 'kamar', 'tanah', 'bangunan', 'lantai', 'sertifikat', 'nomor', 'pilih']);
-      const msgToks = [...new Set(t.split(/[^a-z0-9]+/).filter((w) => w.length >= 5 && !STOP.has(w) && !GENERIC.has(w)))];
+        'survei', 'survey', 'budget', 'harga', 'kamar', 'tanah', 'bangunan', 'lantai', 'sertifikat', 'nomor', 'pilih',
+        // M203: sapaan — "Selamat siang" pernah cocok fuzzy ke "Karang Pilang" (siang≈pilang)
+        'selamat', 'siang', 'pagi', 'malam', 'halo', 'hallo', 'hai', 'assalamualaikum', 'kuliah', 'sekolah', 'kerja']);
+      /* M203: pada pesan panjang (>4 kata) hanya token SESUDAH kata pengantar lokasi yang
+       * boleh dicocokkan typo ("area Gubeng", "di Mneganti") — bukan semua kata kalimat. */
+      const shortMsg = t.trim().split(/\s+/).length <= 4;
+      const afterPrep = [];
+      if (!shortMsg) {
+        const re = /\b(?:di|ke|area|daerah|kawasan|kalau|klo|kl|sekitar|dekat)\s+([a-z0-9]+(?:\s+[a-z0-9]+)?)/gi;
+        let mm; while ((mm = re.exec(t))) afterPrep.push(...mm[1].toLowerCase().split(/\s+/));
+      }
+      const tokSrc = shortMsg ? t.split(/[^a-z0-9]+/) : afterPrep;
+      const msgToks = [...new Set(tokSrc.filter((w) => w.length >= 5 && !STOP.has(w) && !GENERIC.has(w)))];
       const fuzzy = new Set();
       for (const a of areas) {
         for (const tok of a.toLowerCase().split(/[^a-z0-9]+/)) {

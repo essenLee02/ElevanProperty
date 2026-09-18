@@ -31,8 +31,12 @@
  *   sendiri (Private Agent menutup dengan ajakan lanjut; qual gate
  *   menyambung dengan pertanyaan kualifikasi berikutnya).
  */
-function tryTerminologyAnswer(userMessage) {
+function tryTerminologyAnswer(userMessage, options = {}) {
   const text = String(userMessage || '').toLowerCase();
+  // M203 (16 Sep 2026): { lang: 'en' } → jawaban Inggris bila tersedia (answerEn);
+  // "beda X sama Y?" / "difference between X and Y" → KEDUA istilah dijawab.
+  const lang = String(options.lang || 'id').toLowerCase() === 'en' ? 'en' : 'id';
+  const asksDifference = /\bbeda\w*\b|\bdifferen\w*\b|\bvs\.?\b|\bversus\b|\bcompared?\b|\bperbedaan\b/i.test(text);
 
   // ⚠️ GUARD WAJIB: hanya jawab bila pesan benar-benar sebuah PERTANYAAN.
   // Tanpa ini, customer yang menjawab "SHM" atas pertanyaan sertifikat yang
@@ -46,7 +50,7 @@ function tryTerminologyAnswer(userMessage) {
   // urutan "apa itu X" dan `?`/`apakah` eksplisit — pesan pemicu bug ini
   // sendiri TIDAK akan tertangkap tanpa tambahan pola ini (dibuktikan lewat
   // node -e langsung, bukan asumsi).
-  const looksLikeQuestion = /\?|^apa\b|\bapa\s+itu\b|\bitu\s+apa\b|\bapakah\b|\bgimana\b|\bbagaimana\b|\bmaksudnya\b|\bartinya\b|\bbedanya\b|\bbeda\b.{0,15}\bsama\b|\bkenapa\b|\bberapa\b|\bsiapa\b|what\s+is|how\s+does|how\s+much|who\s+pays/i.test(text);
+  const looksLikeQuestion = /\?|^apa\b|\bapa\s+itu\b|\bitu\s+apa\b|\bapakah\b|\bgimana\b|\bbagaimana\b|\bmaksudnya\b|\bartinya\b|\bbedanya\b|\bbeda\b.{0,15}\bsama\b|\bkenapa\b|\bberapa\b|\bsiapa\b|what\s+is|what'?s|what\s+does|how\s+does|how\s+much|who\s+pays|difference\s+between|explain/i.test(text);
   if (!looksLikeQuestion) return null;
 
   /* M201 (16 Sep 2026) — PERTANYAAN PROSES BELI yang lazim, bukan definisi istilah dan
@@ -85,14 +89,17 @@ function tryTerminologyAnswer(userMessage) {
   const TERMS = [
     {
       re: /\bshsrs\b|\bshmsrs\b|sertifikat.{0,15}rumah\s+susun/,
+      answerEn: 'SHMSRS (Sertifikat Hak Milik atas Satuan Rumah Susun) is the strata-title certificate for ONE unit in a vertical building (apartment/condominium) — ownership of the unit plus a share of the common property, not a whole plot of land like SHM.',
       answer: 'SHSRS/SHMSRS (Sertifikat Hak Milik atas Satuan Rumah Susun) adalah bukti kepemilikan sah untuk UNIT hunian vertikal seperti apartemen/kondominium — obyeknya satu unit dalam bangunan bersama, bukan sebidang tanah utuh seperti SHM.',
     },
     {
       re: /\bshgb\b|hak\s+guna\s+bangunan/,
+      answerEn: 'SHGB (Sertifikat Hak Guna Bangunan / Right to Build) is a certificate to use and build on state or third-party land for a LIMITED period (usually 30 years, extendable) — unlike SHM, which is permanent. Common for developer estates, shophouses and commercial property; foreign-owned companies (PT PMA) can hold SHGB.',
       answer: 'SHGB (Sertifikat Hak Guna Bangunan) adalah hak memakai/mendirikan bangunan di atas tanah negara atau tanah pihak lain, dengan masa berlaku TERBATAS (umumnya 30 tahun, bisa diperpanjang) — beda dari SHM yang berlaku selamanya. Umum untuk rumah di kompleks developer, ruko, dan properti komersial.',
     },
     {
       re: /\bshm\b|sertifikat\s+hak\s+milik/,
+      answerEn: 'SHM (Sertifikat Hak Milik / Freehold) is the strongest and highest form of land ownership in Indonesia, valid indefinitely — only Indonesian citizens (individuals) may hold it.',
       answer: 'SHM (Sertifikat Hak Milik) adalah bukti kepemilikan properti TERTINGGI dan TERKUAT, berlaku SELAMANYA tanpa batas waktu. Hanya WNI perorangan yang bisa memegang SHM.',
     },
     /* ── M159: tiga jenis sertifikat yang SEBELUMNYA TIDAK DIKENALI ──────────
@@ -116,6 +123,7 @@ function tryTerminologyAnswer(userMessage) {
      */
     {
       re: /surat\s+hijau|surat\s+ijo|\bipt\b|izin\s+pemakaian\s+tanah/,
+      answerEn: 'Surat Hijau ("green letter", Surat Ijo) is a land-use permit (IPT) issued by a city government (e.g. Surabaya) over municipal land. The holder does NOT own the land — it is a temporary lease/permit with an annual levy — and it cannot simply be upgraded to SHM; the usual path offered is SHGB on top of the city\'s management right (HPL).',
       answer: 'Surat Hijau (Surat Ijo) adalah Izin Pemakaian Tanah (IPT) yang dikeluarkan pemerintah daerah (mis. Pemkot Surabaya) atas lahan milik pemerintah. Pemegangnya TIDAK memiliki tanah itu — statusnya menyewa/pinjam pakai dari pemda, bersifat sementara, dan ada retribusi tahunan. Karena tanahnya aset daerah, statusnya tidak bisa langsung dinaikkan jadi SHM; solusi yang kini sering ditawarkan pemda adalah HGB di atas Hak Pengelolaan Lahan (HPL) Pemkot agar dasar hukum pemakaiannya lebih jelas.',
     },
     {
@@ -124,14 +132,17 @@ function tryTerminologyAnswer(userMessage) {
     },
     {
       re: /\bshp\b|hak\s+pakai|sertifikat\s+hak\s+pakai/,
+      answerEn: 'SHP (Sertifikat Hak Pakai / Right of Use) grants the right to use land held by the state or another party. Narrower than SHM, and it is the title foreigners residing in Indonesia may hold for a house, subject to the prevailing rules.',
       answer: 'SHP (Sertifikat Hak Pakai) adalah hak untuk menggunakan dan/atau memungut hasil dari tanah yang dikuasai langsung oleh negara maupun tanah milik pihak lain. Cakupan haknya lebih terbatas dibanding SHM, dan sering dipakai untuk keperluan tertentu termasuk kepemilikan oleh WNA sesuai ketentuan yang berlaku.',
     },
     {
       re: /\bajb\b|akta\s+jual\s+beli/,
+      answerEn: 'AJB (Akta Jual Beli) is the official deed of sale and purchase, signed before a PPAT (land deed official) — it is required before the certificate can be transferred to the buyer\'s name.',
       answer: 'AJB (Akta Jual Beli) adalah bukti sah pengalihan hak dalam transaksi jual-beli properti, dibuat oleh PPAT — wajib ada sebelum sertifikat bisa dibalik nama ke pembeli baru.',
     },
     {
       re: /\bppjb\b|perjanjian\s+pengikatan\s+jual\s+beli/,
+      answerEn: 'PPJB (Perjanjian Pengikatan Jual Beli) is the preliminary sale-and-purchase agreement made BEFORE the AJB can be signed — typically when the property is still under a mortgage/instalment plan or the developer\'s master certificate has not yet been split per unit. It binds both parties; ownership only transfers with the AJB.',
       answer: 'PPJB (Perjanjian Pengikatan Jual Beli) adalah perjanjian awal sebelum AJB resmi bisa dibuat — biasanya dipakai saat properti masih dalam proses KPR/cicilan atau sertifikat induk developer belum pecah per unit.',
     },
     {
@@ -156,10 +167,12 @@ function tryTerminologyAnswer(userMessage) {
     },
   ];
 
-  for (const { re, answer } of TERMS) {
-    if (re.test(text)) return answer;
-  }
-  return null;
+  const pick = (t) => (lang === 'en' && t.answerEn) ? t.answerEn : t.answer;
+  const hits = TERMS.filter((t) => t.re.test(text));
+  if (!hits.length) return null;
+  // "beda SHMSRS sama SHM?" / "difference between PPJB and AJB?" → dua istilah sekaligus.
+  if (asksDifference && hits.length >= 2) return hits.slice(0, 2).map(pick).join('\n\n');
+  return pick(hits[0]);
 }
 
 module.exports = { tryTerminologyAnswer };

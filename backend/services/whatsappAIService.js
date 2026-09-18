@@ -23,7 +23,9 @@
 const {
   generateWhatsappReplyWithProviderFallback,
   generateWhatsappExternalAIFallback,
+  getPrimaryAIProvider,
 } = require('./aiProviderService');
+const { claudeUsesPlatformSkill } = require('./claudeService');
 const { getWhatsappPropertyContext }                = require('../utils/whatsappPropertyContext');
 const { buildRecommendationContextForLLM,
         extractPropertyFilters,
@@ -157,8 +159,11 @@ const ID_KEYWORDS = [
 function isIndonesian(message, history = []) {
   const lower = (message || '').toLowerCase();
 
-  // Check current message first
-  if (ID_KEYWORDS.some(w => lower.includes(w))) return true;
+  // Check current message first — M203: batas kata & kosakata bersama (lihat
+  // utils/languageKeywords.js): "Budget around 60 million per year" bukan Indonesia.
+  const { indonesianHits, looksEnglish } = require('../utils/languageKeywords');
+  if (indonesianHits(lower, ID_KEYWORDS).length) return true;
+  if (looksEnglish(lower)) return false;
 
   // Fallback: check last 4 customer messages in history
   // role bisa 'user' (website chatbot) atau 'customer' (fonnte/wati/dialog)
@@ -167,7 +172,8 @@ function isIndonesian(message, history = []) {
     .filter(m => m.role === 'user' || m.role === 'customer')
     .slice(-8)
     .map(m => (m.message || '').toLowerCase());
-  if (recentUserMsgs.some(msg => ID_KEYWORDS.some(w => msg.includes(w)))) return true;
+  if (recentUserMsgs.some(msg => indonesianHits(msg, ID_KEYWORDS).length)) return true;
+  if (recentUserMsgs.some(msg => looksEnglish(msg))) return false;
   const recentAi = (history || []).filter(m => m.role === 'ai' || m.role === 'assistant').slice(-4).map(m => String(m.message || '').toLowerCase());
   return recentAi.some(msg => /\b(kak|kakak|silakan|terima kasih|dicatat|survei)\b/.test(msg));
 }
@@ -675,12 +681,12 @@ ${params.distanceFact}`);
       }
     } catch (prErr) { console.warn('[WhatsAppAI] price range gate gagal (non-fatal):', prErr.message); }
   }
-  const termAnswer = asksPickedUnitDocs ? null : tryTerminologyAnswer(message);
+  const termAnswer = asksPickedUnitDocs ? null : tryTerminologyAnswer(message, { lang: isIndonesian(message, history) ? 'id' : 'en' });
   if (termAnswer && backendMayCompose) {
     console.log('[WhatsAppAI] 📖 Pertanyaan istilah legal/sertifikat terdeteksi — dijawab sebelum melanjutkan qualification flow.');
     const combinedReply = qualResponse
       ? `${termAnswer}\n\n${qualResponse.reply}`
-      : `${termAnswer}\n\nAda pertanyaan lain seputar properti yang bisa saya bantu? 😊${agentSignature(agentName, isIndonesian(message, history))}`;
+      : `${termAnswer}\n\n${isIndonesian(message, history) ? 'Ada pertanyaan lain seputar properti yang bisa saya bantu? 😊' : 'Anything else about the property I can help with? 😊'}${agentSignature(agentName, isIndonesian(message, history))}`;
     return {
       reply         : combinedReply,
       replyParts    : [combinedReply],
@@ -1103,7 +1109,7 @@ ${ans.reply}`);
        */
       // M202: kalimat "belum ada <tipe> di <kota>" cukup sekali per tipe/kota.
       const cityEmptyAlreadySaid = Boolean(cityHit) && (Array.isArray(history) ? history : []).some((h) => /^(ai|assistant)$/i.test(String(h.role || ''))
-        && /belum ada di data saya|belum punya listing|memang belum ada|not in my data|no \*?\w+\*? listings/i.test(String(h.message || h.content || ''))
+        && /belum ada di data saya|belum punya listing|memang belum ada|not in my data|no \*?\w+\*? listings|don'?t have any \w+ listings/i.test(String(h.message || h.content || ''))
         && new RegExp(String(realCity).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(String(h.message || h.content || '')));
       const qsCity = (() => { try { const { extractQualificationState: _e } = require('./aiPromptBuilderService'); return _e(history, message) || {}; } catch (_) { return {}; } })();
       const cityRepeatSuppressed = cityEmptyAlreadySaid && !customerAsksAvailability(message) && !qsCity.cityChangedFromHistory && !qsCity.typeChangedFromHistory && !qsCity.txChangedFromHistory;
@@ -1173,7 +1179,8 @@ ${cityHit.reply}`);
     // M198b: "belum ada di *X*" cukup sekali — pemicu (b) tidak mengulanginya tiap giliran
     // selama customer tidak minta lagi (simulasi P7: 9 giliran berturut-turut).
     const areaEmptyAlreadySaid = Boolean(realArea) && (Array.isArray(history) ? history : []).some((h) => /^(ai|assistant)$/i.test(String(h.role || ''))
-      && new RegExp(`^[^\\n]*(?:belum ada|memang belum ada|hanya ada \\d+ saja|not in my data|within (?:that|your) budget)[^\\n]*\\*${String(realArea).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\*|^[^\\n]*\\*${String(realArea).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\*[^\\n]*(?:belum ada|memang belum ada|hanya ada \\d+ saja|not in my data)`, 'im').test(String(h.message || h.content || '')));
+      && new RegExp(`^[^\\n]*(?:belum ada|memang belum ada|hanya ada \\d+ saja|not in my data|within (?:that|your) budget)[^\\n]*\\*${String(realArea).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\*|^[^\\n]*\\*${String(realArea).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\*[^\\n]*(?:belum ada|memang belum ada|hanya ada \\d+ saja|not in my data)|^[^\\n]*don'?t have any[^\\n]*\\b${String(realArea).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b[^\\n]*(?:right now|at the moment|yet|within)`, 'im').test(String(h.message || h.content || '')));
+    // (M203: template Inggris "I don't have any House rent in Citraland right now" ikut dihitung.)
     /* M200 (15 Sep 2026) — "Apakah ada gym, Kidz zone dan pet Playground?" SESUDAH
      * kartu/pilihan = pertanyaan fasilitas unit, bukan minta listing (transkrip
      * produksi 15 Sep: gerbang mengirim 2 kartu TAMBAHAN). Paritas dengan
@@ -1396,8 +1403,11 @@ ${cityHit.reply}`);
       // LAIN (mis. house_pilot), menyuntikkan aturan skill lama = dua skill
       // bertengkar di satu prompt. Pengetahuan faktual (legal/pajak/KPR)
       // tetap dipakai; hanya referensi perilaku yang mengikuti skill aktif.
-      includeSkillReference: !process.env.AI_SKILL_CALL
-        || /chat_gpt_responds|claude_responds|elevan-property-assistant/i.test(process.env.AI_SKILL_CALL),
+      // M203: provider efektif Claude + CLAUDE_SKILL_ID → skill dibaca dari
+      // Claude Platform; cuplikan .md lokal TIDAK boleh ikut (dua skill di satu prompt).
+      includeSkillReference: (!process.env.AI_SKILL_CALL
+        || /chat_gpt_responds|claude_responds|elevan-property-assistant/i.test(process.env.AI_SKILL_CALL))
+        && !(getPrimaryAIProvider(session?.agentAiPrimary) === 'claude' && claudeUsesPlatformSkill()),
     });
   } catch (err) {
     console.warn('[WhatsAppAI] RAG context gagal, dilewati:', err.message);
@@ -1726,3 +1736,4 @@ module.exports = {
   normalizeAiResponderLabel,
   buildQualifyReply,
 };
+module.exports.isIndonesian = isIndonesian; // M203 — exposed for language-detection tests

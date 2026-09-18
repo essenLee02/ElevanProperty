@@ -1,0 +1,1613 @@
+[SKILL] AI_SKILL_CALL aktif — semua provider membaca: C:\Users\HP\OneDrive\Documents\Elevan_Property\backend\asset\skills\chat_gpt_responds
+[LandmarkCache] Loaded 1738 landmarks from DB (for detectLandmark()).
+[CityCache] Loaded 650 cities from DB (for detectLocation()).
+[FacilityCache] Loaded 284 facilities → 345 keyword tokens from DB.
+[PropertyContext] Params — location: "surabaya" | type: "apartment" | tx: "rent"
+[PropertyRecommendationService] Loaded 1046 properties for agent NA40D8N007 (scoped, status=1).
+[PropertyContext] ✅ DB catalog: 45 exact, 0 alternatives
+[WhatsAppAI] ➡️  Gerbang kualifikasi DILEWATI (profil platform) — platform AI yang akan menanyakan Q1-Q14 sendiri sesuai skill docs.
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'apartment', tx: 'rent', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: SURABAYA
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2002,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'rent',
+  type: 'apartment',
+  location: 'Surabaya',
+  readiness: 3,
+  aiCount: 0
+}
+[PropertyRecommendationService] Loaded 10213 properties from database.
+[PrivateAgent/CatalogMode] Asking Q (aiCount=0)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K1 T1] private_agent 11334ms ⚠️ provider=private_agent · 2×?
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 2 exact, 0 alternatives
+[WhatsAppAI] 📊 Ketersediaan "Gubeng" (Rent): area-empty — dikirim sebagai konteks ke platform AI.
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'apartment', tx: 'rent', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: SURABAYA
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2002,
+  language: 'id',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K1 T2] private_agent/area_availability_gate 1375ms ⚠️ provider=private_agent/area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 2 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'apartment', tx: 'rent', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: SURABAYA
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2002,
+  language: 'id',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K1 T3] private_agent 759ms ⚠️ provider=private_agent
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 2 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'apartment', tx: 'rent', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: SURABAYA
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2002,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'rent',
+  type: 'apartment',
+  location: 'Surabaya',
+  readiness: 3,
+  aiCount: 3
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=3)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K1 T4] private_agent 784ms ⚠️ provider=private_agent · SKRIP-BACKEND · 2×?
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 2 exact, 0 alternatives
+[WhatsAppAI] 📊 Ketersediaan "GUBENG" (Rent): area-empty — dikirim sebagai konteks ke platform AI.
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'apartment', tx: 'rent', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2002,
+  language: 'id',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K1 T5] private_agent/area_availability_gate 942ms ⚠️ provider=private_agent/area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 2 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'apartment', tx: 'rent', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2002,
+  language: 'id',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K1 T6] private_agent/no_cards_yet_gate 693ms ⚠️ provider=private_agent/no_cards_yet_gate
+[PropertyContext] Params — location: "malang" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 2 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'apartment', tx: 'rent', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: MALANG
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2002,
+  language: 'id',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K1 T7] private_agent 773ms ⚠️ provider=private_agent · HARGA-TAK-DIKENAL:27000jt
+[PropertyContext] Params — location: "" | type: "" | tx: "rent"
+[PropertyContext] ✅ DB catalog: 2 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'apartment', tx: 'rent', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: MALANG
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2002,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'rent',
+  type: 'apartment',
+  location: 'Surabaya',
+  readiness: 4,
+  aiCount: 7
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=7)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K1 T8] private_agent 1199ms ⚠️ provider=private_agent
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 13 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'apartment',
+  tx: 'rent',
+  location: 'Surabaya',
+  budget: 'Rp 4.000.000'
+}
+[WhatsAppAI] 🏙️ Detected cities in message: MALANG
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2002,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'rent',
+  type: 'apartment',
+  location: 'Surabaya',
+  readiness: 5,
+  aiCount: 8
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=8)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K1 T9] private_agent 1429ms ⚠️ provider=private_agent · 2×?
+[PropertyContext] Params — location: "surabaya" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 13 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'apartment',
+  tx: 'rent',
+  location: 'Surabaya',
+  budget: 'Rp 4.000.000'
+}
+[WhatsAppAI] 🏙️ Detected cities in message: MALANG, SURABAYA
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2002,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'rent',
+  type: 'apartment',
+  location: 'Surabaya',
+  readiness: 5,
+  aiCount: 9
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=9)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K1 T10] private_agent/gate_c_length_cap 1561ms ⚠️ provider=private_agent/gate_c_length_cap · SKRIP-BACKEND
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1046 exact, 0 alternatives
+[WhatsAppAI] 📊 Ketersediaan "Gubeng atau sekitarnya" (Rent): area-empty — dikirim sebagai konteks ke platform AI.
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'apartment', tx: 'rent', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: SURABAYA
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2002,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: post-summary-generic
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K1 T11] private_agent/follow_up_gate 1049ms ⚠️ provider=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1046 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'apartment', tx: 'rent', location: 'Surabaya', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: SURABAYA
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2002,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: post-summary-closing
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K1 T12] private_agent/follow_up_gate 655ms ⚠️ provider=private_agent/follow_up_gate
+[PropertyContext] Params — location: "sidoarjo" | type: "commercial" | tx: "sale"
+[PropertyContext] ✅ DB catalog: 0 exact, 8 alternatives
+[WhatsAppAI] 📍 "Sidoarjo" hanya gema nama kota (Puri Indah Sidoarjo, Sidoarjo Kota) — bukan area ambigu, lanjut.
+[WhatsAppAI] 🏙️ Kota "Sidoarjo" berstok NOL di katalog agent — dikirim sebagai fakta ke platform AI (M187).
+[WhatsAppAI] ➡️  Gerbang kualifikasi DILEWATI (profil platform) — platform AI yang akan menanyakan Q1-Q14 sendiri sesuai skill docs.
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'shophouse', tx: 'sale', location: 'Sidoarjo', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: SIDOARJO
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2003,
+  language: 'id',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K2 T1] private_agent/city_availability_gate 1130ms ⚠️ provider=private_agent/city_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 0 exact, 8 alternatives
+[WhatsAppAI] 📊 Ketersediaan "GEDANGAN" (Sale): area-empty — dikirim sebagai konteks ke platform AI.
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'shophouse', tx: 'sale', location: 'Sidoarjo', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: SIDOARJO
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2003,
+  language: 'id',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K2 T2] private_agent/city_availability_gate/reoffer 679ms ⚠️ provider=private_agent/city_availability_gate/reoffer
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyRecommendation] Reasonable-price cap on alternatives: 8 → 5
+[PropertyContext] ✅ DB catalog: 0 exact, 5 alternatives
+[WhatsAppAI] 📊 Ketersediaan "GEDANGAN" (Sale): area-empty — dikirim sebagai konteks ke platform AI.
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'shophouse',
+  tx: 'sale',
+  location: 'Sidoarjo',
+  budget: 'Rp 1.700.000.000 - Rp 2.300.000.000'
+}
+[WhatsAppAI] 🏙️ Detected cities in message: SIDOARJO
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2003,
+  language: 'id',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K2 T3] private_agent/city_availability_gate/reoffer 746ms ⚠️ provider=private_agent/city_availability_gate/reoffer
+[PropertyContext] Params — location: "" | type: "commercial" | tx: ""
+[PropertyRecommendation] Reasonable-price cap on alternatives: 8 → 5
+[PropertyContext] ✅ DB catalog: 0 exact, 5 alternatives
+[WhatsAppAI] 📊 Ketersediaan "GEDANGAN" (Sale): area-empty — dikirim sebagai konteks ke platform AI.
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'shophouse',
+  tx: 'sale',
+  location: 'Sidoarjo',
+  budget: 'Rp 1.700.000.000 - Rp 2.300.000.000'
+}
+[WhatsAppAI] 🏙️ Detected cities in message: SIDOARJO
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2003,
+  language: 'id',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K2 T4] private_agent 618ms ⚠️ provider=private_agent
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyRecommendation] Reasonable-price cap on alternatives: 8 → 5
+[PropertyContext] ✅ DB catalog: 0 exact, 5 alternatives
+[WhatsAppAI] 📊 Ketersediaan "GEDANGAN" (Sale): area-empty — dikirim sebagai konteks ke platform AI.
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'shophouse',
+  tx: 'sale',
+  location: 'Sidoarjo',
+  budget: 'Rp 1.700.000.000 - Rp 2.300.000.000'
+}
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2003,
+  language: 'id',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K2 T5] private_agent 594ms ⚠️ provider=private_agent
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyRecommendation] Reasonable-price cap on alternatives: 8 → 5
+[PropertyContext] ✅ DB catalog: 0 exact, 5 alternatives
+[WhatsAppAI] 📊 Ketersediaan "GEDANGAN" (Sale): area-empty — dikirim sebagai konteks ke platform AI.
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'shophouse',
+  tx: 'sale',
+  location: 'Sidoarjo',
+  budget: 'Rp 1.700.000.000 - Rp 2.300.000.000'
+}
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2003,
+  language: 'id',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K2 T6] private_agent/no_cards_yet_gate 902ms ⚠️ provider=private_agent/no_cards_yet_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyRecommendation] Reasonable-price cap on alternatives: 8 → 5
+[PropertyContext] ✅ DB catalog: 0 exact, 5 alternatives
+[WhatsAppAI] 📊 Ketersediaan "GEDANGAN" (Sale): area-empty — dikirim sebagai konteks ke platform AI.
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'shophouse',
+  tx: 'sale',
+  location: 'Sidoarjo',
+  budget: 'Rp 1.700.000.000 - Rp 2.300.000.000'
+}
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2003,
+  language: 'id',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K2 T7] private_agent/no_cards_yet_gate 807ms ⚠️ provider=private_agent/no_cards_yet_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyRecommendation] Reasonable-price cap on alternatives: 8 → 5
+[PropertyContext] ✅ DB catalog: 0 exact, 5 alternatives
+[WhatsAppAI] 📊 Ketersediaan "GEDANGAN" (Sale): area-empty — dikirim sebagai konteks ke platform AI.
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'shophouse',
+  tx: 'sale',
+  location: 'Sidoarjo',
+  budget: 'Rp 1.700.000.000 - Rp 2.300.000.000'
+}
+[WhatsAppAI] 🏙️ Detected cities in message: GRESIK
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2003,
+  language: 'id',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K2 T8] private_agent 958ms ⚠️ provider=private_agent · HARGA-TAK-DIKENAL:36000jt,50000jt
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyRecommendation] Reasonable-price cap on alternatives: 8 → 5
+[PropertyContext] ✅ DB catalog: 0 exact, 5 alternatives
+[WhatsAppAI] 📊 Ketersediaan "GEDANGAN" (Sale): area-empty — dikirim sebagai konteks ke platform AI.
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'shophouse',
+  tx: 'sale',
+  location: 'Sidoarjo',
+  budget: 'Rp 1.700.000.000 - Rp 2.300.000.000'
+}
+[WhatsAppAI] 🏙️ Detected cities in message: GRESIK
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2003,
+  language: 'id',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K2 T9] private_agent/gate_c_length_cap 1344ms ⚠️ provider=private_agent/gate_c_length_cap
+[PropertyContext] Params — location: "bali" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1046 exact, 0 alternatives
+[WhatsAppAI] 📊 Ketersediaan "Gedangan atau Waru" (Sale): area-empty — dikirim sebagai konteks ke platform AI.
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'shophouse', tx: 'sale', location: 'Sidoarjo', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: GRESIK
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2003,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: follow-up-viewing-deferred
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K2 T10] private_agent/follow_up_gate 793ms ⚠️ provider=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1046 exact, 0 alternatives
+[WhatsAppAI] 📊 Ketersediaan "Gedangan atau Waru" (Sale): area-empty — dikirim sebagai konteks ke platform AI.
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'shophouse', tx: 'sale', location: 'Sidoarjo', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: GRESIK
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2003,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: post-summary-generic
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K2 T11] private_agent/follow_up_gate 669ms ⚠️ provider=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1046 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'shophouse', tx: 'sale', location: 'Sidoarjo', budget: 'set' }
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2003,
+  language: 'id',
+  agent: 'Natasha'
+}
+[PrivateAgent] 🎯 Gerbang lanjutan pasca-summary: post-summary-closing
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K2 T12] private_agent/follow_up_gate 1114ms ⚠️ provider=private_agent/follow_up_gate
+[PropertyContext] Params — location: "" | type: "house" | tx: "rent"
+[PropertyContext] ✅ DB catalog: 25 exact, 0 alternatives
+[WhatsAppAI] 📊 Ketersediaan "Green Garden Gresik" (Rent): listings-shown — dikirim sebagai konteks ke platform AI.
+[WhatsAppAI] ➡️  Gerbang kualifikasi DILEWATI (profil platform) — platform AI yang akan menanyakan Q1-Q14 sendiri sesuai skill docs.
+[WhatsAppAI] ✅ Proceeding to AI: { type: 'house', tx: 'rent', location: 'Gresik', budget: 'set' }
+[WhatsAppAI] 🏙️ Detected cities in message: GRESIK
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2004,
+  language: 'en',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'rent',
+  type: 'house',
+  location: 'Gresik',
+  readiness: 3,
+  aiCount: 0
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=0)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K3 T1] private_agent 882ms ⚠️ provider=private_agent · 2×?
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] ➡️  Gerbang kualifikasi DILEWATI (profil platform) — platform AI yang akan menanyakan Q1-Q14 sendiri sesuai skill docs.
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'rent',
+  location: 'Gresik',
+  budget: 'Rp 51.000.000 - Rp 69.000.000'
+}
+[WhatsAppAI] 🏙️ Detected cities in message: GRESIK
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2004,
+  language: 'en',
+  agent: 'Natasha'
+}
+[PrivateAgent/Qualifier] {
+  tx: 'rent',
+  type: 'house',
+  location: 'Gresik',
+  readiness: 4,
+  aiCount: 1
+}
+[PrivateAgent/CatalogMode] Asking Q (aiCount=1)
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K3 T2] private_agent 931ms ⚠️ provider=private_agent · 2×?
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 1 exact, 0 alternatives
+[WhatsAppAI] ➡️  Gerbang kualifikasi DILEWATI (profil platform) — platform AI yang akan menanyakan Q1-Q14 sendiri sesuai skill docs.
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'rent',
+  location: 'Gresik',
+  budget: 'Rp 51.000.000 - Rp 69.000.000'
+}
+[WhatsAppAI] 🏙️ Detected cities in message: GRESIK
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2004,
+  language: 'en',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K3 T3] private_agent 690ms ⚠️ provider=private_agent
+[PropertyContext] Params — location: "surabaya" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 7 exact, 0 alternatives
+[WhatsAppAI] 📊 Ketersediaan "CITRALAND" (Rent): wrong-transaction — dikirim sebagai konteks ke platform AI.
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'rent',
+  location: 'Surabaya',
+  budget: 'Rp 51.000.000 - Rp 69.000.000'
+}
+[WhatsAppAI] 🏙️ Detected cities in message: GRESIK, SURABAYA
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2004,
+  language: 'en',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K3 T4] private_agent/area_availability_gate 1174ms ⚠️ provider=private_agent/area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 7 exact, 0 alternatives
+[WhatsAppAI] 📊 Ketersediaan "CITRALAND" (Rent): wrong-transaction — dikirim sebagai konteks ke platform AI.
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'rent',
+  location: 'Surabaya',
+  budget: 'Rp 51.000.000 - Rp 69.000.000'
+}
+[WhatsAppAI] 🏙️ Detected cities in message: SURABAYA
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2004,
+  language: 'en',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K3 T5] private_agent/no_cards_yet_gate 1082ms ⚠️ provider=private_agent/no_cards_yet_gate
+[PropertyContext] Params — location: "" | type: "house" | tx: ""
+[PropertyContext] ✅ DB catalog: 7 exact, 0 alternatives
+[WhatsAppAI] 📊 Ketersediaan "CITRALAND" (Rent): wrong-transaction — dikirim sebagai konteks ke platform AI.
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'rent',
+  location: 'Surabaya',
+  budget: 'Rp 51.000.000 - Rp 69.000.000'
+}
+[WhatsAppAI] 🏙️ Detected cities in message: SURABAYA
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2004,
+  language: 'en',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K3 T6] private_agent/no_cards_yet_gate 1089ms ⚠️ provider=private_agent/no_cards_yet_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 7 exact, 0 alternatives
+[WhatsAppAI] 📊 Ketersediaan "CITRALAND" (Rent): wrong-transaction — dikirim sebagai konteks ke platform AI.
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'rent',
+  location: 'Surabaya',
+  budget: 'Rp 51.000.000 - Rp 69.000.000'
+}
+[WhatsAppAI] 🏙️ Detected cities in message: SURABAYA
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2004,
+  language: 'en',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K3 T7] private_agent/area_availability_gate 1431ms ⚠️ provider=private_agent/area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: "rent"
+[PropertyContext] ✅ DB catalog: 7 exact, 0 alternatives
+[WhatsAppAI] 📊 Ketersediaan "CITRALAND" (Rent): wrong-transaction — dikirim sebagai konteks ke platform AI.
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'rent',
+  location: 'Surabaya',
+  budget: 'Rp 51.000.000 - Rp 69.000.000'
+}
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2004,
+  language: 'en',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K3 T8] private_agent/area_availability_gate 1211ms ⚠️ provider=private_agent/area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 7 exact, 0 alternatives
+[WhatsAppAI] 📊 Ketersediaan "CITRALAND" (Rent): wrong-transaction — dikirim sebagai konteks ke platform AI.
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'rent',
+  location: 'Surabaya',
+  budget: 'Rp 51.000.000 - Rp 69.000.000'
+}
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2004,
+  language: 'en',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K3 T9] private_agent/area_availability_gate 1120ms ⚠️ provider=private_agent/area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 7 exact, 0 alternatives
+[WhatsAppAI] 📊 Ketersediaan "CITRALAND" (Rent): wrong-transaction — dikirim sebagai konteks ke platform AI.
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'rent',
+  location: 'Surabaya',
+  budget: 'Rp 51.000.000 - Rp 69.000.000'
+}
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2004,
+  language: 'en',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K3 T10] private_agent/area_availability_gate 1256ms ⚠️ provider=private_agent/area_availability_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 7 exact, 0 alternatives
+[WhatsAppAI] 📊 Ketersediaan "CITRALAND" (Rent): wrong-transaction — dikirim sebagai konteks ke platform AI.
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'rent',
+  location: 'Surabaya',
+  budget: 'Rp 51.000.000 - Rp 69.000.000'
+}
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2004,
+  language: 'en',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K3 T11] private_agent/no_cards_yet_gate 1122ms ⚠️ provider=private_agent/no_cards_yet_gate
+[PropertyContext] Params — location: "" | type: "" | tx: ""
+[PropertyContext] ✅ DB catalog: 7 exact, 0 alternatives
+[WhatsAppAI] ✅ Proceeding to AI: {
+  type: 'house',
+  tx: 'rent',
+  location: 'Surabaya',
+  budget: 'Rp 51.000.000 - Rp 69.000.000'
+}
+[WhatsAppAI] ✅ Calling AI provider: {
+  primaryProvider: 'claude',
+  respondCatalogRun: 'ON (brief + catalog)'
+}
+[AI Provider] Trying primary provider: claude (fallback to Private Agent if error)
+[CLAUDE REQUEST] {
+  provider: 'claude',
+  model: 'claude-haiku-4-5-20251001',
+  skill: 'skill_01Vx8XTPV3fnujCuLZPfHVRa@latest (platform skill, .md lokal TIDAK dikirim)',
+  source: 'fonnte_whatsapp',
+  channel: 'whatsapp'
+}
+[CLAUDE ERROR] {
+  taskName: 'whatsapp_reply',
+  provider: 'claude',
+  status: 401,
+  message: 'API key is invalid.',
+  stack: 'Error: Claude API error (401): API key is invalid.\n' +
+    '    at normalizeClaudeError (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:118:22)\n' +
+    '    at callClaudeMessagesAPI (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\claudeService.js:204:11)\n' +
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n' +
+    '    at async executeAIProviderWithFallback (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\aiProviderService.js:218:21)\n' +
+    '    at async _generateWhatsAppAIReplyCore (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1448:22)\n' +
+    '    at async generateWhatsAppAIReply (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\services\\whatsappAIService.js:1635:18)\n' +
+    '    at async main (C:\\Users\\HP\\OneDrive\\Documents\\Elevan_Property\\backend\\scripts\\simulate-platform-skill.js:183:15)'
+}
+[WhatsAppAI] AI providers failed — falling back to Private Agent: All AI providers failed. claude: Claude API error (401): API key is invalid.
+[WHATSAPP PRIVATE AGENT ACTIVE] {
+  reason: 'ChatGPT and Claude unavailable for WhatsApp reply',
+  sessionId: 2004,
+  language: 'en',
+  agent: 'Natasha'
+}
+[WhatsAppAI] Private Agent used (0 exact, 0 alt, 0 rumah123)
+[K3 T12] private_agent/gate_c_length_cap 1636ms ⚠️ provider=private_agent/gate_c_length_cap
+
+TOTALS {
+  turns: 36,
+  backendReplies: 36,
+  scriptLeaks: 2,
+  placeholderLeaks: 0,
+  priceInvented: 2,
+  multiQ: 5,
+  tooLong: 0,
+  financeAfterDecline: 0,
+  targetAfterDecline: 0,
+  cardRepeats: 0,
+  noSummaryAtClose: 0,
+  listingAfterSummary: 0,
+  summaryFieldBad: 0
+}
+report → C:\Users\HP\OneDrive\Documents\Elevan_Property\backend\logs\sim-claude-2026-09-16.md

@@ -227,7 +227,7 @@ console.log('\n── Group 10: use-case decides whether "tinggal bersama siapa"
   // detectUseCase categories
   ok('"untuk investasi" → investasi',        svc.detectUseCase('beli rumah untuk investasi') === 'investasi');
   ok('"didiamkan sbg aset" → investasi',     svc.detectUseCase('mau didiamkan saja sebagai aset') === 'investasi');
-  ok('"buka warung" → investasi',            svc.detectUseCase('rumahnya mau buka warung makan') === 'investasi');
+  ok('"buka warung" → usaha (non-hunian; M203: usaha sendiri, bukan investasi)', svc.detectUseCase('rumahnya mau buka warung makan') === 'usaha');
   ok('"untuk tempat ibadah" → ibadah',       svc.detectUseCase('disewa untuk tempat ibadah') === 'ibadah');
   ok('"buat mushola" → ibadah',              svc.detectUseCase('mau buat mushola') === 'ibadah');
   ok('"untuk liburan" → liburan',            svc.detectUseCase('villa untuk liburan keluarga') === 'liburan');

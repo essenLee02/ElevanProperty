@@ -6,7 +6,8 @@ require('dotenv').config();
   const history = [];
   for (const m of process.argv.slice(2)) {
     const r = await generatePrivateTerminalMassege({ session: { id: 0 }, history, userMessage: m, agentName: 'Natasha', agentUserId: process.env.TEST_AGENT_USER_ID || 'NA40D8N007', recommendationContext: null, externalError: new Error('x') });
-    console.log('\n>> C:', m, '\n<< [' + (r.provider || 'private_agent') + ']', String(r.reply).slice(0, 220).replace(/\n/g, ' | '));
+    // FULL=1 → cetak balasan utuh (summary), default 220 char satu baris.
+    console.log('\n>> C:', m, '\n<< [' + (r.provider || 'private_agent') + ']', process.env.FULL ? String(r.reply) : String(r.reply).slice(0, 220).replace(/\n/g, ' | '));
     history.push({ role: 'customer', message: m }, { role: 'ai', message: String(r.reply) });
   }
   process.exit(0);

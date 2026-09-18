@@ -16,8 +16,8 @@
       "location": "Malang",
       "transactionType": "rent"
     },
-    "nextQuestion_summary": "Sudah lihat berapa Villa di *Malang*? Apa yang membuat belum cocok dari yang sudah dilihat?",
-    "nextQuestion_catalog": "Sudah lihat berapa Villa di *Malang*? Apa yang membuat belum cocok dari yang sudah dilihat?"
+    "nextQuestion_summary": "Sudah lihat berapa Villa di *Malang*, dan apa yang membuat belum cocok?",
+    "nextQuestion_catalog": "Sudah lihat berapa Villa di *Malang*, dan apa yang membuat belum cocok?"
   },
   "Q2b: belum pernah lihat (must not loop)": {
     "profile": {
@@ -63,8 +63,8 @@
       "location": "Malang",
       "transactionType": "rent"
     },
-    "nextQuestion_summary": "Sudah lihat berapa Villa di *Malang*? Apa yang membuat belum cocok dari yang sudah dilihat?",
-    "nextQuestion_catalog": "Sudah lihat berapa Villa di *Malang*? Apa yang membuat belum cocok dari yang sudah dilihat?"
+    "nextQuestion_summary": "Sudah lihat berapa Villa di *Malang*, dan apa yang membuat belum cocok?",
+    "nextQuestion_catalog": "Sudah lihat berapa Villa di *Malang*, dan apa yang membuat belum cocok?"
   },
   "budget: numeric range (must not re-ask tier)": {
     "profile": {
@@ -147,8 +147,8 @@
       "location": "Surabaya",
       "transactionType": "rent"
     },
-    "nextQuestion_summary": "Sudah lihat berapa Rumah di *Surabaya*? Apa yang membuat belum cocok dari yang sudah dilihat?",
-    "nextQuestion_catalog": "Sudah lihat berapa Rumah di *Surabaya*? Apa yang membuat belum cocok dari yang sudah dilihat?"
+    "nextQuestion_summary": "Sudah lihat berapa Rumah di *Surabaya*, dan apa yang membuat belum cocok?",
+    "nextQuestion_catalog": "Sudah lihat berapa Rumah di *Surabaya*, dan apa yang membuat belum cocok?"
   },
   "anchor: comma list must be captured whole": {
     "profile": {
@@ -160,8 +160,8 @@
       "location": "Surabaya",
       "transactionType": "rent"
     },
-    "nextQuestion_summary": "Sudah lihat berapa Rumah di *Surabaya*? Apa yang membuat belum cocok dari yang sudah dilihat?",
-    "nextQuestion_catalog": "Sudah lihat berapa Rumah di *Surabaya*? Apa yang membuat belum cocok dari yang sudah dilihat?"
+    "nextQuestion_summary": "Sudah lihat berapa Rumah di *Surabaya*, dan apa yang membuat belum cocok?",
+    "nextQuestion_catalog": "Sudah lihat berapa Rumah di *Surabaya*, dan apa yang membuat belum cocok?"
   },
   "furnishing: \"kosongan\" must NOT flip type to kos": {
     "profile": {
@@ -246,8 +246,8 @@
       "location": "Surabaya",
       "transactionType": "rent"
     },
-    "nextQuestion_summary": "Sudah lihat berapa Hotel di *Surabaya*? Apa yang membuat belum cocok dari yang sudah dilihat?",
-    "nextQuestion_catalog": "Sudah lihat berapa Hotel di *Surabaya*? Apa yang membuat belum cocok dari yang sudah dilihat?"
+    "nextQuestion_summary": "Sudah lihat berapa Hotel di *Surabaya*, dan apa yang membuat belum cocok?",
+    "nextQuestion_catalog": "Sudah lihat berapa Hotel di *Surabaya*, dan apa yang membuat belum cocok?"
   },
   "BOUNDARY C: greeting restart with same type": {
     "profile": {
@@ -280,8 +280,8 @@
       "location": "Kediri",
       "transactionType": "rent"
     },
-    "nextQuestion_summary": "Sudah lihat berapa Villa di *Kediri*? Apa yang membuat belum cocok dari yang sudah dilihat?",
-    "nextQuestion_catalog": "Sudah lihat berapa Villa di *Kediri*? Apa yang membuat belum cocok dari yang sudah dilihat?"
+    "nextQuestion_summary": "Sudah lihat berapa Villa di *Kediri*, dan apa yang membuat belum cocok?",
+    "nextQuestion_catalog": "Sudah lihat berapa Villa di *Kediri*, dan apa yang membuat belum cocok?"
   },
   "hotel booking frame": {
     "profile": {
@@ -299,8 +299,8 @@
       "viewingIsNight": true,
       "viewingTimeOfDay": "malam"
     },
-    "nextQuestion_summary": "Sudah lihat berapa Hotel di *Surabaya*? Apa yang membuat belum cocok dari yang sudah dilihat?",
-    "nextQuestion_catalog": "Sudah lihat berapa Hotel di *Surabaya*? Apa yang membuat belum cocok dari yang sudah dilihat?"
+    "nextQuestion_summary": "Sudah lihat berapa Hotel di *Surabaya*, dan apa yang membuat belum cocok?",
+    "nextQuestion_catalog": "Sudah lihat berapa Hotel di *Surabaya*, dan apa yang membuat belum cocok?"
   },
   "viewing schedule: day + hour": {
     "profile": {
@@ -344,7 +344,7 @@
       "location": "Surabaya",
       "transactionType": "rent"
     },
-    "nextQuestion_summary": "Sudah lihat berapa Villa di *Surabaya*? Apa yang membuat belum cocok dari yang sudah dilihat?",
-    "nextQuestion_catalog": "Sudah lihat berapa Villa di *Surabaya*? Apa yang membuat belum cocok dari yang sudah dilihat?"
+    "nextQuestion_summary": "Sudah lihat berapa Villa di *Surabaya*, dan apa yang membuat belum cocok?",
+    "nextQuestion_catalog": "Sudah lihat berapa Villa di *Surabaya*, dan apa yang membuat belum cocok?"
   }
 }

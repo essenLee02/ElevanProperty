@@ -742,8 +742,12 @@ function detectUseCase(text = '') {
   // terbaca "Untuk investasi (non-hunian)" → Q4 penghuni di-skip + summary
   // menampilkan use-case fiktif. Kata "kontrakan" polos juga dihapus — "cari
   // kontrakan murah" adalah pencarian rumah sewa, bukan investasi.
-  if (/\b(buka|bangun|bikin|dijadikan|jadikan|dijadiin|buat|untuk)\s+(?:\w+\s+){0,2}?(warung|kafe|cafe|resto|restoran|restaurant|kos[\s-]?kosan|kontrakan|jualan)\b/.test(t))
+  // M203: "buka kafe/warung/jualan" = USAHA sendiri (summary "Untuk usaha/komersial"),
+  // "dijadikan kos-kosan/kontrakan" = INVESTASI (disewakan ke orang lain).
+  if (/\b(buka|bangun|bikin|dijadikan|jadikan|dijadiin|buat|untuk)\s+(?:\w+\s+){0,2}?(kos[\s-]?kosan|kontrakan)\b/.test(t))
     return 'investasi';
+  if (/\b(buka|bangun|bikin|dijadikan|jadikan|dijadiin|buat|untuk)\s+(?:\w+\s+){0,2}?(warung|kafe|cafe|resto|restoran|restaurant|jualan)\b/.test(t))
+    return 'usaha';
   const comm = detectCommercialUse(t);
   if (comm) return comm;
   // 'liburan' — kata lemah TIDAK boleh berdiri sendiri. "wisata" adalah deskriptor

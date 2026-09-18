@@ -290,7 +290,9 @@ const HARD_STOP_RE = new RegExp(
   + '|\\bcukup\\b(?!\\s+(?:luas|besar|banyak|kamar|dekat))'
   + '|\\b(?:itu|segitu)\\s+(?:saja|aja|dulu|dlu)\\b|\\bsekian\\b'
   // M196: jawaban atas tawaran penutup "…atau saya rangkum sekarang?"
-  + '|\\b(?:ringkas|rangkum|summary|rekap)\\b',
+  + '|\\b(?:ringkas|rangkum|summary|rekap)\\b'
+  // M203: penutup berbahasa Inggris (sim K3: "Great, that is all for now. Thank you." → dibalas off-topic)
+  + "|\\b(?:that(?:'s| is| will be) all|nothing else|no more questions|that'?s it for now|i'?m (?:good|done|all set)|we'?re (?:good|done|all set))\\b",
   'i'
 );
 const CLOSING_SIGNAL_RE = new RegExp(`${HARD_STOP_RE.source}|${THANKS_RE.source}`, 'i');

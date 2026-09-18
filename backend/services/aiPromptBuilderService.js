@@ -3562,19 +3562,25 @@ const ID_DETECT_WORDS = [
  * @returns {'id'|'en'}
  */
 function detectLanguage(message = '', history = []) {
-  const checkId = (text) => {
-    const lower = (text || '').toLowerCase();
-    return ID_DETECT_WORDS.some(w => lower.includes(w));
-  };
+  // M203 (17 Sep 2026): detektor ini menentukan "FORCED REPLY LANGUAGE" di prompt
+  // platform. Versi substring membaca "Budget around 60 million per year" sebagai
+  // Indonesia ('ya' di "year") → Claude memaksa balasan Indonesia untuk customer
+  // Inggris (sim K3 hidup). Kini memakai pencocok batas-kata yang sama dengan
+  // LanguageDetector/isIndonesian (utils/languageKeywords.js).
+  const { indonesianHits, looksEnglish } = require('../utils/languageKeywords');
+  const checkId = (text) => indonesianHits(String(text || '').toLowerCase(), ID_DETECT_WORDS).length > 0;
+  const checkEn = (text) => looksEnglish(String(text || '').toLowerCase());
 
   if (checkId(message)) return 'id';
+  if (checkEn(message)) return 'en';
 
-  // Fallback: check last 4 customer messages
+  // Fallback: pesan customer terakhir (8) — bahasa sesi melekat.
   const customerMsgs = (history || [])
     .filter(h => h.role === 'user' || h.role === 'customer')
-    .slice(-4);
+    .slice(-8);
 
   if (customerMsgs.some(m => checkId(m.message || ''))) return 'id';
+  if (customerMsgs.some(m => checkEn(m.message || ''))) return 'en';
 
   return 'en';
 }

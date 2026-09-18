@@ -1,4 +1,4 @@
-# 05 - Property-type playbooks (loaded only for types other than rumah/apartemen)
+# 05 - Property-type playbooks
 Docs 02-03 still rule; add only the 1-2 distinctive questions per type, after the listings, one at a time.
 
 | Type | Distinctive slots (in order) | Skip |

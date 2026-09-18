@@ -48,6 +48,9 @@ const INDONESIAN_WORDS = [
   // Common informal conjunctions / fillers (confirms Indonesian)
   'aja', 'nih', 'dong', 'sih', 'deh', 'lah', 'yuk', 'yah', 'udah', 'udah',
   'kayak', 'kayaknya', 'kira-kira', 'kira kira', 'emang', 'memang',
+  // M203: kata pendek/singkatan chat yang sebelumnya tak dikenali (utuh bila ≤3 huruf)
+  'ya', 'siap', 'jam', 'pagi', 'sore', 'malam', 'nanti', 'sampai', 'kabari', 'makasih', 'apa', 'itu', 'apakah',
+  'terima kasih', 'nggak', 'gak', 'yg', 'sy', 'dgn', 'utk', 'tdk', 'blm', 'sdh', 'dkt', 'jgn', 'trims',
 ];
 
 // ── US English indicator patterns ────────────────────────────────────────
@@ -175,4 +178,58 @@ const PROPERTY_WORDS = [
   'tinggal', 'sendiri', 'keluarga', 'family', 'masuk', 'pindah', 'move',
 ];
 
-module.exports = { INDONESIAN_WORDS, US_ENGLISH_PATTERNS, OFF_TOPIC_WORDS, PROPERTY_WORDS };
+/* ⭐ M203 (16 Sep 2026) — deteksi bahasa yang tidak "buta Inggris".
+ * Dulu: `text.includes(word)` substring → "Budget around 60 million per year"
+ * = Indonesia (kata 'budget'), "Is number 1 fully furnished?" = Indonesia
+ * ('furnished'), "…per year" = Indonesia ('ya' di "year"). Sesi customer
+ * berbahasa Inggris berbalik ke Indonesia di giliran ke-2 (sim K3).
+ * Kini: kata ≤3 huruf harus utuh (\bya\b), kata lain cukup awalan (\brumah →
+ * "rumahnya"), dan kata yang dipakai DUA bahasa (budget/furnished/area/…)
+ * tidak dihitung bila kalimatnya jelas Inggris. */
+const SHARED_EN_ID_WORDS = new Set(['budget', 'furnished', 'furnish', 'area', 'mansion', 'premium', 'dp', 'rp',
+  'kos', 'villa', 'hotel', 'studio', 'lokasi', 'deposit', 'garasi', 'apartemen', 'ok', 'oke',
+  // nama tempat bukan penanda bahasa
+  'mangrove', 'wonorejo', 'kenjeran', 'pakuwon', 'citraland', 'grand city', 'galaxy mall', 'tunjungan', 'ciputra', 'darmo']);
+const EXTRA_EN_PATTERNS = [
+  /\b(what|which|where|when|why|how)\s+(is|are|was|do|does|did|much|far|many|long|about)\b/i,
+  /\b(is|are|do|does|can|could|will|would|should)\s+(it|there|we|you|i|the|this|that|number|my|our)\b/i,
+  /\b(i|we)\s+(have|am|are|need|want|move|prefer|will|would|can|cannot|can't|don't)\b/i,
+  /\b(my|our)\s+(wife|husband|family|dog|cat|kids?|children|hr|company|office|budget)\b/i,
+  /\b(thank\s+you|thanks|that\s+is\s+all|for\s+now|next\s+(mon|tues|wednes|thurs|fri|satur|sun)day|around\s+\d{1,2}\s*(am|pm))\b/i,
+  /\b(million|per\s+year|per\s+month|pet[\s-]friendly|fully\s+furnished|relocating|looking\s+to)\b/i,
+];
+
+function _wordRe(word) {
+  const w = String(word).toLowerCase();
+  if (/\s$/.test(w)) return new RegExp(`\\b${w.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s`);
+  const esc = w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return w.length <= 3 ? new RegExp(`\\b${esc}\\b`) : new RegExp(`\\b${esc}`);
+}
+const _reCache = new Map();
+function idWordHits(text, words) {
+  const t = String(text || '').toLowerCase();
+  const hits = [];
+  for (const w of words) {
+    let re = _reCache.get(w);
+    if (!re) { re = _wordRe(w); _reCache.set(w, re); }
+    if (re.test(t)) hits.push(w);
+  }
+  return hits;
+}
+function looksEnglish(text) {
+  const t = String(text || '').toLowerCase();
+  return US_ENGLISH_PATTERNS.some((re) => re.test(t)) || EXTRA_EN_PATTERNS.some((re) => re.test(t));
+}
+/** Kalimat jelas Inggris DAN kata-Indonesia yang cocok hanya kosakata bersama. */
+function isClearlyEnglish(text, words = INDONESIAN_WORDS) {
+  if (!looksEnglish(text)) return false;
+  return idWordHits(text, words).filter((w) => !SHARED_EN_ID_WORDS.has(w.trim())).length === 0;
+}
+/** Kata Indonesia yang cocok, kosakata bersama diabaikan bila kalimatnya jelas Inggris. */
+function indonesianHits(text, words = INDONESIAN_WORDS) {
+  const hits = idWordHits(text, words);
+  return looksEnglish(text) ? hits.filter((w) => !SHARED_EN_ID_WORDS.has(w.trim())) : hits;
+}
+
+module.exports = { INDONESIAN_WORDS, US_ENGLISH_PATTERNS, OFF_TOPIC_WORDS, PROPERTY_WORDS,
+  SHARED_EN_ID_WORDS, EXTRA_EN_PATTERNS, idWordHits, looksEnglish, isClearlyEnglish, indonesianHits };
