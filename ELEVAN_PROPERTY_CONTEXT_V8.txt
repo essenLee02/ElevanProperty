@@ -1460,7 +1460,7 @@ Developer:
     ±4 panggilan bash di container) — lihat §10 ROADMAP.
   • Skill lokal (.md) untuk provider lain: `backend/asset/skills/
     chat_gpt_responds/` = SKILL.md + docs 00–07 (05/06/07 kondisional).
-    Ukuran total ≤14.700 char raw per folder (arahan pemilik, M193/M203).
+    Ukuran total ≤15.000 char raw per folder (arahan pemilik, M207; 14.700 → 15.400 → 15.000).
     Cap env: SKILL_MAX_RESPONSE_CHARACTERS=16000, SKILL_MAX_PROJECT_CHARACTERS
     =16000 (jangan < 16000 atau doc 07 terpotong diam-diam).
   • Bahasa: utils/languageKeywords.js (`indonesianHits`, `looksEnglish`,
@@ -4354,7 +4354,7 @@ PRINSIP DEBUG
   CATATAN AKHIR UNTUK CLAUDE CODE
 ================================================================================
 
-  ⭐ V19: nomor M terakhir = M205 (poin 32). Blok `RINGKAS V19` di awal tiap section
+  ⭐ V19: nomor M terakhir = M207 (poin 34). Blok `RINGKAS V19` di awal tiap section
     adalah kebenaran terkini; bila bertentangan dengan teks di bawahnya, blok
     RINGKAS yang menang. Claude memakai skill PLATFORM (CLAUDE_SKILL_ID), bukan
     .md lokal; jangan "memperbaiki" ini dengan mengirim .md ke Claude.
@@ -6233,6 +6233,53 @@ penuh untuk pertama kalinya sejak berbulan-bulan.
      cardRepeats 5→4, noSummaryAtClose 7→3; K1-K5 tidak memburuk.
      Sisa yang disengaja: N7 pembuka campur bahasa dijawab pertanyaan tier budget (sah);
      "Oke." sesudah survei dijadwalkan dilanjutkan pertanyaan Q8 (bukan penutup).
+
+ 33. M206 (18 Sep 2026) — 8 ATURAN SIMULASI MASUK KE .md; ANGGARAN 14.700 → 15.400.
+     Pertanyaan pemilik: apakah .md sanggup menghadapi simulasi? Jawab: di provider
+     'private' .md TIDAK dipakai sama sekali (semua deterministik); .md hanya bekerja
+     untuk Claude (skill platform) & provider LLM lain. Audit doc vs 15 sesi terakhir:
+     11 situasi belum ada di .md; pemilik memilih 8 untuk ditulis (max 15.400 char):
+       doc 04 §3a: WNA (tanpa SHM - Hak Pakai/SHMSRS/PT PMA); pajak/BPHTB, deposit, yield,
+         detail kompleks → CATAT, tim agent menghubungi, tanpa angka.
+       doc 04 §3b: "belum bisa survei sampai Oktober" = Ditunda sampai Oktober (bukan
+         tanggal); "rencana pindah Maret" = Q8 bukan ubah jadwal; belum ada unit terkirim
+         ("nomor 1 SHM?", "survei Rabu") → jujur belum ada unit di pencarian ini, catat
+         hari/jam, jangan tanya slot.
+       doc 04 §3d: penutup saat stok kosong → terima kasih tanpa summary; slot lengkap +
+         stok kosong → summary tetap dikirim.
+       doc 02 §2: Q2b riwayat hanya bila customer menyebut pernah mencari.
+       doc 02 §6: "cicilan/yield … per bulan/tahun" & "100 m2" = pembiayaan/luas, bukan
+         periode harga, budget, atau pembalik sewa/beli.
+     Ukuran: 15.328 / 15.326 / 15.351 char raw (6 folder identik). Pin tes: total ≤15.400
+     (redFlagPreferenceAndUnitAttributeM186), selalu-dimuat ≤13.200 (conditionalSkillDocs
+     M189 & M186; doc kondisional 05/06/07 ≈2.600). Termuat 15.464 char, tidak terpotong
+     (cap env 16.000). publish-claude-skill.js MAX_MD_CHARS 15.400 → versi platform baru
+     skver_012dHamfssNTkTsvMio77m54 (latest). SUITE 3314/3314.
+     Belum ditulis (3 dari 11, keputusan pemilik): serah-terima manusia/nomor agent,
+     keluhan foto tidak cocok, kata kunci "Sudah lihat berapa" — sudah ditangani kode
+     di jalur private (M204/M205).
+
+ 34. M207 (18 Sep 2026) — PEMADATAN .md 15.351 → ≤15.000 TANPA MEMBUANG ATURAN.
+     Arahan: ".md lebih optimal, hemat, efisien … total 15.000 character", semua case
+     (keluhan, penolakan, pilihan, perubahan, permintaan, pertanyaan, kebutuhan) tetap.
+     Hasil: 14.967 / 14.965 / 14.990 char raw (6 folder identik). Cara: hanya kata
+     pengisi yang dipangkas ("the number they asked for" → "the number asked", "record as
+     no preference" → "no preference", "(2 + 1 = 3)" → "(2+1=3)", kolom Skip tabel doc 05
+     "bedrooms, furnishing" → "bedrooms/furnishing", contoh redundan "ada carport?" dibuang,
+     "§ Escalate legal/tax detail" dihapus karena sudah tercakup aturan M206 "catat, tim
+     menghubungi"). TIDAK ada aturan yang hilang; 8 aturan M206 tetap termuat (dicek
+     lewat loadSkillGroupPrompt: 15.104 char termuat, tidak terpotong).
+     ⚠️ 6 frasa ternyata DIKUNCI tes dan sempat rusak saat pemadatan — dikembalikan
+     persis: SKILL.md "Previous versions of this file said *"❌ Never show listings
+     mid-interview"*. That rule is withdrawn." (showListingsEarlyM139); doc 04 "§1 always
+     applies first" (offtopicSentinelM131), "with no mapping or geocoding data", "Never
+     state a specific ferry port" (distanceSkillDocsSync); doc 03 "never ask about areas in
+     a city with no stock" (M139); doc 02 "after a city change, the ONE question is the
+     landmark" (contextSwitchM162); doc 06 "Area name beats landmark" (conditionalSkill
+     DocsM189). Pelajaran: sebelum memadatkan satu kalimat, grep frasanya di tests/.
+     Pin cap: tests total ≤15.000 (M186), selalu-dimuat ≤13.200; publish-claude-skill.js
+     MAX_MD_CHARS 15.000 → versi platform baru skver_016TrXKm2PSF1nUQeCJ4recq (latest).
+     SUITE 3314/3314, lint 0 error.
 
  17. ⭐ M189 (12 Sep 2026) — TIGA DOC BACKUP JULI KEMBALI KE chat_gpt_responds.
      Arahan: 15-date-money ≤300 char; 10-playbooks & 19-landmark "diolah".

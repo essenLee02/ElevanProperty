@@ -36,7 +36,7 @@ console.log('\n[2] Konteks rumah/apartemen → 05 & 06 TIDAK dimuat');
   ok('06 tidak dimuat', !f.includes('06-landmark-reference.md'));
   ok('07 selalu dimuat', f.includes('07-date-money-parsing-reference.md'));
   // M190: anggaran pemilik proyek = total berkas ≤ 14.500, cap loader 15.000.
-  ok(`selalu-dimuat ${t.length} ≤ 12500`, t.length <= 12500);
+  ok(`selalu-dimuat ${t.length} ≤ 13200 (M206: total 15.400 - doc kondisional ≈2.600)`, t.length <= 13200);
 }
 
 console.log('\n[3] Pemicu kondisional');

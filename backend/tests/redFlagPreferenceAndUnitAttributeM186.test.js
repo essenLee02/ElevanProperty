@@ -95,8 +95,8 @@ console.log('\n[5] chat_gpt_responds docs carry the M186 rule and fit the cap');
   // adalah SKILL.md + 00-04 + 07 dan harus ≤ 11000; total 9 berkas.
   const always = files.filter((f) => !/0[56]-/.test(f)).map((f) => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n');
   const total = files.map((f) => fs.readFileSync(path.join(dir, f), 'utf8')).join('').length;
-  ok(`total semua .md ${total} ≤ 14700 (anggaran pemilik proyek, 16 Sep 2026 — M203)`, total <= 14700);
-  ok(`always-loaded ${always.length} chars ≤ 12500`, always.length <= 12500);
+  ok(`total semua .md ${total} ≤ 15000 (anggaran pemilik proyek, 18 Sep 2026 — M207)`, total <= 15000);
+  ok(`always-loaded ${always.length} chars ≤ 13200 (M206)`, always.length <= 13200);
   ok('9 files (SKILL.md + docs 00-07)', files.length === 9, files.join(','));
   ok('Q5 rule: never re-send the catalog for a red flag', raw.includes('never re-send the catalog for it'));
   ok('Q5 rule: "kawasan asri" is a quality, not an area', raw.includes('"kawasan asri" is a quality, not an area'));

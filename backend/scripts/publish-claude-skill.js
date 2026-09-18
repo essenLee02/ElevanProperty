@@ -27,7 +27,7 @@ const flag = (k) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : '
 const CHECK_ONLY = args.includes('--check');
 const DIR = path.resolve(__dirname, flag('--dir') || '../../skills/elevan-property-assistant');
 const NAME_OVERRIDE = flag('--name') || sanitizeEnvValue(process.env.CLAUDE_SKILL_NAME) || '';
-const MAX_MD_CHARS = Number(process.env.SKILL_MD_BUDGET_CHARACTERS || 14700);
+const MAX_MD_CHARS = Number(process.env.SKILL_MD_BUDGET_CHARACTERS || 15000)   // M206 (18 Sep 2026): anggaran pemilik 14.700 → 15.400;
 
 const apiKey = sanitizeEnvValue(process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY);
 const skillId = sanitizeEnvValue(process.env.CLAUDE_SKILL_ID);
