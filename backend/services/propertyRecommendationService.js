@@ -607,7 +607,7 @@ function stripAmbiguousRumah(text) {
  * would flip house→office and reset the whole search). The established type is kept;
  * the commercial use is captured separately (see detectCommercialUse).
  */
-const _USE_LEAD = '(?:untuk|buat|dipakai|dipake|digunakan|dijadikan|jadikan|jadiin|jadi|sebagai|bangun|dibangun|membangun|bikin|dibikin|dibuat|buka|membuka|dibuka)';
+const _USE_LEAD = '(?:untuk|buat|dipakai|dipake|digunakan|dijadikan|jadikan|jadiin|jadi|sebagai|bangun|dibangun|membangun|bikin|dibikin|dibuat|buka|membuka|dibuka|kamar|usaha|bisnis|okupansi|penyewa|penghuni|tarif|harga\\s+sewa|dibagi\\s+jadi(?:\\s+\\d+|\\s+berapa)?(?:\\s+kamar)?)';   // M208: "kamar kos", "usaha kos", "dibagi jadi 6 kamar kos"
 const _USE_TYPE = '(?:kantor|perkantoran|usaha|bisnis|umkm|startup|software\\s*house|softwarehouse|co[\\s-]?working|coworking|workshop|office|toko|ruko|gudang|warehouse|store|klinik|salon|cafe|kafe|resto|restoran|restaurant|warung|kos[\\s-]?kosan|kontrakan|kontrakkan|kost|kos|studio|ibadah|masjid|mushola|musholla|gereja|pura|vihara)';
 function stripCommercialUsePhrases(text) {
   return text.replace(new RegExp(`\\b${_USE_LEAD}\\s+(?:${_USE_LEAD}\\s+)?${_USE_TYPE}\\b`, 'gi'), '');
@@ -724,7 +724,8 @@ function stripRejectedTransactionPhrases(text) {
 }
 
 function detectCanonicalTransaction(txt = '') {
-  const w = stripRejectedTransactionPhrases(stripInvestmentIntentPhrases(String(txt || '').toLowerCase()));
+  // M208: "beli rumah untuk dijadikan kos-kosan" → kata kos = PENGGUNAAN, bukan sewa.
+  const w = stripRejectedTransactionPhrases(stripInvestmentIntentPhrases(stripCommercialUsePhrases(String(txt || '').toLowerCase())));
   if (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|kos|kost|kosan|kostan|ngekos|ngekost|ngekosan|indekos|indekost|rent|rental|lease|booking|book|pesan|reservasi)\b/.test(w)) return 'rent';
   if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase|invest|investasi)\b/.test(w)) return 'sale';
   return null;
@@ -869,7 +870,7 @@ function detectTransactionType(message = '') {
   // BELI (simulasi 11 Sep). Frasa rencana-menyewakan dibuang dulu (helper yang
   // sama dengan detektor kanonik); sisa niat investasi tanpa kata transaksi
   // lain = pembeli.
-  let text = stripRejectedTransactionPhrases(stripInvestmentIntentPhrases(raw));
+  let text = stripRejectedTransactionPhrases(stripInvestmentIntentPhrases(stripCommercialUsePhrases(raw)));   // M208
   /* M204 (18 Sep 2026) — "Cicilan 15 tahun kira2 berapa per bulan?" (sim N2): kata
    * periode "per bulan/per tahun" adalah alias SEWA di TRANSACTION_TYPES, jadi
    * pertanyaan KPR pembeli membalik transaksi ke rent (summary "Rencana: Sewa",
@@ -882,7 +883,7 @@ function detectTransactionType(message = '') {
   const hit  = Object.entries(TRANSACTION_TYPES).find(([, keywords]) => includesAny(text, keywords))?.[0] || '';
   if (!hit && /(?<![a-z])invest(?:asi|ment)?(?![a-z])/.test(raw)) return 'sale';
   // M204 (sim N4): "cari kos buat anak" = SEWA (kos/ngekos/indekos tidak pernah dibeli oleh penghuninya).
-  if (!hit && /(?<![a-z])(?:kos|kost|kosan|kostan|ngekos|ngekost|indekos|indekost)(?![a-z])/.test(raw) && !/(?<![a-z])(?:beli|membeli|jual|dijual|buy|invest\w*)(?![a-z])/.test(raw)) return 'rent';
+  if (!hit && /(?<![a-z])(?:kos|kost|kosan|kostan|ngekos|ngekost|indekos|indekost)(?![a-z])/.test(text) && !/(?<![a-z])(?:beli|membeli|jual|dijual|buy|invest\w*)(?![a-z])/.test(raw)) return 'rent';   // M208: teks sudah tanpa "usaha/kamar/okupansi kos"
   return hit;
 }
 

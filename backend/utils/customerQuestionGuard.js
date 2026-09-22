@@ -282,11 +282,11 @@ function buildAnswerFirstDirective(message, nextQuestion = null) {
  * "Rencananya masuk bulan apa?" — itu benar. Aturan: ucapan terima kasih saja
  * tidak mengakhiri sesi bila masih ada pertanyaan WAJIB (Q8 untuk sewa) dan
  * belum menyentuh 10 percakapan; penutup HARD selalu mengakhiri. */
-const THANKS_RE = /\b(?:terima\s*kasih|trma\s*(?:kasih|ksh)|makasi[h]?|mksh|mksih|thanks?|thx|tq|thank\s*you)\b/i;
+const THANKS_RE = /\b(?:terima\s*kasih|tr[ie]?ma\s*(?:kasih|ksh)|makasi[h]?|mksh|mksih|thanks?|thx|tq|thank\s*you)\b/i;   // M208: "trima kasih" (dan tetap "trma ksh")
 const HARD_STOP_RE = new RegExp(
   // M196: "nggak ada yang dihindari" / "tidak ada yang khusus" adalah JAWABAN
   // (Q5/Q4), bukan penutup — "tidak ada" hanya penutup bila TIDAK diikuti "yang/…nya".
-  '\\b(?:tidak|nggak|ga+k?|blm|belum)\\s+(?:ada|tertarik|minat)\\b(?!\\s+(?:yang|yg|khusus|masalah|preferensi|permintaan|pantangan))'
+  '\\b(?:tidak|nggak|ga+k?|blm|belum)\\s+(?:ada|tertarik|minat)\\b(?!\\s+(?:yang|yg|khusus|masalah|preferensi|permintaan|pantangan|kabar|jawaban|balasan|respon\\w*|telpon|telepon|info|konfirmasi))'
   + '|\\bcukup\\b(?!\\s+(?:luas|besar|banyak|kamar|dekat))'
   + '|\\b(?:itu|segitu)\\s+(?:saja|aja|dulu|dlu)\\b|\\bsekian\\b'
   // M196: jawaban atas tawaran penutup "…atau saya rangkum sekarang?"
@@ -294,7 +294,9 @@ const HARD_STOP_RE = new RegExp(
   // M203: penutup berbahasa Inggris (sim K3: "Great, that is all for now. Thank you." → dibalas off-topic)
   + "|\\b(?:that(?:'s| is| will be) all|nothing else|no more questions|that'?s it for now|i'?m (?:good|done|all set)|we'?re (?:good|done|all set))\\b"
   // M204 (sim N6/N5): "Oke ditunggu ya." / "nanti kami kabari" = menutup sambil menunggu kabar.
-  + "|\\bditunggu\\b(?:\\s+(?:ya|kabarnya|infonya))?|\\bnanti\\s+(?:saya|sy|kami|aku)\\s+(?:kabari|hubungi|infokan|konfirmasi)\\b",
+  + "|\\bditunggu\\b(?:\\s+(?:ya|kabarnya|infonya))?|\\bnanti\\s+(?:saya|sy|kami|aku)\\s+(?:kabari|hubungi|infokan|konfirmasi)\\b"
+  // M208 (sim R3/R6): keputusan ditunda / minta dikabari = menutup giliran ini.
+  + "|\\b(?:diskusi|rundingan|rembug|konsul\\w*|koordinasi)\\b[^.?!]{0,25}\\b(?:dulu|dlu)\\b|\\bkabari\\s+(?:saja|aja|ya|kalau|klo|kl|kalo)\\b|\\bkabari\\s*[.!]?\\s*$",
   'i'
 );
 const CLOSING_SIGNAL_RE = new RegExp(`${HARD_STOP_RE.source}|${THANKS_RE.source}`, 'i');

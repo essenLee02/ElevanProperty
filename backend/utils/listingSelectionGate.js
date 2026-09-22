@@ -478,7 +478,7 @@ const ATTR_RE = {
   price: /\b(harga\w*|berapa\s*duit|hrg\w*|berapa\s*(?:per|se)\s*(?:bulan|tahun|hari|malam)|per\s*bulan|sebulan|per\s*tahun|setahun|sewanya\s*berapa)\b/i,
   availability: /\b(masih\s+(?:ada|tersedia|available|kosong)|sudah\s+(?:laku|terjual|tersewa|dibooking|di-?booking)|belum\s+laku)\b/i,
   facilities: /\b(fasilitas|ada\s+(?:ac|gym|kolam|lift|carport|garasi|taman|garden|cctv|security|satpam|parkir|parking|wifi|water\s*heater|kitchen|dapur|kompor|musholla|laundry|kid[sz]|playground|pet\s*\w+|jogging|minimarket|balkon|balcony)\w*|furnished|furnitur|perabot)\b/i,
-  unknown: /\b(banjir|panas|bising|berisik|ipl|lantai\s*berapa|tower|jam\s*malam|pasangan|suami\s*istri|pemilik|owner|nego|diskon|promo|potongan|bisa\s+kurang|turun\s+harga|dekat\s+sekolah|sekolah|tetangga|lingkungan|air|listrik\s*berapa|watt|hadap|renovasi|direnovasi|tahun\s+dibangun|usia\s+bangunan|umur\s+bangunan|pbb|lunas|tunggakan|patokan\w*|dekat\s+apa|imb|pbg|denah|floor\s*plan|legalitas|dokumen\w*|berkas|surat[-\s]surat|deposit\w*|uang\s+jaminan|termin|cicil\w*|bulanan|tahunan|bayar\s+(?:per|tiap|setiap|di\s+tempat|di\s+muka|setahun|sebulan)|per\s+\d+\s+bulan|dekat\s+tol|tol\b|angkot|bus\b|transport\w*|akses\w*|stasiun|halte|kursi\s+roda|difabel|lansia|tangga|check[-\s]?in|check[-\s]?out|jam\s+masuk|parkir\w*|parking|muat\s+\d+\s+mobil|zonasi|izin\s+usaha|hewan|peliharaan|pet\b|kucing|anjing|dapur|kitchen|kompor|penyewa\w*|tenant\w*|yield|roi|balik\s+modal|cash\s+bertahap|bertahap|cash\s+keras)\b/i,
+  unknown: /\b(banjir|panas|bising|berisik|ipl|lantai\s*berapa|bertingkat|tingkat|satu\s+lantai|dua\s+lantai|kolam\w*|pool|tower|jam\s*malam|pasangan|suami\s*istri|pemilik|owner|nego|diskon|promo|potongan|bisa\s+kurang|turun\s+harga|dekat\s+sekolah|sekolah|tetangga|lingkungan|air|listrik\s*berapa|watt|hadap|renovasi|direnovasi|tahun\s+dibangun|usia\s+bangunan|umur\s+bangunan|pbb|lunas|tunggakan|patokan\w*|dekat\s+apa|imb|pbg|denah|floor\s*plan|legalitas|dokumen\w*|berkas|surat[-\s]surat|deposit\w*|uang\s+jaminan|termin|cicil\w*|bulanan|tahunan|bayar\s+(?:per|tiap|setiap|di\s+tempat|di\s+muka|setahun|sebulan)|per\s+\d+\s+bulan|dekat\s+tol|tol\b|angkot|bus\b|transport\w*|akses\w*|stasiun|halte|kursi\s+roda|difabel|lansia|tangga|check[-\s]?in|check[-\s]?out|jam\s+masuk|parkir\w*|parking|muat\s+\d+\s+mobil|zonasi|izin\s+usaha|hewan|peliharaan|pet\b|kucing|anjing|dapur|kitchen|kompor|penyewa\w*|tenant\w*|yield|roi|balik\s+modal|cash\s+bertahap|bertahap|cash\s+keras)\b/i,
 };
 // M198b: "Yang tidak dekat jalan raya ya, berisik" adalah PERNYATAAN (red flag), bukan
 // pertanyaan — negasi hanya dihitung bila di UJUNG kalimat ("banjir nggak?", "dekat sekolah nggak").
@@ -729,7 +729,7 @@ function tryPendingViewingConfirmation({ message, history = [], isId = true }) {
     // terbaca tanggal +3 bulan). Pertanyaan pembayaran/deposit/harga → gerbang lain.
     if (/\b(?:bayar|cicil|termin|deposit|dp|harga|nego|diskon|promo|ipl|listrik|watt)\b/i.test(text)
         && !/\b(?:survei|survey|viewing|ketemu\w*|lihat\s+langsung)\b/i.test(text)) return null;
-    const direct = scheduleViewingFromText(text, isId);
+    const direct = scheduleViewingFromText(text, isId, { history });
     if (direct) return direct;
 
     const { customerRequestsViewing, customerOnlyThanks } = require('./customerQuestionGuard');
@@ -786,7 +786,7 @@ const normalizeForDateParsing = (m) => {
 /* Pertanyaan TANGGAL survei. Bentuk pendek M189e didahulukan; bentuk gabungan
  * lama tetap dikenali supaya percakapan yang SEDANG berjalan (sudah menerima
  * pertanyaan versi lama di riwayatnya) tidak putus saat versi baru dirilis. */
-const PENDING_SCHEDULE_ASK_RE = /enaknya survei tanggal berapa\?|what date works for the viewing\?|tanggal berapa dan jam berapa\?|what date and time work for you\?/i;
+const PENDING_SCHEDULE_ASK_RE = /enaknya survei tanggal berapa\?|what date works for the viewing\?|tanggal berapa dan jam berapa\?|what date and time work for you\?|mau hari dan jam berapa\?|what day and time suit you\?/i;   // M208: tawaran video call ikut menunggu jadwal
 /* ── M189c (7 Sep 2026) — GILIRAN SUSULAN: HANYA JAM, ATAU HANYA TANGGAL ──
  * Transkrip produksi lanjutan lagi: customer menjawab tanggal saja ("Saya
  * mau survei bln dpn, Kak") → gerbang di bawah BENAR bertanya balik "Kira-
@@ -853,10 +853,8 @@ function tryPendingViewingSchedule({ message, history = [], isId = true }) {
     // M202: penutup ("Makasih", "Terima kasih") atau pesan panjang tanpa tanggal/jam saat
     // menunggu jawaban jadwal → biarkan gerbang penutup/lanjutan menjawab, jangan mengulang
     // "hari apa yang pas?" (simulasi Z9: diulang 3 giliran).
-    {
-      const { customerSignalsClosing: _cls } = require('./customerQuestionGuard');
-      if (_cls(text)) return null;
-    }
+    const { customerSignalsClosing: _cls, customerRequestsViewing } = require('./customerQuestionGuard');
+    if (_cls(text)) return null;
     // M198b: "Masuknya rencana awal Desember" = tanggal MASUK, bukan jawaban jadwal survei.
     if (/\b(masuk\w*|pindah\w*|huni\w*|nempat\w*|check[- ]?in)\b/i.test(text) && !/\b(survei|survey|viewing|lihat|liat|ketemu\w*)\b/i.test(text)) return null;
 
@@ -867,7 +865,7 @@ function tryPendingViewingSchedule({ message, history = [], isId = true }) {
      * customer hanya belum menentukan jam. `isDontKnowDateAnswer()` sudah lama
      * ada untuk kelas jawaban ini; dipakai ulang di sini, bukan ditulis lagi. */
     const isDontKnow = isDontKnowDateAnswer(text);
-    if (VIEWING_DECLINE_RE.test(text) && !((isDateOnlyFollow || isTimeOnlyFollow) && isDontKnow)) {
+    if (VIEWING_DECLINE_RE.test(text) && !((isDateOnlyFollow || isTimeOnlyFollow) && isDontKnow) && !customerRequestsViewing(text)) {   // M208 (P23): "nggak mau online, mau datang langsung"
       return {
         reply: isId
           ? `Baik, Kak 😊 Kalau berubah pikiran atau mau jadwalkan nanti, tinggal bilang saja ya.`
@@ -921,7 +919,10 @@ function tryPendingViewingSchedule({ message, history = [], isId = true }) {
       }
       if (String(text).trim().split(/\s+/).length > 3 || /\?/.test(text)) return null;
     }
-    return composeViewingScheduleReply({ dateFormatted, timeFormatted, isDateOnlyFollow, isId });
+    const composed = composeViewingScheduleReply({ dateFormatted, timeFormatted, isDateOnlyFollow, isId });
+    // M208 (sim R2): jawaban atas tawaran VIDEO CALL — sebut video call, bukan survei.
+    if (composed && /video\s*call/i.test(lastAi)) composed.reply = composed.reply.replace(/\bSurvei\b/g, 'Video call').replace(/\bThe viewing\b/g, 'The video call');
+    return composed;
   } catch (err) {
     console.error('[PENDING VIEWING SCHEDULE GATE ERROR]', err.message);
     return null;
@@ -975,12 +976,31 @@ function sundayInViewingContext(text) {
     .replace(/\bminggu(?=\s*(?:,|\.|jam|pukul|pagi|siang|sore|malam|$))/gi, 'hari minggu');
 }
 
-function scheduleViewingFromText(text, isId = true) {
+/* M208 (sim R7) — "Sabtu nggak jadi, Minggu aja jam yang sama": klausa hari yang DIBATALKAN
+ * dibuang sebelum parse (dulu "Sabtu" yang terbaca), dan "jam yang sama" mengambil jam dari
+ * jadwal terakhir di riwayat. */
+function stripCancelledDayClause(text) {
+  return String(text || '')
+    .replace(/\b(?:hari\s+)?(?:senin|selasa|rabu|kamis|jumat|jum'at|sabtu|minggu|besok|lusa|monday|tuesday|wednesday|thursday|friday|saturday|sunday)(?:\s+(?:ini|depan|besok))?\s*(?:nya)?\s+(?:nggak|ngga|gak|ga|tidak|tdk|ndak)\s+(?:jadi|bisa)\b[^,.;]*[,.;]?/gi, ' ')
+    .replace(/\b(?:batal|cancel|ganti|undur)\s+(?:yang\s+)?(?:senin|selasa|rabu|kamis|jumat|jum'at|sabtu|minggu|besok|lusa)(?:\s+(?:ini|depan))?\b/gi, ' ');
+}
+function lastScheduledTime(history) {
+  const rows = Array.isArray(history) ? history : [];
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const h = rows[i]; if (!/^(ai|assistant)$/i.test(String(h.role || ''))) continue;
+    const m = String(h.message || '').match(/(?:survei|viewing)[^\n]{0,40}tanggal \*[^*]+\*,\s*\*([^*]+)\*|✓ Viewing: \*\d{1,2} [A-Za-z]+ \d{4},\s*([^*]+)\*|(?:set|scheduled) for \*[^*]+\*,\s*\*([^*]+)\*/i);
+    if (m) return (m[1] || m[2] || m[3] || '').trim();
+  }
+  return '';
+}
+
+function scheduleViewingFromText(text, isId = true, opts = {}) {
   try {
-    const normText = sundayInViewingContext(normalizeForDateParsing(text));
+    const normText = sundayInViewingContext(normalizeForDateParsing(stripCancelledDayClause(text).replace(/\bminggu\s+(?:saja|aja|deh|ya)\b/i, 'hari minggu')));
     const d = parseCustomerDate(normText);
     const dateFormatted = d && d.status === 'ok' ? d.formatted : null;
-    const timeFormatted = parseSurveyTime(normText, { requireClockWord: true });
+    const sameTime = /\bjam\s+(?:yang\s+)?sama\b|\bsame\s+time\b/i.test(String(text)) ? lastScheduledTime(opts.history) : '';
+    const timeFormatted = parseSurveyTime(normText, { requireClockWord: true }) || sameTime || null;
     if (!dateFormatted && !timeFormatted) return null;
     return composeViewingScheduleReply({ dateFormatted, timeFormatted, isDateOnlyFollow: false, isId });
   } catch (_) { return null; }
@@ -1292,6 +1312,8 @@ module.exports = {
   tryPendingViewingConfirmation,
   scheduleViewingFromText,
   tryPendingViewingSchedule,
+  stripCancelledDayClause,
+  lastScheduledTime,
   tryPostPickFallback,
   readConfirmedPick,
   pickedUnitFacilities,

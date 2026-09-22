@@ -1428,7 +1428,10 @@ function extractQualificationState(history = [], currentMessage = '') {
     const moveInRaw = String(raw)
       .split(/[.!?\n;]+/).map((c) => c.trim()).filter(Boolean)
       .filter((c) => !(VIEWING_CUE_RE.test(c) && !MOVE_IN_CUE_RE.test(c)))
-      .join('. ');
+      .join('. ')
+      // M208 (sim R4): "Masuk awal Oktober, 1 tahun" → "1 tahun" dibaca +1 tahun (21 Sep 2027).
+      // Durasi (angka + satuan tanpa depan/lagi/ini) dibuang sebelum parse tanggal masuk.
+      .replace(/\b\d+\s*(?:tahun|thn|bulan|bln|minggu|hari|malam)\b(?!\s+(?:depan|dpn|lagi|ini|ke\s*depan|kedepan))/gi, ' ');
 
     /* ⭐ M184 (6 Sep 2026) — JAWABAN TANGGAL PASTI HARUS MENIMPA JAWABAN BULAN.
      * Bug nyata: customer menjawab "Akhir Desember", AI lalu bertanya "boleh
@@ -1474,6 +1477,27 @@ function extractQualificationState(history = [], currentMessage = '') {
       }
     }
 
+    /* M208 (sim R3) — SYARAT & PENOLAKAN BERSYARAT yang diucapkan sambil lalu:
+     *   "harus satu lantai, akses kursi roda"      → Prefer (syarat wajib)
+     *   "Kalau bertingkat saya nggak mau"           → Hindari: bertingkat
+     * Dulu keduanya hilang dari summary; agent tidak tahu unit bertingkat tak berguna. */
+    {
+      const mustM = [...raw.matchAll(/\b(?:harus|wajib|mesti|kudu|must\s+be|must\s+have)\s+([^.?!;]{3,90})/gi)]
+        .flatMap((m) => m[1].split(/\s*,\s*|\s+dan\s+/i)).map((x) => x.trim())
+        .filter((x) => x.length >= 3 && !/^(?:dekat|deket|dkt|di|area|daerah|sekitar|near)\b/i.test(x)
+          && !/\b(?:survei|survey|bayar|cash|kpr|dp\b|nego|kirim|tanya|jawab|balas|hubungi|telpon|telepon|ada\s+kabar)\b/i.test(x));
+      if (mustM.length) {
+        const add = mustM.join(', ');
+        if (!state.preferences) state.preferences = add;
+        else if (!String(state.preferences).toLowerCase().includes(add.toLowerCase())) state.preferences = `${state.preferences}, ${add}`;
+      }
+      const condM = raw.match(/\bkalau\s+([^,.?!;]{2,30}?)\s+(?:saya|sy|kami|aku)?\s*(?:nggak|ngga|gak|ga|tidak|tdk|ndak)\s+mau\b/i);
+      if (condM && !/\b(?:ada|bisa|dapat|boleh|mahal|murah|cocok|jadi|nego|deal|survei|survey|kpr)\b/i.test(condM[1])) {
+        const avoid = `tidak mau ${condM[1].trim()}`;
+        if (!state.redFlags) state.redFlags = avoid;
+        else if (!String(state.redFlags).toLowerCase().includes(condM[1].trim().toLowerCase())) state.redFlags = `${state.redFlags}, ${avoid}`;
+      }
+    }
     // ── BELI-only slots (Q_KPR / Q_COND / use-case) — bagian dari 24 kombinasi ──
     if (state.transactionType === 'sale') {
       // Q_KPR — pembiayaan (MANDATORY untuk semua 12 tipe beli)

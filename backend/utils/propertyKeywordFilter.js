@@ -259,8 +259,11 @@ function matchesPropertyType(lower, type) {
 function hasPropertyType(lower) {
   // Cek "rumah" dengan pengecualian
   if (lower.includes('rumah')) {
-    const isExcluded = RUMAH_EXCLUSIONS.some(exc => lower.includes(exc));
-    if (!isExcluded) return true;
+    // M208 (sim R3): "rumah sewa … dekat rumah sakit" — hanya kemunculan "rumah" di dalam frasa
+    // pengecualian yang dibuang; "rumah" lain di kalimat yang sama tetap properti.
+    let stripped = lower;
+    for (const exc of RUMAH_EXCLUSIONS) stripped = stripped.split(exc).join(' ');
+    if (stripped.includes('rumah')) return true;   // substring: "rumahnya", "rumah2"
   }
 
   // Cek semua tipe properti lainnya (dengan word boundary untuk kata pendek)
@@ -780,6 +783,8 @@ function detectCustomerFrustration(message = '') {
   const t = String(message || '').toLowerCase();
   if (!t.trim()) return { frustrated: false, kind: null };
 
+  // M208 (sim R9): "kok lama balasnya", "lama banget balasnya" = keluhan LAMBAT (kind 'slow') — dicek paling awal.
+  if (/\b(lama|lambat|lemot|lelet)\b[^.?!]{0,20}\b(bal[ae]s\w*|respon\w*|jawab\w*|reply|tunggu)\b|\bdari\s+tadi\b[^.?!]{0,15}\btunggu/i.test(t)) return { frustrated: true, kind: 'slow' };
   // (a) Mengeluh PERTANYAAN BERULANG — paling sering & paling penting.
   const REPETITION = [
     /\b(udah|sudah|kan\s+udah|kan\s+sudah)\b.{0,20}\b(jawab|bilang|kasih\s+tau|sebut|info)/i,
@@ -1038,7 +1043,10 @@ function isPropertyContextContinuation(message, history = []) {
       // non-properti: "kasi makan dulu ya" tepat sesudah pertanyaan properti
       // pertama tetap harus ditolak.
       const strongEnoughToBypass = hasRecentPropertyQ && inPropertyFlow;
-      if (!strongEnoughToBypass && CLEAR_NON_PROPERTY.some(p => p.test(lower))) return false;
+      // M208 (sim R3): "dekat rumah sakit" / "sekitar kampus" adalah PATOKAN lokasi, bukan topik
+      // kesehatan/kuliner — frasa kedekatan dibuang sebelum uji kosakata non-properti.
+      const lowerSansNear = lower.replace(/\b(?:dekat|deket|dkt|sekitar|sekitaran|samping|seberang|depan|near|dari|ke)\s+(?:rumah\s+sakit|rs\b|klinik|puskesmas|kampus|sekolah|mall|pasar|stasiun|bandara|terminal|kantor|cafe|kafe|resto\w*|masjid|gereja|tol|halte|minimarket|indomaret|alfamart)\w*/gi, ' ');
+      if (!strongEnoughToBypass && CLEAR_NON_PROPERTY.some(p => p.test(lowerSansNear))) return false;
       return true;
     }
 

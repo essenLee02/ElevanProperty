@@ -30,7 +30,7 @@ const { getWhatsappPropertyContext }                = require('../utils/whatsapp
 const { buildRecommendationContextForLLM,
         extractPropertyFilters,
         humanBuildingType,
-        detectLandmark }                            = require('./propertyRecommendationService');
+        detectLandmark, detectLocation, isKnownLocationName }   = require('./propertyRecommendationService');   // M208
 const { getConversationHistory }                    = require('./sessionService');
 const { loadAIContextBlocks }                       = require('./aiContextService');
 const { splitCatalogReply }                         = require('../utils/replySplitter');
@@ -633,7 +633,9 @@ ${params.distanceFact}`);
     const sansCity = cityNames.length ? message.replace(new RegExp(`\\b(?:${cityNames.join('|')})\\b`, 'gi'), ' ') : message;
     const smallTalk = !frustration.frustrated && !photoMismatch
       && detectSmallTalk(sansCity, { hasPropertyKeyword: _hpk, isContinuation: (m) => _ipc(m, history) });
-    const humanRequest = detectHumanRequest(message);
+    // M208 (sim R9): "kemarin katanya agent mau telpon tapi belum ada kabar" = keluhan layanan → maaf + serah-terima.
+    const serviceComplaint = /\b(?:agent|agen|tim|marketing)\w*\b[^.?!]{0,40}\b(?:belum|nggak|gak|tidak|blm)\s+(?:ada\s+kabar|telpon|telepon|hubungi|menghubungi|nelpon|kabar\w*|balas|respon\w*)|\b(?:belum|nggak|gak|tidak)\s+(?:ada\s+)?(?:kabar|dihubungi|ditelpon|ditelepon)\b[^.?!]{0,30}\b(?:agent|agen|tim)\b|\bdijanjikan\b[^.?!]{0,30}\b(?:telpon|telepon|hubungi|kabar)/i.test(message);
+    const humanRequest = detectHumanRequest(message) || serviceComplaint;
     const agentNumberRequest = !humanRequest && detectAgentNumberRequest(message);
     const repair = buildRepairReply({ message, lang: langR, cardsSent, frustration, smallTalk, photoMismatch, humanRequest, agentNumberRequest });
     if (repair && backendMayCompose) {
@@ -792,7 +794,8 @@ ${params.distanceFact}`);
      * yang bertentangan dengan banner MENGGANTI TRANSAKSI. Pilihan unit beli
      * tidak relevan untuk pencarian sewa. */
     const changeTurn = Boolean(qualState?.txChangedFromHistory || qualState?.cityChangedFromHistory || qualState?.typeChangedFromHistory);
-    let pick = changeTurn ? null : tryListingSelectionAnswer({ message, history, isId: isIdMsg });
+    // M208 (sim R3): "kabari kalau ada yang satu lantai ya" = penutup, bukan pilihan unit.
+    let pick = (changeTurn || customerSignalsClosing(message)) ? null : tryListingSelectionAnswer({ message, history, isId: isIdMsg });
     // M198: pertanyaan atribut tentang kartu no. N → jawab dari kartu/DB (local) atau
     // kirim sebagai fakta (platform), jangan dianggap memilih.
     if (pick && pick.attributeQuestion) {
@@ -967,6 +970,19 @@ ${ans.reply}`);
     const lmToken = detectLandmark(message);
     // M198b: patokan tetap jadi kandidat area bila customer sekaligus minta listing ("ada apartemen dekat ITS?").
     const isAnchorPhrase = /\b(patokan|dekat|deket|near|sekitar)\b/i.test(message) && !customerAsksAvailability(message);
+    /* M208 (sim R6) — "Cari rumah dijual di Surabaya atau Sidoarjo": dua kota dalam satu pesan.
+     * Dulu kota pertama dipilih diam-diam. Sekarang tanya kota mana dulu (satu pertanyaan). */
+    if (backendMayCompose) {
+      const two = String(message).match(/\b([A-Z][a-z]{3,})\s+(?:atau|or|\/)\s+([A-Z][a-z]{3,})\b/);
+      const histPrev = (Array.isArray(history) ? history : []).filter((h, i, arr) => !(String(h.message || h.content || '').trim() === String(message).trim() && i === arr.length - 1 - [...arr].reverse().findIndex((x) => String(x.message || x.content || '').trim() === String(message).trim())));
+      const cityMentionedBefore = histPrev.some((h) => /^(user|customer)$/i.test(String(h.role || '')) && detectLocation(String(h.message || '')));
+      if (two && !cityMentionedBefore && isKnownLocationName(two[1]) && isKnownLocationName(two[2]) && two[1].toLowerCase() !== two[2].toLowerCase()) {
+        const reply = isIdMsg
+          ? `Boleh, Kak 😊 Mau saya mulai dari *${two[1]}* atau *${two[2]}* dulu? Nanti kota satunya bisa menyusul.`
+          : `Sure 😊 Shall I start with *${two[1]}* or *${two[2]}*? We can do the other city after.`;
+        return { reply, replyParts: [reply], provider: 'city_choice_gate', contextSource };
+      }
+    }
     const { city: realCity, area: resolvedArea } = await resolveCityAndArea([
       isAnchorPhrase ? '' : lmToken, isAnchorPhrase ? '' : filters.landmark, qs.district, qs.city,
       isAnchorPhrase ? '' : qs.anchorPoint, filters.location,
@@ -1235,7 +1251,11 @@ ${cityHit.reply}`);
     const areaKnownWithoutCity = Boolean(txDb && typeDb && realArea && !realCity);
     // M198b: "belum ada di *X*" cukup sekali — pemicu (b) tidak mengulanginya tiap giliran
     // selama customer tidak minta lagi (simulasi P7: 9 giliran berturut-turut).
+    // M208 (sim R1): "Maaf salah ketik, maksudnya 500 juta" — "belum ada yang sesuai budget" untuk
+    // budget LAMA bukan alasan diam; budget baru di pesan ini = cek ulang.
+    const budgetNowW = (() => { try { return Boolean(require('./propertyRecommendationService').detectBudget(message)); } catch (_) { return false; } })();
     const areaEmptyAlreadySaid = Boolean(realArea) && (Array.isArray(history) ? history : []).some((h) => /^(ai|assistant)$/i.test(String(h.role || ''))
+      && !(budgetNowW && /sesuai budget|within (?:that|your) budget|masih belum ada/i.test(String(h.message || h.content || '')))
       && new RegExp(`^[^\\n]*(?:belum ada|memang belum ada|hanya ada \\d+ saja|not in my data|within (?:that|your) budget)[^\\n]*\\*${String(realArea).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\*|^[^\\n]*\\*${String(realArea).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\*[^\\n]*(?:belum ada|memang belum ada|hanya ada \\d+ saja|not in my data)|^[^\\n]*don'?t have any[^\\n]*\\b${String(realArea).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b[^\\n]*(?:right now|at the moment|yet|within)`, 'im').test(String(h.message || h.content || '')));
     // (M203: template Inggris "I don't have any House rent in Citraland right now" ikut dihitung.)
     /* M200 (15 Sep 2026) — "Apakah ada gym, Kidz zone dan pet Playground?" SESUDAH
@@ -1247,9 +1267,27 @@ ${cityHit.reply}`);
     const gateShouldSpeak = (customerAsksAvailability(message) && !bareAfterCards)
       || ((fourSlotsKnown || areaKnownWithoutCity) && !listingsAlreadyShown && !areaEmptyAlreadySaid);
 
-    if (agentUserId && realArea && txDb && gateShouldSpeak && !pickAlreadyHandledThisTurn && !customerSignalsClosing(message)) {
+    /* M208 (sim R5) — AREA BEBAS ("area mana saja", "terserah", "bebas"): slot ④ dianggap
+     * terpenuhi; mulai dari area berstok terbanyak di kota itu dan sebutkan alasannya. */
+    let flexibleAreaNote = '';
+    let realAreaEff = realArea;
+    // "area mana saja" / "bebas" / "terserah" boleh muncul tanpa AI bertanya area lebih dulu (sim R5).
+    const flexibleNow = (qs.q2cDeclined || /\b(?:area|daerah|kawasan|lokasi)?\s*(?:mana\s*(?:saja|aja|pun)|bebas|terserah|fleksibel|flexible|di\s*mana\s*(?:saja|aja))\b/i.test(String(message)))
+      && !/\bapa\s+(?:saja|aja)\b|\bada\s+(?:apa|di\s+mana)\b/i.test(String(message));   // "Sidoarjo ada apa saja?" = tanya cakupan, bukan area bebas
+    if (!realAreaEff && flexibleNow && realCity && txDb && typeDb && agentUserId && backendMayCompose && !listingsAlreadyShown) {
+      try {
+        const { resolveCityId: _rcid, listAlternativeAreas: _laa } = require('./areaAvailabilityService');
+        const cityIdF = await _rcid(realCity);
+        const areasF = await _laa({ userId: agentUserId, cityId: cityIdF, buildingType: typeDb, transactionType: txDb });
+        if (areasF && areasF.length) {
+          realAreaEff = areasF[0].area;
+          flexibleAreaNote = isIdMsg ? `Area bebas ya, Kak — saya mulai dari *${realAreaEff}* (stok terbanyak):\n\n` : `Any area works — starting with *${realAreaEff}* (most stock):\n\n`;
+        }
+      } catch (_) { /* fail-open */ }
+    }
+    if (agentUserId && realAreaEff && txDb && (gateShouldSpeak || flexibleAreaNote) && !pickAlreadyHandledThisTurn && !customerSignalsClosing(message)) {
       const hit = await tryAreaAvailabilityAnswer({
-        userId: agentUserId, city: realCity, area: realArea,
+        userId: agentUserId, city: realCity, area: realAreaEff,
         buildingType: typeDb || undefined, transactionType: txDb,
         // Label Indonesia ("apartemen", bukan "apartment") — pakai peta yang
         // sudah ada supaya tidak lahir daftar tipe kedua yang bisa menyimpang.
@@ -1268,7 +1306,8 @@ ${cityHit.reply}`);
         })()),
       });
       if (hit && backendMayCompose) {
-        console.log(`[WhatsAppAI] 📊 Gerbang ketersediaan: ${hit.verdict} untuk "${realArea}" (${txDb}) — dijawab dengan data katalog, alur interview dilewati.`);
+        console.log(`[WhatsAppAI] 📊 Gerbang ketersediaan: ${hit.verdict} untuk "${realAreaEff}" (${txDb}) — dijawab dengan data katalog, alur interview dilewati.`);
+        if (flexibleAreaNote && hit.reply) hit.reply = flexibleAreaNote + hit.reply;
         /* M204 — paritas dengan Private Agent (M203): "Ada 3 unit nggak?" saat "belum ada
          * di *Gubeng*" sudah pernah dijawab → kalimat pendek "masih belum ada", daftar
          * alternatif tetap ikut (sim K1: paragraf identik diulang utuh). */

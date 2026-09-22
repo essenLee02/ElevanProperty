@@ -682,7 +682,9 @@ async function findAreaCandidatesInText({ userId, city, text }) {
         // M204 (sim N8): "Kamis jam 4" cocok fuzzy ke "Dukuh Pakis" (kamis≈pakis). Nama hari/bulan/waktu bukan area.
         'senin', 'selasa', 'kamis', 'jumat', 'sabtu', 'minggu', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
         'depan', 'besok', 'lusa', 'januari', 'februari', 'maret', 'april', 'agustus', 'september', 'oktober', 'november', 'desember',
-        'batal', 'ganti', 'jadwal', 'orang', 'suami', 'istri', 'anaknya', 'makasih', 'thanks', 'furnished', 'kosongan', 'budget']);
+        'batal', 'ganti', 'jadwal', 'orang', 'suami', 'istri', 'anaknya', 'makasih', 'thanks', 'furnished', 'kosongan', 'budget',
+        // M208 (sim R3): "akses kursi roda, dekat rumah sakit" cocok fuzzy ke Bukit Mas/Dukuh Pakis (sakit≈pakis)
+        'sakit', 'kursi', 'akses', 'dekat', 'berisik', 'bertingkat', 'tingkat', 'kolam', 'renang', 'garasi', 'carport', 'lansia', 'difabel']);
       /* M203: pada pesan panjang (>4 kata) hanya token SESUDAH kata pengantar lokasi yang
        * boleh dicocokkan typo ("area Gubeng", "di Mneganti") — bukan semua kata kalimat. */
       const shortMsg = t.trim().split(/\s+/).length <= 4;

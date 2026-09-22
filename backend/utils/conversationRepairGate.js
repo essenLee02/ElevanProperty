@@ -82,6 +82,14 @@ function buildRepairReply({ message, lang = 'id', cardsSent = false, lastCardTit
         : `Thanks for flagging that 🙏 If the photo and the description don't match, the DATA on the card${unit} (address, rooms, size, price) is the reference — the photo is likely outdated or swapped. I'll ask our agent to send the latest photos of that unit. Meanwhile, anything else you'd like me to check?`,
     };
   }
+  if (frustration && frustration.frustrated && frustration.kind === 'slow') {
+    return {
+      verdict: 'frustration-slow',
+      reply: id
+        ? `Maaf ya, Kak, lama menunggu 🙏 Saya siap sekarang — mau lanjut dari mana? ${cardsSent ? 'Sebut nomor unitnya atau' : 'Sebutkan'} area/kriteria yang Kakak mau, langsung saya proses.`
+        : `Sorry for the wait 🙏 I'm here now — where shall we pick up? ${cardsSent ? 'Mention the unit number or' : 'Tell me'} the area/criteria and I'll get right on it.`,
+    };
+  }
   if (frustration && frustration.frustrated) {
     return {
       verdict: `frustration-${frustration.kind}`,
