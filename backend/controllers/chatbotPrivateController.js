@@ -1199,9 +1199,12 @@ class ResponseBuilderWhatsApp {
     }[brief.priority] || '';
 
     // ── Compose full message ──────────────────────────────────────────────────
+    // M209 (21-22 Sep 2026): badge prioritas ("🔥 Prioritas Tinggi") adalah penilaian INTERNAL untuk
+    // agent (brief.priority tetap tersimpan) — tidak ditampilkan ke customer.
+    void priorityBadge;
     const header = isId
-      ? `Baik, semua sudah saya catat! 📝 ${priorityBadge}`
-      : `Got it, I've noted everything! 📝 ${priorityBadge}`;
+      ? `Baik, semua sudah saya catat! 📝`
+      : `Got it, I've noted everything! 📝`;
 
     const summary = isId
       ? `${header}\n\n${bulletBlock}\n\nSaya akan segera menghubungi Anda dengan rekomendasi properti yang paling sesuai! 🏠\nTerima kasih sudah menghubungi saya. 🙏`
@@ -1289,9 +1292,12 @@ class ResponseBuilderWhatsApp {
       INCOMPLETE: isId ? '⚠️ Data Belum Lengkap' : '⚠️ Incomplete Data',
     }[brief.priority] || '';
 
+    // M209 (21-22 Sep 2026): badge prioritas ("🔥 Prioritas Tinggi") adalah penilaian INTERNAL untuk
+    // agent (brief.priority tetap tersimpan) — tidak ditampilkan ke customer.
+    void priorityBadge;
     const header = isId
-      ? `Baik, semua sudah saya catat! 📝 ${priorityBadge}`
-      : `Got it, I've noted everything! 📝 ${priorityBadge}`;
+      ? `Baik, semua sudah saya catat! 📝`
+      : `Got it, I've noted everything! 📝`;
     const closing = isId
       ? `Saya akan segera menghubungi Anda dengan rekomendasi properti yang paling sesuai! 🏠\n\nTerima kasih sudah menghubungi saya. 🙏`
       : `I'll reach out soon with the most suitable property recommendations! 🏠\n\nThank you for contacting me. 🙏`;
@@ -4971,7 +4977,7 @@ class ChatbotPrivateService {
       const asksAboutNonexistentUnit = !anyCardSent && emptySaidEarly && /\?/.test(userMessage) && !definitionQ && !termFirst
         && !customerAsksAvailability(userMessage) && !detectAreaName(userMessage) && !customerRequestsViewing(userMessage)
         && !/\b(?:jarak|jauh|berapa\s+(?:lama|menit|jam|km)|how\s+far|budget|harga\s+rata|kisaran)\b/i.test(userMessage)
-        && /\b(?:aman|penjaga|security|satpam|lift|grade|parkir|akses|listrik|kva|banjir|furnish\w*|garasi|taman|lantai|tower|kolam|gym|ipl|deposit\w*|nego|luas|kamar|fasilitas|ada\s+\w+\s*\?)/i.test(userMessage);
+        && /\b(?:aman|penjaga|security|satpam|lift|grade|parkir|akses|listrik|kva|banjir|furnish\w*|garasi|taman|lantai|tower|kolam|gym|ipl|deposit\w*|nego|luas|kamar|fasilitas|ac\b|kasur|wifi|dapur|kitchen|balkon|carport|ada\s+(?:yang\s+)?(?:sudah\s+)?(?:ada\s+)?[\w ,/&]{2,40}\?)/i.test(userMessage);
       /* M208 (P14/P3): pilihan yang SUDAH DICATAT (readConfirmedPick) atau rujukan ke unit LAMA
        * ("yang nomor 1 tadi", "tetap beli rumah Pakuwon") = milik gerbang pilihan/recall, bukan no_cards. */
       const pickSticks = Boolean(readConfirmedPick(history)) || (oldCardSent && /\b(?:tadi|sebelumnya|kemarin|tetap|balik|kembali|yang\s+saya\s+pilih)\b/i.test(userMessage));
@@ -5654,7 +5660,10 @@ class ChatbotPrivateService {
         const { isBareAvailabilityQuestion: _bareAvailP } = require('../utils/listingSelectionGate');
         // M208 (sim R4): "yang kemarin masih tersedia kan?" sesudah kartu = soal unit itu, bukan minta listing.
         const asksAvailNew = customerAsksAvailability(userMessage) && !(cardsShownBefore && _bareAvailP(userMessage)) && !(cardsShownBefore && /\b(?:yang|yg)\s+(?:kemarin|tadi|itu|saya\s+pilih)\b/i.test(userMessage) && /\bmasih\b/i.test(userMessage));
-        const gateMaySpeak = !customerSignalsClosing(userMessage) && (asksAvailNew || changeTurnAvail
+        // M209: "Budget 450 juta" sesudah ekor kartu "boleh sebutkan budget…" = minta penyaringan ulang → kartu
+        // tambahan dalam budget atau "belum ada yang sesuai budget" (bukan pertanyaan target/penghuni).
+        const budgetAfterInvite = cardsShownBefore && budgetNowP && /boleh sebutkan budget atau kebutuhan lainnya|let me know your budget or other needs/i.test(String(lastAiMessage(history) || '')) && !/\?/.test(userMessage);
+        const gateMaySpeak = !customerSignalsClosing(userMessage) && (asksAvailNew || changeTurnAvail || budgetAfterInvite
           || (Boolean(txDb && typeDb && availArea) && !cardsShownBefore && !areaEmptyAlreadySaid));
         /* ── M195 (14 Sep 2026) — EMPAT SLOT WAJIB SEBELUM LISTING (aturan pemilik
          * proyek; doc 02 §1). Gerbang ini bisa menyala lewat customerAsksAvailability
@@ -5875,6 +5884,8 @@ class ChatbotPrivateService {
       );
 
       if (nextQuestion) {
+        const ackA = this.#postCardAcknowledge({ nextQuestion, profile, lang, userMessage, history });
+        if (ackA) { console.log('[PrivateAgent/SummaryMode] 📝 Sesudah kartu: catat, bukan tanya (M209)'); return this.#wrap(ackA, { skillInfo, filters, provider: 'post_card_ack' }); }
         console.log(`[PrivateAgent/SummaryMode] Asking Q (aiCount=${profile.aiCount})`);
         return this.#wrap(builder.qualificationQuestion(nextQuestion), {
           skillInfo, filters, qualificationMode: true, summaryMode: true,
@@ -5920,6 +5931,8 @@ class ChatbotPrivateService {
       profile, lang, priceAnchors, 'summary', agentAreaOptions
     );
     if (nextQuestion) {
+      const ackB = this.#postCardAcknowledge({ nextQuestion, profile, lang, userMessage, history });
+      if (ackB) { console.log('[PrivateAgent/CatalogMode] 📝 Sesudah kartu: catat, bukan tanya (M209)'); return this.#wrap(ackB, { skillInfo, filters, provider: 'post_card_ack' }); }
       console.log(`[PrivateAgent/CatalogMode] Asking Q (aiCount=${profile.aiCount})`);
       return this.#wrap(builder.qualificationQuestion(nextQuestion), {
         skillInfo, filters, qualificationMode: true,
@@ -6549,6 +6562,58 @@ class ChatbotPrivateService {
    * dijawab gerbang biasa; "tidak/ringkas/cukup" -> penutup keras -> ringkasan;
    * bila sudah ditanya dan customer tetap tidak bertanya -> ringkasan. */
   static #WRAP_UP_RE = /ada lagi yang mau ditanyakan atau diubah|anything else you want to ask or change/i;
+
+  /* ⭐ M209 (22 Sep 2026) — SESUDAH KARTU TERKIRIM, TIDAK ADA WAWANCARA LAGI.
+   * Sim P/Z/K/N/R: customer memberi info sukarela ("Budget 450 juta", "Bayar cash",
+   * "Masuk Januari", "kejauhan dari kerja saya") sesudah kartu, lalu dibalas skrip
+   * "Ada target kapan proses belinya?", "tinggal bersama siapa saja?", "terjangkau/
+   * menengah/eksklusif?". Aturan pemilik (M202): AI bertanya hanya bila customer tidak
+   * punya agenda; sesudah kartu, info dicatat dan pintu dibuka — bukan pertanyaan baru.
+   * Yang TETAP boleh ditanya: Q8 sewa (satu kali, kontrak M193) dan slot wajib. */
+  static #postCardAcknowledge({ nextQuestion, profile, lang, userMessage, history }) {
+    if (!profile || !nextQuestion) return null;
+    const q = String(nextQuestion);
+    // Area/kota sudah dinyatakan KOSONG dan tawaran ulang sudah diberikan (P7): info tambahan
+    // dicatat, ajak pilih area yang ada stoknya — bukan pertanyaan penghuni/target.
+    const emptyOffered = !profile.cardsShownBefore && (history || []).some((h) => /^(ai|assistant)$/i.test(String(h.role || '')) && /masih belum ada — mau saya carikan|Tinggal sebut area yang mau dicoba|still nothing there|Just name the area/i.test(String(h.message || '')));
+    if (emptyOffered && !/\?/.test(String(userMessage))) {
+      const last = [...(history || [])].reverse().find((h) => /^(ai|assistant)$/i.test(String(h.role || '')) && /misalnya ([^?]+)\?|\(([^)]+)\), langsung|e\.g\. ([^?]+)\?|\(([^)]+)\) and I'll/i.test(String(h.message || '')));
+      const m = last ? String(last.message).match(/misalnya ([^?]+)\?|\(([^)]+)\), langsung|e\.g\. ([^?]+)\?|\(([^)]+)\) and I'll/i) : null;
+      const names = m ? (m[1] || m[2] || m[3] || m[4] || '').trim() : '';
+      return lang === 'id'
+        ? `Dicatat ya, Kak 📝 Begitu Kakak sebut area yang mau dicoba${names ? ` (${names})` : ''}, langsung saya kirim pilihannya.`
+        : `Noted 📝 As soon as you name an area to try${names ? ` (${names})` : ''}, I'll send the options.`;
+    }
+    if (!profile.cardsShownBefore) return null;
+    /* Customer PASIF yang MENJAWAB pertanyaan slot AI ("Budget 500 juta" sesudah "terjangkau/
+     * menengah/eksklusif?") → alur tanya berlanjut (kontrak M202, tes sim 18/19). Ack hanya
+     * untuk info yang DIBERIKAN SUKARELA sesudah kartu/pilihan/jadwal/jawaban atribut. */
+    const lastAiText = String((([...(history || [])].reverse().find((h) => /^(ai|assistant)$/i.test(String(h.role || '')))) || {}).message || '');
+    const lastAiTail = lastAiText.trim().replace(/[\s\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\uFE0F]+$/u, '');   // buang emoji penutup
+    const lastAiIsSlotQuestion = /\?$/.test(lastAiTail) && /sewa atau beli|rent or buy|tipe properti|property type|kota mana|which city|area atau kawasan|which area|masuk atau pindah|move in|tinggal bersama|live there|terjangkau|budget-friendly|furnitur|furnish|fasilitas (?:tertentu|yang)|amenit|target kapan|dihindari|avoid|baru\/ready|brand new|durasi|how long|tower|lantai|floor|sudah lihat berapa|options have you seen|patokan|landmark|koordinasi|decision|jam berapa|what time|tanggal berapa|what date/i.test(lastAiText);
+    if (lastAiIsSlotQuestion) return null;
+    // Ekor kartu "boleh sebutkan budget atau kebutuhan lainnya" adalah UNDANGAN: jawaban budget/
+    // kebutuhan di giliran berikutnya = customer pasif menjawab → alur tanya berlanjut (tes 18/19).
+    const cardsTailInvite = /boleh sebutkan budget atau kebutuhan lainnya|let me know your budget or other needs/i.test(lastAiText);
+    const suppliesNeed = /\b(?:kolam|carport|garasi|furnish\w*|ac\b|wifi|gym|kamar|kt\b|balkon|taman|lantai)\b/i.test(String(userMessage));
+    if (cardsTailInvite && suppliesNeed) return null;   // kebutuhan fasilitas → alur tanya berlanjut (tes 19)
+    const isRentQ8 = /masuk atau pindah bulan apa|planning to move in|move in/i.test(q) && /rent|sewa/i.test(String(profile.transactionType || ''));
+    if (isRentQ8) return null;
+    const mandatory = /sewa atau beli|rent or buy|tipe properti apa|which property type|kota mana|which city|area atau kawasan mana|which area|nomor berapa/i.test(q);
+    if (mandatory) return null;
+    if (/\?/.test(String(userMessage))) return null;   // pertanyaan customer dijawab gerbang lain
+    const isId = lang === 'id';
+    const lastAi = String((([...(history || [])].reverse().find((h) => /^(ai|assistant)$/i.test(String(h.role || '')))) || {}).message || '');
+    const repeated = /Dicatat ya, Kak 📝 Kalau ada yang menarik|Noted 📝 If one of the units/i.test(lastAi);
+    const reply = isId
+      ? (repeated
+        ? `Siap, dicatat 📝 Mau cek detail salah satu unit di atas, atau saya carikan dengan kriteria lain?`
+        : `Dicatat ya, Kak 📝 Kalau ada yang menarik dari unit di atas, sebut nomornya — atau mau saya carikan yang lebih pas dengan kriteria itu?`)
+      : (repeated
+        ? `Noted 📝 Want details on one of the units above, or shall I search with another criterion?`
+        : `Noted 📝 If one of the units above interests you, mention its number — or shall I look for something closer to that?`);
+    return reply;
+  }
   static #wrapUpBeforeSummary({ profile, history = [], lang = 'id', skillInfo, filters }) {
     try {
       const exchanges = Number(profile && profile.aiCount) || 0;
