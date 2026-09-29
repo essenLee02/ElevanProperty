@@ -64,11 +64,36 @@ function tryTerminologyAnswer(userMessage, options = {}) {
       answer: 'PBB (Pajak Bumi dan Bangunan) tahun berjalan biasanya ditanggung penjual sampai tanggal serah terima, lalu pembeli untuk tahun berikutnya — tetapi ini bisa disepakati di AJB. Agent kami bantu cek status PBB unit yang Kakak pilih.' },
     { re: /\bkpr\b[^.?!]{0,30}\b(?:dp|uang\s*muka)\b|\b(?:dp|uang\s*muka)\b[^.?!]{0,30}\b(?:minimal|berapa|persen)\b/,
       answer: 'DP KPR umumnya minimal 10–20% dari harga (bank tertentu ada program DP lebih rendah untuk rumah pertama); cicilan idealnya ≤30–35% penghasilan bulanan. Simulasi angka pastinya dibantu agent kami dengan bank rekanan.' },
+    // M210 (sim R2): "Bisa bayar DP dulu?" / "tanda jadi berapa?" — tanpa kata KPR. Jelaskan
+    // mekanismenya (booking fee menahan unit, lewat notaris/agent), jangan diamkan pertanyaannya.
+    { re: /\b(?:bisa|boleh|bayar|kasih|berapa)\b[^.?!]{0,20}\b(?:dp|uang\s*muka|booking\s*fee|tanda\s+jadi)\b|\b(?:dp|booking\s*fee|tanda\s+jadi)\b[^.?!]{0,20}\b(?:dulu|berapa|bisa|boleh)\b/,
+      answer: 'Bisa, Kak — untuk menahan unit biasanya ada booking fee/tanda jadi (nominalnya ditentukan pemilik, umumnya dipotong dari pembayaran berikutnya). Pembayarannya selalu lewat agent kami dan notaris/PPAT, tidak pernah ke rekening perorangan. Saya catat ya, nominal & syarat pastinya dikonfirmasi agent kami.',
+      answerEn: 'Yes — to hold a unit there is usually a booking fee (the amount is set by the owner and normally deducted from the next payment). Payment always goes through our agent and the notary, never to a personal account. I have noted this; our agent will confirm the exact amount and terms.' },
     { re: /\b(?:rata[-\s]?rata|kisaran|range)\b[^.?!]{0,30}\bharga\b|\bharga\b[^.?!]{0,30}\b(?:rata[-\s]?rata|kisaran|pasaran)\b/,
       answer: null },   // dijawab dari katalog (gerbang area/harga), bukan angka umum
     // M202 — kepercayaan customer: legalitas agent, komisi, biaya tersembunyi, pajak rumah second, "bisa KPR?"
     { re: /\b(?:agent|agen)\w*\b[^.?!]{0,25}\b(?:resmi|legal|terdaftar|kantor\w*|terpercaya|bisa\s+dipercaya)\b|\b(?:resmi|legal|terdaftar)\b[^.?!]{0,15}\b(?:agent|agen)\b/,
       answer: 'Agent kami adalah agen properti terdaftar dengan kantor resmi — detail identitas, alamat kantor, dan nomor telepon kantornya akan dikirimkan agent kami langsung ke Kakak (saya asisten yang membantu mencatat kebutuhan). Semua transaksi dilakukan lewat notaris/PPAT, jadi pembayaran tidak pernah ke perorangan.' },
+    // M210 (sim S9): "Bank mana yang paling murah bunganya?", "Penghasilan saya 15 juta cukup?",
+    // "Tenor 20 tahun bisa?" — JANGAN merekomendasikan bank & jangan menilai kelayakan kredit.
+    { re: /\bbank\b[^.?!]{0,30}\b(?:mana|apa|murah|bunga|rendah|terbaik|rekomendasi|saran)\b|\b(?:bunga|suku\s+bunga)\b[^.?!]{0,25}\b(?:berapa|termurah|paling)\b|\bwhich\s+bank\b/,
+      answer: 'Saya tidak bisa merekomendasikan bank tertentu, Kak — bunga & program KPR berubah tiap bank dan tiap periode. Saya catat kebutuhan Kakak; agent kami yang akan bandingkan bank rekanan dan buat simulasinya.',
+      answerEn: 'I cannot recommend a specific bank — rates and mortgage programmes change per bank and per period. I have noted your needs; our agent will compare partner banks and prepare the simulation.' },
+    { re: /\b(?:penghasilan|gaji|income|slip\s+gaji|take\s+home)\b[^.?!]{0,30}\b(?:cukup|bisa|layak|approve|disetujui|berapa)\b|\b(?:cukup|layak)\b[^.?!]{0,20}\b(?:penghasilan|gaji)\b|\btenor\b[^.?!]{0,25}\b(?:bisa|berapa|maksimal|sampai)\b|\bcicilan\b[^.?!]{0,25}\bberapa\b/,
+      answer: 'Kelayakan KPR & cicilan pastinya dihitung bank (umumnya cicilan ≤30–35% penghasilan, tenor sampai 15–20 tahun, DP 10–20%) — saya tidak bisa memastikan approval. Angka & simulasinya dibantu agent kami bersama bank rekanan; saya catat datanya ya.',
+      answerEn: 'Mortgage eligibility and the exact instalment are decided by the bank (typically instalment ≤30–35% of income, tenor up to 15–20 years, 10–20% down payment) — I cannot confirm approval. Our agent will run the simulation with partner banks; I have noted your details.' },
+    // M210 (sim S11): WNA menyewa — beda dari WNA MEMILIKI (SHM) di bawah.
+    { re: /\b(?:wna|foreigner\w*|expat\w*|orang\s+asing|warga\s+negara\s+asing)\b[^.?!]{0,40}\b(?:sewa|rent|menyewa|long\s+term|visa|kitas|kitap|izin\s+tinggal)\b|\b(?:visa|kitas|kitap)\b[^.?!]{0,30}\b(?:sewa|rent|syarat|perlu|butuh|require)\b/,
+      answer: 'WNA boleh menyewa properti di Indonesia tanpa batasan seperti pembelian, Kak. Yang biasanya diminta pemilik: paspor + izin tinggal (KITAS/KITAP atau visa yang berlaku) dan kontrak sewa; sebagian pemilik minta pembayaran tahunan di muka. Untuk pajak & syarat detailnya, saya catat dan agent kami yang akan konfirmasi.',
+      answerEn: 'Foreigners may rent property in Indonesia without the restrictions that apply to buying. Owners typically ask for a passport plus a valid stay permit (KITAS/KITAP or visa) and a lease; some require the year paid upfront. For tax and the finer requirements I have noted your question and our agent will confirm.' },
+    // M210 (sim S14): permintaan dokumen/scan → agent yang mengirim, bukan AI.
+    { re: /\b(?:scan|salinan|copy|fotokopi|softcopy|kirim\w*|minta|lihat)\b[^.?!]{0,25}\b(?:sertifikat\w*|shm|shgb|imb|pbg|pbb|akta|dokumen\w*|berkas)\b|\b(?:sertifikat\w*|imb|pbg|pbb|dokumen\w*)\b[^.?!]{0,25}\b(?:scan|salinan|copy|fotokopi|bisa\s+dikirim|dikirim)\b|\btunggakan\b/,
+      answer: 'Salinan/scan dokumen (sertifikat, IMB/PBG, PBB terakhir, dan status tunggakan) dipegang pemilik dan hanya dibagikan lewat agent kami setelah verifikasi — saya catat permintaannya ya, Kak. Semua dokumen juga dicek notaris/PPAT sebelum transaksi.',
+      answerEn: 'Copies of the documents (certificate, building permit, latest property tax, and any arrears) are held by the owner and shared through our agent after verification — I have noted your request. Every document is also checked by the notary/PPAT before the transaction.' },
+    // M210 (sim S13): harga di data berbeda dari yang customer ingat.
+    { re: /\b(?:kok|kenapa|mengapa)\b[^.?!]{0,25}\b(?:naik|beda|berubah|nambah|mahal)\b|\b(?:data|harga)\w*\b[^.?!]{0,20}\b(?:yang\s+benar|betul|valid|update|terbaru)\b|\bnaik\s+ya\b/,
+      answer: 'Yang berlaku adalah harga yang tercatat di data agent kami hari ini, Kak — harga bisa berubah kalau pemilik memperbarui penawarannya. Saya catat harga yang Kakak ingat, biar agent kami yang konfirmasi langsung ke pemilik.',
+      answerEn: 'The price recorded in our agent\'s data today is the valid one — owners sometimes update their asking price. I have noted the figure you remember so our agent can confirm it with the owner.' },
     { re: /\bkomisi\w*\b|\bfee\s+agen\w*\b/,
       answer: 'Komisi agen umumnya ditanggung PENJUAL (lazimnya 2-3% dari harga transaksi, sesuai kesepakatan penjual-agent); pembeli tidak dikenakan komisi. Untuk sewa, umumnya satu bulan sewa dari pemilik. Agent kami bisa jelaskan detailnya.' },
     { re: /\bbiaya\s+(?:tersembunyi|lain|tambahan|siluman)\b|\bhidden\s+(?:cost|fee)\b/,

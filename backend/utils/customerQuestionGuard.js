@@ -115,6 +115,9 @@ const VIEWING_REQUEST_RE = new RegExp(
   + '|'
   + '\\b(?:survei|survey|viewing|ketemuan)\\b[^.?!]{0,30}?\\b(?:dulu|dlu|dl|yuk|ayo|dong|saja|aja)\\b'
   + '|'
+  // M210 (sim S2): pesan satu kata "survei" / "viewing" adalah permintaan survei.
+  + '^\\s*(?:survei|survey|viewing|ketemuan|site\\s*visit)\\s*[.!?]?\\s*$'
+  + '|'
   // M196: berbagai cara customer mengajak survei — "ayo ketemuan", "lihat langsung",
   // "cek unitnya", "mampir ke lokasi", "jadwalkan viewing", "meet up".
   + '\\b(?:ayo|yuk|yok)\\s+(?:ketemu\\w*|lihat|liat|cek|survei|viewing|mampir|datang)'
@@ -296,7 +299,13 @@ const HARD_STOP_RE = new RegExp(
   // M204 (sim N6/N5): "Oke ditunggu ya." / "nanti kami kabari" = menutup sambil menunggu kabar.
   + "|\\bditunggu\\b(?:\\s+(?:ya|kabarnya|infonya))?|\\bnanti\\s+(?:saya|sy|kami|aku)\\s+(?:kabari|hubungi|infokan|konfirmasi)\\b"
   // M208 (sim R3/R6): keputusan ditunda / minta dikabari = menutup giliran ini.
-  + "|\\b(?:diskusi|rundingan|rembug|konsul\\w*|koordinasi)\\b[^.?!]{0,25}\\b(?:dulu|dlu)\\b|\\bkabari\\s+(?:saja|aja|ya|kalau|klo|kl|kalo)\\b|\\bkabari\\s*[.!]?\\s*$",
+  + "|\\b(?:diskusi|rundingan|rembug|konsul\\w*|koordinasi)\\b[^.?!]{0,25}\\b(?:dulu|dlu)\\b|\\bkabari\\s+(?:saja|aja|ya|kalau|klo|kl|kalo)\\b|\\bkabari\\s*[.!]?\\s*$"
+  // M210 (sim S10): "Ok sip." / "sip" / "oke deh" = penutup santai.
+  + "|^\\s*(?:ok|oke|okay|baik|siap|sip|sipp+)\\s*(?:sip|sipp+|deh|ya|yaa|kak|bos|banget)?\\s*[.!]?\\s*$"
+  // M210 (sim S12): "saya tunggu agentnya menghubungi" = menutup sambil menunggu agent.
+  + "|\\b(?:saya|sy|aku|kami)\\s+tunggu\\b|\\btunggu\\s+(?:kabar|info|konfirmasi)\\w*\\b"
+  // M210 (sim R6): "Oke saya pikir dulu ya" / "pikir-pikir dulu" = menunda keputusan, bukan slot baru.
+  + "|\\bpikir(?:[-\\s]?pikir)?\\b[^.?!]{0,15}\\b(?:dulu|dlu)\\b|\\b(?:saya|sy|aku)\\s+pikir(?:kan)?\\s+(?:dulu|dlu)\\b",
   'i'
 );
 const CLOSING_SIGNAL_RE = new RegExp(`${HARD_STOP_RE.source}|${THANKS_RE.source}`, 'i');

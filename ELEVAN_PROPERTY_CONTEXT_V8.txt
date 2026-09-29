@@ -3,7 +3,7 @@
   Dibuat  : 15 Juni 2026
   Update  : 17 September 2026 (M188–M203) — ⭐ V19: 14 section (Overview …
             Summary) masing-masing dibuka blok `RINGKAS V19` berisi status
-            TERKINI; teks lama di bawahnya = riwayat. Suite 3314/3314.
+            TERKINI; teks lama di bawahnya = riwayat. Suite 3343/3343.
             PRIMARY=claude (Haiku 4.5) + SKILL PLATFORM `CLAUDE_SKILL_ID`
             (M203, poin 30 paling bawah): .md lokal TIDAK dikirim ke Claude;
             provider lain tetap memakai `AI_SKILL_CALL`. File ini dibuat
@@ -4354,7 +4354,7 @@ PRINSIP DEBUG
   CATATAN AKHIR UNTUK CLAUDE CODE
 ================================================================================
 
-  ⭐ V19: nomor M terakhir = M207 (poin 34). Blok `RINGKAS V19` di awal tiap section
+  ⭐ V20: nomor M terakhir = M210 (poin 37). Blok `RINGKAS V19` di awal tiap section
     adalah kebenaran terkini; bila bertentangan dengan teks di bawahnya, blok
     RINGKAS yang menang. Claude memakai skill PLATFORM (CLAUDE_SKILL_ID), bukan
     .md lokal; jangan "memperbaiki" ini dengan mengirim .md ke Claude.
@@ -6280,6 +6280,127 @@ penuh untuk pertama kalinya sejak berbulan-bulan.
      Pin cap: tests total ≤15.000 (M186), selalu-dimuat ≤13.200; publish-claude-skill.js
      MAX_MD_CHARS 15.000 → versi platform baru skver_016TrXKm2PSF1nUQeCJ4recq (latest).
      SUITE 3314/3314, lint 0 error.
+
+ 35. ⭐ M208 (21 Sep 2026) — 10 SESI BARU R1-R10 + REGRESI P/Z/K/N: 25 PERBAIKAN PRIVATE AGENT.
+     Arahan: uji private dengan 10 simulasi baru + simulasi lama; perbaiki bila AI gagal/lupa/
+     salah mengenali (pertanyaan, keluhan, permintaan, penolakan, pilihan, kebutuhan).
+     Skenario baru scripts/sim-scenarios-private-r10.js (ralat budget, banding unit, tolak KPR→
+     cash, video call, maps, kursi roda/dekat RS, alamat spesifik, "masih ada?" sesudah summary,
+     villa harian, dua kota, pesan ganda, lupa pilihan, investor kos, keluhan layanan, nego).
+     Perbaikan (log: logs/sim-private-{r10,private,z20,k5,n10}-m208.md):
+       • detectBudget/areaEmptyAlreadySaid: "Maaf salah ketik, maksudnya 500 juta" → cek ulang
+         (jawaban "belum ada yang sesuai budget" untuk budget LAMA tidak menahan gerbang).
+       • Q8: "Masuk awal Oktober, 1 tahun" → durasi dibuang sebelum parse (dulu +1 tahun).
+       • propertyKeywordFilter: "rumah sewa … dekat rumah sakit" ditolak off-topic (RUMAH_
+         EXCLUSIONS membuang SEMUA "rumah"; CLEAR_NON_PROPERTY "sakit") → frasa kedekatan
+         dibuang dulu; hanya "rumah" di dalam frasa pengecualian yang diabaikan.
+       • stripCommercialUsePhrases + detektor transaksi/tipe: "dijadikan/kamar/usaha/okupansi
+         kos" bukan tipe kos & bukan sewa; aturan kos→rent memakai teks yang sudah dibersihkan.
+       • customerQuestionGuard: "belum ada kabar/jawaban/telpon" BUKAN penutup; "diskusi/
+         rundingan/koordinasi … dulu", "kabari kalau/saja/ya", "kabari." = penutup; "pikir/
+         mikir dulu" tetap menjelajah; THANKS_RE "trima kasih" (⚠️ sempat memecahkan "trma ksh").
+       • conversationRepairGate: keluhan layanan ("agent belum telpon", "belum ada kabar") →
+         maaf + serah-terima; kind 'slow' ("kok lama balasnya", "lama banget balasnya") → maaf
+         lama menunggu (dicek SEBELUM repetition/general).
+       • whatsappAIService: dua kota "Surabaya atau Sidoarjo" → tanya kota mana dulu
+         (city_choice_gate; riwayat DB memuat pesan saat ini → dikecualikan); "area mana saja/
+         bebas/terserah" → ④ dianggap terpenuhi, mulai dari area berstok terbanyak
+         ("Area bebas ya, Kak — saya mulai dari *X*"); "ada apa saja?" tetap tanya cakupan;
+         penutup tidak dibaca sebagai pilihan (tryListingSelectionAnswer).
+       • listingSelectionGate: "Sabtu nggak jadi, Minggu aja jam yang sama" (klausa hari batal
+         dibuang, "jam yang sama" dari jadwal terakhir); tawaran VIDEO CALL menunggu jadwal &
+         balasan menyebut "Video call"; "nggak mau survei online, mau datang langsung" bukan
+         penolakan; ATTR bertingkat/tingkat/kolam.
+       • Follow-up (controller): alamat yang disebut customer ("Jl. Rungkut Menanggal No. 38")
+         → kartu itu; "yang kemarin masih tersedia?" sesudah summary → unit terpilih (bukan
+         sesi baru; sapaan + pertanyaan unit tidak dianggap greeting); "survei besok tetap ya?"
+         tanggal sama → "Tetap" (bukan "diubah"); tawaran harga "Kemahalan. 400 juta boleh?" →
+         dicatat untuk agent; tanggal+jam sukarela sesudah "surveinya kapan pun Kakak siap" →
+         dijadwalkan; no_cards_yet mengalah pada pilihan/recall lama (P14/P3); reoffer area
+         hanya SEKALI (P7); pertanyaan ketersediaan unit terpilih bukan minta listing.
+       • Ekstraktor kebutuhan (Fase 1, termasuk pesan pembuka): "harus satu lantai, akses
+         kursi roda" → Prefer; "kalau bertingkat saya nggak mau" → Hindari "Tidak mau
+         bertingkat" (label "Jauh dari" hanya untuk tempat); Prefer dari ekstraktor digabung ke
+         brief tanpa membocorkan item "jauh dari X".
+       • terminologyAnswerGate: okupansi/tingkat hunian → catat, tim agent.
+       • areaAvailabilityService STOP: sakit, kursi, akses, dekat, berisik, bertingkat, kolam…
+     Tes: tests/privateAgentSimsR10M208.test.js (29). SUITE 3343/3343, lint 0 error. Metrik:
+     R10 scriptLeaks 4→2, noSummaryAtClose 7→4; P-set 14→13 / cardRepeats 40 (tetap);
+     Z20, K5, N10 tidak memburuk. Belum masuk .md (cap 15.000 sudah 14.990): aturan tawaran
+     harga, alamat→kartu, area bebas, dua kota — untuk jalur LLM masih mengandalkan fakta.
+     ⚠️ 22 Sep 2026: kode M208 sempat HILANG karena pemilik menimpa backend dengan versi
+     GitHub (snapshot pasca-M207, semua .js jadi CRLF). Dipulihkan dengan menjalankan ulang
+     skrip patch scratchpad p11-p22 (anchor-based) sesudah normalisasi CRLF→LF 164 berkas;
+     hasil identik (suite 3343/3343, metrik 5 set sim sama persis). Pelajaran: simpan
+     skrip patch per-M di scratchpad/repo sampai perubahan itu masuk commit GitHub.
+     Sisa yang disengaja: R6 pesan ganda (dedup ada di webhook, bukan sim); R2 "nggak mau
+     KPR, cash saja" dijawab pertanyaan target (dicatat, tidak ditanya lagi).
+
+ 36. M209 (22 Sep 2026) — SKRIP WAWANCARA SESUDAH KARTU DIHENTIKAN (37 → 1 kebocoran).
+     Arahan: "Perbaiki semua skrip yang masih bocor" (penanda SKRIP-BACKEND runner: "Ada
+     target kapan proses belinya", "tinggal bersama siapa saja", "terjangkau/menengah/
+     eksklusif", "Prioritas Tinggi", dll.). Temuan: 3 kelas.
+       (1) Badge "🔥 Prioritas Tinggi" di header summary = penilaian INTERNAL agent yang ikut
+           terkirim ke customer → dihapus dari teks customer (brief.priority tetap tersimpan).
+       (2) Info SUKARELA sesudah kartu/pilihan/jadwal/jawaban atribut ("Budget 450 juta",
+           "Bayar cash", "Masuk Januari", "kejauhan dari kerja") dibalas pertanyaan slot
+           berikutnya → #postCardAcknowledge: catat + pintu terbuka ("Dicatat ya, Kak 📝 Kalau
+           ada yang menarik dari unit di atas, sebut nomornya — atau mau saya carikan yang
+           lebih pas?"; varian kedua juga pertanyaan terbuka). Berlaku juga saat area/kota
+           sudah dinyatakan kosong & tawaran ulang sudah diberikan (ajak sebut area).
+           Budget sesudah ekor kartu "boleh sebutkan budget…" = minta penyaringan ulang →
+           gerbang area (kartu tambahan dalam budget / "belum ada yang sesuai budget").
+       (3) Yang SENGAJA dipertahankan: customer PASIF yang menjawab pertanyaan slot AI
+           ("Rencananya masuk bulan apa?" → "Masuk Januari") tetap dilanjutkan pertanyaan
+           berikutnya — kontrak M202 "AI bertanya bila customer tidak punya agenda", dikunci
+           tes sim 18/19 (privateAgentSimulations15). Ini satu-satunya kebocoran tersisa
+           (Z10 C4). Mengubahnya = mengubah kontrak M202, butuh keputusan pemilik.
+     Detail: pertanyaan slot dikenali dari kalimat AI terakhir (regex frasa Q1-Q14, emoji
+     penutup 📅/🛏️ dibuang sebelum cek "?"); Q8 sewa (satu kali) & slot wajib tetap boleh
+     ditanya. asksAboutNonexistentUnit + AC/kasur/wifi/balkon ("Ada yang sudah ada AC dan
+     kasur?" saat stok kosong → belum ada unit). Hasil: R10/N10/K5/P23 = 0 kebocoran, Z20 = 1;
+     multiQ 4/9 → 1/0. SUITE 3343/3343, lint 0 error. Log: logs/sim-private-*-m209.md.
+
+ 37. M210 (29 Sep 2026) — 15 SESI BARU (S1–S15): PENUTUP, DP, TYPO, KONTEKS SEWA HARIAN.
+     Arahan: "Testing private dengan 15 simulasi chat antara AI dan customer; perbaiki semua
+     kendala, error, bugs, kehilangan konteks, gagal respon dengan tepat."
+     Skenario: satu pesan panjang semua slot, balasan satu kata, typo berat, menolak budget,
+     salah sambung, dua orang satu chat, tiga kali ganti kota, 3→5→8 kartu + banding harga,
+     KPR (bank/penghasilan/tenor), sewa hari ini, ekspat campur bahasa, titipan properti,
+     keluhan harga berubah, dokumen legal lengkap, ringkas ulang + ubah slot.
+     PERBAIKAN KODE (batch p35–p40):
+       (1) tryPostPickFallback menelan penutup: "ok" dibalas "Boleh diulang maksudnya?" —
+           sekarang return null bila customerSignalsClosing → lolos ke gerbang penutup/summary.
+       (2) HARD_STOP_RE + "saya/kami tunggu", "tunggu kabar/info/konfirmasi", "pikir(-pikir)
+           dulu". ⚠️ "mikir-mikir dulu" WAJIB tetap BUKAN penutup (menjelajah, dikunci tes).
+       (3) "Bisa bayar DP dulu?" / "tanda jadi berapa?" tanpa kata KPR sebelumnya didiamkan
+           (dibalas pertanyaan area) → PROCESS_QA baru: booking fee menahan unit, nominal dari
+           pemilik, pembayaran SELALU lewat agent + notaris, tidak pernah ke perorangan.
+       (4) #postCardAcknowledge return null pada penutup — "Makasih." tidak lagi ditimpa ack
+           "sebut nomornya".
+       (5) KEHILANGAN KONTEKS sewa harian (Z17): "Untuk 3 malam, tanggal 20-23 Oktober" tidak
+           mengisi hasMoveInDate, jadi pengecualian M193 (terima kasih + Q8 sewa tertunda)
+           membalas penutup dengan pertanyaan Q5 "yang dihindari". Kini Q8 dianggap TIDAK
+           tertunda bila tanggal pernah disebut customer di riwayat (parseCustomerDate).
+           ⛔ Percobaan pertama memakai penjaga "sudah memilih unit" — SALAH, melanggar
+           kontrak M193/tes 13 privateAgentSimulations15 (pilih no 1 lalu "trma ksh" MEMANG
+           masih ditanya Q8). Penjaga yang benar = tanggal, bukan pilihan.
+       (6) isAttributeQuestion memperluas singkatan/typo dulu ("srtfikatnya apa?").
+     METRIK RUNNER yang ikut diperbaiki (dulu menyembunyikan/memalsukan masalah):
+       ULANG-KARTU dihitung hanya bila balasan memang blok KATALOG (alamat unik ≥2 atau ada
+       penomoran) — jawaban atribut "Untuk *X*: sertifikatnya SHM" bukan kirim ulang kartu;
+       multiQ per KALIMAT dan kalimat contoh ("Misalnya kolam renang, gym…?") tidak dihitung
+       sebagai pertanyaan kedua; summary wajib SEKALI per sesi (vendor_lead_gate &
+       closing_without_cards tidak berutang summary); brief agent bebas dari batas 700 char;
+       "17 min"/"16 km" tidak lagi dibaca sebagai harga 17 miliar.
+     HASIL 7 set sim (S15/R10/N10/K5/P23/Z20/M201/prod0915): scriptLeaks 0 kecuali Z20 = 1
+     (kasus pasif M202 yang SENGAJA dipertahankan), placeholder 0, priceInvented 0, multiQ 0,
+     cardRepeats 5 (semuanya customer minta KEMBALI ke area sebelumnya — benar), tooLong 1
+     (perbandingan SHM vs Surat Hijau 770 char, informatif), noSummaryAtClose 1 (M193 sengaja).
+     SUITE 3354/3354, lint 0 error. Tes baru: tests/privateAgentSimsS15M210.test.js (11).
+     ⚠️ privateAgentSimsR10M208 pernah merah hanya karena TANGGAL BERGANTI (patokan literal
+     "27 September 2026") — kini hari Minggu terdekat dihitung dinamis. Jangan patok tanggal.
+     Log: logs/rerun-sim-scenarios-*.md, logs/sim-private-s15-final.md.
 
  17. ⭐ M189 (12 Sep 2026) — TIGA DOC BACKUP JULI KEMBALI KE chat_gpt_responds.
      Arahan: 15-date-money ≤300 char; 10-playbooks & 19-landmark "diolah".

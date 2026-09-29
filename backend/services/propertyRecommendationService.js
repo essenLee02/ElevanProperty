@@ -682,8 +682,9 @@ function stripNegatedTypePhrases(text = '') {
 }
 
 function detectCanonicalType(txt = '') {
+  const _raw = (() => { try { return require('../utils/lazyChatNormalizer').expandAbbreviations(String(txt || '')); } catch (_) { return String(txt || ''); } })();   // M210 (sim S3)
   const w = stripLandSizePhrases(stripCommercialUsePhrases(   // M188: "tanah minimal 120 m2" bukan tipe
-    stripMovingFromPhrases(stripAmbiguousRumah(stripNearPhrases(stripNegatedTypePhrases(String(txt || '').toLowerCase()))))
+    stripMovingFromPhrases(stripAmbiguousRumah(stripNearPhrases(stripNegatedTypePhrases(_raw.toLowerCase()))))
   ));
   if (/\bkondotel\b|\bcondotel\b/.test(w))                                    return 'kondotel';
   if (/\bmansion\b|\brumah\s+mewah\b/.test(w))                                return 'mansion';
@@ -725,7 +726,9 @@ function stripRejectedTransactionPhrases(text) {
 
 function detectCanonicalTransaction(txt = '') {
   // M208: "beli rumah untuk dijadikan kos-kosan" → kata kos = PENGGUNAAN, bukan sewa.
-  const w = stripRejectedTransactionPhrases(stripInvestmentIntentPhrases(stripCommercialUsePhrases(String(txt || '').toLowerCase())));
+  // M210 (sim S3): singkatan/typo diperluas dulu ("dijul" → dijual).
+  const _rawTx = (() => { try { return require('../utils/lazyChatNormalizer').expandAbbreviations(String(txt || '')); } catch (_) { return String(txt || ''); } })();
+  const w = stripRejectedTransactionPhrases(stripInvestmentIntentPhrases(stripCommercialUsePhrases(_rawTx.toLowerCase())));
   if (/\b(sewa|menyewa|penyewaan|disewa|disewakan|kontrak|ngontrak|kos|kost|kosan|kostan|ngekos|ngekost|ngekosan|indekos|indekost|rent|rental|lease|booking|book|pesan|reservasi)\b/.test(w)) return 'rent';
   if (/\b(beli|membeli|pembelian|dibeli|jual|dijual|buy|purchase|invest|investasi)\b/.test(w)) return 'sale';
   return null;
@@ -853,7 +856,8 @@ function stripLandSizePhrases(text = '') {
 }
 
 function detectBuildingType(message = '') {
-  const text = normalizeText(stripNegatedTypePhrases(message));   // M202
+  const _rawBt = (() => { try { return require('../utils/lazyChatNormalizer').expandAbbreviations(String(message || '')); } catch (_) { return message; } })();   // M210
+  const text = normalizeText(stripNegatedTypePhrases(_rawBt));   // M202
   // Strip "dekat X" anchors, ambiguous "rumah makan/…", commercial use-phrases
   // ("dipakai kantor", "buat usaha"), AND "pindah dari X" origin phrases so none
   // pollutes building-type detection (a restaurant anchor must not become house;
@@ -864,7 +868,7 @@ function detectBuildingType(message = '') {
 }
 
 function detectTransactionType(message = '') {
-  const raw  = normalizeText(message);
+  const raw  = normalizeText((() => { try { return require('../utils/lazyChatNormalizer').expandAbbreviations(String(message || '')); } catch (_) { return message; } })());   // M210
   // M187: includesAny() mencocokkan SUBSTRING, jadi "untuk investasi DISEWAKAN"
   // terbaca 'sewa' -> tx=rent dan katalog SEWA dikirim ke investor yang mau
   // BELI (simulasi 11 Sep). Frasa rencana-menyewakan dibuang dulu (helper yang
@@ -932,7 +936,9 @@ const AVOIDANCE_CONTEXT = new RegExp(
 );
 
 function detectLocation(message = '') {
-  const text = normalizeText(message);
+  // M210 (sim S3): "di sda" (Sidoarjo) tidak dikenali karena filters dibangun dari teks MENTAH —
+  // perluas singkatan di sini supaya satu funnel saja yang perlu tahu soal singkatan.
+  const text = normalizeText((() => { try { return require('../utils/lazyChatNormalizer').expandAbbreviations(String(message || '')); } catch (_) { return message; } })());
 
   // "kisaran" sebagai kata keterangan harga ("kisaran 900K", "kisaran Rp 1,5 juta",
   // "kisaran 2M") BUKAN nama kota Kisaran (Sumatera Utara). Strip sebelum deteksi

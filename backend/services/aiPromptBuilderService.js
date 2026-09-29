@@ -1836,6 +1836,8 @@ function extractQualificationState(history = [], currentMessage = '') {
        * Anda Punya* belum ada". Kalimat yang MENANYAKAN cakupan (lain/mana/
        * punya/dimana/apa saja/tanda tanya) dilewati tanpa menandai Q2c selesai. */
       const isCoverageQuestion = /\?|\b(lain|lainnya|mana|dimana|di\s*mana|punya|tersedia|apa\s+saja|selain)\b/i.test(candidateDistrict)
+        // M210 (sim S7): "Eh, Sidoarjo saja." = ganti KOTA, bukan nama area.
+        || /^\s*(?:eh|oh|hmm+|ya\s+sudah|udah|oke?|baik)\b/i.test(candidateDistrict)
         // M204: "Area yang rame" / "yang strategis" = PREFERENSI, bukan nama area (sim N8: district "Ng Rame").
         || /\b(?:yang|yg)\s+(?:rame|ramai|strategis|sepi|tenang|aman|nyaman|bagus|dekat|deket|murah|elit|elite|premium|bebas\s+banjir)\b|^\s*(?:rame|ramai|strategis|sepi|tenang|aman|nyaman|bagus|murah|elit|elite|premium)\b/i.test(candidateDistrict);
 

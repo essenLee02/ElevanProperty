@@ -75,14 +75,24 @@ const AVAILABILITY_RE = new RegExp([
  * apartemen di Pakuwon Surabaya, AI bisa berikan 5 data, selama jumlah data itu
  * possible." Dibatasi 10 supaya satu balasan tidak jadi banjir pesan.
  */
+/* M210 (29 Sep 2026) — permintaan jumlah tanpa kata benda: "Kirim 2.", "Tambah jadi 5 ya",
+ * "Coba semua deh, 8", "minta 3 aja". Dulu hanya "3 listing/unit/pilihan" yang terbaca, jadi
+ * "Kirim 2." jatuh ke gerbang lain dan customer tidak pernah menerima kartu tambahan (sim S1/S6/S7/S8). */
 const COUNT_RE = /\b(\d{1,2})\s*(?:data|listing|unit|properti|apartemen|rumah|pilihan|opsi)\b/i;
+const COUNT_VERB_RE = /\b(?:kirim\w*|kasih|tampilkan|lihat|liat|minta|mau|tambah\w*|jadi\w*|coba|boleh)\b[^.?!\d]{0,20}(\d{1,2})\b/i;
+const COUNT_WORD_RE = /\b(?:dua[-\s]?dua\w*|keduanya|semua\w*)\b/i;
 
 const MAX_REQUESTED = 10;
 const DEFAULT_SHOWN = 2;
 
 function detectRequestedCount(message) {
-  const m = String(message || '').match(COUNT_RE);
-  if (!m) return null;
+  const t = String(message || '');
+  // Jam/tanggal survei bukan jumlah listing ("jam 2", "Sabtu jam 10", "tanggal 5").
+  if (/\b(?:jam|pukul|tanggal|tgl)\s*\d/i.test(t) || /\b\d{1,2}\s*(?:pagi|siang|sore|malam|am|pm)\b/i.test(t)) return null;
+  // Ukuran/luas/kamar juga bukan jumlah listing.
+  if (/\b\d{1,2}\s*(?:m2|m²|kamar|kt\b|km\b|lantai|orang|juta|jt|miliar|m\b|ribu|tahun|bulan|malam|hari)\b/i.test(t)) return null;
+  const m = t.match(COUNT_RE) || t.match(COUNT_VERB_RE);
+  if (!m) return COUNT_WORD_RE.test(t) ? MAX_REQUESTED : null;
   const n = parseInt(m[1], 10);
   if (!Number.isFinite(n) || n < 1) return null;
   return Math.min(n, MAX_REQUESTED);
@@ -510,6 +520,7 @@ module.exports = {
   composeBudgetEmptyReply,
   customerAsksAvailability,
   detectRequestedCount,
+  COUNT_WORD_RE,
   humanPrice,
   DEFAULT_SHOWN,
   MAX_REQUESTED,

@@ -53,7 +53,7 @@ const { getAgentIdentity,
         buildAgentIdentityContext }                 = require('./agentIdentityService');
 const { tryCityAvailabilityAnswer,
         tryAreaAvailabilityAnswer,
-        customerAsksAvailability }                  = require('../utils/areaAvailabilityGate');
+        customerAsksAvailability, detectRequestedCount }   = require('../utils/areaAvailabilityGate');   // M210
 const { resolveCityAndArea, findAreaInText,
         findAreaCandidatesInText }                  = require('./areaAvailabilityService');
 const { tryListingSelectionAnswer, tryPendingViewingConfirmation, tryPendingViewingSchedule, tryPostPickFallback, lastAiMessage, isCardMessage, lastSentAreaLabel } = require('../utils/listingSelectionGate');
@@ -306,14 +306,17 @@ function buildQualifyReply(filters, message, agentName, contextSource, history =
   if (!tx && !loc && !spec) {
     if (!type) {
       // Benar-benar kosong
+      // M210 (sim S2/S5): SATU pertanyaan per pesan (aturan pemilik) — sapaan lama mengirim 4
+      // pertanyaan bernomor sekaligus. Tipe/kota/area menyusul di giliran berikutnya.
       question = id
-        ? `Halo! 😊 Terima kasih sudah menghubungi *${appName}*.\n\nSaya dengan senang hati akan membantu Anda menemukan properti yang tepat. Sebelum saya carikan pilihan terbaik, boleh saya tanyakan beberapa hal?\n\n1️⃣ Apakah Anda sedang cari untuk *sewa* atau *beli*?\n2️⃣ Tipe properti apa yang Anda inginkan?\n   _Rumah, Apartemen, Villa, Kos-kosan, Ruko, Kantor, Gudang, dll_ 🏡\n3️⃣ Di *kota* mana? _(Contoh: Surabaya, Malang, Bali)_\n4️⃣ Area/kawasan atau patokan lokasinya di mana? _(Contoh: Pakuwon, dekat PTC)_\n\nSemakin lengkap infonya, semakin tepat rekomendasi yang bisa saya berikan 🙏`
-        : `Hello! 😊 Thank you for reaching out to *${appName}*.\n\nI'd love to help you find the perfect property. Before I start searching, may I ask a few things?\n\n1️⃣ Are you looking to *rent* or *buy*?\n2️⃣ What type of property do you have in mind?\n   _House, Apartment, Villa, Boarding House, Shophouse, Office, Warehouse, etc._ 🏡\n3️⃣ Which city?\n4️⃣ Which area or nearby landmark?\n\nThe more details you share, the better I can match your needs 🙏`;
+        ? `Halo! 😊 Terima kasih sudah menghubungi *${appName}*.\n\nSupaya saya bisa carikan yang tepat — Kakak sedang cari untuk *sewa* atau *beli*? 🏡`
+        : `Hello! 😊 Thanks for reaching out to *${appName}*.\n\nSo I can find the right match — are you looking to *rent* or *buy*? 🏡`;
     } else {
       // Type diketahui, sisanya kosong
+      // M210: satu pertanyaan — transaksi dulu; kota & area menyusul (KASUS 4/5).
       question = id
-        ? `Terima kasih! 😊 Untuk *${typeLbl}* yang Anda cari, saya butuh beberapa informasi tambahan:\n\n1️⃣ Apakah rencananya untuk *sewa* atau *beli*?\n2️⃣ Di *kota* mana? _(Contoh: Surabaya, Malang, Bali)_\n3️⃣ Area/kawasan atau patokan lokasinya? _(Contoh: Pakuwon, dekat PTC)_\n\nSilakan ceritakan kebutuhannya, saya siap bantu! 🏡`
-        : `Thank you! 😊 For the *${typeLbl}* you're looking for, I need a bit more information:\n\n1️⃣ Are you planning to *rent* or *buy*?\n2️⃣ Which city?\n3️⃣ Which area or nearby landmark?\n\nPlease share the details and I'll find the best match! 🏡`;
+        ? `Terima kasih! 😊 Untuk *${typeLbl}* yang Kakak cari — rencananya *sewa* atau *beli*? 🏠`
+        : `Thank you! 😊 For the *${typeLbl}* you're looking for — are you planning to *rent* or *buy*? 🏠`;
     }
   }
 
@@ -1264,7 +1267,7 @@ ${cityHit.reply}`);
      * isBareAvailabilityQuestion di jalur Private Agent (M193). */
     const { isBareAvailabilityQuestion: _bareAvail } = require('../utils/listingSelectionGate');
     const bareAfterCards = listingsAlreadyShown && _bareAvail(message);
-    const gateShouldSpeak = (customerAsksAvailability(message) && !bareAfterCards)
+    const gateShouldSpeak = ((customerAsksAvailability(message) || Boolean(detectRequestedCount(message))) && !bareAfterCards)   // M210: "Kirim 3", "Tambah jadi 5"
       || ((fourSlotsKnown || areaKnownWithoutCity) && !listingsAlreadyShown && !areaEmptyAlreadySaid);
 
     /* M208 (sim R5) — AREA BEBAS ("area mana saja", "terserah", "bebas"): slot ④ dianggap
@@ -1272,7 +1275,8 @@ ${cityHit.reply}`);
     let flexibleAreaNote = '';
     let realAreaEff = realArea;
     // "area mana saja" / "bebas" / "terserah" boleh muncul tanpa AI bertanya area lebih dulu (sim R5).
-    const flexibleNow = (qs.q2cDeclined || /\b(?:area|daerah|kawasan|lokasi)?\s*(?:mana\s*(?:saja|aja|pun)|bebas|terserah|fleksibel|flexible|di\s*mana\s*(?:saja|aja))\b/i.test(String(message)))
+    // M210 (sim S7): "Eh, Sidoarjo saja" (ganti kota) bukan "area mana saja" — kata 'saja' saja tidak cukup.
+    const flexibleNow = (qs.q2cDeclined || /\b(?:area|daerah|kawasan|lokasi)\s*(?:mana\s*(?:saja|aja|pun)|bebas|terserah|fleksibel|flexible)\b|\b(?:mana\s*(?:saja|aja|pun)|bebas|terserah|fleksibel)\s*(?:aja|saja)?\s*$|\bdi\s*mana\s*(?:saja|aja)\b/i.test(String(message)))
       && !/\bapa\s+(?:saja|aja)\b|\bada\s+(?:apa|di\s+mana)\b/i.test(String(message));   // "Sidoarjo ada apa saja?" = tanya cakupan, bukan area bebas
     if (!realAreaEff && flexibleNow && realCity && txDb && typeDb && agentUserId && backendMayCompose && !listingsAlreadyShown) {
       try {

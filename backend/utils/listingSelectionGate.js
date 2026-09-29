@@ -485,9 +485,14 @@ const ATTR_RE = {
 const ATTR_QUESTION_RE = /\?|\b(apa|berapa|brp|apakah|gimana|bagaimana|kah|bisa|boleh|tolong|minta|kirim\w*|share)\b|\b(nggak|ngga|gak|tidak|tdk|sudah|belum)\s*\??\s*$/i;
 
 function isAttributeQuestion(message) {
-  const t = String(message || '');
-  if (!ATTR_QUESTION_RE.test(t)) return false;
-  return Object.values(ATTR_RE).some((re) => re.test(t));
+  // M210 (sim S3): "srtfikatnya apa?" / "hrga brp?" — perluas singkatan & typo dulu,
+  // supaya pertanyaan atribut tidak jatuh ke gerbang lain hanya karena salah ketik.
+  const raw = String(message || '');
+  const t = (() => {
+    try { return require('./lazyChatNormalizer').expandAbbreviations(raw); } catch (_) { return raw; }
+  })();
+  if (!ATTR_QUESTION_RE.test(t) && !ATTR_QUESTION_RE.test(raw)) return false;
+  return Object.values(ATTR_RE).some((re) => re.test(t) || re.test(raw));
 }
 
 async function findRowForCard(userId, card) {
@@ -585,7 +590,9 @@ async function answerCardAttribute({ message, card, userId = null, isId = true }
     parts.push(isId ? 'soal nego saya tidak bisa menjanjikan angkanya — nanti dibantu langsung oleh agent kami; kalau Kakak punya angka yang diharapkan, saya catat' : 'I cannot promise a negotiated figure — our agent will handle that; tell me your target and I will note it');
   }
   if (/\b(imb|pbg|pbb|denah|floor\s*plan|legalitas|dokumen\w*|berkas|surat[-\s]surat|ajb|akta)\b/i.test(t)) {
-    const c = row && row.certificateType ? String(row.certificateType).toUpperCase() : '';
+    // M210 (sim S14): bila baris sertifikat SUDAH ditambahkan di atas, jangan ulangi di baris dokumen.
+    const certAlready = parts.some((p) => /sertifikat|certificate/i.test(String(p)));
+    const c = (!certAlready && row && row.certificateType) ? String(row.certificateType).toUpperCase() : '';
     parts.push(isId
       ? `${c ? `sertifikat tercatat *${c}*; ` : ''}dokumen lain (IMB/PBG, PBB, denah, salinan sertifikat) dipegang agent kami — saya minta agent mengirimkannya ke Kakak`
       : `${c ? `certificate on file: *${c}*; ` : ''}other documents (building permit, tax, floor plan, certificate copy) are with our agent — I'll ask them to send these to you`);
@@ -1108,6 +1115,12 @@ async function tryPostPickFallback({ history = [], isId = true, message = '', us
     }
     const words = String(message || '').trim().split(/\s+/).filter(Boolean);
     if (words.length > 2 || /[a-z0-9]{3,}/i.test(String(message || ''))) return null;
+    // M210 (sim S2): "ok" / "sip" adalah PENUTUP, bukan pesan tak jelas — biarkan lolos ke
+    // gerbang penutup supaya customer dapat ringkasan, bukan "Boleh diulang maksudnya?".
+    try {
+      const { customerSignalsClosing } = require('./customerQuestionGuard');
+      if (customerSignalsClosing(String(message || ''))) return null;
+    } catch (_) { /* guard opsional */ }
 
     return {
       reply: isId

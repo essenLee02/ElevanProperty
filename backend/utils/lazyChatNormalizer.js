@@ -103,6 +103,15 @@ const ABBR_DICT = {
   // (5 Agu 2026). Tanpa ini SCHEDULING_ONLY_RE di ekstraktor Q9 tidak mengenali
   // kalimat "Saya mau servei 5 hari lagi" sebagai konteks survei.
   srvei: 'survei', srvey: 'survei', servei: 'survei', servey: 'survei',
+  // M210 (sim S3 — typo berat sepanjang sesi): tanpa ini 4 dari 7 giliran hilang konteks.
+  svey: 'survei', svei: 'survei', surve: 'survei', suvey: 'survei',
+  dijul: 'dijual', dijul_: 'dijual', djual: 'dijual', dijuaal: 'dijual',
+  srtfikat: 'sertifikat', srtifikat: 'sertifikat', sertifkat: 'sertifikat', sertifikt: 'sertifikat',
+  srtfikatnya: 'sertifikatnya', srtifikatnya: 'sertifikatnya', sertifkatnya: 'sertifikatnya',
+  hrga: 'harga', hrg: 'harga', harag: 'harga',
+  bugdet: 'budget', budgt: 'budget', budjet: 'budget',
+  kash: 'cash', cas: 'cash',
+  hri: 'hari', sbtu: 'sabtu', jm: 'jam', pgii: 'pagi', mksh: 'makasih',
 
   // People / relations
   ortu: 'orang tua', krj: 'kerja', krja: 'kerja',

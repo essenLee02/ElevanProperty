@@ -49,7 +49,11 @@ const A = (m) => ({ role: 'ai', message: m }); const C = (m) => ({ role: 'custom
   {
     const hist = [C('Apartemen sewa Kalijudan'), A('Baik, Kak 😊 Survei dijadwalkan tanggal *26 September 2026*, *Jam 10* ya. Nanti tim kami hubungi untuk konfirmasi.')];
     const r = g.scheduleViewingFromText('Sabtu nggak jadi, Minggu aja jam yang sama.', true, { history: hist });
-    ok('"Sabtu nggak jadi, Minggu aja jam yang sama" → Minggu + Jam 10', r && /27 September 2026/.test(r.reply) && /Jam 10/.test(r.reply), r && r.reply.slice(0, 90));
+    // Tanggalnya relatif terhadap HARI INI (jangan dipatok literal — tes ini pernah merah hanya
+     // karena tanggal berganti): yang diuji = hari Minggu terdekat + jam yang sama dipertahankan.
+    const nextSunday = (() => { const d = new Date(); d.setDate(d.getDate() + ((7 - d.getDay()) % 7 || 7)); return d; })();
+    const sundayRe = new RegExp(`\\b0?${nextSunday.getDate()}\\s+\\w+\\s+${nextSunday.getFullYear()}`);
+    ok('"Sabtu nggak jadi, Minggu aja jam yang sama" → Minggu + Jam 10', r && sundayRe.test(r.reply) && /Jam 10/.test(r.reply), r && r.reply.slice(0, 90));
   }
 
   console.log('\n[2] Jalur WhatsApp lengkap (provider=private)');

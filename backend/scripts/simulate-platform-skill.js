@@ -138,7 +138,8 @@ const SCENARIOS = ONLY.length ? ALL_SCENARIOS.filter((sc) => ONLY.some((k) => sc
 const priceTokens = (text) => {
   const out = [];
   // 'm' hanya = miliar bila BUKAN satuan luas (m2 / m² / m persegi).
-  const re = /(\d+(?:[.,]\d+)?)\s*(miliar|milyar|juta|jt|m(?![\s²2]|\s*persegi))/gi;
+  // M210: "17 min" / "16 km" / "3 menit" bukan harga — 'm' harus berdiri sendiri sebagai satuan miliar.
+  const re = /(\d+(?:[.,]\d+)?)\s*(miliar|milyar|juta|jt|m(?![\s²2]|[a-z]|\s*persegi))/gi;
   let m;
   while ((m = re.exec(text))) {
     const num = parseFloat(m[1].replace(',', '.'));
@@ -173,6 +174,7 @@ async function main() {
     });
     let declined = false;
     const sentAddrs = new Set();
+    let summarySeen = false;   // M210: summary cukup sekali per sesi
     try {
       for (let i = 0; i < sc.turns.length; i++) {
         const msg = sc.turns[i];
@@ -200,19 +202,31 @@ async function main() {
         if (/\{\{|\[Nama|\$\{agent|\$\{app/.test(reply)) { flags.push('PLACEHOLDER'); totals.placeholderLeaks++; }
         const unknown = priceTokens(reply).filter((p) => p >= 50e6 && !priceKnown(p));
         if (unknown.length) { flags.push(`HARGA-TAK-DIKENAL:${unknown.map((p) => p / 1e6 + 'jt').join(',')}`); totals.priceInvented++; }
-        const qCount = (reply.match(/\?/g) || []).length;
+        /* M210: satu TOPIK per pesan. Kalimat contoh ("Misalnya kolam renang, gym…?") memperjelas
+         * pertanyaan yang sama, jadi tanda tanyanya tidak dihitung sebagai pertanyaan kedua. */
+        const qCount = reply.split(/(?<=[?!.])\s+|\n/)
+          .filter((seg) => /\?/.test(seg) && !/^\s*[>_(*]*\s*(?:misal\w*|contoh\w*|mis\.|e\.g\.|for example|such as)/i.test(seg))
+          .reduce((n, seg) => n + (seg.match(/\?/g) || []).length, 0);
         if (qCount > 1) { flags.push(`${qCount}×?`); totals.multiQ++; }
         const hasCard = /Estimasi Harga|📍|🏡/.test(reply);
-        if (!hasCard && reply.length > 700) { flags.push(`${reply.length}ch>700`); totals.tooLong++; }
+        // M210: ringkasan untuk agent memang panjang (daftar slot) — batas 700 hanya untuk balasan chat.
+        const isBrief = /(✓|•)\s*(Rencana|Transaksi|Plan)\s*:/.test(reply);
+        if (!hasCard && !isBrief && reply.length > 700) { flags.push(`${reply.length}ch>700`); totals.tooLong++; }
         if (/tanya-tanya dulu|belum mau survei|nggak mau bahas kpr|jangan dipaksa|lihat-lihat dulu|tidak usah tanya survei/i.test(msg)) declined = true;
         if (declined && FINANCE_PROBE.test(reply) && !/kpr/i.test(msg)) { flags.push('TANYA-PEMBIAYAAN-SETELAH-TOLAK'); totals.financeAfterDecline++; }
         if (declined && TARGET_PROBE.test(reply)) { flags.push('TANYA-TARGET-SETELAH-TOLAK'); totals.targetAfterDecline++; }
 
+        // Summary = daftar ✓/• ber-label (Transaksi/Rencana, Tipe, Kota); format tanda tangan boleh beragam.
+        // M210: sesi Inggris memakai label Plan/Type/City — dulu selalu dihitung "tanpa summary".
+        const isSummary = /(✓|•)\s*(Rencana|Transaksi|Tipe|Kota|Plan|Type|City)/.test(reply) && /(✓|•)\s*(Tipe|Type)/.test(reply);
+        if (isSummary) summarySeen = true;
         // Skill chat_gpt_responds: giliran PENUTUP harus dibalas SUMMARY sekali (doc 04 §3d).
         if ((SET === 'chatgpt' || SET === 'private') && i === sc.turns.length - 1) {
-          // Summary = daftar ✓/• ber-label (Transaksi/Rencana, Tipe, Kota); format tanda tangan boleh beragam.
-          const isSummary = /(✓|•)\s*(Rencana|Transaksi|Tipe|Kota)/.test(reply) && /(✓|•)\s*Tipe/.test(reply);
-          if (!isSummary) { flags.push('TANPA-SUMMARY-DI-PENUTUP'); totals.noSummaryAtClose++; }
+          /* M210: summary hanya wajib SEKALI per sesi, dan hanya untuk lead pembeli/penyewa —
+           * sesi titipan properti (vendor) ditutup oleh gerbangnya sendiri tanpa ringkasan. */
+          // closing_without_cards: belum ada kartu/slot → memang tidak ada yang bisa dirangkum.
+          const summaryNotOwed = summarySeen || /vendor_lead_gate|closing_without_cards/.test(String(r.provider || ''));
+          if (!isSummary && !summaryNotOwed) { flags.push('TANPA-SUMMARY-DI-PENUTUP'); totals.noSummaryAtClose++; }
           else {
             if (/Estimasi Harga|📍 Lokasi/.test(reply)) { flags.push('LISTING-IKUT-SUMMARY'); totals.listingAfterSummary++; }
             if (/✓\s*Kota:\s*\*?[^*\n]*(?<![a-z])(tipe|no\.?|nomor)(?![a-z])/i.test(reply)) { flags.push('KOTA-SALAH-ISI'); totals.summaryFieldBad++; }
@@ -223,7 +237,11 @@ async function main() {
         // Pengulangan kartu identik: alamat yang sama dikirim lagi setelah pernah dikirim.
         const addrs = reply.match(/Jl\.?\s[^\n,]{3,60}/g) || [];
         const dup = addrs.filter((a) => sentAddrs.has(a.trim()));
-        if (dup.length && !/(nomor|no\.?)\s*\d|pilih/i.test(msg)) { flags.push(`ULANG-KARTU:${dup.length}`); totals.cardRepeats++; }
+        /* M210: yang dilarang adalah mengirim ULANG KATALOG, bukan menyebut lagi unit yang
+         * sedang dibahas. Jawaban atribut ("Untuk *X*: sertifikatnya SHM") dan konfirmasi
+         * pilihan hanya memuat SATU alamat dan bukan blok katalog → jangan dihitung. */
+        const looksLikeCatalog = new Set(addrs.map((a) => a.trim())).size >= 2 || /^\s*(?:\*?\d+[.)]|[1-9]\u{FE0F}?\u{20E3})/mu.test(reply);
+        if (dup.length && looksLikeCatalog && !/(nomor|no\.?)\s*\d|pilih/i.test(msg)) { flags.push(`ULANG-KARTU:${dup.length}`); totals.cardRepeats++; }
         addrs.forEach((a) => sentAddrs.add(a.trim()));
 
         report.push(`**C${i + 1}:** ${msg}`, '', `**AI** _(${r.provider}, ${ms} ms${flags.length ? ', ⚠️ ' + flags.join(' · ') : ''})_:`, '', reply.split('\n').map((l) => '> ' + l).join('\n'), '');
