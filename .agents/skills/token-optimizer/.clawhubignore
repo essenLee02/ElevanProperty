@@ -1,0 +1,24 @@
+# Marketing materials (not part of the skill)
+marketing/
+VIRAL_PROMPT.md
+pdf/
+skills/
+
+# Install scripts (optional, available on GitHub)
+scripts/
+
+# Shortcuts and temp files
+*.url
+nul
+
+# Info materials
+infomaterial/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Internal project files
+.claude/
+.clawhub/
+_ul
